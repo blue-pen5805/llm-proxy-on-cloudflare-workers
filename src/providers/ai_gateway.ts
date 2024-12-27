@@ -1,0 +1,111 @@
+import { EndpointBase } from "./endpoint";
+
+export const AiGatewaySupportedProviders = [
+  "workers-ai",
+  "aws-bedrock",
+  "anthropic",
+  "azure-openai",
+  "cohere",
+  "google-ai-studio",
+  "google-vertex-ai",
+  "grok",
+  "groq",
+  "huggingface",
+  "mistral",
+  "openai",
+  "openrouter",
+  "perplexity-ai",
+  "replicate",
+];
+
+export const OpenAICompatibleProviders = [
+  "workers-ai",
+  "google-ai-studio",
+  "grok",
+  "groq",
+  "mistral",
+  "openai",
+];
+
+export const AiGatewayBasicEndpointPaths: { [key: string]: string } = {
+  "workers-ai": "v1/chat/completions",
+  // "aws-bedrock": "",
+  anthropic: "v1/messages",
+  // "azure-openai": "chat/completions",
+  cohere: "v2/chat",
+  "google-ai-studio": "v1beta/openai/chat/completions",
+  // "google-vertex-ai": "",
+  grok: "v1/chat/completions",
+  groq: "chat/completions",
+  // "huggingface": "",
+  mistral: "v1/chat/completions",
+  openai: "chat/completions",
+  openrouter: "chat/completions",
+  // "perplexity-ai": "chat/completions",
+  // replicate: "predictions",
+};
+
+export class AiGatewayEndpoint extends EndpointBase {
+  static readonly origin = "https://gateway.ai.cloudflare.com/v1";
+
+  static accountId: string | undefined = undefined;
+  static gatewayId: string | undefined = undefined;
+  static apiKey: string | undefined;
+
+  providerName: string | undefined;
+  destination: EndpointBase | undefined;
+
+  static configure(accountId: string, gatewayId: string, apiKey?: string) {
+    AiGatewayEndpoint.accountId = accountId;
+    AiGatewayEndpoint.gatewayId = gatewayId;
+    AiGatewayEndpoint.apiKey = apiKey;
+  }
+
+  static isActive(providerName?: string): boolean {
+    return (
+      AiGatewayEndpoint.accountId !== undefined &&
+      AiGatewayEndpoint.gatewayId !== undefined &&
+      (providerName === undefined ||
+        AiGatewaySupportedProviders.includes(providerName))
+    );
+  }
+
+  constructor(
+    providerName: string | undefined = undefined,
+    destination: EndpointBase | undefined = undefined,
+  ) {
+    super();
+    this.providerName = providerName;
+    this.destination = destination;
+  }
+
+  available(): boolean {
+    return (
+      this.destination?.available() ||
+      AiGatewayEndpoint.isActive(this.providerName)
+    );
+  }
+
+  baseUrl() {
+    const url = `${AiGatewayEndpoint.origin}/${AiGatewayEndpoint.accountId}/${AiGatewayEndpoint.gatewayId}`;
+
+    return this.providerName ? `${url}/${this.providerName}` : url;
+  }
+
+  pathnamePrefix(): string {
+    return this.destination?.pathnamePrefix() || "";
+  }
+
+  headers() {
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
+      ...this.destination?.headers(),
+    };
+
+    if (AiGatewayEndpoint.apiKey) {
+      headers["cf-aig-authorization"] = `Bearer ${AiGatewayEndpoint.apiKey}`;
+    }
+
+    return headers;
+  }
+}
