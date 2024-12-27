@@ -174,3 +174,12 @@ curl -X POST https://your-worker-url/google-ai-studio/v1beta/models/gemini-1.5-p
     "contents": [{"role": "user", "parts": [{"text": "Hello, world!"}]}]
   }'
 ```
+
+## Known Issues and Limitations
+
+This project is under active development and has the following known issues and limitations:
+
+- **Limited Testing:** The project currently lacks comprehensive test coverage. This may lead to unexpected behavior or bugs.
+- **Incomplete Provider Support:** Not all LLM providers are fully supported. Some providers may have limited feature support or may not be supported at all.
+- **Insufficient Validation:** Thorough validation of the behavior against different providers and inputs is not yet completed.
+- **Error Handling:**: Error handling could be more robust. Some errors may not be caught or reported properly.
