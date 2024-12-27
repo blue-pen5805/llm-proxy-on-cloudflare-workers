@@ -42,6 +42,16 @@ flowchart
 
 **Note**: Providers marked with ⚠️ have limited support for certain features (e.g., Tool Use, multimodal capabilities).
 
+## Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+- **Node.js:** Version `18.x` or later is required.
+  - Download from: [nodejs.org](https://nodejs.org/)
+  - Verify your version: Run `node -v` in your terminal.
+- **Cloudflare Account:** A Free Plan is probably sufficient to deploy this project.
+  - Sign up for free at: [cloudflare.com](https://www.cloudflare.com/)
+
 ## Quick Start
 
 To get started:
