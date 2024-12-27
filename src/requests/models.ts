@@ -25,8 +25,12 @@ export async function models() {
   const responses = await Promise.allSettled(requests);
   const models = responses.map((response, index) => {
     const provider = Object.keys(Providers)[index];
-    if (response.status === "rejected") {
-      console.warn(`Failed to fetch models for ${provider}.`, response.reason);
+    if (response.status === "rejected" || response.value.data === undefined) {
+      console.warn(`Failed to fetch models for ${provider}.`);
+      if ("reason" in response) {
+        console.error(response.reason);
+      }
+
       return [];
     }
 
