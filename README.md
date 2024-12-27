@@ -57,9 +57,8 @@ Before you begin, ensure you have the following installed:
 To get started:
 
 1. Clone this repository.
-2. Install dependencies: `npm install`
-3. Deploy the Cloudflare Worker: `npm run deploy`
-4. Set environment variables securely using `npx wrangler secret put <ENVIRONMENT_VARIABLE_NAME>`.
+2. Deploy the Cloudflare Worker: `npx wrangler deploy`
+3. Set environment variables securely using `npx wrangler secret put <ENVIRONMENT_VARIABLE_NAME>`.
    - Examples: `npx wrangler secret put PROXY_API_KEY`, `npx wrangler secret put OPENAI_API_KEY`
    - Refer to the "Environment Variables" section for a list of required variables.
 
