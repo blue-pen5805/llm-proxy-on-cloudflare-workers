@@ -23,7 +23,7 @@ export async function proxy(request: Request, providerName: string) {
     pathname = pathname.replace(endpointBasePath, "");
   }
 
-  return await providerClass.fetch(pathname, {
+  return providerClass.fetch(pathname, {
     method: request.method,
     body: request.body,
     headers: request.headers,

@@ -100,8 +100,8 @@ export class GoogleAiStudio extends ProviderBase {
     };
   }
 
-  async fetchModels() {
-    return await this.fetch("/v1beta/models", {
+  fetchModels() {
+    return this.fetch("/v1beta/models", {
       method: "GET",
     });
   }

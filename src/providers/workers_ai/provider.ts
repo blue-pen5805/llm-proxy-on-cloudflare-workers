@@ -48,8 +48,8 @@ export class WorkersAi extends ProviderBase {
     };
   }
 
-  async fetchModels() {
-    return await this.fetch("/models/search?task=Text Generation", {
+  fetchModels() {
+    return this.fetch("/models/search?task=Text Generation", {
       method: "GET",
     });
   }

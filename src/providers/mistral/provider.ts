@@ -41,8 +41,8 @@ export class Mistral extends ProviderBase {
     };
   }
 
-  async fetchModels() {
-    return await this.fetch("/v1/models", {
+  fetchModels() {
+    return this.fetch("/v1/models", {
       method: "GET",
     });
   }

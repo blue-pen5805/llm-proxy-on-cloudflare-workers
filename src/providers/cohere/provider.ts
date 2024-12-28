@@ -280,8 +280,8 @@ export class Cohere extends ProviderBase {
     };
   }
 
-  async fetchModels() {
-    return await this.fetch("/v1/models?page_size=100&endpoint=chat", {
+  fetchModels() {
+    return this.fetch("/v1/models?page_size=100&endpoint=chat", {
       method: "GET",
     });
   }

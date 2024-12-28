@@ -135,8 +135,8 @@ export class ProviderBase {
     return (await response.json()) as OpenAIModelsListResponseBody;
   }
 
-  async fetchModels(): Promise<Response> {
-    return await this.fetch("/models", {
+  fetchModels(): Promise<Response> {
+    return this.fetch("/models", {
       method: "GET",
     });
   }

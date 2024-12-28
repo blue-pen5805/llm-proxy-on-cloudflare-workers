@@ -25,8 +25,8 @@ export class Groq extends ProviderBase {
     };
   }
 
-  async fetchModels() {
-    return await this.fetch("/models", {
+  fetchModels() {
+    return this.fetch("/models", {
       method: "GET",
     });
   }

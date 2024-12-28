@@ -413,8 +413,8 @@ export class Anthropic extends ProviderBase {
     };
   }
 
-  async fetchModels(): Promise<Response> {
-    return await this.fetch("/v1/models", {
+  fetchModels(): Promise<Response> {
+    return this.fetch("/v1/models", {
       method: "GET",
     });
   }
