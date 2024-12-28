@@ -58,23 +58,23 @@ export async function chatCompletions(request: Request) {
       return requestToUniversalEndpointItem(providerName, requestData);
     });
 
-    const response = await endpoint.fetch("", {
+    const promise = endpoint.fetch("", {
       method: "POST",
       body: JSON.stringify(body),
     });
 
     if (OpenAICompatibleProviders.includes(providerName)) {
-      return response;
+      return promise;
     }
 
     const isStream = (data.stream as boolean | undefined) === true;
     if (!isStream) {
-      return providerClass.processChatCompletions(response, model);
+      return providerClass.processChatCompletions(promise, model);
     } else {
-      return providerClass.processChatCompletionsStream(response, model);
+      return providerClass.processChatCompletionsStream(promise, model);
     }
   } else {
-    return await providerClass.chatCompletions({
+    return providerClass.chatCompletions({
       body: JSON.stringify({
         ...data,
         model,

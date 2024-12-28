@@ -71,7 +71,7 @@ export class ProviderBase {
     ) as OpenAIChatCompletionsRequestBody;
     const isStream = (stream as boolean | undefined) === true;
 
-    const response = await fetch2(
+    const promise = fetch2(
       ...this.chatCompletionsRequestData({
         body: this.chatCompletionsRequestBody(body),
         headers,
@@ -79,24 +79,24 @@ export class ProviderBase {
     );
 
     if (!isStream) {
-      return await this.processChatCompletions(response, model);
+      return await this.processChatCompletions(promise, model);
     } else {
-      return await this.processChatCompletionsStream(response, model);
+      return await this.processChatCompletionsStream(promise, model);
     }
   }
 
   async processChatCompletions(
-    response: Response,
+    promise: Promise<Response>,
     _model?: string,
   ): Promise<Response> {
-    return response;
+    return promise;
   }
 
   async processChatCompletionsStream(
-    response: Response,
+    promise: Promise<Response>,
     _model?: string,
   ): Promise<Response> {
-    return response;
+    return promise;
   }
 
   chatCompletionsRequestData({

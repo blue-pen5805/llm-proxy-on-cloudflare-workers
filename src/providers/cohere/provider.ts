@@ -22,9 +22,10 @@ export class Cohere extends ProviderBase {
 
   // OpenAI Comaptible API - Chat Completions
   async processChatCompletions(
-    response: Response,
+    promise: Promise<Response>,
     model: string = "",
   ): Promise<Response> {
+    const response = await promise;
     const responseBody = (await response.json()) as CohereV2ChatResponse;
     const modifiedResponse: OpenAIChatCompletionsResponseBody = {
       id: responseBody.id,
@@ -77,7 +78,7 @@ export class Cohere extends ProviderBase {
   }
 
   async processChatCompletionsStream(
-    response: Response,
+    promise: Promise<Response>,
     model: string = "",
   ): Promise<Response> {
     let controller: TransformStreamDefaultController | undefined = undefined;
@@ -212,6 +213,8 @@ export class Cohere extends ProviderBase {
         parser.feed(body);
       },
     });
+
+    const response = await promise;
     response.body?.pipeTo(writable);
 
     return new Response(readable, response);

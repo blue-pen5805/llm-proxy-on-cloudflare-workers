@@ -24,9 +24,10 @@ export class Anthropic extends ProviderBase {
 
   // OpenAI ComaptiQble API - Chat Completions
   async processChatCompletions(
-    response: Response,
+    promise: Promise<Response>,
     _model?: string,
   ): Promise<Response> {
+    const response = await promise;
     const responseBody =
       (await response.json()) as AnthropicCreateMessageResponseBody;
 
@@ -82,7 +83,7 @@ export class Anthropic extends ProviderBase {
   }
 
   async processChatCompletionsStream(
-    response: Response,
+    promise: Promise<Response>,
     _model?: string,
   ): Promise<Response> {
     let controller: TransformStreamDefaultController | undefined = undefined;
@@ -266,6 +267,8 @@ export class Anthropic extends ProviderBase {
         parser.feed(body);
       },
     });
+
+    const response = await promise;
     response.body?.pipeTo(writable);
 
     return new Response(readable, response);
