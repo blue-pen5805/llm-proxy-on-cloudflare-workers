@@ -1,5 +1,4 @@
 import { createParser, EventSourceMessage } from "eventsource-parser";
-import { fetch2 } from "../../utils";
 import {
   OpenAIChatCompletionsChunkResponseBody,
   OpenAIChatCompletionsRequestBody,

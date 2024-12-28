@@ -11,7 +11,6 @@ import {
   OpenAIChatCompletionsRequestBody,
   OpenAIChatCompletionsResponseBody,
 } from "../openai/types";
-import { fetch2 } from "../../utils";
 
 export class Cohere extends ProviderBase {
   endpoint: CohereEndpoint;
