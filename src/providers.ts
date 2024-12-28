@@ -8,6 +8,7 @@ import { Mistral } from "./providers/mistral";
 import { OpenAI } from "./providers/openai";
 import { WorkersAi } from "./providers/workers_ai";
 import { OpenRouter } from "./providers/openrouter";
+import { Cerebras } from "./providers/cerebras";
 
 export const Providers: {
   [providerName: string]: {
@@ -78,5 +79,10 @@ export const Providers: {
   // "perplexity-ai": {},
   // "replicate": {},
   // --- Other Providers
-  // ...
+  cerebras: {
+    providerClass: Cerebras,
+    args: {
+      apiKey: "CEREBRAS_API_KEY",
+    },
+  },
 };
