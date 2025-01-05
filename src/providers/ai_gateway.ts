@@ -37,7 +37,7 @@ export const AiGatewayBasicEndpointPaths: { [key: string]: string } = {
   // "google-vertex-ai": "",
   grok: "v1/chat/completions",
   groq: "chat/completions",
-  // "huggingface": "",
+  huggingface: "", // HuggingFace Chat Completion API is currently not supported by AI Gateway。
   mistral: "v1/chat/completions",
   openai: "chat/completions",
   openrouter: "chat/completions",

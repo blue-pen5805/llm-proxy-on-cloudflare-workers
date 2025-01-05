@@ -15,5 +15,6 @@ interface Env {
 	GROQ_API_KEY: string;
 	MISTRAL_API_KEY: string;
 	OPENROUTER_API_KEY: string;
+	HUGGINGFACE_API_KEY: string;
 	OPENAI_API_KEY: string;
 }

@@ -37,7 +37,7 @@ flowchart
 | Amazon Bedrock   | ❌      | ❌                 | `aws-bedrock`       |                                              |
 | OpenRouter       | ✅      | ✅                 | `openrouter`        | `OPENROUTER_API_KEY`                         |
 | Workers AI       | ✅      | ✅                 | `workers-ai`        | `CLOUDFLARE_ACCOUNT_ID` `CLOUDFLARE_API_KEY` |
-| HuggingFace      | ❌      | ❌                 | `huggingface`       |                                              |
+| HuggingFace      | ⚠️      | ✅                 | `huggingface`       | `HUGGINGFACE_API_KEY`                        |
 | Replicate        | ❌      | ❌                 | `replicate`         |                                              |
 
 **Note**: Providers marked with ⚠️ have limited support for certain features (e.g., Tool Use, multimodal capabilities).
@@ -90,6 +90,7 @@ Set the API key(s) for each provider you intend to use. API keys can be a single
 - `OPENROUTER_API_KEY`: OpenRouter API key.
 - `CLOUDFLARE_ACCOUNT_ID`: Cloudflare account ID. (for Workers AI).
 - `CLOUDFLARE_API_KEY`: Cloudflare API key (for Workers AI).
+- `HUGGINGFACE_API_KEY`: HuggingFace Access Tokens
 
 ### Proxy Configuration:
 

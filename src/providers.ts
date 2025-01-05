@@ -8,6 +8,7 @@ import { Mistral } from "./providers/mistral";
 import { OpenAI } from "./providers/openai";
 import { WorkersAi } from "./providers/workers_ai";
 import { OpenRouter } from "./providers/openrouter";
+import { HuggingFace } from "./providers/huggingface";
 
 export const Providers: {
   [providerName: string]: {
@@ -56,7 +57,12 @@ export const Providers: {
       apiKey: "GROQ_API_KEY",
     },
   },
-  // "huggingface": {},
+  huggingface: {
+    providerClass: HuggingFace,
+    args: {
+      apiKey: "HUGGINGFACE_API_KEY",
+    },
+  },
   mistral: {
     providerClass: Mistral,
     args: {
