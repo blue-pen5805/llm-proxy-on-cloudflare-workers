@@ -10,6 +10,7 @@ interface Env {
 	CLOUDFLARE_API_KEY: string;
 	ANTHROPIC_API_KEY: string;
 	COHERE_API_KEY: string;
+	DEEPSEEK_API_KEY: string;
 	GEMINI_API_KEY: string;
 	GROK_API_KEY: string;
 	GROQ_API_KEY: string;

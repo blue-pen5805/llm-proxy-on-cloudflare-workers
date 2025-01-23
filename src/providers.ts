@@ -1,6 +1,7 @@
 import { ProviderBase } from "./providers/provider";
 import { Anthropic } from "./providers/anthropic";
 import { Cohere } from "./providers/cohere";
+import { DeepSeek } from "./providers/deepseek";
 import { GoogleAiStudio } from "./providers/google_ai_studio";
 import { Grok } from "./providers/grok";
 import { Groq } from "./providers/groq";
@@ -36,6 +37,12 @@ export const Providers: {
     providerClass: Cohere,
     args: {
       apiKey: "COHERE_API_KEY",
+    },
+  },
+  deepseek: {
+    providerClass: DeepSeek,
+    args: {
+      apiKey: "DEEPSEEK_API_KEY",
     },
   },
   "google-ai-studio": {

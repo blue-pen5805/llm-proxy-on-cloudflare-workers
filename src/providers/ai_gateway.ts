@@ -6,6 +6,7 @@ export const AiGatewaySupportedProviders = [
   "anthropic",
   "azure-openai",
   "cohere",
+  "deepseek",
   "google-ai-studio",
   "google-vertex-ai",
   "grok",
@@ -20,6 +21,7 @@ export const AiGatewaySupportedProviders = [
 
 export const OpenAICompatibleProviders = [
   "workers-ai",
+  "deepseek",
   "google-ai-studio",
   "grok",
   "groq",
@@ -33,6 +35,7 @@ export const AiGatewayBasicEndpointPaths: { [key: string]: string } = {
   anthropic: "v1/messages",
   // "azure-openai": "chat/completions",
   cohere: "v2/chat",
+  deepseek: "chat/completions",
   "google-ai-studio": "v1beta/openai/chat/completions",
   // "google-vertex-ai": "",
   grok: "v1/chat/completions",

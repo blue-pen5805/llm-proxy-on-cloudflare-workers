@@ -28,6 +28,7 @@ flowchart
 | Google AI Studio | ✅      | ✅                 | `google-ai-studio`  | `GEMINI_API_KEY`                             |
 | Anthropic        | ⚠️      | ✅                 | `anthropic`         | `ANTHROPIC_API_KEY`                          |
 | Cohere           | ⚠️      | ✅                 | `cohere`            | `COHERE_API_KEY`                             |
+| DeepSeek         | ✅      | ✅                 | `deepseek`          | `DEEPSEEK_API_KEY`                           |
 | Grok             | ✅      | ✅                 | `grok`              | `GROK_API_KEY`                               |
 | Groq             | ✅      | ✅                 | `groq`              | `GROQ_API_KEY`                               |
 | Mistral          | ✅      | ✅                 | `mistral`           | `MISTRAL_API_KEY`                            |
@@ -84,6 +85,7 @@ Set the API key(s) for each provider you intend to use. API keys can be a single
 - `GEMINI_API_KEY`: Google AI Studio API key.
 - `ANTHROPIC_API_KEY`: Anthropic API key.
 - `COHERE_API_KEY`: Cohere API key.
+- `DEEPSEEK_API_KEY`: DeepSeek API Key.
 - `GROK_API_KEY`: Grok API key.
 - `GROQ_API_KEY`: Groq API key.
 - `MISTRAL_API_KEY`: Mistral API key.
