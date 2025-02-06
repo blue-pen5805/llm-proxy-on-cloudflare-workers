@@ -14,6 +14,7 @@ interface Env {
 	GEMINI_API_KEY: string;
 	GROK_API_KEY: string;
 	GROQ_API_KEY: string;
+	CEREBRAS_API_KEY: string;
 	MISTRAL_API_KEY: string;
 	OPENROUTER_API_KEY: string;
 	HUGGINGFACE_API_KEY: string;

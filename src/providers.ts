@@ -10,6 +10,7 @@ import { OpenAI } from "./providers/openai";
 import { WorkersAi } from "./providers/workers_ai";
 import { OpenRouter } from "./providers/openrouter";
 import { HuggingFace } from "./providers/huggingface";
+import { Cerebras } from "./providers/cerebras";
 
 export const Providers: {
   [providerName: string]: {
@@ -33,6 +34,12 @@ export const Providers: {
     },
   },
   // "azure-openai": {},
+  cerebras: {
+    providerClass: Cerebras,
+    args: {
+      apiKey: "CEREBRAS_API_KEY",
+    },
+  },
   cohere: {
     providerClass: Cohere,
     args: {
@@ -91,5 +98,4 @@ export const Providers: {
   // "perplexity-ai": {},
   // "replicate": {},
   // --- Other Providers
-  // ...
 };

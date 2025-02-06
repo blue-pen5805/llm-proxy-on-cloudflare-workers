@@ -22,24 +22,25 @@ flowchart
 
 ## Supported Providers
 
-| Name             | Support | AI Gateway Support | Pass-Through Routes | Environment Variable                         |
-| ---------------- | ------- | ------------------ | ------------------- | -------------------------------------------- |
-| OpenAI           | ✅      | ✅                 | `openai`            | `OPENAI_API_KEY`                             |
-| Google AI Studio | ✅      | ✅                 | `google-ai-studio`  | `GEMINI_API_KEY`                             |
-| Anthropic        | ⚠️      | ✅                 | `anthropic`         | `ANTHROPIC_API_KEY`                          |
-| Cohere           | ⚠️      | ✅                 | `cohere`            | `COHERE_API_KEY`                             |
-| DeepSeek         | ✅      | ✅                 | `deepseek`          | `DEEPSEEK_API_KEY`                           |
-| Grok             | ✅      | ✅                 | `grok`              | `GROK_API_KEY`                               |
-| Groq             | ✅      | ✅                 | `groq`              | `GROQ_API_KEY`                               |
-| Mistral          | ✅      | ✅                 | `mistral`           | `MISTRAL_API_KEY`                            |
-| Perplexity       | ❌      | ❌                 | `perplexity`        |                                              |
-| Azure OpenAI     | ❌      | ❌                 | `azure-openai`      |                                              |
-| Vertex AI        | ❌      | ❌                 | `google-vertex-ai`  |                                              |
-| Amazon Bedrock   | ❌      | ❌                 | `aws-bedrock`       |                                              |
-| OpenRouter       | ✅      | ✅                 | `openrouter`        | `OPENROUTER_API_KEY`                         |
-| Workers AI       | ✅      | ✅                 | `workers-ai`        | `CLOUDFLARE_ACCOUNT_ID` `CLOUDFLARE_API_KEY` |
-| HuggingFace      | ⚠️      | ✅                 | `huggingface`       | `HUGGINGFACE_API_KEY`                        |
-| Replicate        | ❌      | ❌                 | `replicate`         |                                              |
+| Name             | Support | Direct | AI Gateway Support | Pass-Through Routes | Environment Variable                         |
+| ---------------- | ------- | ------ | ------------------ | ------------------- | -------------------------------------------- |
+| OpenAI           | ✅      | ✅     | ✅                 | `openai`            | `OPENAI_API_KEY`                             |
+| Google AI Studio | ✅      | ✅     | ✅                 | `google-ai-studio`  | `GEMINI_API_KEY`                             |
+| Anthropic        | ⚠️      | ✅     | ✅                 | `anthropic`         | `ANTHROPIC_API_KEY`                          |
+| Cerebras         | ✅      | ❌     | ✅                 | `cerebras`          | `CEREBRAS_API_KEY`                           |
+| Cohere           | ⚠️      | ✅     | ✅                 | `cohere`            | `COHERE_API_KEY`                             |
+| DeepSeek         | ✅      | ✅     | ✅                 | `deepseek`          | `DEEPSEEK_API_KEY`                           |
+| Grok             | ✅      | ✅     | ✅                 | `grok`              | `GROK_API_KEY`                               |
+| Groq             | ✅      | ✅     | ✅                 | `groq`              | `GROQ_API_KEY`                               |
+| Mistral          | ✅      | ✅     | ✅                 | `mistral`           | `MISTRAL_API_KEY`                            |
+| Perplexity       | ❌      | ❌     | ❌                 | `perplexity`        |                                              |
+| Azure OpenAI     | ❌      | ❌     | ❌                 | `azure-openai`      |                                              |
+| Vertex AI        | ❌      | ❌     | ❌                 | `google-vertex-ai`  |                                              |
+| Amazon Bedrock   | ❌      | ❌     | ❌                 | `aws-bedrock`       |                                              |
+| OpenRouter       | ✅      | ✅     | ✅                 | `openrouter`        | `OPENROUTER_API_KEY`                         |
+| Workers AI       | ✅      | ✅     | ✅                 | `workers-ai`        | `CLOUDFLARE_ACCOUNT_ID` `CLOUDFLARE_API_KEY` |
+| HuggingFace      | ⚠️      | ✅     | ✅                 | `huggingface`       | `HUGGINGFACE_API_KEY`                        |
+| Replicate        | ❌      | ❌     | ❌                 | `replicate`         |                                              |
 
 **Note**: Providers marked with ⚠️ have limited support for certain features (e.g., Tool Use, multimodal capabilities).
 
@@ -84,6 +85,7 @@ Set the API key(s) for each provider you intend to use. API keys can be a single
 - `OPENAI_API_KEY`: OpenAI API key.
 - `GEMINI_API_KEY`: Google AI Studio API key.
 - `ANTHROPIC_API_KEY`: Anthropic API key.
+- `CEREBRAS_API_KEY`: Cerebras API key.
 - `COHERE_API_KEY`: Cohere API key.
 - `DEEPSEEK_API_KEY`: DeepSeek API Key.
 - `GROK_API_KEY`: Grok API key.

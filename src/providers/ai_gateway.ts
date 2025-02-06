@@ -5,8 +5,11 @@ export const AiGatewaySupportedProviders = [
   "aws-bedrock",
   "anthropic",
   "azure-openai",
+  "cartesia",
+  "cerebras",
   "cohere",
   "deepseek",
+  "elevenlabs",
   "google-ai-studio",
   "google-vertex-ai",
   "grok",
@@ -21,6 +24,7 @@ export const AiGatewaySupportedProviders = [
 
 export const OpenAICompatibleProviders = [
   "workers-ai",
+  "cerebras",
   "deepseek",
   "google-ai-studio",
   "grok",
@@ -34,6 +38,7 @@ export const AiGatewayBasicEndpointPaths: { [key: string]: string } = {
   // "aws-bedrock": "",
   anthropic: "v1/messages",
   // "azure-openai": "chat/completions",
+  cerebras: "chat/completions",
   cohere: "v2/chat",
   deepseek: "chat/completions",
   "google-ai-studio": "v1beta/openai/chat/completions",
