@@ -19,7 +19,7 @@
     "prettier": "^3.5.1",
     "typescript": "^5.7.3",
     "vitest": "2.1.9",
-    "wrangler": "^3.107.3"
+    "wrangler": "^3.109.1"
   },
   "dependencies": {
     "eventsource-parser": "^3.0.0"
