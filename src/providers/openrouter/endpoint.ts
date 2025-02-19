@@ -14,7 +14,7 @@ export class OpenRouterEndpoint extends EndpointBase {
   }
 
   baseUrl() {
-    return "https://openrouter.ai/api/v1";
+    return "https://openrouter.ai/api";
   }
 
   headers() {
