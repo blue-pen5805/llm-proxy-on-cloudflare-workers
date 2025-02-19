@@ -19,7 +19,7 @@ export class WorkersAiEndpoint extends EndpointBase {
     return `https://api.cloudflare.com/client/v4/accounts/${Secrets.get(
       this.accountId,
       false,
-    )}/ai/run/`;
+    )}/ai`;
   }
 
   headers() {

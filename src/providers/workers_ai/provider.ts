@@ -24,7 +24,7 @@ export class WorkersAi extends ProviderBase {
     body: string;
     headers: HeadersInit;
   }) {
-    return this.endpoint.requestData("v1/chat/completions", {
+    return this.endpoint.requestData("/v1/chat/completions", {
       method: "POST",
       headers,
       body,
