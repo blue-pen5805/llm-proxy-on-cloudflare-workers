@@ -23,4 +23,10 @@ export class Grok extends ProviderBase {
       body,
     });
   }
+
+  fetchModels() {
+    return this.fetch("/v1/models", {
+      method: "GET",
+    });
+  }
 }
