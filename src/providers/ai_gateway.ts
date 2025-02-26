@@ -39,7 +39,7 @@ export const AiGatewayBasicEndpointPaths: { [key: string]: string } = {
   anthropic: "v1/messages",
   // "azure-openai": "chat/completions",
   cerebras: "chat/completions",
-  cohere: "v2/chat",
+  cohere: "compatibility/v1/chat/completions",
   deepseek: "chat/completions",
   "google-ai-studio": "v1beta/openai/chat/completions",
   // "google-vertex-ai": "",
