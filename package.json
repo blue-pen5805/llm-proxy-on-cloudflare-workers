@@ -14,7 +14,7 @@
     "prettier-ci": "prettier --check ."
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.7.3",
+    "@cloudflare/vitest-pool-workers": "^0.7.4",
     "@cloudflare/workers-types": "^4.20250224.0",
     "prettier": "^3.5.2",
     "typescript": "^5.8.2",
