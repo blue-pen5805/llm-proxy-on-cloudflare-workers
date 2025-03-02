@@ -36,7 +36,7 @@ export const OpenAICompatibleProviders = [
 export const AiGatewayBasicEndpointPaths: { [key: string]: string } = {
   "workers-ai": "v1/chat/completions",
   // "aws-bedrock": "",
-  anthropic: "v1/messages",
+  anthropic: "v1/chat/completions",
   // "azure-openai": "chat/completions",
   cerebras: "chat/completions",
   cohere: "compatibility/v1/chat/completions",

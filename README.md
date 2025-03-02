@@ -26,7 +26,7 @@ flowchart
 | ---------------- | ------- | ------ | ------------------ | ------------------- | -------------------------------------------- |
 | OpenAI           | ✅      | ✅     | ✅                 | `openai`            | `OPENAI_API_KEY`                             |
 | Google AI Studio | ✅      | ✅     | ✅                 | `google-ai-studio`  | `GEMINI_API_KEY`                             |
-| Anthropic        | ⚠️      | ✅     | ✅                 | `anthropic`         | `ANTHROPIC_API_KEY`                          |
+| Anthropic        | ✅      | ✅     | ✅                 | `anthropic`         | `ANTHROPIC_API_KEY`                          |
 | Cerebras         | ✅      | ❌     | ✅                 | `cerebras`          | `CEREBRAS_API_KEY`                           |
 | Cohere           | ✅      | ✅     | ✅                 | `cohere`            | `COHERE_API_KEY`                             |
 | DeepSeek         | ✅      | ✅     | ✅                 | `deepseek`          | `DEEPSEEK_API_KEY`                           |
