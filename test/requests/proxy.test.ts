@@ -33,7 +33,7 @@ describe("proxy", () => {
       headers: new Headers(),
     });
 
-    await proxy(mockRequest, providerName);
+    await proxy(mockRequest, providerName, "/test/path");
 
     expect(mockProviderClass.fetch).toHaveBeenCalledWith("/test/path", {
       method: mockRequest.method,
@@ -57,7 +57,7 @@ describe("proxy", () => {
       headers: new Headers(),
     });
 
-    await proxy(mockRequest, providerName);
+    await proxy(mockRequest, providerName, "/test/path");
 
     expect(mockProviderClass.fetch).toHaveBeenCalledWith("/test/path", {
       method: mockRequest.method,
