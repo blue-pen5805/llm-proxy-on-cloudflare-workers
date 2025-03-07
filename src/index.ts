@@ -10,17 +10,31 @@ import { universalEndpoint } from "./requests/universal_endpoint";
 
 export default {
   async fetch(request, env, _ctx): Promise<Response> {
-    const pathname = getPathname(request);
+    let pathname = getPathname(request);
     if (env.DEV !== "True" && authenticate(request, env) === false) {
       return new Response("Unauthorized", { status: 401 });
     }
 
     Secrets.configure(env);
-    AiGatewayEndpoint.configure(
-      env.CLOUDFLARE_ACCOUNT_ID,
-      env.AI_GATEWAY_NAME,
-      env.CF_AIG_TOKEN,
-    );
+
+    // AI Gateway routes
+    // Example: /g/{AI_GATEWAY_NAME}/chat/completions
+    if (pathname.startsWith("/g/")) {
+      const [_empty, _g, ai_gateway_name, ...paths] = pathname.split("/");
+      pathname = `/${paths.join("/")}`;
+
+      AiGatewayEndpoint.configure(
+        env.CLOUDFLARE_ACCOUNT_ID,
+        ai_gateway_name,
+        env.CF_AIG_TOKEN,
+      );
+    } else {
+      AiGatewayEndpoint.configure(
+        env.CLOUDFLARE_ACCOUNT_ID,
+        env.AI_GATEWAY_NAME,
+        env.CF_AIG_TOKEN,
+      );
+    }
 
     // Proxy
     // Example: /openai/v1/chat/completions
