@@ -1,8 +1,11 @@
 import { AiGatewayEndpoint } from "../providers/ai_gateway";
 import { Providers } from "../providers";
-import { getPathname } from "../utils";
 
-export async function proxy(request: Request, providerName: string) {
+export async function proxy(
+  request: Request,
+  providerName: string,
+  pathname: string,
+) {
   const provider = Providers[providerName];
   const providerClass = new provider.providerClass(provider.args);
   if (AiGatewayEndpoint.isActive(providerName)) {
@@ -12,18 +15,15 @@ export async function proxy(request: Request, providerName: string) {
     );
   }
 
-  let pathname = getPathname(request).replace(
-    new RegExp(`^/${providerName}/`),
-    "/",
-  );
+  let targetPathname = pathname.replace(new RegExp(`^/${providerName}/`), "/");
 
   // Remove duplicated base path
   const endpointBasePath = new URL(providerClass.endpoint.baseUrl()).pathname;
-  if (pathname.startsWith(endpointBasePath + endpointBasePath)) {
-    pathname = pathname.replace(endpointBasePath, "");
+  if (targetPathname.startsWith(endpointBasePath + endpointBasePath)) {
+    targetPathname = targetPathname.replace(endpointBasePath, "");
   }
 
-  return providerClass.fetch(pathname, {
+  return providerClass.fetch(targetPathname, {
     method: request.method,
     body: request.body,
     headers: request.headers,

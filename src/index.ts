@@ -43,7 +43,7 @@ export default {
       pathname.startsWith(`/${providerName}/`),
     );
     if (providerName) {
-      return await proxy(request, providerName);
+      return await proxy(request, providerName, pathname);
     }
 
     // OpenAI compatible endpoints
