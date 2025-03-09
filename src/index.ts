@@ -17,6 +17,16 @@ export default {
 
     Secrets.configure(env);
 
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        },
+      });
+    }
+
     // AI Gateway routes
     // Example: /g/{AI_GATEWAY_NAME}/chat/completions
     if (pathname.startsWith("/g/")) {

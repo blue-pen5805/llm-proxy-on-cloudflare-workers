@@ -21,10 +21,10 @@ export async function chatCompletions(request: Request) {
     );
   }
 
-  const [providerName, ...modelParts] = data["model"].split("/") as [
-    string,
-    string[],
-  ];
+  const [providerName, ...modelParts] = (
+    data["model"] === "default" ? Secrets.get("DEFAULT_MODEL") : data["model"]
+  ).split("/") as [string, string];
+
   const model = modelParts.join("/");
 
   const provider = Providers[providerName];

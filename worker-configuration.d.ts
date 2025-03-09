@@ -3,18 +3,19 @@
 interface Env {
 	DEV: string;
 	PROXY_API_KEY: string;
+	DEFAULT_MODEL: string;
 	RETRY: string;
 	CLOUDFLARE_ACCOUNT_ID: string;
 	AI_GATEWAY_NAME: string;
 	CF_AIG_TOKEN: string;
 	CLOUDFLARE_API_KEY: string;
 	ANTHROPIC_API_KEY: string;
+	CEREBRAS_API_KEY: string;
 	COHERE_API_KEY: string;
 	DEEPSEEK_API_KEY: string;
 	GEMINI_API_KEY: string;
 	GROK_API_KEY: string;
 	GROQ_API_KEY: string;
-	CEREBRAS_API_KEY: string;
 	MISTRAL_API_KEY: string;
 	OPENROUTER_API_KEY: string;
 	HUGGINGFACE_API_KEY: string;
