@@ -9,7 +9,6 @@ export class Grok extends ProviderBase {
     this.endpoint = new GrokEndpoint(apiKey);
   }
 
-  // OpenAI Comaptible API - Chat Completions
   chatCompletionsRequestData({
     body,
     headers,

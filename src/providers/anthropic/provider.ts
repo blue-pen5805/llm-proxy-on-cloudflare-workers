@@ -1,4 +1,3 @@
-import { OpenAIChatCompletionsRequestBody } from "../openai/types";
 import { ProviderBase } from "../provider";
 import { AnthropicEndpoint } from "./endpoint";
 import { AnthropicModelsListResponseBody } from "./types";
@@ -11,7 +10,6 @@ export class Anthropic extends ProviderBase {
     this.endpoint = new AnthropicEndpoint(apiKey);
   }
 
-  // OpenAI ComaptiQble API - Chat Completions
   chatCompletionsRequestData({
     body,
     headers = {},
@@ -26,10 +24,12 @@ export class Anthropic extends ProviderBase {
     });
   }
 
+  // Anthropic API requires `max_tokens` parameter to be set.
   chatCompletionsRequestBody(body: string): string {
     const trimmedData = JSON.parse(super.chatCompletionsRequestBody(body));
-    if (trimmedData["max_tokens"] === undefined)
+    if (trimmedData["max_tokens"] === undefined) {
       trimmedData["max_tokens"] = 1024;
+    }
 
     return JSON.stringify(trimmedData);
   }

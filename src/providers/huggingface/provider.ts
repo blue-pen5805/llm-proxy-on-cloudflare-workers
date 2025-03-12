@@ -10,7 +10,7 @@ export class HuggingFace extends ProviderBase {
     this.endpoint = new HuggingFaceEndpoint(apiKey);
   }
 
-  // OpenAI Comaptible API - Chat Completions
+  // OpenAI Compatible API - Chat Completions
   async chatCompletions({
     body,
     headers = {},

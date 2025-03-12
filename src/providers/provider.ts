@@ -58,7 +58,7 @@ export class ProviderBase {
     return this.endpoint.fetch(pathname, init);
   }
 
-  // OpenAI Comaptible API - Chat Completions
+  // OpenAI Compatible API - Chat Completions
   async chatCompletions({
     body,
     headers = {},
@@ -128,7 +128,7 @@ export class ProviderBase {
     return JSON.stringify(trimmedData);
   }
 
-  // OpenAI Comaptible API - Models
+  // OpenAI Compatible API - Models
   async listModels(): Promise<OpenAIModelsListResponseBody> {
     const response = await this.fetchModels();
 

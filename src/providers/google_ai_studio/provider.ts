@@ -11,33 +11,17 @@ export class GoogleAiStudio extends ProviderBase {
     [
       "messages",
       "model",
-      // "store",
-      // "metadata",
-      // "frequency_penalty",
-      // "logit_bias",
-      // "logprobs",
       "max_tokens",
       "max_completion_tokens",
       "n",
-      // "modalities",
-      // "prediction",
-      // "audio",
-      // "presence_penalty",
       "response_format",
-      // "seed",
-      // "service_tier",
       "stop",
       "stream",
       "stream_options",
-      // "suffix",
       "temperature",
       "top_p",
       "tools",
       "tool_choice",
-      // "parallel_tool_calls",
-      // "user",
-      // "function_call",
-      // "functions",
     ];
 
   endpoint: GoogleAiStudioEndpoint;
@@ -63,7 +47,6 @@ export class GoogleAiStudio extends ProviderBase {
     }
   }
 
-  // OpenAI Comaptible API - Chat Completions
   chatCompletionsRequestData({
     body,
     headers = {},
@@ -82,7 +65,6 @@ export class GoogleAiStudio extends ProviderBase {
     });
   }
 
-  // OpenAI Comaptible API - Models
   async listModels() {
     const response = await this.fetchModels();
     const data =

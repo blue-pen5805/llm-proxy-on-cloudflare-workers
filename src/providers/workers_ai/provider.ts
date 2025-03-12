@@ -16,7 +16,6 @@ export class WorkersAi extends ProviderBase {
     this.endpoint = new WorkersAiEndpoint(apiKey, accountId);
   }
 
-  // OpenAI Comaptible API - Chat Completions
   chatCompletionsRequestData({
     body,
     headers,
@@ -31,7 +30,6 @@ export class WorkersAi extends ProviderBase {
     });
   }
 
-  // OpenAI Comaptible API - Models
   async listModels() {
     const response = await this.fetchModels();
     const data = (await response.json()) as WorkersAiModelsListResponseBody;

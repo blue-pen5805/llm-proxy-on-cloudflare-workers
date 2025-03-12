@@ -10,7 +10,6 @@ export class OpenRouter extends ProviderBase {
     this.endpoint = new OpenRouterEndpoint(apiKey);
   }
 
-  // OpenAI Comaptible API - Chat Completions
   chatCompletionsRequestData({
     body,
     headers,
@@ -25,7 +24,6 @@ export class OpenRouter extends ProviderBase {
     });
   }
 
-  // OpenAI Comaptible API - Models
   async listModels() {
     const response = await this.fetchModels();
     const data = (await response.json()) as OpenRouterModelsListResponseBody;

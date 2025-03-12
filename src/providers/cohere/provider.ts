@@ -1,16 +1,7 @@
 import { ProviderBase } from "../provider";
 import { CohereEndpoint, CohereOpenAICompatibleEndpoint } from "./endpoint";
-import { createParser, type EventSourceMessage } from "eventsource-parser";
-import {
-  CohereModelsListResponseBody,
-  CohereV2ChatChunkResponse,
-  CohereV2ChatResponse,
-} from "./types";
-import {
-  OpenAIChatCompletionsChunkResponseBody,
-  OpenAIChatCompletionsRequestBody,
-  OpenAIChatCompletionsResponseBody,
-} from "../openai/types";
+import { CohereModelsListResponseBody } from "./types";
+import { OpenAIChatCompletionsRequestBody } from "../openai/types";
 
 export class Cohere extends ProviderBase {
   readonly CHAT_COMPLETIONS_SUPPORTED_PARAMETERS: (keyof OpenAIChatCompletionsRequestBody)[] =
@@ -53,7 +44,6 @@ export class Cohere extends ProviderBase {
     }
   }
 
-  // OpenAI Comaptible API - Chat Completions
   chatCompletionsRequestData({
     body,
     headers = {},
