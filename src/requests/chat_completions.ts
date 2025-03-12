@@ -55,7 +55,11 @@ export async function chatCompletions(request: Request) {
         headers,
       });
 
-      return requestToUniversalEndpointItem(providerName, requestData);
+      return requestToUniversalEndpointItem(
+        providerName,
+        providerClass,
+        requestData,
+      );
     });
 
     const promise = endpoint.fetch("", {

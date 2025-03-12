@@ -24,10 +24,4 @@ export class Groq extends ProviderBase {
       })),
     };
   }
-
-  fetchModels() {
-    return this.fetch("/models", {
-      method: "GET",
-    });
-  }
 }

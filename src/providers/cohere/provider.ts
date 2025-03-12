@@ -4,6 +4,9 @@ import { CohereModelsListResponseBody } from "./types";
 import { OpenAIChatCompletionsRequestBody } from "../openai/types";
 
 export class Cohere extends ProviderBase {
+  readonly chatCompletionPath: string = "/compatibility/v1/chat/completions";
+  readonly modelsPath: string = "/v1/models?page_size=100&endpoint=chat";
+
   readonly CHAT_COMPLETIONS_SUPPORTED_PARAMETERS: (keyof OpenAIChatCompletionsRequestBody)[] =
     [
       "messages",
@@ -55,11 +58,14 @@ export class Cohere extends ProviderBase {
       this.endpoint,
     );
 
-    return openaiCompatibleEndpoint.requestData("/chat/completions", {
-      method: "POST",
-      headers,
-      body: this.chatCompletionsRequestBody(body),
-    });
+    return openaiCompatibleEndpoint.requestData(
+      this.chatCompletionPath.replace("/compatibility/v1", ""),
+      {
+        method: "POST",
+        headers,
+        body: this.chatCompletionsRequestBody(body),
+      },
+    );
   }
 
   async listModels() {
@@ -76,11 +82,5 @@ export class Cohere extends ProviderBase {
         _: model,
       })),
     };
-  }
-
-  fetchModels() {
-    return this.fetch("/v1/models?page_size=100&endpoint=chat", {
-      method: "GET",
-    });
   }
 }

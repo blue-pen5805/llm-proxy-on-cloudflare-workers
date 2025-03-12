@@ -3,6 +3,9 @@ import { ProviderBase } from "../provider";
 import { HuggingFaceEndpoint } from "./endpoint";
 
 export class HuggingFace extends ProviderBase {
+  readonly chatCompletionPath: string = "";
+  readonly modelsPath: string = "";
+
   endpoint: HuggingFaceEndpoint;
 
   constructor({ apiKey }: { apiKey: keyof Env }) {
@@ -10,7 +13,6 @@ export class HuggingFace extends ProviderBase {
     this.endpoint = new HuggingFaceEndpoint(apiKey);
   }
 
-  // OpenAI Compatible API - Chat Completions
   async chatCompletions({
     body,
     headers = {},

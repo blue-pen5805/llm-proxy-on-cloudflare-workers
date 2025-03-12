@@ -3,6 +3,9 @@ import { WorkersAiEndpoint } from "./endpoint";
 import { WorkersAiModelsListResponseBody } from "./types";
 
 export class WorkersAi extends ProviderBase {
+  readonly chatCompletionPath: string = "/v1/chat/completions";
+  readonly modelsPath: string = "/models/search?task=Text Generation";
+
   endpoint: WorkersAiEndpoint;
 
   constructor({
@@ -14,20 +17,6 @@ export class WorkersAi extends ProviderBase {
   }) {
     super({ apiKey });
     this.endpoint = new WorkersAiEndpoint(apiKey, accountId);
-  }
-
-  chatCompletionsRequestData({
-    body,
-    headers,
-  }: {
-    body: string;
-    headers: HeadersInit;
-  }) {
-    return this.endpoint.requestData("/v1/chat/completions", {
-      method: "POST",
-      headers,
-      body,
-    });
   }
 
   async listModels() {
@@ -44,11 +33,5 @@ export class WorkersAi extends ProviderBase {
         _: model,
       })),
     };
-  }
-
-  fetchModels() {
-    return this.fetch("/models/search?task=Text Generation", {
-      method: "GET",
-    });
   }
 }

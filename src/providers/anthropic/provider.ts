@@ -3,25 +3,14 @@ import { AnthropicEndpoint } from "./endpoint";
 import { AnthropicModelsListResponseBody } from "./types";
 
 export class Anthropic extends ProviderBase {
+  readonly chatCompletionPath: string = "/v1/chat/completions";
+  readonly modelsPath: string = "/v1/models";
+
   endpoint: AnthropicEndpoint;
 
   constructor({ apiKey }: { apiKey: keyof Env }) {
     super({ apiKey });
     this.endpoint = new AnthropicEndpoint(apiKey);
-  }
-
-  chatCompletionsRequestData({
-    body,
-    headers = {},
-  }: {
-    body: string;
-    headers: HeadersInit;
-  }) {
-    return this.endpoint.requestData("/v1/chat/completions", {
-      method: "POST",
-      headers,
-      body: this.chatCompletionsRequestBody(body),
-    });
   }
 
   // Anthropic API requires `max_tokens` parameter to be set.
@@ -48,11 +37,5 @@ export class Anthropic extends ProviderBase {
         _: model,
       })),
     };
-  }
-
-  fetchModels(): Promise<Response> {
-    return this.fetch("/v1/models", {
-      method: "GET",
-    });
   }
 }

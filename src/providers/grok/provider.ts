@@ -2,30 +2,13 @@ import { ProviderBase } from "../provider";
 import { GrokEndpoint } from "./endpoint";
 
 export class Grok extends ProviderBase {
+  readonly chatCompletionPath: string = "/v1/chat/completions";
+  readonly modelsPath: string = "/v1/models";
+
   endpoint: GrokEndpoint;
 
   constructor({ apiKey }: { apiKey: keyof Env }) {
     super({ apiKey });
     this.endpoint = new GrokEndpoint(apiKey);
-  }
-
-  chatCompletionsRequestData({
-    body,
-    headers,
-  }: {
-    body: string;
-    headers: HeadersInit;
-  }) {
-    return this.endpoint.requestData("/v1/chat/completions", {
-      method: "POST",
-      headers,
-      body,
-    });
-  }
-
-  fetchModels() {
-    return this.fetch("/v1/models", {
-      method: "GET",
-    });
   }
 }

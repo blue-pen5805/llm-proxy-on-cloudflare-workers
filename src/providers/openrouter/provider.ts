@@ -3,25 +3,14 @@ import { OpenRouterEndpoint } from "./endpoint";
 import { OpenRouterModelsListResponseBody } from "./types";
 
 export class OpenRouter extends ProviderBase {
+  readonly chatCompletionPath: string = "/v1/chat/completions";
+  readonly modelsPath: string = "/v1/models";
+
   endpoint: OpenRouterEndpoint;
 
   constructor({ apiKey }: { apiKey: keyof Env }) {
     super({ apiKey });
     this.endpoint = new OpenRouterEndpoint(apiKey);
-  }
-
-  chatCompletionsRequestData({
-    body,
-    headers,
-  }: {
-    body: string;
-    headers: HeadersInit;
-  }) {
-    return this.endpoint.requestData("/v1/chat/completions", {
-      method: "POST",
-      headers,
-      body,
-    });
   }
 
   async listModels() {
@@ -37,11 +26,5 @@ export class OpenRouter extends ProviderBase {
         _: model,
       })),
     };
-  }
-
-  fetchModels() {
-    return this.fetch("/v1/models", {
-      method: "GET",
-    });
   }
 }

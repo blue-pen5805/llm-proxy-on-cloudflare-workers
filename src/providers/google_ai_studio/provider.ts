@@ -7,6 +7,9 @@ import { OpenAIChatCompletionsRequestBody } from "../openai/types";
 import { GoogleAiStudioModelsListResponseBody } from "./types";
 
 export class GoogleAiStudio extends ProviderBase {
+  readonly chatCompletionPath: string = "/v1beta/openai/chat/completions";
+  readonly modelsPath: string = "/v1beta/models";
+
   readonly CHAT_COMPLETIONS_SUPPORTED_PARAMETERS: (keyof OpenAIChatCompletionsRequestBody)[] =
     [
       "messages",
@@ -58,11 +61,14 @@ export class GoogleAiStudio extends ProviderBase {
       this.endpoint,
     );
 
-    return openaiCompatibleEndpoint.requestData("/chat/completions", {
-      method: "POST",
-      headers,
-      body: this.chatCompletionsRequestBody(body),
-    });
+    return openaiCompatibleEndpoint.requestData(
+      this.chatCompletionPath.replace("/v1beta/openai", ""),
+      {
+        method: "POST",
+        headers,
+        body: this.chatCompletionsRequestBody(body),
+      },
+    );
   }
 
   async listModels() {
@@ -80,11 +86,5 @@ export class GoogleAiStudio extends ProviderBase {
         _: model,
       })),
     };
-  }
-
-  fetchModels() {
-    return this.fetch("/v1beta/models", {
-      method: "GET",
-    });
   }
 }

@@ -36,26 +36,6 @@ export const OpenAICompatibleProviders = [
   "openrouter",
 ];
 
-export const AiGatewayBasicEndpointPaths: { [key: string]: string } = {
-  "workers-ai": "v1/chat/completions",
-  // "aws-bedrock": "",
-  anthropic: "v1/chat/completions",
-  // "azure-openai": "chat/completions",
-  cerebras: "chat/completions",
-  cohere: "compatibility/v1/chat/completions",
-  deepseek: "chat/completions",
-  "google-ai-studio": "v1beta/openai/chat/completions",
-  // "google-vertex-ai": "",
-  grok: "v1/chat/completions",
-  groq: "chat/completions",
-  huggingface: "v1/chat/completions",
-  mistral: "v1/chat/completions",
-  openai: "chat/completions",
-  openrouter: "chat/completions",
-  // "perplexity-ai": "chat/completions",
-  // replicate: "predictions",
-};
-
 export class AiGatewayEndpoint extends EndpointBase {
   static readonly origin = "https://gateway.ai.cloudflare.com/v1";
 

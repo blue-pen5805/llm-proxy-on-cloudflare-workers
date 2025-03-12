@@ -6,6 +6,9 @@ import {
 } from "./openai/types";
 
 export class ProviderBase {
+  readonly chatCompletionPath: string = "/chat/completions";
+  readonly modelsPath: string = "/models";
+
   readonly CHAT_COMPLETIONS_SUPPORTED_PARAMETERS: (keyof OpenAIChatCompletionsRequestBody)[] =
     [
       "messages",
@@ -106,10 +109,10 @@ export class ProviderBase {
     body: string;
     headers: HeadersInit;
   }) {
-    return this.endpoint.requestData("/chat/completions", {
+    return this.endpoint.requestData(this.chatCompletionPath, {
       method: "POST",
       headers,
-      body,
+      body: this.chatCompletionsRequestBody(body),
     });
   }
 
@@ -136,7 +139,7 @@ export class ProviderBase {
   }
 
   fetchModels(): Promise<Response> {
-    return this.fetch("/models", {
+    return this.fetch(this.modelsPath, {
       method: "GET",
     });
   }

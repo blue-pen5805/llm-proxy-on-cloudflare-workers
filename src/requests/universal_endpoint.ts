@@ -1,8 +1,6 @@
-import {
-  AiGatewayBasicEndpointPaths,
-  AiGatewayEndpoint,
-} from "../providers/ai_gateway";
+import { AiGatewayEndpoint } from "../providers/ai_gateway";
 import { Providers } from "../providers";
+import { ProviderBase } from "../providers/provider";
 
 type UniversalEndpointItem = {
   provider?: string;
@@ -34,7 +32,7 @@ export function modifyUniversalEndpointItem(item: UniversalEndpointItem) {
     const model = item.query.model || "";
     const endpoint =
       item.endpoint ||
-      AiGatewayBasicEndpointPaths[providerName] ||
+      providerClass.chatCompletionPath.replace("/", "") ||
       "/chat/completions";
     const headers = item.headers || providerClass.endpoint.headers();
 
@@ -61,7 +59,7 @@ export function modifyUniversalEndpointItem(item: UniversalEndpointItem) {
     const providerClass = new provider.providerClass(provider.args);
     const endpoint =
       item.endpoint ||
-      AiGatewayBasicEndpointPaths[providerName] ||
+      providerClass.chatCompletionPath.replace("/", "") ||
       "/chat/completions";
     const headers = item.headers || providerClass?.endpoint?.headers();
 
@@ -79,10 +77,11 @@ export function modifyUniversalEndpointItem(item: UniversalEndpointItem) {
 
 export function requestToUniversalEndpointItem(
   providerName: string,
+  providerClass: ProviderBase,
   requestData: Parameters<typeof fetch>,
 ) {
   const endpoint =
-    AiGatewayBasicEndpointPaths[providerName] || "/chat/completions";
+    providerClass.chatCompletionPath.replace("/", "") || "/chat/completions";
 
   return {
     provider: providerName,
