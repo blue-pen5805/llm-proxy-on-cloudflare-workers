@@ -41,25 +41,21 @@ describe("EndpointBase", () => {
 
   describe("requestData", () => {
     it("should construct proper request data", () => {
-      const pathname = "/test/path";
       const init = {
         method: "POST",
         headers: { "X-Custom-Header": "value" },
         body: JSON.stringify({ test: "data" }),
       };
 
-      const result = endpoint.requestData(pathname, init);
+      const result = endpoint.requestData(init);
 
-      expect(result).toEqual([
-        "https://example.com/test/path",
-        {
-          ...init,
-          headers: {
-            ...init.headers,
-            ...endpoint.headers(),
-          },
+      expect(result).toEqual({
+        ...init,
+        headers: {
+          ...init.headers,
+          ...endpoint.headers(),
         },
-      ]);
+      });
     });
 
     it("should combine custom headers with endpoint headers", () => {
@@ -68,20 +64,12 @@ describe("EndpointBase", () => {
       });
 
       const init = { headers: { Authorization: "Bearer token" } };
-      const [_, resultInit = {}] = endpoint.requestData("/test", init);
+      const resultInit = endpoint.requestData(init);
 
-      expect(resultInit.headers).toEqual({
+      expect(resultInit?.headers).toEqual({
         Authorization: "Bearer token",
         "Content-Type": "application/json",
       });
-    });
-
-    it("should include pathname prefix", () => {
-      vi.spyOn(endpoint, "pathnamePrefix").mockReturnValue("/prefix");
-
-      const [url] = endpoint.requestData("/test");
-
-      expect(url).toBe("https://example.com/prefix/test");
     });
   });
 
@@ -89,17 +77,19 @@ describe("EndpointBase", () => {
     it("should call fetch2 with correct parameters", async () => {
       const pathname = "/test";
       const init = { method: "GET" };
-      const requestDataResult = [
-        "https://example.com/test",
-        { method: "GET", headers: {} },
-      ] as Parameters<typeof fetch>;
+      const requestDataResult = { method: "GET", headers: {} } as Parameters<
+        typeof fetch
+      >[1];
 
       vi.spyOn(endpoint, "requestData").mockReturnValue(requestDataResult);
 
       await endpoint.fetch(pathname, init);
 
-      expect(endpoint.requestData).toHaveBeenCalledWith(pathname, init);
-      expect(fetch2).toHaveBeenCalledWith(...requestDataResult);
+      expect(endpoint.requestData).toHaveBeenCalledWith(init);
+      expect(fetch2).toHaveBeenCalledWith(
+        endpoint.baseUrl() + pathname,
+        requestDataResult,
+      );
     });
   });
 });

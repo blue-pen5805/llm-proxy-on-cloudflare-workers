@@ -92,28 +92,26 @@ describe("ProviderBase", () => {
 
   describe("chatCompletionsRequestData", () => {
     it("should return endpoint.requestData with correct parameters", () => {
-      const body = "test body";
+      const body = "{}";
       const headers = { "Test-Header": "value" };
 
       providerBase.chatCompletionsRequestData({ body, headers });
 
-      expect(mockEndpoint.requestData).toHaveBeenCalledWith(
-        "/chat/completions",
-        {
-          method: "POST",
-          headers,
-          body,
-        },
-      );
+      expect(mockEndpoint.requestData).toHaveBeenCalledWith({
+        method: "POST",
+        headers,
+        body,
+      });
     });
   });
 
   describe("chatCompletions", () => {
     beforeEach(() => {
-      vi.spyOn(providerBase, "chatCompletionsRequestData").mockReturnValue([
-        "https://api.example.com/chat/completions",
-        { method: "POST", headers: {}, body: "" },
-      ]);
+      vi.spyOn(providerBase, "chatCompletionsRequestData").mockReturnValue({
+        method: "POST",
+        headers: {},
+        body: "{}",
+      });
       vi.spyOn(providerBase, "chatCompletionsRequestBody").mockReturnValue("");
       vi.spyOn(providerBase, "processChatCompletions").mockResolvedValue(
         new Response(),

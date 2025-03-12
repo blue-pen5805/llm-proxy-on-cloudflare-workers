@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
-  AiGatewayBasicEndpointPaths,
   AiGatewayEndpoint,
   AiGatewaySupportedProviders,
   OpenAICompatibleProviders,
@@ -201,20 +200,6 @@ describe("AI Gateway", () => {
       it("should return empty string if no destination", () => {
         const gatewayEndpoint = new AiGatewayEndpoint("openai");
         expect(gatewayEndpoint.pathnamePrefix()).toBe("");
-      });
-    });
-
-    describe("AiGatewayBasicEndpointPaths", () => {
-      it("should have matching entries for OpenAI-compatible providers", () => {
-        OpenAICompatibleProviders.forEach((provider) => {
-          if (AiGatewayBasicEndpointPaths[provider]) {
-            expect(
-              AiGatewayBasicEndpointPaths[provider].includes(
-                "chat/completions",
-              ),
-            ).toBeTruthy();
-          }
-        });
       });
     });
 
