@@ -1,4 +1,5 @@
 import { defineWorkersConfig } from "@cloudflare/vitest-pool-workers/config";
+import { resolve } from "path";
 
 export default defineWorkersConfig({
   test: {
@@ -6,6 +7,9 @@ export default defineWorkersConfig({
       workers: {
         wrangler: { configPath: "./wrangler.toml" },
       },
+    },
+    alias: {
+      "~/src": resolve(__dirname, "./src"),
     },
   },
 });

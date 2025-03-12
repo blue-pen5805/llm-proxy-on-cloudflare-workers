@@ -24,13 +24,16 @@ export const AiGatewaySupportedProviders = [
 
 export const OpenAICompatibleProviders = [
   "workers-ai",
+  "anthropic",
   "cerebras",
+  "cohere",
   "deepseek",
   "google-ai-studio",
   "grok",
   "groq",
   "mistral",
   "openai",
+  "openrouter",
 ];
 
 export const AiGatewayBasicEndpointPaths: { [key: string]: string } = {
@@ -88,10 +91,9 @@ export class AiGatewayEndpoint extends EndpointBase {
   }
 
   available(): boolean {
-    return (
-      this.destination?.available() ||
-      AiGatewayEndpoint.isActive(this.providerName)
-    );
+    if (!AiGatewayEndpoint.isActive(this.providerName)) return false;
+
+    return this.destination?.available() || false;
   }
 
   baseUrl() {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { authenticate } from "../src/authorization";
+import { authenticate } from "~/src/authorization";
 
 describe("authenticate", () => {
   // Test when no API key is set in the environment

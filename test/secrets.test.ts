@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { Secrets } from "../src/secrets";
+import { Secrets } from "~/src/secrets";
 
 describe("Secrets", () => {
   let env: Env;
