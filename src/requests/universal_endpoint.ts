@@ -78,7 +78,7 @@ export function modifyUniversalEndpointItem(item: UniversalEndpointItem) {
 export function requestToUniversalEndpointItem(
   providerName: string,
   providerClass: ProviderBase,
-  requestData: Parameters<typeof fetch>,
+  requestData: Parameters<typeof fetch>[1],
 ) {
   const endpoint =
     providerClass.chatCompletionPath.replace("/", "") || "/chat/completions";
@@ -86,9 +86,7 @@ export function requestToUniversalEndpointItem(
   return {
     provider: providerName,
     endpoint,
-    headers: requestData[1] ? requestData[1].headers : {},
-    query: requestData[1]
-      ? JSON.parse(requestData[1].body as string)
-      : undefined,
+    headers: requestData ? requestData.headers : {},
+    query: requestData ? JSON.parse(requestData.body as string) : undefined,
   };
 }

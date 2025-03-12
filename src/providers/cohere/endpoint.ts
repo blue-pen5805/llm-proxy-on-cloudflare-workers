@@ -24,28 +24,3 @@ export class CohereEndpoint extends EndpointBase {
     };
   }
 }
-
-export class CohereOpenAICompatibleEndpoint extends EndpointBase {
-  endpoint: CohereEndpoint;
-
-  constructor(endpoint: CohereEndpoint) {
-    super();
-    this.endpoint = endpoint;
-  }
-
-  available() {
-    return this.endpoint.available();
-  }
-
-  baseUrl() {
-    return this.endpoint.baseUrl();
-  }
-
-  pathnamePrefix() {
-    return "/compatibility/v1";
-  }
-
-  headers() {
-    return this.endpoint.headers();
-  }
-}

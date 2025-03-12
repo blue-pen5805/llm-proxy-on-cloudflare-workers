@@ -1,5 +1,4 @@
 import { EndpointBase } from "./endpoint";
-import { fetch2 } from "../utils";
 import {
   OpenAIChatCompletionsRequestBody,
   OpenAIModelsListResponseBody,
@@ -74,12 +73,11 @@ export class ProviderBase {
     ) as OpenAIChatCompletionsRequestBody;
     const isStream = (stream as boolean | undefined) === true;
 
-    const promise = fetch2(
-      ...this.chatCompletionsRequestData({
-        body: this.chatCompletionsRequestBody(body),
-        headers,
-      }),
-    );
+    const init = this.chatCompletionsRequestData({
+      body: this.chatCompletionsRequestBody(body),
+      headers,
+    });
+    const promise = this.fetch(this.chatCompletionPath, init);
 
     if (!isStream) {
       return await this.processChatCompletions(promise, model);
@@ -109,7 +107,7 @@ export class ProviderBase {
     body: string;
     headers: HeadersInit;
   }) {
-    return this.endpoint.requestData(this.chatCompletionPath, {
+    return this.endpoint.requestData({
       method: "POST",
       headers,
       body: this.chatCompletionsRequestBody(body),

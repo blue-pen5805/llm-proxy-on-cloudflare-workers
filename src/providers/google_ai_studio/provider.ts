@@ -61,14 +61,11 @@ export class GoogleAiStudio extends ProviderBase {
       this.endpoint,
     );
 
-    return openaiCompatibleEndpoint.requestData(
-      this.chatCompletionPath.replace("/v1beta/openai", ""),
-      {
-        method: "POST",
-        headers,
-        body: this.chatCompletionsRequestBody(body),
-      },
-    );
+    return openaiCompatibleEndpoint.requestData({
+      method: "POST",
+      headers,
+      body: this.chatCompletionsRequestBody(body),
+    });
   }
 
   async listModels() {

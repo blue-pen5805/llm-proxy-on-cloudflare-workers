@@ -1,5 +1,5 @@
 import { ProviderBase } from "../provider";
-import { CohereEndpoint, CohereOpenAICompatibleEndpoint } from "./endpoint";
+import { CohereEndpoint } from "./endpoint";
 import { CohereModelsListResponseBody } from "./types";
 import { OpenAIChatCompletionsRequestBody } from "../openai/types";
 
@@ -28,44 +28,6 @@ export class Cohere extends ProviderBase {
   constructor({ apiKey }: { apiKey: keyof Env }) {
     super({ apiKey });
     this.endpoint = new CohereEndpoint(apiKey);
-  }
-
-  async fetch(
-    pathname: string,
-    init?: Parameters<typeof fetch>[1],
-  ): ReturnType<typeof fetch> {
-    if (pathname.startsWith("/compatibility/v1")) {
-      const openaiCompatibleEndpoint = new CohereOpenAICompatibleEndpoint(
-        this.endpoint,
-      );
-      return openaiCompatibleEndpoint.fetch(
-        pathname.replace("/compatibility/v1", ""),
-        init,
-      );
-    } else {
-      return this.endpoint.fetch(pathname, init);
-    }
-  }
-
-  chatCompletionsRequestData({
-    body,
-    headers = {},
-  }: {
-    body: string;
-    headers: HeadersInit;
-  }) {
-    const openaiCompatibleEndpoint = new CohereOpenAICompatibleEndpoint(
-      this.endpoint,
-    );
-
-    return openaiCompatibleEndpoint.requestData(
-      this.chatCompletionPath.replace("/compatibility/v1", ""),
-      {
-        method: "POST",
-        headers,
-        body: this.chatCompletionsRequestBody(body),
-      },
-    );
   }
 
   async listModels() {

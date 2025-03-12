@@ -21,21 +21,18 @@ export class EndpointBase {
     pathname: string,
     init?: Parameters<typeof fetch>[1],
   ): ReturnType<typeof fetch> {
-    return fetch2(...this.requestData(pathname, init));
-  }
-
-  requestData(pathname: string, init?: RequestInit): Parameters<typeof fetch> {
     const url = this.baseUrl() + this.pathnamePrefix() + pathname;
 
-    return [
-      url,
-      {
-        ...init,
-        headers: {
-          ...init?.headers,
-          ...this.headers(),
-        },
+    return fetch2(url, this.requestData(init));
+  }
+
+  requestData(init?: RequestInit): Parameters<typeof fetch>[1] {
+    return {
+      ...init,
+      headers: {
+        ...init?.headers,
+        ...this.headers(),
       },
-    ];
+    };
   }
 }
