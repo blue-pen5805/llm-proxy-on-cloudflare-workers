@@ -11,16 +11,16 @@ import { handleOptions } from "./requests/options";
 
 export default {
   async fetch(request, env, _ctx): Promise<Response> {
+    if (request.method === "OPTIONS") {
+      return handleOptions(request);
+    }
+
     let pathname = getPathname(request);
     if (env.DEV !== "True" && authenticate(request, env) === false) {
       return new Response("Unauthorized", { status: 401 });
     }
 
     Secrets.configure(env);
-
-    if (request.method === "OPTIONS") {
-      return handleOptions(request);
-    }
 
     // AI Gateway routes
     // Example: /g/{AI_GATEWAY_NAME}/chat/completions
