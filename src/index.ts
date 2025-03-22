@@ -7,6 +7,7 @@ import { chatCompletions } from "./requests/chat_completions";
 import { Providers } from "./providers";
 import { proxy } from "./requests/proxy";
 import { universalEndpoint } from "./requests/universal_endpoint";
+import { handleOptions } from "./requests/options";
 
 export default {
   async fetch(request, env, _ctx): Promise<Response> {
@@ -18,13 +19,7 @@ export default {
     Secrets.configure(env);
 
     if (request.method === "OPTIONS") {
-      return new Response(null, {
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        },
-      });
+      return handleOptions(request);
     }
 
     // AI Gateway routes
