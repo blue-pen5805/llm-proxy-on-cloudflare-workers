@@ -1,12 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { authenticate } from "~/src/authorization";
+import { Secrets } from "~/src/secrets";
 
 describe("authenticate", () => {
   // Test when no API key is set in the environment
   it("should return true when no PROXY_API_KEY is set", () => {
     const request = new Request("https://example.com");
     const env = {} as Env;
-    expect(authenticate(request, env)).toBe(true);
+    expect(authenticate(request)).toBe(true);
   });
 
   // Test when API key is set and authentication succeeds with Authorization header
@@ -19,7 +20,8 @@ describe("authenticate", () => {
     const env = {
       PROXY_API_KEY: "valid-key",
     } as Env;
-    expect(authenticate(request, env)).toBe(true);
+    Secrets.configure(env);
+    expect(authenticate(request)).toBe(true);
   });
 
   // Test when API key is set and authentication succeeds with x-api-key header
@@ -32,7 +34,8 @@ describe("authenticate", () => {
     const env = {
       PROXY_API_KEY: "valid-key",
     } as Env;
-    expect(authenticate(request, env)).toBe(true);
+    Secrets.configure(env);
+    expect(authenticate(request)).toBe(true);
   });
 
   // Test when API key is set and authentication succeeds with x-goog-api-key header
@@ -45,7 +48,8 @@ describe("authenticate", () => {
     const env = {
       PROXY_API_KEY: "valid-key",
     } as Env;
-    expect(authenticate(request, env)).toBe(true);
+    Secrets.configure(env);
+    expect(authenticate(request)).toBe(true);
   });
 
   // Test when authentication fails due to missing headers
@@ -54,7 +58,8 @@ describe("authenticate", () => {
     const env = {
       PROXY_API_KEY: "valid-key",
     } as Env;
-    expect(authenticate(request, env)).toBe(false);
+    Secrets.configure(env);
+    expect(authenticate(request)).toBe(false);
   });
 
   // Test when authentication fails due to incorrect API key
@@ -67,7 +72,8 @@ describe("authenticate", () => {
     const env = {
       PROXY_API_KEY: "valid-key",
     } as Env;
-    expect(authenticate(request, env)).toBe(false);
+    Secrets.configure(env);
+    expect(authenticate(request)).toBe(false);
   });
 
   // Test case with Authorization header in format "Bearer token"
@@ -80,7 +86,8 @@ describe("authenticate", () => {
     const env = {
       PROXY_API_KEY: "valid-key",
     } as Env;
-    expect(authenticate(request, env)).toBe(true);
+    Secrets.configure(env);
+    expect(authenticate(request)).toBe(true);
   });
 
   // Test case with plain token in header without Bearer prefix
@@ -93,6 +100,7 @@ describe("authenticate", () => {
     const env = {
       PROXY_API_KEY: "valid-key",
     } as Env;
-    expect(authenticate(request, env)).toBe(true);
+    Secrets.configure(env);
+    expect(authenticate(request)).toBe(true);
   });
 });

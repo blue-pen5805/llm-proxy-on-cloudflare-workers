@@ -20,6 +20,12 @@ export class Secrets {
     return availables;
   }
 
+  static isAvailable(keyName: keyof Env): boolean {
+    const value = Secrets.getAll(keyName);
+
+    return value.length > 0;
+  }
+
   static getAll(keyName: keyof Env): string[] {
     if (Secrets.env === undefined) {
       return [];

@@ -15,12 +15,12 @@ export default {
       return handleOptions(request);
     }
 
+    Secrets.configure(env);
+
     let pathname = getPathname(request);
-    if (env.DEV !== "True" && authenticate(request, env) === false) {
+    if (env.DEV !== "True" && authenticate(request) === false) {
       return new Response("Unauthorized", { status: 401 });
     }
-
-    Secrets.configure(env);
 
     // AI Gateway routes
     // Example: /g/{AI_GATEWAY_NAME}/chat/completions

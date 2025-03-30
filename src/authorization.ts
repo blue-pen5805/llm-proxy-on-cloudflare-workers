@@ -1,7 +1,10 @@
-export function authenticate(request: Request, env: Env): boolean {
-  if (!env.PROXY_API_KEY) {
+import { Secrets } from "./secrets";
+
+export function authenticate(request: Request): boolean {
+  if (!Secrets.isAvailable("PROXY_API_KEY")) {
     return true;
   }
+
   const authorizationKeys = ["Authorization", "x-api-key", "x-goog-api-key"];
   const authorizationKey =
     authorizationKeys.find((key) => {
@@ -14,5 +17,5 @@ export function authenticate(request: Request, env: Env): boolean {
   }
 
   const apiKey = authorizationValue.split(/\s/)[1] || authorizationValue;
-  return apiKey === env.PROXY_API_KEY;
+  return Secrets.getAll("PROXY_API_KEY").includes(apiKey);
 }

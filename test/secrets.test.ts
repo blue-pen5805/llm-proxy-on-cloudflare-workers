@@ -43,4 +43,14 @@ describe("Secrets", () => {
     const key4 = Secrets.get("GEMINI_API_KEY", true);
     expect(key4).toBe(key1);
   });
+
+  it("should check if a key is available", () => {
+    expect(Secrets.isAvailable("OPENAI_API_KEY")).toBe(true);
+    expect(Secrets.isAvailable("NONEXISTENT_KEY" as any)).toBe(false);
+  });
+
+  it("should return false when env is undefined", () => {
+    Secrets.env = undefined;
+    expect(Secrets.isAvailable("OPENAI_API_KEY")).toBe(false);
+  });
 });
