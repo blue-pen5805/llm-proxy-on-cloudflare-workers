@@ -14,11 +14,11 @@
     "prettier-ci": "prettier --check ."
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.8.6",
+    "@cloudflare/vitest-pool-workers": "^0.8.8",
     "@types/node": "^22.13.14",
     "prettier": "^3.5.3",
     "typescript": "^5.8.2",
     "vitest": "^3.0.9",
-    "wrangler": "^4.5.0"
+    "wrangler": "^4.6.0"
   }
 }
