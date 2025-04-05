@@ -1,6 +1,11 @@
 import { Environments } from "./environments";
 
 export class Config {
+  static isDevelopment(): boolean {
+    const dev = Environments.get("DEV", false);
+    return dev !== undefined && dev !== "False" && dev !== "false";
+  }
+
   static apiKeys(): string[] | undefined {
     const apiKeys = Environments.get("PROXY_API_KEY");
 

@@ -10,14 +10,20 @@ import { handleOptions } from "./requests/options";
 import { Config } from "./utils/config";
 
 export default {
-  async fetch(request, env, _ctx): Promise<Response> {
+  async fetch(request, _env, _ctx): Promise<Response> {
     if (request.method === "OPTIONS") {
       return handleOptions(request);
     }
 
     let pathname = getPathname(request);
-    if (env.DEV !== "True" && authenticate(request) === false) {
+    if (!Config.isDevelopment() && authenticate(request) === false) {
       return new Response("Unauthorized", { status: 401 });
+    }
+
+    // Ping
+    // Example: /ping
+    if (pathname === "/ping") {
+      return new Response("Pong", { status: 200 });
     }
 
     // AI Gateway routes
