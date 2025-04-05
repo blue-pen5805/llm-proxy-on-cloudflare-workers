@@ -4,7 +4,7 @@ import {
   getPathname,
   shuffle,
   formatString,
-} from "~/src/utils/utils";
+} from "~/src/utils/helpers";
 
 describe("safeJsonParse", () => {
   it("should parse valid JSON string", () => {

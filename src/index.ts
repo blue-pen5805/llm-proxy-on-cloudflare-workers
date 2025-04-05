@@ -1,5 +1,5 @@
 import { authenticate } from "./utils/authorization";
-import { getPathname } from "./utils/utils";
+import { getPathname } from "./utils/helpers";
 import { AiGatewayEndpoint } from "./providers/ai_gateway";
 import { models } from "./requests/models";
 import { chatCompletions } from "./requests/chat_completions";

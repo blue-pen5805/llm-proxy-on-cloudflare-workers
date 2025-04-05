@@ -4,7 +4,7 @@ import {
   OpenAICompatibleProviders,
 } from "../providers/ai_gateway";
 import { Providers } from "../providers";
-import { safeJsonParse } from "../utils/utils";
+import { safeJsonParse } from "../utils/helpers";
 import { requestToUniversalEndpointItem } from "./universal_endpoint";
 
 export async function chatCompletions(request: Request) {

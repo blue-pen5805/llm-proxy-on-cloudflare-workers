@@ -1,4 +1,4 @@
-import { fetch2 } from "../utils/utils";
+import { fetch2 } from "../utils/helpers";
 
 export class EndpointBase {
   available(): boolean {

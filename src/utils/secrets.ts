@@ -1,5 +1,5 @@
 import { Environments } from "./environments";
-import { shuffle } from "./utils";
+import { shuffle } from "./helpers";
 
 /**
  * A utility class for managing and retrieving secrets from environment variables.
