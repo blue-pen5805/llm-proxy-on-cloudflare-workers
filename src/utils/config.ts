@@ -17,4 +17,16 @@ export class Config {
 
     return undefined;
   }
+
+  static aiGateway(): {
+    accountId: string | undefined;
+    name: string | undefined;
+    token: string | undefined;
+  } {
+    return {
+      accountId: Environments.get("CLOUDFLARE_ACCOUNT_ID", false),
+      name: Environments.get("AI_GATEWAY_NAME", false),
+      token: Environments.get("CF_AIG_TOKEN", false),
+    };
+  }
 }
