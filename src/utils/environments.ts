@@ -28,15 +28,29 @@ export class Environments {
   }
 
   /**
-   * Gets a specific environment variable by key and optionally parses it.
+   * Gets a specific environment variable by key and returns it as a string.
+   *
+   * @param {keyof Env} key - The environment variable key to retrieve
+   * @param {false} parse - Set to false to prevent parsing and return the raw string
+   * @returns {string | undefined} The environment variable value as a string, or undefined if not found
+   */
+  static get(key: keyof Env, parse: false): string | undefined;
+
+  /**
+   * Gets a specific environment variable by key and parses it.
    * Parsing attempts to convert the value to a JSON object, array, or number.
    * If JSON parsing fails, it tries to parse as comma-separated values.
    *
    * @param {keyof Env} key - The environment variable key to retrieve
    * @param {boolean} [parse=true] - Whether to parse the value
    * @returns {string | Array<any> | Object | number | undefined} The environment variable value,
-   * parsed according to the parse parameter if specified
+   * parsed according to the parse parameter
    */
+  static get(
+    key: keyof Env,
+    parse?: boolean,
+  ): string | Array<any> | Object | number | undefined;
+
   static get(
     key: keyof Env,
     parse: boolean = true,
@@ -44,8 +58,12 @@ export class Environments {
     const env = this.all();
     const value = env[key] as string | undefined;
 
-    if (value === undefined || !parse) {
+    if (value === undefined) {
       return undefined;
+    }
+
+    if (!parse) {
+      return value;
     }
 
     // Try to parse as JSON first

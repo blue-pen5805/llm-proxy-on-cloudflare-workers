@@ -47,8 +47,8 @@ describe("Environments", () => {
   });
 
   describe("get", () => {
-    test("should return undefined when parse is false", () => {
-      expect(Environments.get("TEST_VAR", false)).toBeUndefined();
+    test("should return  value when parse is false", () => {
+      expect(Environments.get("JSON_OBJECT", false)).toBe('{"key": "value"}');
     });
 
     test("should return undefined for non-existing variables", () => {
