@@ -1,12 +1,20 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { authenticate } from "~/src/utils/authorization";
-import { Secrets } from "~/src/utils/secrets";
+import { Config } from "~/src/utils/config";
+
+vi.mock("~/src/utils/config");
 
 describe("authenticate", () => {
+  // Mock the Config.apiKeys method to return a valid API key
+  beforeEach(() => {
+    vi.mocked(Config.apiKeys).mockReturnValue(["valid-key"]);
+  });
+
   // Test when no API key is set in the environment
   it("should return true when no PROXY_API_KEY is set", () => {
+    vi.mocked(Config.apiKeys).mockReturnValue(undefined);
     const request = new Request("https://example.com");
-    const env = {} as Env;
+
     expect(authenticate(request)).toBe(true);
   });
 
@@ -17,10 +25,7 @@ describe("authenticate", () => {
         Authorization: "Bearer valid-key",
       },
     });
-    const env = {
-      PROXY_API_KEY: "valid-key",
-    } as Env;
-    Secrets.configure(env);
+
     expect(authenticate(request)).toBe(true);
   });
 
@@ -31,10 +36,7 @@ describe("authenticate", () => {
         "x-api-key": "valid-key",
       },
     });
-    const env = {
-      PROXY_API_KEY: "valid-key",
-    } as Env;
-    Secrets.configure(env);
+
     expect(authenticate(request)).toBe(true);
   });
 
@@ -45,20 +47,14 @@ describe("authenticate", () => {
         "x-goog-api-key": "valid-key",
       },
     });
-    const env = {
-      PROXY_API_KEY: "valid-key",
-    } as Env;
-    Secrets.configure(env);
+
     expect(authenticate(request)).toBe(true);
   });
 
   // Test when authentication fails due to missing headers
   it("should return false when no authorization header is provided", () => {
     const request = new Request("https://example.com");
-    const env = {
-      PROXY_API_KEY: "valid-key",
-    } as Env;
-    Secrets.configure(env);
+
     expect(authenticate(request)).toBe(false);
   });
 
@@ -69,10 +65,7 @@ describe("authenticate", () => {
         Authorization: "Bearer invalid-key",
       },
     });
-    const env = {
-      PROXY_API_KEY: "valid-key",
-    } as Env;
-    Secrets.configure(env);
+
     expect(authenticate(request)).toBe(false);
   });
 
@@ -83,10 +76,7 @@ describe("authenticate", () => {
         Authorization: "Bearer valid-key",
       },
     });
-    const env = {
-      PROXY_API_KEY: "valid-key",
-    } as Env;
-    Secrets.configure(env);
+
     expect(authenticate(request)).toBe(true);
   });
 
@@ -97,10 +87,7 @@ describe("authenticate", () => {
         Authorization: "valid-key",
       },
     });
-    const env = {
-      PROXY_API_KEY: "valid-key",
-    } as Env;
-    Secrets.configure(env);
+
     expect(authenticate(request)).toBe(true);
   });
 });

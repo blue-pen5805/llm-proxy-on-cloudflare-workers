@@ -33,13 +33,13 @@ export class Environments {
    * If JSON parsing fails, it tries to parse as comma-separated values.
    *
    * @param {keyof Env} key - The environment variable key to retrieve
-   * @param {boolean} [parse=false] - Whether to parse the value
+   * @param {boolean} [parse=true] - Whether to parse the value
    * @returns {string | Array<any> | Object | number | undefined} The environment variable value,
    * parsed according to the parse parameter if specified
    */
   static get(
     key: keyof Env,
-    parse: boolean = false,
+    parse: boolean = true,
   ): string | Array<any> | Object | number | undefined {
     const env = this.all();
     const value = env[key] as string | undefined;
