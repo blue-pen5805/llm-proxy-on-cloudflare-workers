@@ -1,49 +1,46 @@
-import { Providers } from "../providers";
+import { Environments } from "./environments";
 import { shuffle } from "./utils";
 
+/**
+ * A utility class for managing and retrieving secrets from environment variables.
+ * Provides functionality to access all values for a key or get a single value with optional rotation.
+ */
 export class Secrets {
-  static env: Env | undefined;
   static readonly loaded: { [key: string]: string[] } = {};
 
-  static configure(env: Env) {
-    Secrets.env = env;
-  }
-
-  static availables(): (keyof Env)[] {
-    const availables = Object.keys(Providers)
-      .map((key) => {
-        const keyName = Providers[key].args.apiKey;
-        return Secrets.env && Secrets.env[keyName] ? keyName : null;
-      })
-      .filter((key) => key !== null) as (keyof Env)[];
-
-    return availables;
-  }
-
-  static isAvailable(keyName: keyof Env): boolean {
-    const value = Secrets.getAll(keyName);
-
-    return value.length > 0;
-  }
-
+  /**
+   * Retrieves all values for a specified environment key.
+   *
+   * @param keyName - The name of the environment variable to retrieve
+   * @returns An array of string values, or an empty array if the key doesn't exist
+   */
   static getAll(keyName: keyof Env): string[] {
-    if (Secrets.env === undefined) {
-      return [];
-    }
+    const value = Environments.get(keyName);
 
-    const value = Secrets.env[keyName];
     if (value === undefined) {
       return [];
     }
 
-    try {
-      const parsed = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed : [parsed];
-    } catch {
-      return value.split(",");
+    if (Array.isArray(value)) {
+      return value;
     }
+
+    if (typeof value === "string") {
+      return [value];
+    }
+
+    return [];
   }
 
+  /**
+   * Retrieves a single value for a specified environment key.
+   * When rotation is enabled, it cycles through available values in a round-robin fashion.
+   * When rotation is disabled, it returns a random value from the available options.
+   *
+   * @param keyName - The name of the environment variable to retrieve
+   * @param rotate - Whether to rotate through available values (defaults to true)
+   * @returns A string value for the specified key
+   */
   static get(keyName: keyof Env, rotate: boolean = true): string {
     if (rotate) {
       if (!Secrets.loaded[keyName]) {
@@ -54,9 +51,9 @@ export class Secrets {
       Secrets.loaded[keyName].push(Secrets.loaded[keyName].shift() as string);
 
       return apiKey;
+    } else {
+      const secrets = shuffle(this.getAll(keyName));
+      return secrets[0];
     }
-
-    const secrets = shuffle(this.getAll(keyName));
-    return secrets[0];
   }
 }

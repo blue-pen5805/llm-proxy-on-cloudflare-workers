@@ -2,7 +2,6 @@ import { authenticate } from "./utils/authorization";
 import { getPathname } from "./utils/utils";
 import { AiGatewayEndpoint } from "./providers/ai_gateway";
 import { models } from "./requests/models";
-import { Secrets } from "./utils/secrets";
 import { chatCompletions } from "./requests/chat_completions";
 import { Providers } from "./providers";
 import { proxy } from "./requests/proxy";
@@ -15,8 +14,6 @@ export default {
     if (request.method === "OPTIONS") {
       return handleOptions(request);
     }
-
-    Secrets.configure(env);
 
     let pathname = getPathname(request);
     if (env.DEV !== "True" && authenticate(request) === false) {

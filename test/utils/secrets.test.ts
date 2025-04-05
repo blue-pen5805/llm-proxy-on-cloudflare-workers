@@ -1,26 +1,21 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { Environments } from "~/src/utils/environments";
 import { Secrets } from "~/src/utils/secrets";
 
+vi.mock("~/src/utils/environments");
+
 describe("Secrets", () => {
-  let env: Env;
+  let env: { [key: string]: string | string[] };
 
   beforeEach(() => {
     env = {
       OPENAI_API_KEY: "key1",
-      GEMINI_API_KEY: '["key1", "key2", "key3"]',
-    } as Env;
-    Secrets.configure(env);
-  });
+      GEMINI_API_KEY: ["key1", "key2", "key3"],
+    };
 
-  it("should configure environment", () => {
-    expect(Secrets.env).toBe(env);
-  });
-
-  it("should return available secrets", () => {
-    const availableKeys = Secrets.availables();
-    expect(availableKeys.sort()).toEqual(
-      ["OPENAI_API_KEY", "GEMINI_API_KEY"].sort(),
-    );
+    vi.mocked(Environments.get).mockImplementation((keyName) => {
+      return env[keyName];
+    });
   });
 
   it("should return all secrets for a given key name", () => {
@@ -42,15 +37,5 @@ describe("Secrets", () => {
     expect(key3).not.toBe(key2);
     const key4 = Secrets.get("GEMINI_API_KEY", true);
     expect(key4).toBe(key1);
-  });
-
-  it("should check if a key is available", () => {
-    expect(Secrets.isAvailable("OPENAI_API_KEY")).toBe(true);
-    expect(Secrets.isAvailable("NONEXISTENT_KEY" as any)).toBe(false);
-  });
-
-  it("should return false when env is undefined", () => {
-    Secrets.env = undefined;
-    expect(Secrets.isAvailable("OPENAI_API_KEY")).toBe(false);
   });
 });
