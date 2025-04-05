@@ -37,7 +37,7 @@ export async function chatCompletions(request: Request) {
     );
   }
 
-  const providerClass = new provider.providerClass(provider.args);
+  const providerClass = new provider.providerClass();
 
   if (AiGatewayEndpoint.isActive(providerName)) {
     const retry = parseInt(Secrets.get("RETRY")) || 0;

@@ -7,7 +7,7 @@ export async function proxy(
   pathname: string,
 ) {
   const provider = Providers[providerName];
-  const providerClass = new provider.providerClass(provider.args);
+  const providerClass = new provider.providerClass();
   if (AiGatewayEndpoint.isActive(providerName)) {
     providerClass.endpoint = new AiGatewayEndpoint(
       providerName,
