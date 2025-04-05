@@ -1,3 +1,4 @@
+import { Secrets } from "../../utils/secrets";
 import { ProviderBase } from "../provider";
 import { AnthropicEndpoint } from "./endpoint";
 import { AnthropicModelsListResponseBody } from "./types";
@@ -6,11 +7,13 @@ export class Anthropic extends ProviderBase {
   readonly chatCompletionPath: string = "/v1/chat/completions";
   readonly modelsPath: string = "/v1/models";
 
+  readonly apiKeyName: keyof Env = "ANTHROPIC_API_KEY";
+
   endpoint: AnthropicEndpoint;
 
-  constructor({ apiKey }: { apiKey: keyof Env }) {
-    super({ apiKey });
-    this.endpoint = new AnthropicEndpoint(apiKey);
+  constructor() {
+    super();
+    this.endpoint = new AnthropicEndpoint(Secrets.get(this.apiKeyName));
   }
 
   // Anthropic API requires `max_tokens` parameter to be set.

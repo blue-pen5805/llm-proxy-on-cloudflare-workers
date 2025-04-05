@@ -1,3 +1,4 @@
+import { Secrets } from "../../utils/secrets";
 import { OpenAIModelsListResponseBody } from "../openai/types";
 import { ProviderBase } from "../provider";
 import { HuggingFaceEndpoint } from "./endpoint";
@@ -6,11 +7,13 @@ export class HuggingFace extends ProviderBase {
   readonly chatCompletionPath: string = "";
   readonly modelsPath: string = "";
 
+  readonly apiKeyName: keyof Env = "HUGGINGFACE_API_KEY";
+
   endpoint: HuggingFaceEndpoint;
 
-  constructor({ apiKey }: { apiKey: keyof Env }) {
-    super({ apiKey });
-    this.endpoint = new HuggingFaceEndpoint(apiKey);
+  constructor() {
+    super();
+    this.endpoint = new HuggingFaceEndpoint(Secrets.get(this.apiKeyName));
   }
 
   async chatCompletions({

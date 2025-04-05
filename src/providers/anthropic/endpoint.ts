@@ -1,16 +1,15 @@
-import { Secrets } from "../../utils/secrets";
 import { EndpointBase } from "../endpoint";
 
 export class AnthropicEndpoint extends EndpointBase {
-  apiKey: keyof Env;
+  apiKey: string;
 
-  constructor(apikey: keyof Env) {
+  constructor(apikey: string) {
     super();
     this.apiKey = apikey;
   }
 
   available() {
-    return Boolean(Secrets.get(this.apiKey));
+    return Boolean(this.apiKey);
   }
 
   baseUrl() {
@@ -20,7 +19,7 @@ export class AnthropicEndpoint extends EndpointBase {
   headers() {
     return {
       "Content-Type": "application/json",
-      "x-api-key": `${Secrets.get(this.apiKey)}`,
+      "x-api-key": `${this.apiKey}`,
       "anthropic-version": "2023-06-01",
     };
   }

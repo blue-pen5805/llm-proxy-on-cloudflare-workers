@@ -1,8 +1,11 @@
+import { Secrets } from "../../utils/secrets";
 import { OpenAIChatCompletionsRequestBody } from "../openai/types";
 import { ProviderBase } from "../provider";
 import { CerebrasEndpoint } from "./endpoint";
 
 export class Cerebras extends ProviderBase {
+  readonly apiKeyName: keyof Env = "CEREBRAS_API_KEY";
+
   // https://inference-docs.cerebras.ai/openai#currently-unsupported-openai-features
   readonly CHAT_COMPLETIONS_SUPPORTED_PARAMETERS: (keyof OpenAIChatCompletionsRequestBody)[] =
     [
@@ -33,8 +36,8 @@ export class Cerebras extends ProviderBase {
 
   endpoint: CerebrasEndpoint;
 
-  constructor({ apiKey }: { apiKey: keyof Env }) {
-    super({ apiKey });
-    this.endpoint = new CerebrasEndpoint(apiKey);
+  constructor() {
+    super();
+    this.endpoint = new CerebrasEndpoint(Secrets.get(this.apiKeyName));
   }
 }

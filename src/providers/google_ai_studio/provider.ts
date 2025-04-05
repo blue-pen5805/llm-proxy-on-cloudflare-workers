@@ -5,10 +5,13 @@ import {
 } from "./endpoint";
 import { OpenAIChatCompletionsRequestBody } from "../openai/types";
 import { GoogleAiStudioModelsListResponseBody } from "./types";
+import { Secrets } from "../../utils/secrets";
 
 export class GoogleAiStudio extends ProviderBase {
   readonly chatCompletionPath: string = "/v1beta/openai/chat/completions";
   readonly modelsPath: string = "/v1beta/models";
+
+  readonly apiKeyName: keyof Env = "GEMINI_API_KEY";
 
   readonly CHAT_COMPLETIONS_SUPPORTED_PARAMETERS: (keyof OpenAIChatCompletionsRequestBody)[] =
     [
@@ -29,9 +32,9 @@ export class GoogleAiStudio extends ProviderBase {
 
   endpoint: GoogleAiStudioEndpoint;
 
-  constructor({ apiKey }: { apiKey: keyof Env }) {
-    super({ apiKey });
-    this.endpoint = new GoogleAiStudioEndpoint(apiKey);
+  constructor() {
+    super();
+    this.endpoint = new GoogleAiStudioEndpoint(Secrets.get(this.apiKeyName));
   }
 
   async fetch(
