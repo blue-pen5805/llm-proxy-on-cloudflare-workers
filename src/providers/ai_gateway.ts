@@ -46,7 +46,11 @@ export class AiGatewayEndpoint extends EndpointBase {
   providerName: string | undefined;
   destination: EndpointBase | undefined;
 
-  static configure(accountId: string, gatewayId: string, apiKey?: string) {
+  static configure(
+    accountId: string | undefined,
+    gatewayId: string | undefined,
+    apiKey?: string | undefined,
+  ) {
     AiGatewayEndpoint.accountId = accountId;
     AiGatewayEndpoint.gatewayId = gatewayId;
     AiGatewayEndpoint.apiKey = apiKey;

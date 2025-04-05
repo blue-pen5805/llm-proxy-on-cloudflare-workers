@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { EndpointBase } from "~/src/providers/endpoint";
-import * as utils from "~/src/utils";
+import * as utils from "~/src/utils/helpers";
 
-vi.mock("~/src/utils", () => ({
+vi.mock("~/src/utils/helpers", () => ({
   fetch2: vi.fn().mockImplementation(() => Promise.resolve(new Response())),
 }));
 

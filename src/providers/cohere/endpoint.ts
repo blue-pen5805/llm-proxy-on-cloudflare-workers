@@ -1,16 +1,15 @@
-import { Secrets } from "../../secrets";
 import { EndpointBase } from "../endpoint";
 
 export class CohereEndpoint extends EndpointBase {
-  apiKey: keyof Env;
+  apiKey: string;
 
-  constructor(apikey: keyof Env) {
+  constructor(apikey: string) {
     super();
     this.apiKey = apikey;
   }
 
   available() {
-    return Boolean(Secrets.get(this.apiKey));
+    return Boolean(this.apiKey);
   }
 
   baseUrl() {
@@ -20,7 +19,7 @@ export class CohereEndpoint extends EndpointBase {
   headers() {
     return {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${Secrets.get(this.apiKey)}`,
+      Authorization: `Bearer ${this.apiKey}`,
     };
   }
 }

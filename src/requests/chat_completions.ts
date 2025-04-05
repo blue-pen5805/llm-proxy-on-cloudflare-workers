@@ -1,11 +1,11 @@
-import { Secrets } from "../secrets";
 import {
   AiGatewayEndpoint,
   OpenAICompatibleProviders,
 } from "../providers/ai_gateway";
 import { Providers } from "../providers";
-import { safeJsonParse } from "../utils";
+import { safeJsonParse } from "../utils/helpers";
 import { requestToUniversalEndpointItem } from "./universal_endpoint";
+import { Config } from "../utils/config";
 
 export async function chatCompletions(request: Request) {
   const headers = new Headers(request.headers);
@@ -22,7 +22,7 @@ export async function chatCompletions(request: Request) {
   }
 
   const [providerName, ...modelParts] = (
-    data["model"] === "default" ? Secrets.get("DEFAULT_MODEL") : data["model"]
+    data["model"] === "default" ? Config.defaultModel() : data["model"]
   ).split("/") as [string, string];
 
   const model = modelParts.join("/");
@@ -37,10 +37,10 @@ export async function chatCompletions(request: Request) {
     );
   }
 
-  const providerClass = new provider.providerClass(provider.args);
+  const providerClass = new provider.providerClass();
 
   if (AiGatewayEndpoint.isActive(providerName)) {
-    const retry = parseInt(Secrets.get("RETRY")) || 0;
+    const retry = Config.retryCount();
     const endpoint = new AiGatewayEndpoint(undefined, providerClass.endpoint);
     const requestBody = providerClass.chatCompletionsRequestBody(
       JSON.stringify({

@@ -41,11 +41,9 @@ export class ProviderBase {
       "functions",
     ];
 
-  apiKey: keyof Env;
   endpoint: EndpointBase;
 
-  constructor({ apiKey }: { [key: string]: string }) {
-    this.apiKey = apiKey as keyof Env;
+  constructor() {
     this.endpoint = new EndpointBase();
   }
 

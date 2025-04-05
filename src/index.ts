@@ -1,44 +1,42 @@
-import { authenticate } from "./authorization";
-import { getPathname } from "./utils";
+import { authenticate } from "./utils/authorization";
+import { getPathname } from "./utils/helpers";
 import { AiGatewayEndpoint } from "./providers/ai_gateway";
 import { models } from "./requests/models";
-import { Secrets } from "./secrets";
 import { chatCompletions } from "./requests/chat_completions";
 import { Providers } from "./providers";
 import { proxy } from "./requests/proxy";
 import { universalEndpoint } from "./requests/universal_endpoint";
 import { handleOptions } from "./requests/options";
+import { Config } from "./utils/config";
 
 export default {
-  async fetch(request, env, _ctx): Promise<Response> {
+  async fetch(request, _env, _ctx): Promise<Response> {
     if (request.method === "OPTIONS") {
       return handleOptions(request);
     }
 
-    Secrets.configure(env);
-
     let pathname = getPathname(request);
-    if (env.DEV !== "True" && authenticate(request) === false) {
+    if (!Config.isDevelopment() && authenticate(request) === false) {
       return new Response("Unauthorized", { status: 401 });
+    }
+
+    // Ping
+    // Example: /ping
+    if (pathname === "/ping") {
+      return new Response("Pong", { status: 200 });
     }
 
     // AI Gateway routes
     // Example: /g/{AI_GATEWAY_NAME}/chat/completions
     if (pathname.startsWith("/g/")) {
-      const [_empty, _g, ai_gateway_name, ...paths] = pathname.split("/");
+      const [_empty, _g, aiGatewayName, ...paths] = pathname.split("/");
       pathname = `/${paths.join("/")}`;
 
-      AiGatewayEndpoint.configure(
-        env.CLOUDFLARE_ACCOUNT_ID,
-        ai_gateway_name,
-        env.CF_AIG_TOKEN,
-      );
+      const { accountId, token } = Config.aiGateway();
+      AiGatewayEndpoint.configure(accountId, aiGatewayName, token);
     } else {
-      AiGatewayEndpoint.configure(
-        env.CLOUDFLARE_ACCOUNT_ID,
-        env.AI_GATEWAY_NAME,
-        env.CF_AIG_TOKEN,
-      );
+      const { accountId, name, token } = Config.aiGateway();
+      AiGatewayEndpoint.configure(accountId, name, token);
     }
 
     // Proxy

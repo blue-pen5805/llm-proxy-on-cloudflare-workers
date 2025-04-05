@@ -5,7 +5,7 @@ import { OpenAIModelsListResponseBody } from "../providers/openai/types";
 export async function models() {
   const requests = Object.keys(Providers).map((providerName) => {
     const provider = Providers[providerName];
-    const providerClass = new provider.providerClass(provider.args);
+    const providerClass = new provider.providerClass();
     if (providerClass.available() === false) {
       return Promise.resolve({
         object: "list",

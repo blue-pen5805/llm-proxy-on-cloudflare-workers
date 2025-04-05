@@ -1,13 +1,16 @@
+import { Secrets } from "../../utils/secrets";
 import { ProviderBase } from "../provider";
 import { GroqEndpoint } from "./endpoint";
 import { GroqModelsListResponseBody } from "./types";
 
 export class Groq extends ProviderBase {
+  readonly apiKeyName: keyof Env = "GROQ_API_KEY";
+
   endpoint: GroqEndpoint;
 
-  constructor({ apiKey }: { apiKey: keyof Env }) {
-    super({ apiKey });
-    this.endpoint = new GroqEndpoint(apiKey);
+  constructor() {
+    super();
+    this.endpoint = new GroqEndpoint(Secrets.get(this.apiKeyName));
   }
 
   async listModels() {

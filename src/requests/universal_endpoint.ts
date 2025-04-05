@@ -28,7 +28,7 @@ export function modifyUniversalEndpointItem(item: UniversalEndpointItem) {
   if (item.provider) {
     const providerName = item.provider;
     const provider = Providers[providerName];
-    const providerClass = new provider.providerClass(provider.args);
+    const providerClass = new provider.providerClass();
     const model = item.query.model || "";
     const endpoint =
       item.endpoint ||
@@ -56,7 +56,7 @@ export function modifyUniversalEndpointItem(item: UniversalEndpointItem) {
     if (!provider) {
       return {};
     }
-    const providerClass = new provider.providerClass(provider.args);
+    const providerClass = new provider.providerClass();
     const endpoint =
       item.endpoint ||
       providerClass.chatCompletionPath.replace("/", "") ||

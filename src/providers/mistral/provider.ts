@@ -1,3 +1,4 @@
+import { Secrets } from "../../utils/secrets";
 import { ProviderBase } from "../provider";
 import { MistralEndpoint } from "./endpoint";
 import { MistralModelsListResponseBody } from "./types";
@@ -6,11 +7,13 @@ export class Mistral extends ProviderBase {
   readonly chatCompletionPath: string = "/v1/chat/completions";
   readonly modelsPath: string = "/v1/models";
 
+  readonly apiKeyName: keyof Env = "MISTRAL_API_KEY";
+
   endpoint: MistralEndpoint;
 
-  constructor({ apiKey }: { apiKey: keyof Env }) {
-    super({ apiKey });
-    this.endpoint = new MistralEndpoint(apiKey);
+  constructor() {
+    super();
+    this.endpoint = new MistralEndpoint(Secrets.get(this.apiKeyName));
   }
 
   async listModels() {

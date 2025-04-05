@@ -28,13 +28,12 @@ describe("ProviderBase", () => {
     } as unknown as EndpointBase;
 
     // Initialize the provider base with mock endpoint
-    providerBase = new ProviderBase({ apiKey: "TEST_API_KEY" });
+    providerBase = new ProviderBase();
     providerBase.endpoint = mockEndpoint;
   });
 
   describe("constructor", () => {
-    it("should initialize with correct apiKey", () => {
-      expect(providerBase.apiKey).toBe("TEST_API_KEY");
+    it("should initialize", () => {
       expect(providerBase.endpoint).toBeDefined();
     });
   });
