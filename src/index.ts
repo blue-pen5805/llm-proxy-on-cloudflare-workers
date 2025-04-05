@@ -1,3 +1,4 @@
+import * as process from "node:process";
 import { authenticate } from "./utils/authorization";
 import { getPathname } from "./utils/utils";
 import { AiGatewayEndpoint } from "./providers/ai_gateway";
