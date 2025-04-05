@@ -1,4 +1,4 @@
-import { Providers } from "./providers";
+import { Providers } from "../providers";
 import { shuffle } from "./utils";
 
 export class Secrets {

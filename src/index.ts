@@ -1,8 +1,8 @@
-import { authenticate } from "./authorization";
-import { getPathname } from "./utils";
+import { authenticate } from "./utils/authorization";
+import { getPathname } from "./utils/utils";
 import { AiGatewayEndpoint } from "./providers/ai_gateway";
 import { models } from "./requests/models";
-import { Secrets } from "./secrets";
+import { Secrets } from "./utils/secrets";
 import { chatCompletions } from "./requests/chat_completions";
 import { Providers } from "./providers";
 import { proxy } from "./requests/proxy";

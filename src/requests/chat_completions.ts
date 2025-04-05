@@ -1,10 +1,10 @@
-import { Secrets } from "../secrets";
+import { Secrets } from "../utils/secrets";
 import {
   AiGatewayEndpoint,
   OpenAICompatibleProviders,
 } from "../providers/ai_gateway";
 import { Providers } from "../providers";
-import { safeJsonParse } from "../utils";
+import { safeJsonParse } from "../utils/utils";
 import { requestToUniversalEndpointItem } from "./universal_endpoint";
 
 export async function chatCompletions(request: Request) {

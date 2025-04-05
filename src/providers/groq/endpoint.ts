@@ -1,4 +1,4 @@
-import { Secrets } from "../../secrets";
+import { Secrets } from "../../utils/secrets";
 import { EndpointBase } from "../endpoint";
 
 export class GroqEndpoint extends EndpointBase {

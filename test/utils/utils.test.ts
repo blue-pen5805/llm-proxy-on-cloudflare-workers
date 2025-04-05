@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { safeJsonParse, getPathname, shuffle, formatString } from "~/src/utils";
+import {
+  safeJsonParse,
+  getPathname,
+  shuffle,
+  formatString,
+} from "~/src/utils/utils";
 
 describe("safeJsonParse", () => {
   it("should parse valid JSON string", () => {
