@@ -11,6 +11,7 @@ import { WorkersAi } from "./providers/workers_ai";
 import { OpenRouter } from "./providers/openrouter";
 import { HuggingFace } from "./providers/huggingface";
 import { Cerebras } from "./providers/cerebras";
+import { Replicate } from "./providers/replicate";
 
 export const Providers: {
   [providerName: string]: {
@@ -58,6 +59,8 @@ export const Providers: {
     providerClass: OpenRouter,
   },
   // "perplexity-ai": {},
-  // "replicate": {},
+  replicate: {
+    providerClass: Replicate,
+  },
   // --- Other Providers
 };

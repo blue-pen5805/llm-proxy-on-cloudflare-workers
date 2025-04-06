@@ -1,3 +1,6 @@
+export { Replicate } from "./provider";
+export { ReplicateEndpoint } from "./endpoint";
+
 /*
 # Replicate
 
@@ -10,6 +13,6 @@ Base URL: https://api.replicate.com/v1
 AI Gateway Base URL: https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/replicate
 
 ## APIs
-Chat Completions: Unknown
-Models:           Unknown
+Chat Completions: Not Supported
+Models:           Not Supported
 */

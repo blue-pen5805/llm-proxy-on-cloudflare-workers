@@ -40,7 +40,7 @@ flowchart
 | OpenRouter       | ✅               | ✅     | ✅                 | `openrouter`        | `OPENROUTER_API_KEY`                         |
 | Workers AI       | ✅               | ✅     | ✅                 | `workers-ai`        | `CLOUDFLARE_ACCOUNT_ID` `CLOUDFLARE_API_KEY` |
 | HuggingFace      | ❌               | ✅     | ✅                 | `huggingface`       | `HUGGINGFACE_API_KEY`                        |
-| Replicate        | ❌               | ❌     | ❌                 | `replicate`         |                                              |
+| Replicate        | ❌               | ✅     | ✅                 | `replicate`         | `REPLICATE_API_KEY`                          |
 
 **Note**: Providers marked with ⚠️ have limited support for certain features (e.g., Tool Use, multimodal capabilities).
 
