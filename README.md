@@ -33,7 +33,7 @@ flowchart
 | Grok             | ✅               | ✅     | ✅                 | `grok`              | `GROK_API_KEY`                               |
 | Groq             | ✅               | ✅     | ✅                 | `groq`              | `GROQ_API_KEY`                               |
 | Mistral          | ✅               | ✅     | ✅                 | `mistral`           | `MISTRAL_API_KEY`                            |
-| Perplexity       | ❌               | ❌     | ❌                 | `perplexity`        |                                              |
+| Perplexity       | ✅               | ✅     | ✅                 | `perplexity`        | `PERPLEXITY_API_KEY`                         |
 | Azure OpenAI     | ❌               | ❌     | ❌                 | `azure-openai`      |                                              |
 | Vertex AI        | ❌               | ❌     | ❌                 | `google-vertex-ai`  |                                              |
 | Amazon Bedrock   | ❌               | ❌     | ❌                 | `aws-bedrock`       |                                              |

@@ -12,6 +12,7 @@ import { OpenRouter } from "./providers/openrouter";
 import { HuggingFace } from "./providers/huggingface";
 import { Cerebras } from "./providers/cerebras";
 import { Replicate } from "./providers/replicate";
+import { PerplexityAi } from "./providers/perplexity-ai";
 
 export const Providers: {
   [providerName: string]: {
@@ -27,6 +28,7 @@ export const Providers: {
     providerClass: Anthropic,
   },
   // "azure-openai": {},
+  // "cartesia": {},
   cerebras: {
     providerClass: Cerebras,
   },
@@ -36,6 +38,7 @@ export const Providers: {
   deepseek: {
     providerClass: DeepSeek,
   },
+  // elevenlabs: {},
   "google-ai-studio": {
     providerClass: GoogleAiStudio,
   },
@@ -58,7 +61,9 @@ export const Providers: {
   openrouter: {
     providerClass: OpenRouter,
   },
-  // "perplexity-ai": {},
+  "perplexity-ai": {
+    providerClass: PerplexityAi,
+  },
   replicate: {
     providerClass: Replicate,
   },
