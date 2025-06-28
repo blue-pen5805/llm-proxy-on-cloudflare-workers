@@ -35,15 +35,6 @@ export class Config {
     };
   }
 
-  static retryCount(): number {
-    const retry = parseInt(Environments.get("RETRY", false) || "0");
-    if (isNaN(retry)) {
-      return 0;
-    }
-
-    return retry;
-  }
-
   static defaultModel(): string | undefined {
     const defaultModel = Environments.get("DEFAULT_MODEL", false);
 
