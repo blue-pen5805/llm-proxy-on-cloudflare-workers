@@ -11,7 +11,8 @@
     "test-watch": "vitest watch",
     "cf-typegen": "wrangler types",
     "prettier": "prettier --write .",
-    "prettier-ci": "prettier --check ."
+    "prettier-ci": "prettier --check .",
+    "download-llm-resources": "./.llm_resources/download.sh"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.8.47",
