@@ -1,29 +1,34 @@
-import { AiGatewayEndpoint } from "../providers/ai_gateway";
+import { CloudflareAIGateway } from "../ai_gateway";
 import { Providers } from "../providers";
+import { fetch2 } from "../utils/helpers";
 
 export async function proxy(
   request: Request,
   providerName: string,
   pathname: string,
+  aiGateway: CloudflareAIGateway | undefined = undefined,
 ) {
   const provider = Providers[providerName];
   const providerClass = new provider.providerClass();
-  if (AiGatewayEndpoint.isActive(providerName)) {
-    providerClass.endpoint = new AiGatewayEndpoint(
-      providerName,
-      providerClass.endpoint,
+
+  // Handle AI Gateway requests
+  if (aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)) {
+    return fetch2(
+      ...aiGateway.buildProviderEndpointRequest({
+        provider: providerName,
+        method: request.method,
+        path: pathname,
+        body: request.body,
+        headers: {
+          ...providerClass.endpoint.headers(),
+          ...request.headers,
+        },
+      }),
     );
   }
 
-  let targetPathname = pathname.replace(new RegExp(`^/${providerName}/`), "/");
-
-  // Remove duplicated base path
-  const endpointBasePath = new URL(providerClass.endpoint.baseUrl()).pathname;
-  if (targetPathname.startsWith(endpointBasePath + endpointBasePath)) {
-    targetPathname = targetPathname.replace(endpointBasePath, "");
-  }
-
-  return providerClass.fetch(targetPathname, {
+  // Send request to the provider directly
+  return providerClass.fetch(pathname, {
     method: request.method,
     body: request.body,
     headers: request.headers,

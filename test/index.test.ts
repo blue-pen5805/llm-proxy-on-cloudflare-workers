@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SELF } from "cloudflare:test";
 
-import { AiGatewayEndpoint } from "~/src/providers/ai_gateway";
 import { chatCompletions } from "~/src/requests/chat_completions";
 import { models } from "~/src/requests/models";
 import { handleOptions } from "~/src/requests/options";
@@ -9,13 +8,6 @@ import { proxy } from "~/src/requests/proxy";
 import { universalEndpoint } from "~/src/requests/universal_endpoint";
 import { authenticate } from "~/src/utils/authorization";
 import { Config } from "~/src/utils/config";
-
-vi.mock("~/src/providers/ai_gateway", () => ({
-  AiGatewayEndpoint: {
-    configure: vi.fn(),
-    isActive: vi.fn(),
-  },
-}));
 
 vi.mock("~/src/providers", () => ({
   Providers: {
@@ -67,7 +59,6 @@ describe("fetch", () => {
       name: "test-gateway",
       token: "test-token",
     });
-    vi.mocked(AiGatewayEndpoint.isActive).mockReturnValue(true);
   });
 
   it("should handle OPTIONS request", async () => {
@@ -105,41 +96,10 @@ describe("fetch", () => {
     expect(response.status).toBe(200);
   });
 
-  it("should handle request with default AI Gateway configurations", async () => {
-    await SELF.fetch("https://example.com");
-
-    expect(AiGatewayEndpoint.configure).toHaveBeenCalledWith(
-      "test-account-id",
-      "test-gateway",
-      "test-token",
-    );
-  });
-
-  it("should handle requests starting with /g/{AI_GATEWAY_NAME}", async () => {
-    await SELF.fetch("https://example.com/g/selected-gateway/");
-
-    expect(AiGatewayEndpoint.configure).toHaveBeenCalledWith(
-      "test-account-id",
-      "selected-gateway",
-      "test-token",
-    );
-  });
-
   it("should handle requests starting with {PROVIDER_NAME}", async () => {
     await SELF.fetch("https://example.com/openai/notfound");
 
     expect(proxy).toHaveBeenCalledOnce();
-  });
-
-  it("should handle requests starting with /g/{AI_GATEWAY_NAME}/{PROVIDER_NAME}", async () => {
-    await SELF.fetch("https://example.com/g/selected-gateway/openai/notfound");
-
-    expect(proxy).toHaveBeenCalledOnce();
-    expect(AiGatewayEndpoint.configure).toHaveBeenCalledWith(
-      "test-account-id",
-      "selected-gateway",
-      "test-token",
-    );
   });
 
   it("should handle chat completions request", async () => {

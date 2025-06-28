@@ -1,7 +1,10 @@
 import { ProviderBase } from "../provider";
 import { CohereEndpoint } from "./endpoint";
 import { CohereModelsListResponseBody } from "./types";
-import { OpenAIChatCompletionsRequestBody } from "../openai/types";
+import {
+  OpenAIChatCompletionsRequestBody,
+  OpenAIModelsListResponseBody,
+} from "../openai/types";
 import { Secrets } from "../../utils/secrets";
 
 export class Cohere extends ProviderBase {
@@ -33,10 +36,10 @@ export class Cohere extends ProviderBase {
     this.endpoint = new CohereEndpoint(Secrets.get(this.apiKeyName));
   }
 
-  async listModels() {
-    const response = await this.fetchModels();
-    const data = (await response.json()) as CohereModelsListResponseBody;
-
+  // Convert model list to OpenAI format
+  modelsToOpenAIFormat(
+    data: CohereModelsListResponseBody,
+  ): OpenAIModelsListResponseBody {
     return {
       object: "list",
       data: data.models.map(({ name, ...model }) => ({

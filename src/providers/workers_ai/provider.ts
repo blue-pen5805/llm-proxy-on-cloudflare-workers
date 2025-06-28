@@ -1,4 +1,5 @@
 import { Secrets } from "../../utils/secrets";
+import { OpenAIModelsListResponseBody } from "../openai/types";
 import { ProviderBase } from "../provider";
 import { WorkersAiEndpoint } from "./endpoint";
 import { WorkersAiModelsListResponseBody } from "./types";
@@ -20,10 +21,10 @@ export class WorkersAi extends ProviderBase {
     );
   }
 
-  async listModels() {
-    const response = await this.fetchModels();
-    const data = (await response.json()) as WorkersAiModelsListResponseBody;
-
+  // Convert model list to OpenAI format
+  modelsToOpenAIFormat(
+    data: WorkersAiModelsListResponseBody,
+  ): OpenAIModelsListResponseBody {
     return {
       object: "list",
       data: data.result.map(({ name, ...model }) => ({

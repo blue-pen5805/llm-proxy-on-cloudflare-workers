@@ -1,16 +1,18 @@
-import {
-  AiGatewayEndpoint,
-  OpenAICompatibleProviders,
-} from "../providers/ai_gateway";
+import { CloudflareAIGateway } from "../ai_gateway";
 import { Providers } from "../providers";
-import { safeJsonParse } from "../utils/helpers";
-import { requestToUniversalEndpointItem } from "./universal_endpoint";
+import { fetch2, safeJsonParse } from "../utils/helpers";
 import { Config } from "../utils/config";
+import { Secrets } from "../utils/secrets";
 
-export async function chatCompletions(request: Request) {
+export async function chatCompletions(
+  request: Request,
+  aiGateway: CloudflareAIGateway | undefined = undefined,
+) {
+  // Remove Authorization header to prevent it from being sent to the provider
   const headers = new Headers(request.headers);
   headers.delete("Authorization");
 
+  // Validate Request Data Structure
   const data = safeJsonParse(await request.text());
   if (typeof data === "string") {
     return new Response(
@@ -21,12 +23,13 @@ export async function chatCompletions(request: Request) {
     );
   }
 
+  // Split model into provider and model name
   const [providerName, ...modelParts] = (
     data["model"] === "default" ? Config.defaultModel() : data["model"]
   ).split("/") as [string, string];
-
   const model = modelParts.join("/");
 
+  // Validate provider name
   const provider = Providers[providerName];
   if (!Providers[providerName]) {
     return new Response(
@@ -37,53 +40,33 @@ export async function chatCompletions(request: Request) {
     );
   }
 
+  // Generate chat completions request
   const providerClass = new provider.providerClass();
+  const [requestInfo, requestInit] = providerClass.buildChatCompletionsRequest({
+    body: JSON.stringify({
+      ...data,
+      model,
+    }),
+    headers,
+  });
 
-  if (AiGatewayEndpoint.isActive(providerName)) {
-    const retry = Config.retryCount();
-    const endpoint = new AiGatewayEndpoint(undefined, providerClass.endpoint);
-    const requestBody = providerClass.chatCompletionsRequestBody(
-      JSON.stringify({
-        ...data,
-        model,
+  // If AI Gateway is enabled and the provider supports it, use AI Gateway
+  if (
+    aiGateway &&
+    CloudflareAIGateway.isSupportedProvider(providerName, true)
+  ) {
+    return fetch2(
+      ...aiGateway.buildChatCompletionsRequest({
+        provider: providerName,
+        body: requestInit.body as string,
+        headers: {
+          ...headers,
+          Authorization: `Bearer ${Secrets.get(providerClass.apiKeyName as keyof Env)}`,
+        },
       }),
     );
-
-    const body = new Array(1 + retry).fill(null).map(() => {
-      const requestData = providerClass.chatCompletionsRequestData({
-        body: requestBody,
-        headers,
-      });
-
-      return requestToUniversalEndpointItem(
-        providerName,
-        providerClass,
-        requestData,
-      );
-    });
-
-    const promise = endpoint.fetch("", {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
-
-    if (OpenAICompatibleProviders.includes(providerName)) {
-      return promise;
-    }
-
-    const isStream = (data.stream as boolean | undefined) === true;
-    if (!isStream) {
-      return providerClass.processChatCompletions(promise, model);
-    } else {
-      return providerClass.processChatCompletionsStream(promise, model);
-    }
-  } else {
-    return providerClass.chatCompletions({
-      body: JSON.stringify({
-        ...data,
-        model,
-      }),
-      headers,
-    });
   }
+
+  // Request to the provider endpoint
+  return providerClass.fetch(requestInfo, requestInit);
 }

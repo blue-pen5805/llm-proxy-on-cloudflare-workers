@@ -5,6 +5,7 @@ import {
 } from "./openai/types";
 
 export class ProviderBase {
+  readonly apiKeyName: keyof Env | undefined = undefined;
   readonly chatCompletionPath: string = "/chat/completions";
   readonly modelsPath: string = "/models";
 
@@ -59,61 +60,14 @@ export class ProviderBase {
   }
 
   // OpenAI Compatible API - Chat Completions
-  async chatCompletions({
+  buildChatCompletionsRequest({
     body,
     headers = {},
   }: {
     body: string;
     headers: HeadersInit;
-  }): Promise<Response> {
-    const { model, stream } = JSON.parse(
-      body as string,
-    ) as OpenAIChatCompletionsRequestBody;
-    const isStream = (stream as boolean | undefined) === true;
-
-    const init = this.chatCompletionsRequestData({
-      body: this.chatCompletionsRequestBody(body),
-      headers,
-    });
-    const promise = this.fetch(this.chatCompletionPath, init);
-
-    if (!isStream) {
-      return await this.processChatCompletions(promise, model);
-    } else {
-      return await this.processChatCompletionsStream(promise, model);
-    }
-  }
-
-  async processChatCompletions(
-    promise: Promise<Response>,
-    _model?: string,
-  ): Promise<Response> {
-    return promise;
-  }
-
-  async processChatCompletionsStream(
-    promise: Promise<Response>,
-    _model?: string,
-  ): Promise<Response> {
-    return promise;
-  }
-
-  chatCompletionsRequestData({
-    body,
-    headers = {},
-  }: {
-    body: string;
-    headers: HeadersInit;
-  }) {
-    return this.endpoint.requestData({
-      method: "POST",
-      headers,
-      body: this.chatCompletionsRequestBody(body),
-    });
-  }
-
-  chatCompletionsRequestBody(body: string): string {
-    const data = JSON.parse(body as string) as OpenAIChatCompletionsRequestBody;
+  }): [string, RequestInit] {
+    const data = JSON.parse(body) as OpenAIChatCompletionsRequestBody;
     const trimmedData = Object.fromEntries(
       (Object.keys(data) as (keyof OpenAIChatCompletionsRequestBody)[])
         .map((key) =>
@@ -124,19 +78,36 @@ export class ProviderBase {
         .filter((x) => x !== null),
     );
 
-    return JSON.stringify(trimmedData);
+    return [
+      this.chatCompletionPath,
+      {
+        method: "POST",
+        body: JSON.stringify(trimmedData),
+        headers: {
+          ...this.endpoint.headers(),
+          ...headers,
+        },
+      },
+    ];
   }
 
-  // OpenAI Compatible API - Models
-  async listModels(): Promise<OpenAIModelsListResponseBody> {
-    const response = await this.fetchModels();
-
-    return (await response.json()) as OpenAIModelsListResponseBody;
+  // Model List
+  buildModelsRequest(): [string, RequestInit] {
+    return [
+      this.modelsPath,
+      {
+        method: "GET",
+        headers: this.endpoint.headers(),
+      },
+    ];
   }
 
-  fetchModels(): Promise<Response> {
-    return this.fetch(this.modelsPath, {
-      method: "GET",
-    });
+  // Convert model list to OpenAI format
+  modelsToOpenAIFormat(
+    data: any, // Replace 'any' with the actual type if available,
+  ): OpenAIModelsListResponseBody {
+    return data as OpenAIModelsListResponseBody;
   }
 }
+
+export class ProviderNotSupportedError extends Error {}
