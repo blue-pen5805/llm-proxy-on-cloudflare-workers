@@ -9,7 +9,6 @@ import {
   isCloudflareAIGatewayOpenAICompatibleProvider,
   isCloudflareAIGatewayProvider,
 } from "./utils";
-import { fetch2 } from "../utils/helpers";
 
 export class CloudflareAIGateway {
   static readonly origin = "https://gateway.ai.cloudflare.com/v1";
@@ -47,9 +46,9 @@ export class CloudflareAIGateway {
     ? CloudflareAIGatewayOpenAICompatibleProvider
     : CloudflareAIGatewayProvider {
     if (hasOpenAiCompatibility) {
-      return isCloudflareAIGatewayOpenAICompatibleProvider(providerName) as any;
+      return isCloudflareAIGatewayOpenAICompatibleProvider(providerName);
     } else {
-      return isCloudflareAIGatewayProvider(providerName) as any;
+      return isCloudflareAIGatewayProvider(providerName);
     }
   }
 
