@@ -61,6 +61,17 @@ export async function models(
       );
       return [];
     }
+    if (
+      response.status === "fulfilled" &&
+      (!response.value || !response.value?.data)
+    ) {
+      console.error(
+        `Invalid response for provider ${provider}:`,
+        response.value,
+      );
+      return [];
+    }
+
     const fulfilledResponse =
       response as PromiseFulfilledResult<OpenAIModelsListResponseBody>;
     return fulfilledResponse.value.data.map(({ id, ...model }) => ({
