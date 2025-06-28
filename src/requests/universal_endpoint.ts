@@ -1,6 +1,5 @@
 import { CloudflareAIGateway } from "../ai_gateway";
 import {
-  CloudflareAIGatewayProvider,
   CloudflareAIGatewayUniversalEndpointData,
   CloudflareAIGatewayUniversalEndpointStep,
 } from "../ai_gateway/const";

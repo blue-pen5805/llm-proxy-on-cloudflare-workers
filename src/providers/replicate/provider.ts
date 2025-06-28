@@ -1,5 +1,4 @@
 import { Secrets } from "../../utils/secrets";
-import { OpenAIModelsListResponseBody } from "../openai/types";
 import { ProviderBase, ProviderNotSupportedError } from "../provider";
 import { ReplicateEndpoint } from "./endpoint";
 
@@ -17,8 +16,8 @@ export class Replicate extends ProviderBase {
   }
 
   buildChatCompletionsRequest({
-    body,
-    headers = {},
+    body, // eslint-disable-line @typescript-eslint/no-unused-vars
+    headers = {}, // eslint-disable-line @typescript-eslint/no-unused-vars
   }: {
     body: string;
     headers: HeadersInit;

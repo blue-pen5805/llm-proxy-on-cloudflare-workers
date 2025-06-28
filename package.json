@@ -3,6 +3,7 @@
   "author": "blue.pen5805",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
@@ -12,13 +13,22 @@
     "cf-typegen": "wrangler types",
     "prettier": "prettier --write .",
     "prettier-ci": "prettier --check .",
+    "lint": "eslint 'src/**/*.ts'",
+    "lint:fix": "eslint --fix 'src/**/*.ts'",
     "download-llm-resources": "./.llm_resources/download.sh"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.8.47",
+    "@trivago/prettier-plugin-sort-imports": "^5.2.2",
     "@types/node": "^24.0.6",
+    "@typescript-eslint/eslint-plugin": "^8.35.0",
+    "@typescript-eslint/parser": "^8.35.0",
+    "eslint": "^9.30.0",
+    "eslint-config-prettier": "^10.1.5",
+    "eslint-plugin-prettier": "^5.5.1",
     "prettier": "^3.6.2",
     "typescript": "^5.8.3",
+    "typescript-eslint": "^8.35.0",
     "vite": "^7.0.0",
     "vitest": "^3.2.4",
     "wrangler": "^4.22.0"

@@ -1,13 +1,13 @@
 import { CloudflareAIGateway } from "./ai_gateway";
-import { authenticate } from "./utils/authorization";
-import { getPathname } from "./utils/helpers";
-import { models } from "./requests/models";
-import { chatCompletions } from "./requests/chat_completions";
 import { Providers } from "./providers";
+import { chatCompletions } from "./requests/chat_completions";
+import { models } from "./requests/models";
+import { handleOptions } from "./requests/options";
 import { proxy } from "./requests/proxy";
 import { universalEndpoint } from "./requests/universal_endpoint";
-import { handleOptions } from "./requests/options";
+import { authenticate } from "./utils/authorization";
 import { Config } from "./utils/config";
+import { getPathname } from "./utils/helpers";
 
 export default {
   async fetch(request, _env, _ctx): Promise<Response> {

@@ -1,6 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SELF } from "cloudflare:test";
-
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { chatCompletions } from "~/src/requests/chat_completions";
 import { models } from "~/src/requests/models";
 import { handleOptions } from "~/src/requests/options";

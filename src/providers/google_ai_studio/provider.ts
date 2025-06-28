@@ -1,14 +1,14 @@
+import { Secrets } from "../../utils/secrets";
+import {
+  OpenAIChatCompletionsRequestBody,
+  OpenAIModelsListResponseBody,
+} from "../openai/types";
 import { ProviderBase } from "../provider";
 import {
   GoogleAiStudioEndpoint,
   GoogleAiStudioOpenAICompatibleEndpoint,
 } from "./endpoint";
-import {
-  OpenAIChatCompletionsRequestBody,
-  OpenAIModelsListResponseBody,
-} from "../openai/types";
 import { GoogleAiStudioModelsListResponseBody } from "./types";
-import { Secrets } from "../../utils/secrets";
 
 export class GoogleAiStudio extends ProviderBase {
   readonly chatCompletionPath: string = "/v1beta/openai/chat/completions";

@@ -4,6 +4,7 @@
     "respectGitIgnore": true,
     "enableRecursiveFileSearch": false
   },
+  "autoAccept": true,
   "mcpServers": {
     "cloudflare-docs": {
       "command": "npx",

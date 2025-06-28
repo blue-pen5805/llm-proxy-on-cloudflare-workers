@@ -1,7 +1,7 @@
 import {
-  CloudflareAIGatewayProvider,
   CLOUDFLARE_AI_GATEWAY_SUPPORTED_PROVIDERS,
   CloudflareAIGatewayOpenAICompatibleProvider,
+  CloudflareAIGatewayProvider,
   OPENAI_COMPATIBLE_PROVIDERS,
 } from "./const";
 

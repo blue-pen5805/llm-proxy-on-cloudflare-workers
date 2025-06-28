@@ -1,9 +1,8 @@
-import { request } from "http";
 import { CloudflareAIGateway } from "../ai_gateway";
 import { Providers } from "../providers";
 import { OpenAIModelsListResponseBody } from "../providers/openai/types";
-import { fetch2 } from "../utils/helpers";
 import { ProviderNotSupportedError } from "../providers/provider";
+import { fetch2 } from "../utils/helpers";
 
 export async function models(
   aiGateway: CloudflareAIGateway | undefined = undefined,

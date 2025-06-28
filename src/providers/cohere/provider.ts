@@ -1,11 +1,11 @@
-import { ProviderBase } from "../provider";
-import { CohereEndpoint } from "./endpoint";
-import { CohereModelsListResponseBody } from "./types";
+import { Secrets } from "../../utils/secrets";
 import {
   OpenAIChatCompletionsRequestBody,
   OpenAIModelsListResponseBody,
 } from "../openai/types";
-import { Secrets } from "../../utils/secrets";
+import { ProviderBase } from "../provider";
+import { CohereEndpoint } from "./endpoint";
+import { CohereModelsListResponseBody } from "./types";
 
 export class Cohere extends ProviderBase {
   readonly chatCompletionPath: string = "/compatibility/v1/chat/completions";

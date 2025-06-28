@@ -1,7 +1,7 @@
 import { CloudflareAIGateway } from "../ai_gateway";
 import { Providers } from "../providers";
-import { fetch2, safeJsonParse } from "../utils/helpers";
 import { Config } from "../utils/config";
+import { fetch2, safeJsonParse } from "../utils/helpers";
 
 export async function chatCompletions(
   request: Request,

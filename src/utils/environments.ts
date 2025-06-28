@@ -49,12 +49,12 @@ export class Environments {
   static get(
     key: keyof Env,
     parse?: boolean,
-  ): string | Array<any> | Object | number | undefined;
+  ): string | Array<any> | object | number | undefined;
 
   static get(
     key: keyof Env,
     parse: boolean = true,
-  ): string | Array<any> | Object | number | undefined {
+  ): string | Array<any> | object | number | undefined {
     const env = this.all();
     const value = env[key] as string | undefined;
 
@@ -88,10 +88,10 @@ export class Environments {
    */
   private static parseJson(
     value: string,
-  ): Array<any> | Object | number | undefined {
+  ): Array<any> | object | number | undefined {
     try {
       return JSON.parse(value);
-    } catch (e) {
+    } catch {
       return undefined;
     }
   }

@@ -1,18 +1,18 @@
-import { ProviderBase } from "./providers/provider";
 import { Anthropic } from "./providers/anthropic";
+import { Cerebras } from "./providers/cerebras";
 import { Cohere } from "./providers/cohere";
 import { DeepSeek } from "./providers/deepseek";
 import { GoogleAiStudio } from "./providers/google_ai_studio";
 import { Grok } from "./providers/grok";
 import { Groq } from "./providers/groq";
+import { HuggingFace } from "./providers/huggingface";
 import { Mistral } from "./providers/mistral";
 import { OpenAI } from "./providers/openai";
-import { WorkersAi } from "./providers/workers_ai";
 import { OpenRouter } from "./providers/openrouter";
-import { HuggingFace } from "./providers/huggingface";
-import { Cerebras } from "./providers/cerebras";
-import { Replicate } from "./providers/replicate";
 import { PerplexityAi } from "./providers/perplexity-ai";
+import { ProviderBase } from "./providers/provider";
+import { Replicate } from "./providers/replicate";
+import { WorkersAi } from "./providers/workers_ai";
 
 export const Providers: {
   [providerName: string]: {
