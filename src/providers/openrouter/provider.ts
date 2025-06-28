@@ -1,4 +1,5 @@
 import { Secrets } from "../../utils/secrets";
+import { OpenAIModelsListResponseBody } from "../openai/types";
 import { ProviderBase } from "../provider";
 import { OpenRouterEndpoint } from "./endpoint";
 import { OpenRouterModelsListResponseBody } from "./types";
@@ -16,9 +17,10 @@ export class OpenRouter extends ProviderBase {
     this.endpoint = new OpenRouterEndpoint(Secrets.get(this.apiKeyName));
   }
 
-  async listModels() {
-    const response = await this.fetchModels();
-    const data = (await response.json()) as OpenRouterModelsListResponseBody;
+  // Convert model list to OpenAI format
+  modelsToOpenAIFormat(
+    data: OpenRouterModelsListResponseBody,
+  ): OpenAIModelsListResponseBody {
     return {
       object: "list",
       data: data.data.map(({ id, created, ...model }) => ({

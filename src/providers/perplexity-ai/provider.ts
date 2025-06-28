@@ -1,6 +1,5 @@
 import { Secrets } from "../../utils/secrets";
-import { OpenAIModelsListResponseBody } from "../openai/types";
-import { ProviderBase } from "../provider";
+import { ProviderBase, ProviderNotSupportedError } from "../provider";
 import { PerplexityAiEndpoint } from "./endpoint";
 
 export class PerplexityAi extends ProviderBase {
@@ -16,10 +15,9 @@ export class PerplexityAi extends ProviderBase {
     this.endpoint = new PerplexityAiEndpoint(Secrets.get(this.apiKeyName));
   }
 
-  async listModels(): Promise<OpenAIModelsListResponseBody> {
-    return Promise.resolve({
-      object: "list",
-      data: [],
-    });
+  buildModelsRequest(): [string, RequestInit] {
+    throw new ProviderNotSupportedError(
+      "Perplexity AI does not support list models",
+    );
   }
 }

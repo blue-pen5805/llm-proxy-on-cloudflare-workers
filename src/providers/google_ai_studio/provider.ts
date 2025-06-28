@@ -1,11 +1,14 @@
+import { Secrets } from "../../utils/secrets";
+import {
+  OpenAIChatCompletionsRequestBody,
+  OpenAIModelsListResponseBody,
+} from "../openai/types";
 import { ProviderBase } from "../provider";
 import {
   GoogleAiStudioEndpoint,
   GoogleAiStudioOpenAICompatibleEndpoint,
 } from "./endpoint";
-import { OpenAIChatCompletionsRequestBody } from "../openai/types";
 import { GoogleAiStudioModelsListResponseBody } from "./types";
-import { Secrets } from "../../utils/secrets";
 
 export class GoogleAiStudio extends ProviderBase {
   readonly chatCompletionPath: string = "/v1beta/openai/chat/completions";
@@ -53,29 +56,10 @@ export class GoogleAiStudio extends ProviderBase {
     }
   }
 
-  chatCompletionsRequestData({
-    body,
-    headers = {},
-  }: {
-    body: string;
-    headers: HeadersInit;
-  }) {
-    const openaiCompatibleEndpoint = new GoogleAiStudioOpenAICompatibleEndpoint(
-      this.endpoint,
-    );
-
-    return openaiCompatibleEndpoint.requestData({
-      method: "POST",
-      headers,
-      body: this.chatCompletionsRequestBody(body),
-    });
-  }
-
-  async listModels() {
-    const response = await this.fetchModels();
-    const data =
-      (await response.json()) as GoogleAiStudioModelsListResponseBody;
-
+  // Convert model list to OpenAI format
+  modelsToOpenAIFormat(
+    data: GoogleAiStudioModelsListResponseBody,
+  ): OpenAIModelsListResponseBody {
     return {
       object: "list",
       data: data.models.map(({ name, ...model }) => ({

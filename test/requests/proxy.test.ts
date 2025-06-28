@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { proxy } from "~/src/requests/proxy";
 import { Providers } from "~/src/providers";
+import { proxy } from "~/src/requests/proxy";
 
 vi.mock("~/src/providers");
 vi.mock("~/src/providers/ai_gateway");

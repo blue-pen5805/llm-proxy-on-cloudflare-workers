@@ -215,7 +215,7 @@ export type OpenAIChatCompletionsChunkResponseBody = {
             };
           }[];
         }
-      | {};
+      | object;
     logprobs?: {
       content: any[];
       refusal: any[];

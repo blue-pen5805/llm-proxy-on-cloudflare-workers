@@ -1,13 +1,13 @@
-import { authenticate } from "./utils/authorization";
-import { getPathname } from "./utils/helpers";
-import { AiGatewayEndpoint } from "./providers/ai_gateway";
-import { models } from "./requests/models";
-import { chatCompletions } from "./requests/chat_completions";
+import { CloudflareAIGateway } from "./ai_gateway";
 import { Providers } from "./providers";
+import { chatCompletions } from "./requests/chat_completions";
+import { models } from "./requests/models";
+import { handleOptions } from "./requests/options";
 import { proxy } from "./requests/proxy";
 import { universalEndpoint } from "./requests/universal_endpoint";
-import { handleOptions } from "./requests/options";
+import { authenticate } from "./utils/authorization";
 import { Config } from "./utils/config";
+import { getPathname } from "./utils/helpers";
 
 export default {
   async fetch(request, _env, _ctx): Promise<Response> {
@@ -26,17 +26,44 @@ export default {
       return new Response("Pong", { status: 200 });
     }
 
+    // Setup AI Gateway
+    const { accountId, name, token } = Config.aiGateway();
+    CloudflareAIGateway.configure({
+      accountId,
+      gatewayId: name,
+      apiKey: token,
+    });
+
     // AI Gateway routes
     // Example: /g/{AI_GATEWAY_NAME}/chat/completions
     if (pathname.startsWith("/g/")) {
       const [_empty, _g, aiGatewayName, ...paths] = pathname.split("/");
       pathname = `/${paths.join("/")}`;
 
-      const { accountId, token } = Config.aiGateway();
-      AiGatewayEndpoint.configure(accountId, aiGatewayName, token);
-    } else {
-      const { accountId, name, token } = Config.aiGateway();
-      AiGatewayEndpoint.configure(accountId, name, token);
+      CloudflareAIGateway.configure({
+        gatewayId: aiGatewayName,
+      });
+    }
+
+    // Initialize AI Gateway
+    const aiGateway = CloudflareAIGateway.isAvailable()
+      ? new CloudflareAIGateway()
+      : undefined;
+
+    // OpenAI compatible endpoints
+    // Chat Completions - https://platform.openai.com/docs/api-reference/chat
+    if (
+      request.method === "POST" &&
+      (pathname === "/chat/completions" || pathname === "/v1/chat/completions")
+    ) {
+      return await chatCompletions(request, aiGateway);
+    }
+    // Models - https://platform.openai.com/docs/api-reference/models
+    if (
+      request.method === "GET" &&
+      (pathname === "/models" || pathname === "/v1/models")
+    ) {
+      return await models(aiGateway);
     }
 
     // Proxy
@@ -46,33 +73,17 @@ export default {
       pathname.startsWith(`/${providerName}/`),
     );
     if (providerName) {
-      return await proxy(request, providerName, pathname);
-    }
-
-    // OpenAI compatible endpoints
-    // Chat Completions - https://platform.openai.com/docs/api-reference/chat
-    if (
-      request.method === "POST" &&
-      (pathname === "/chat/completions" || pathname === "/v1/chat/completions")
-    ) {
-      return await chatCompletions(request);
-    }
-    // Models - https://platform.openai.com/docs/api-reference/models
-    if (
-      request.method === "GET" &&
-      (pathname === "/models" || pathname === "/v1/models")
-    ) {
-      return await models();
+      const targetPathname = pathname.replace(
+        new RegExp(`^/${providerName}/`),
+        "/",
+      );
+      return await proxy(request, providerName, targetPathname, aiGateway);
     }
 
     // Universal Endpoint
     // https://developers.cloudflare.com/ai-gateway/providers/universal/
-    if (
-      AiGatewayEndpoint.isActive() &&
-      request.method === "POST" &&
-      pathname === "/"
-    ) {
-      return await universalEndpoint(request);
+    if (aiGateway && request.method === "POST" && pathname === "/") {
+      return await universalEndpoint(request, aiGateway);
     }
 
     return new Response("Not Found", { status: 404 });

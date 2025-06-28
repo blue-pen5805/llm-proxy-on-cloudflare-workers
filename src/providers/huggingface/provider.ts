@@ -1,6 +1,5 @@
 import { Secrets } from "../../utils/secrets";
-import { OpenAIModelsListResponseBody } from "../openai/types";
-import { ProviderBase } from "../provider";
+import { ProviderBase, ProviderNotSupportedError } from "../provider";
 import { HuggingFaceEndpoint } from "./endpoint";
 
 export class HuggingFace extends ProviderBase {
@@ -16,20 +15,21 @@ export class HuggingFace extends ProviderBase {
     this.endpoint = new HuggingFaceEndpoint(Secrets.get(this.apiKeyName));
   }
 
-  async chatCompletions({
-    body,
-    headers = {},
+  buildChatCompletionsRequest({
+    body, // eslint-disable-line @typescript-eslint/no-unused-vars
+    headers = {}, // eslint-disable-line @typescript-eslint/no-unused-vars
   }: {
     body: string;
     headers: HeadersInit;
-  }): Promise<Response> {
-    return Promise.resolve(new Response("Not Supported"));
+  }): [string, RequestInit] {
+    throw new ProviderNotSupportedError(
+      "HuggingFace does not support chat completions",
+    );
   }
 
-  async listModels(): Promise<OpenAIModelsListResponseBody> {
-    return Promise.resolve({
-      object: "list",
-      data: [],
-    });
+  buildModelsRequest(): [string, RequestInit] {
+    throw new ProviderNotSupportedError(
+      "HuggingFace does not support list models",
+    );
   }
 }

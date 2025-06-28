@@ -1,0 +1,14 @@
+{
+  "contextFileName": ["AGENTS.md"],
+  "fileFiltering": {
+    "respectGitIgnore": true,
+    "enableRecursiveFileSearch": false
+  },
+  "autoAccept": true,
+  "mcpServers": {
+    "cloudflare-docs": {
+      "command": "npx",
+      "args": ["mcp-remote", "https://docs.mcp.cloudflare.com/sse"]
+    }
+  }
+}

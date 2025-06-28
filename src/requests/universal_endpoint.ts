@@ -1,8 +1,13 @@
-import { AiGatewayEndpoint } from "../providers/ai_gateway";
+import { CloudflareAIGateway } from "../ai_gateway";
+import {
+  CloudflareAIGatewayUniversalEndpointData,
+  CloudflareAIGatewayUniversalEndpointStep,
+} from "../ai_gateway/const";
+import { isCloudflareAIGatewayProvider } from "../ai_gateway/utils";
 import { Providers } from "../providers";
-import { ProviderBase } from "../providers/provider";
+import { fetch2 } from "../utils/helpers";
 
-type UniversalEndpointItem = {
+type UniversalEndpointRequest = {
   provider?: string;
   endpoint?: string;
   headers?: { [key: string]: string };
@@ -12,81 +17,40 @@ type UniversalEndpointItem = {
   };
 };
 
-export async function universalEndpoint(request: Request) {
-  const data = (await request.json()) as UniversalEndpointItem[];
-
-  const body = data.map((item) => modifyUniversalEndpointItem(item));
-
-  const endpoint = new AiGatewayEndpoint();
-  return await endpoint.fetch("", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
-}
-
-export function modifyUniversalEndpointItem(item: UniversalEndpointItem) {
-  if (item.provider) {
-    const providerName = item.provider;
-    const provider = Providers[providerName];
-    const providerClass = new provider.providerClass();
-    const model = item.query.model || "";
-    const endpoint =
-      item.endpoint ||
-      providerClass.chatCompletionPath.replace("/", "") ||
-      "/chat/completions";
-    const headers = item.headers || providerClass.endpoint.headers();
-
-    return {
-      provider: providerName,
-      endpoint,
-      headers,
-      query: {
-        ...item.query,
-        model,
-      },
-    };
-  } else {
-    const [providerName, ...modelParts] = item.query.model?.split("/") as [
-      string,
-      string[],
-    ];
-    const model = modelParts.join("/");
-
-    const provider = Providers[providerName];
-    if (!provider) {
-      return {};
-    }
-    const providerClass = new provider.providerClass();
-    const endpoint =
-      item.endpoint ||
-      providerClass.chatCompletionPath.replace("/", "") ||
-      "/chat/completions";
-    const headers = item.headers || providerClass?.endpoint?.headers();
-
-    return {
-      provider: providerName,
-      endpoint,
-      headers,
-      query: {
-        ...item.query,
-        model,
-      },
-    };
-  }
-}
-
-export function requestToUniversalEndpointItem(
-  providerName: string,
-  providerClass: ProviderBase,
-  requestData: Parameters<typeof fetch>[1],
+export async function universalEndpoint(
+  request: Request,
+  aiGateway: CloudflareAIGateway,
 ) {
-  const endpoint =
-    providerClass.chatCompletionPath.replace("/", "") || "/chat/completions";
+  const items: UniversalEndpointRequest[] = await request.json();
 
-  return {
-    provider: providerName,
-    endpoint,
-    headers: requestData ? requestData.headers : {},
-    query: requestData ? JSON.parse(requestData.body as string) : undefined,
-  };
+  const mappedItems: CloudflareAIGatewayUniversalEndpointData = items.map(
+    (item): CloudflareAIGatewayUniversalEndpointStep => {
+      const providerName = item.provider;
+      if (!providerName) {
+        throw new Error(`Provider not specified.`);
+      }
+      if (isCloudflareAIGatewayProvider(providerName) === false) {
+        throw new Error(`Provider ${providerName} is not supported.`);
+      }
+      const provider = Providers[providerName];
+      const providerClass = new provider.providerClass();
+      const endpoint =
+        item.endpoint || providerClass.chatCompletionPath.replace("/", "");
+      const headers = { ...providerClass.endpoint.headers(), ...item.headers };
+      const query = item.query;
+
+      return {
+        provider: providerName,
+        endpoint,
+        headers,
+        query,
+      };
+    },
+  );
+
+  return await fetch2(
+    ...aiGateway.buildUniversalEndpointRequest({
+      data: mappedItems,
+    }),
+  );
 }

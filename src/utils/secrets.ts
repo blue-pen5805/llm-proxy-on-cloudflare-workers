@@ -1,5 +1,5 @@
 import { Environments } from "./environments";
-import { shuffle } from "./helpers";
+import { shuffleArray } from "./helpers";
 
 /**
  * A utility class for managing and retrieving secrets from environment variables.
@@ -14,7 +14,7 @@ export class Secrets {
    * @param keyName - The name of the environment variable to retrieve
    * @returns An array of string values, or an empty array if the key doesn't exist
    */
-  static getAll(keyName: keyof Env): string[] {
+  static getAll(keyName: keyof Env, shuffle: boolean = false): string[] {
     const value = Environments.get(keyName);
 
     if (value === undefined) {
@@ -22,7 +22,7 @@ export class Secrets {
     }
 
     if (Array.isArray(value)) {
-      return value;
+      return shuffle ? shuffleArray(value) : value;
     }
 
     if (typeof value === "string") {
@@ -44,7 +44,7 @@ export class Secrets {
   static get(keyName: keyof Env, rotate: boolean = true): string {
     if (rotate) {
       if (!Secrets.loaded[keyName]) {
-        Secrets.loaded[keyName] = shuffle(this.getAll(keyName));
+        Secrets.loaded[keyName] = this.getAll(keyName, true);
       }
 
       const apiKey = Secrets.loaded[keyName][0];
@@ -52,7 +52,8 @@ export class Secrets {
 
       return apiKey;
     } else {
-      const secrets = shuffle(this.getAll(keyName));
+      const secrets = this.getAll(keyName, true);
+
       return secrets[0];
     }
   }

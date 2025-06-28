@@ -1,0 +1,9 @@
+# List of LLM resource files to download.
+# Add or remove URLs here to update the list of files to be downloaded.
+resources:
+  # Cloudflare
+  - https://developers.cloudflare.com/llms.txt
+  # Cloudflare Workers
+  - https://developers.cloudflare.com/workers/llms-full.txt
+  # Cloudflare AI Gateway
+  - https://developers.cloudflare.com/ai-gateway/llms-full.txt

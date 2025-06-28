@@ -17,7 +17,7 @@ export function getPathname(request: Request): string {
   return request.url.replace(new URL(request.url).origin, "");
 }
 
-export function shuffle<T>(array: T[]): T[] {
+export function shuffleArray<T>(array: T[]): T[] {
   const cloneArray = [...array];
 
   for (let i = cloneArray.length - 1; i > 0; i--) {

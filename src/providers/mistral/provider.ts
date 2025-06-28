@@ -1,4 +1,5 @@
 import { Secrets } from "../../utils/secrets";
+import { OpenAIModelsListResponseBody } from "../openai/types";
 import { ProviderBase } from "../provider";
 import { MistralEndpoint } from "./endpoint";
 import { MistralModelsListResponseBody } from "./types";
@@ -16,9 +17,10 @@ export class Mistral extends ProviderBase {
     this.endpoint = new MistralEndpoint(Secrets.get(this.apiKeyName));
   }
 
-  async listModels() {
-    const response = await this.fetchModels();
-    const data = (await response.json()) as MistralModelsListResponseBody;
+  // Convert model list to OpenAI format
+  modelsToOpenAIFormat(
+    data: MistralModelsListResponseBody,
+  ): OpenAIModelsListResponseBody {
     return {
       object: "list",
       data: data.data.map(({ id, object, created, owned_by, ...model }) => ({
