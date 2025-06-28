@@ -36,9 +36,9 @@ export async function universalEndpoint(
       const provider = Providers[providerName];
       const providerClass = new provider.providerClass();
       const endpoint =
-        item.endpoint || providerClass.chatCompletionPath.replace(/^\/+/, "");
+        item.endpoint || providerClass.chatCompletionPath.replace("/", "");
       const headers = { ...providerClass.endpoint.headers(), ...item.headers };
-      const query = item.query || {};
+      const query = item.query;
 
       return {
         provider: providerName,

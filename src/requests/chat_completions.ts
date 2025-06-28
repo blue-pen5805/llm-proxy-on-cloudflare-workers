@@ -2,7 +2,6 @@ import { CloudflareAIGateway } from "../ai_gateway";
 import { Providers } from "../providers";
 import { fetch2, safeJsonParse } from "../utils/helpers";
 import { Config } from "../utils/config";
-import { Secrets } from "../utils/secrets";
 
 export async function chatCompletions(
   request: Request,
@@ -61,8 +60,8 @@ export async function chatCompletions(
         body: requestInit.body as string,
         headers: {
           ...headers,
-          Authorization: `Bearer ${Secrets.get(providerClass.apiKeyName as keyof Env)}`,
         },
+        apiKeyName: providerClass.apiKeyName as keyof Env,
       }),
     );
   }

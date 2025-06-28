@@ -1,3 +1,4 @@
+import { Secrets } from "../utils/secrets";
 import {
   CloudflareAIGatewayHeaders,
   CloudflareAIGatewayOpenAICompatibleProvider,
@@ -84,7 +85,7 @@ export class CloudflareAIGateway {
   buildHeaders(additionalHeaders: HeadersInit = {}): Record<string, string> {
     return {
       "Content-Type": "application/json",
-      "cf-aig-authorization": this.apiKey || "",
+      "cf-aig-authorization": `Bearer ${this.apiKey}` || "",
       ...additionalHeaders,
     };
   }
@@ -149,24 +150,40 @@ export class CloudflareAIGateway {
     provider,
     body,
     headers,
+    apiKeyName,
   }: {
     provider: CloudflareAIGatewayOpenAICompatibleProvider;
     body: string;
     headers: CloudflareAIGatewayHeaders | HeadersInit;
+    apiKeyName: keyof Env;
   }): [RequestInfo, RequestInit] {
-    const url = `${this.baseUrl("compat")}/chat/completions`;
-    const data = JSON.parse(body) as {
+    const parsedBody = JSON.parse(body) as {
       model: string;
       [key: string]: any;
     };
-    const model = `${provider}/${data.model}`;
+
+    const apiKeys = Secrets.getAll(apiKeyName, true);
+    const data: CloudflareAIGatewayUniversalEndpointData = apiKeys.map(
+      (apiKey) => ({
+        provider: "compat",
+        endpoint: "chat/completions",
+        headers: {
+          ...headers,
+          authorization: `Bearer ${apiKey}`,
+        },
+        query: {
+          ...parsedBody,
+          model: `${provider}/${parsedBody.model}`,
+        },
+      }),
+    );
 
     return [
-      url,
+      this.baseUrl(),
       {
         method: "POST",
         headers: this.buildHeaders(headers),
-        body: JSON.stringify({ ...data, model }),
+        body: JSON.stringify(data),
       },
     ];
   }
