@@ -42,5 +42,5 @@
 
   // --- Configurations ---
   "DEV": false,
-  "DEFAULT_MODEL": null,
+  "DEFAULT_MODEL": null
 }

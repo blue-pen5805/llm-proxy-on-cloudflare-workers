@@ -3,8 +3,5 @@
   "chat.instructionsFilesLocations": {
     "AGENTS.md": true
   },
-  "github.copilot.chat.agent.terminal.allowList": [
-    "npm",
-    "node",
-  ]
+  "github.copilot.chat.agent.terminal.allowList": ["npm", "node"]
 }

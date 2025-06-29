@@ -12,19 +12,17 @@
 
   // Compatibility flags
   // Docs: https://developers.cloudflare.com/workers/configuration/compatibility-flags/
-  "compatibility_flags": [
-    "nodejs_compat",
-  ],
+  "compatibility_flags": ["nodejs_compat"],
 
   // Workers Logs
   // Docs: https://developers.cloudflare.com/workers/observability/logs/workers-logs/
   "observability": {
-    "enabled": true,
+    "enabled": true
   },
 
   // Smart Placement
   // Docs: https://developers.cloudflare.com/workers/configuration/smart-placement/
   "placement": {
-    "mode": "smart",
-  },
+    "mode": "smart"
+  }
 }

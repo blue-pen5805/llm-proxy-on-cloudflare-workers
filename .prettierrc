@@ -1,5 +1,13 @@
 {
   "tabWidth": 2,
   "useTabs": false,
+  "overrides": [
+    {
+      "files": ["*.jsonc"],
+      "options": {
+        "trailingComma": "none"
+      }
+    }
+  ],
   "plugins": ["@trivago/prettier-plugin-sort-imports"]
 }
