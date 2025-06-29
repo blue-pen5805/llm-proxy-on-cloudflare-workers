@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "deploy": "wrangler deploy",
-    "dev": "npm run generate-dev-vars && wrangler dev",
+    "dev": "npm run generate-dev-vars -- --env develop && wrangler dev --env develop",
     "cf-typegen": "npm run generate-dev-vars -- --env example && wrangler types --env example",
     "test": "vitest run",
     "test-watch": "vitest watch",

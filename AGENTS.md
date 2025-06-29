@@ -21,6 +21,19 @@ npm run lint        # Run linter
 npm run prettier-ci # Run formatter
 ```
 
+## Configuration
+
+- Copy `config.example.jsonc` to `config.jsonc` for local development
+- Environment variables managed through `src/utils/config.ts`
+- **IMPORTANT**: Never commit real API keys to git
+
+## Development Workflow
+
+1. **Explore**: Read relevant files before making changes
+2. **Test**: Write tests before implementing code
+3. **Code**: Follow TypeScript strict mode
+4. **Verify**: Run tests, linting and formatting checks
+
 ## Code Style Guidelines
 
 - **TypeScript**: Strict mode, target ES2022
@@ -31,31 +44,25 @@ npm run prettier-ci # Run formatter
 
 ## Naming Conventions
 
-- **Files**: snake-case for all file names (`chat-completions.ts`, not `chatCompletions.ts`)
-- **Directories**: snake-case for folder names (`ai_gateway/`, `workers_ai/`)
-- **Variables/Functions**: camelCase (`getUserConfig`, `apiKey`, `requestHandler`)
-- **Constants**: SCREAMING_SNAKE_CASE (`API_BASE_URL`, `DEFAULT_TIMEOUT`)
-- **Types/Interfaces**: PascalCase (`ChatCompletionRequest`, `ProviderConfig`)
-- **Enums**: PascalCase with descriptive prefix (`HttpStatus`, `ProviderType`)
-- **Classes**: PascalCase (`OpenAIProvider`, `CloudflareAIGateway`)
+- **Files**: snake-case for all file names
+- **Directories**: snake-case for folder names
+- **Variables/Functions**: camelCase
+- **Constants**: SCREAMING_SNAKE_CASE
+- **Types/Interfaces**: PascalCase
+- **Enums**: PascalCase with descriptive prefix
+- **Classes**: PascalCase
 
 ## Comment Guidelines
 
 - **Language**: English only, be concise
 - **Use sparingly**: Only when necessary for clarity
-- **Focus on**: Complex logic, workarounds, API mappings, provider differences
+- **Focus on**: Complex logic, workarounds, differences
 - **Avoid**: Self-explanatory code, type info (TypeScript handles this)
 
-## Configuration
+## Documentation Guidelines
 
-- Copy `config.example.jsonc` to `config.jsonc` for local development
-- Environment variables managed through `src/utils/config.ts`
-- **IMPORTANT**: Never commit real API keys to git
-
-## Development Workflow
-
-1. **Explore**: Read relevant provider files before making changes
-2. **Test**: Write tests before implementing features
-3. **Code**: Follow TypeScript strict mode
-4. **Verify**: Run tests and linting
-5. **Deploy**: Test locally before production deployment
+- **Format**: Markdown files in `docs/`
+- **Language**: English for main documentation, Japanese translations with `_ja.md` suffix (both languages required)
+- **Structure**: Use headings, bullet points, code blocks
+- **Simplicity**: Keep it clear and concise
+- **Examples**: Include code snippets for complex concepts
