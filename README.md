@@ -84,8 +84,6 @@ Set the API key(s) for each provider you intend to use. API keys can be a single
 
 ### Proxy Configuration:
 
-- `RETRY`: Number of retry attempts for failed requests to the LLM provider via AI Gateway. Defaults to 0 (no retries). Only applicable when using AI Gateway.
-
 ## Usage Example
 
 Send requests to your deployed Cloudflare Worker URL with the appropriate route and API key.
