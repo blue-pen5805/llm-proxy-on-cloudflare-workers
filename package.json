@@ -10,7 +10,7 @@
     "start": "wrangler dev",
     "test": "vitest run",
     "test-watch": "vitest watch",
-    "cf-typegen": "wrangler types",
+    "cf-typegen": "wrangler types --env example",
     "prettier": "prettier --write .",
     "prettier-ci": "prettier --check .",
     "lint": "eslint 'src/**/*.ts'",
