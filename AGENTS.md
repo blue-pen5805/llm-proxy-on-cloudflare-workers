@@ -1,97 +1,61 @@
 # LLM Proxy on Cloudflare Workers
 
-This project is an LLM (Large Language Model) proxy server running on Cloudflare Workers.
-
 ## Project Overview
 
-**LLM Proxy on Cloudflare Workers** is a serverless proxy that integrates multiple LLM APIs, providing centralized API key management and OpenAI-compatible endpoints.
+Serverless LLM proxy running on Cloudflare Workers, providing centralized API key management and OpenAI-compatible endpoints for multiple LLM providers.
 
-### Key Features
+## Key Architecture
 
-- Centralized API key management
-- Pass-through endpoints (direct API forwarding for each provider)
-- OpenAI-compatible endpoints (`/v1/chat/completions`, `/v1/models`)
-- Cloudflare AI Gateway integration
+- **Runtime**: Cloudflare Workers (Edge computing)
+- **Language**: TypeScript with strict type checking
+- **Entry point**: `src/index.ts`
+- **Config**: `config.jsonc` (use `config.jsonc.example` as template)
+- **Testing**: Vitest with `@cloudflare/vitest-pool-workers`
 
-## Tech Stack
-
-- **Runtime**: Cloudflare Workers
-- **Language**: TypeScript
-- **Testing**: Vitest
-- **Deployment**: Wrangler CLI
-
-This project provides a lightweight proxy server that can handle multiple LLM providers in a unified way, designed to help developers efficiently utilize LLM APIs.
-
-## Project Structure
-
-```
-├── src/                   # Main source code
-├── test/                  # Test files
-├── docs/                  # Documentation
-│   ├── dependencies.md    # Dependency management
-│   └── llm-resources.md   # LLM resource management
-└── .llm_resources/        # LLM resource files
-    ├── ../                # LLM friendly documentation
-    ├── download.sh        # LLM resource download script
-    └── urls.yaml          # Download target URL configuration
-```
-
-### Key Commands
+## Essential Commands
 
 ```bash
-# Start development server
-npm run dev
-
-# Run tests
-npm run test
-
-# Update LLM resources
-npm run download-llm-resources
-
-# Deploy
-npm run deploy
+npm run dev         # Start local development server
+npm run test        # Run test suite
+npm run lint        # Run linter
+npm run prettier-ci # Run formatter
 ```
 
-## Coding Style
+## Code Style Guidelines
 
-The project follows TypeScript best practices and maintains consistent code formatting:
+- **TypeScript**: Strict mode, target ES2022
+- **Imports**: ES modules with destructuring
+- **Async**: Prefer async/await over Promise chains
+- **Functions**: Arrow functions for callbacks, regular functions for top-level
+- **Objects**: Use spread syntax (`{...obj}`) over `Object.assign()`
 
-- **TypeScript**: Strict type checking enabled
-- **Formatting**: Prettier for consistent code style
-- **File Structure**: Modular approach with clear separation of concerns
-- **Naming**: Descriptive variable and function names
-- **Error Handling**: Proper error propagation and handling
+## Naming Conventions
 
-### Code Formatting Commands
+- **Files**: snake-case for all file names (`chat-completions.ts`, not `chatCompletions.ts`)
+- **Directories**: snake-case for folder names (`ai_gateway/`, `workers_ai/`)
+- **Variables/Functions**: camelCase (`getUserConfig`, `apiKey`, `requestHandler`)
+- **Constants**: SCREAMING_SNAKE_CASE (`API_BASE_URL`, `DEFAULT_TIMEOUT`)
+- **Types/Interfaces**: PascalCase (`ChatCompletionRequest`, `ProviderConfig`)
+- **Enums**: PascalCase with descriptive prefix (`HttpStatus`, `ProviderType`)
+- **Classes**: PascalCase (`OpenAIProvider`, `CloudflareAIGateway`)
 
-```bash
-# Format specific files
-npm run prettier <file1> <file2> ...
-```
+## Comment Guidelines
 
-## Testing
+- **Language**: English only, be concise
+- **Use sparingly**: Only when necessary for clarity
+- **Focus on**: Complex logic, workarounds, API mappings, provider differences
+- **Avoid**: Self-explanatory code, type info (TypeScript handles this)
 
-The project uses Vitest with Cloudflare Workers-specific testing utilities:
+## Configuration
 
-- **Test Framework**: Vitest
-- **Test Structure**: Mirror source structure in `test/` directory
+- Copy `config.example.jsonc` to `config.jsonc` for local development
+- Environment variables managed through `src/utils/config.ts`
+- **IMPORTANT**: Never commit real API keys to git
 
-### Testing Commands
+## Development Workflow
 
-```bash
-# Run tests
-npm run test
-```
-
-## LLM Documentation
-
-### `.llm_resources/` Folder
-
-- Latest LLM model information resources
-- Cloudflare developer documentation
-- Automated download script (`download.sh`)
-
-### `docs/` Folder
-
-- **dependencies.md**: npm dependency management guide
-- **llm-resources.md**: LLM resource update procedures
+1. **Explore**: Read relevant provider files before making changes
+2. **Test**: Write tests before implementing features
+3. **Code**: Follow TypeScript strict mode
+4. **Verify**: Run tests and linting
+5. **Deploy**: Test locally before production deployment

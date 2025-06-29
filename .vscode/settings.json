@@ -1,3 +1,10 @@
 {
-  "geminicodeassist.agentYoloMode": true
+  "geminicodeassist.agentYoloMode": true,
+  "chat.instructionsFilesLocations": {
+    "AGENTS.md": true
+  },
+  "github.copilot.chat.agent.terminal.allowList": [
+    "npm",
+    "node",
+  ]
 }
