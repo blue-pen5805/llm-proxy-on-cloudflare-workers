@@ -1,0 +1,30 @@
+// This file is used to configure the Cloudflare Workers project using Wrangler.
+// Docs: https://developers.cloudflare.com/workers/wrangler/configuration/
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+
+  "name": "llm-proxy",
+  "main": "src/index.ts",
+
+  // Compatibility dates
+  // Docs: https://developers.cloudflare.com/workers/configuration/compatibility-dates/
+  "compatibility_date": "2025-05-05",
+
+  // Compatibility flags
+  // Docs: https://developers.cloudflare.com/workers/configuration/compatibility-flags/
+  "compatibility_flags": [
+    "nodejs_compat",
+  ],
+
+  // Workers Logs
+  // Docs: https://developers.cloudflare.com/workers/observability/logs/workers-logs/
+  "observability": {
+    "enabled": true,
+  },
+
+  // Smart Placement
+  // Docs: https://developers.cloudflare.com/workers/configuration/smart-placement/
+  "placement": {
+    "mode": "smart",
+  },
+}
