@@ -1,6 +1,16 @@
-import { deploySecrets, filterSecretsForDeployment, generateSecretsJson, getConfigPath, parseArgs, parseJsonc, showHelp, validateEnvironmentName, valueToSecret, type FileSystemOperations } from "../../scripts/deploy-secrets";
+import {
+  deploySecrets,
+  filterSecretsForDeployment,
+  generateSecretsJson,
+  getConfigPath,
+  parseArgs,
+  parseJsonc,
+  showHelp,
+  validateEnvironmentName,
+  valueToSecret,
+  type FileSystemOperations,
+} from "../../scripts/deploy-secrets";
 import { describe, expect, it, vi } from "vitest";
-
 
 // Mock child_process module
 vi.mock("child_process", () => ({
