@@ -6,16 +6,18 @@
   "type": "module",
   "scripts": {
     "deploy": "wrangler deploy",
-    "dev": "npm run generate-dev-vars -- --env develop && wrangler dev --env develop",
-    "cf-typegen": "npm run generate-dev-vars -- --env example && wrangler types --env example",
+    "dev": "npm run secrets:dev-vars -- --env develop && wrangler dev --env develop",
+    "cf-typegen": "npm run secrets:dev-vars -- --env example && wrangler types --env example",
+    "cf:login": "wrangler login",
+    "cf:logout": "wrangler logout",
     "test": "vitest run",
     "test-watch": "vitest watch",
     "prettier": "prettier --write .",
     "prettier-ci": "prettier --check .",
     "lint": "eslint 'src/**/*.ts'",
     "lint:fix": "eslint --fix 'src/**/*.ts'",
-    "generate-dev-vars": "ts-node scripts/generate-dev-vars.ts",
-    "deploy-secrets": "ts-node scripts/deploy-secrets.ts",
+    "secrets:deploy": "ts-node scripts/deploy-secrets.ts",
+    "secrets:dev-vars": "ts-node scripts/generate-dev-vars.ts",
     "download-llm-resources": "./.llm_resources/download.sh"
   },
   "devDependencies": {
