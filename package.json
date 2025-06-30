@@ -18,6 +18,7 @@
     "lint:fix": "eslint --fix 'src/**/*.ts'",
     "secrets:deploy": "ts-node scripts/deploy-secrets.ts",
     "secrets:dev-vars": "ts-node scripts/generate-dev-vars.ts",
+    "secrets:create": "ts-node scripts/create-config.ts",
     "download-llm-resources": "./.llm_resources/download.sh"
   },
   "devDependencies": {

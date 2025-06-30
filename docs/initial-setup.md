@@ -35,13 +35,13 @@ This command will open a browser window where you can log in to your Cloudflare 
 
 ## 3. Create the Configuration File
 
-Next, create the actual configuration file by copying the template.
+Create the configuration file using the provided script.
 
 ```bash
-cp config.example.jsonc config.jsonc
+npm run secrets:create
 ```
 
-Open the created `config.jsonc` and edit the settings for the LLM providers you want to use. You need to configure at least one provider.
+This will create `config.jsonc` from the template and guide you through the configuration process. You need to configure at least one provider.
 
 **Configuration Example (`config.jsonc`):**
 
