@@ -178,7 +178,6 @@ config.*.jsonc
 !config.example.jsonc
 
 # LLM resources
-# Ignore all files in .llm_resources except scripts and config files
+# Ignore all files in .llm_resources except config files
 .llm_resources/*
-!.llm_resources/download.sh
-!.llm_resources/urls.yaml
+!.llm_resources/urls.jsonc
