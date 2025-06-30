@@ -6,16 +6,20 @@
   "type": "module",
   "scripts": {
     "deploy": "wrangler deploy",
-    "dev": "wrangler dev",
-    "start": "wrangler dev",
+    "dev": "npm run secrets:dev-vars -- --env develop && wrangler dev --env develop",
+    "cf-typegen": "npm run secrets:dev-vars -- --env example && wrangler types --env example",
+    "cf:login": "wrangler login",
+    "cf:logout": "wrangler logout",
     "test": "vitest run",
     "test-watch": "vitest watch",
-    "cf-typegen": "wrangler types",
     "prettier": "prettier --write .",
     "prettier-ci": "prettier --check .",
     "lint": "eslint 'src/**/*.ts'",
     "lint:fix": "eslint --fix 'src/**/*.ts'",
-    "download-llm-resources": "./.llm_resources/download.sh"
+    "secrets:deploy": "ts-node scripts/deploy-secrets.ts",
+    "secrets:dev-vars": "ts-node scripts/generate-dev-vars.ts",
+    "secrets:create": "ts-node scripts/create-config.ts",
+    "download-llm-resources": "ts-node scripts/download-llm-resources.ts"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.8.47",
@@ -27,6 +31,7 @@
     "eslint-config-prettier": "^10.1.5",
     "eslint-plugin-prettier": "^5.5.1",
     "prettier": "^3.6.2",
+    "ts-node": "^10.9.2",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.35.0",
     "vite": "^7.0.0",

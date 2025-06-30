@@ -1,5 +1,7 @@
 # LLM Proxy on Cloudflare Workers
 
+English | [日本語](README_ja.md)
+
 This is a serverless proxy built on [Cloudflare Workers](https://www.cloudflare.com/developer-platform/products/workers/) that integrates with multiple Large Language Model (LLM) APIs. Inspired by [LiteLLM](https://github.com/BerriAI/litellm).
 
 ## Features
@@ -56,13 +58,15 @@ Before you begin, ensure you have the following installed:
 
 ## Quick Start
 
-To get started:
-
 1. Clone this repository.
-2. Deploy the Cloudflare Worker: `npx wrangler deploy`
-3. Set environment variables securely using `npx wrangler secret put <ENVIRONMENT_VARIABLE_NAME>`.
-   - Examples: `npx wrangler secret put PROXY_API_KEY`, `npx wrangler secret put OPENAI_API_KEY`
-   - Refer to the "Environment Variables" section for a list of required variables.
+2. Install dependencies: `npm install`
+3. Authenticate with Cloudflare: `npm run cf:login`
+4. Create configuration file: `cp config.example.jsonc config.jsonc`
+5. Edit `config.jsonc` with your API keys
+6. Deploy the Cloudflare Worker: `npm run deploy`
+7. Deploy secrets: `npm run secrets:deploy`
+
+For more detailed instructions, please refer to the [Initial Setup Guide](docs/initial-setup.md).
 
 ## Environment Variables
 
@@ -83,8 +87,6 @@ Set these if you are using the Cloudflare AI Gateway.
 Set the API key(s) for each provider you intend to use. API keys can be a single string, a comma-separated string, or a JSON-formatted string array.
 
 ### Proxy Configuration:
-
-- `RETRY`: Number of retry attempts for failed requests to the LLM provider via AI Gateway. Defaults to 0 (no retries). Only applicable when using AI Gateway.
 
 ## Usage Example
 

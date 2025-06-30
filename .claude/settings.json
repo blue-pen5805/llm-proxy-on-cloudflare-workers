@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev)",
+      "Bash(npm run test)",
+      "Bash(npm run prettier:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npm run cf-typegen)"
+    ]
+  }
+}

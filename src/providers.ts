@@ -2,7 +2,7 @@ import { Anthropic } from "./providers/anthropic";
 import { Cerebras } from "./providers/cerebras";
 import { Cohere } from "./providers/cohere";
 import { DeepSeek } from "./providers/deepseek";
-import { GoogleAiStudio } from "./providers/google_ai_studio";
+import { GoogleAiStudio } from "./providers/google-ai-studio";
 import { Grok } from "./providers/grok";
 import { Groq } from "./providers/groq";
 import { HuggingFace } from "./providers/huggingface";

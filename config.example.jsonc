@@ -1,0 +1,46 @@
+{
+  "$schema": "schemas/config-schema.json",
+
+  // --- General Authentication ---
+  // API Key for llm proxy.
+  "PROXY_API_KEY": "YOUR-PROXY-API-KEY",
+
+  // --- AI Gateway ---
+  "CLOUDFLARE_ACCOUNT_ID": null,
+  "AI_GATEWAY_NAME": null,
+  "CF_AIG_TOKEN": null,
+
+  // --- API keys for providers ---
+  // OpenAI: https://platform.openai.com/
+  "OPENAI_API_KEY": null,
+  // Google AI Studio: https://aistudio.google.com/
+  "GEMINI_API_KEY": null,
+  // Anthropic: https://console.anthropic.com/
+  "ANTHROPIC_API_KEY": null,
+  // Cerebras: https://cloud.cerebras.ai/
+  "CEREBRAS_API_KEY": null,
+  // Cohere: https://dashboard.cohere.com
+  "COHERE_API_KEY": null,
+  // DeepSeek: https://platform.deepseek.com/
+  "DEEPSEEK_API_KEY": null,
+  // xAI: https://console.x.ai/
+  "GROK_API_KEY": null,
+  // Groq: https://console.groq.com/
+  "GROQ_API_KEY": null,
+  // Mistral: https://console.mistral.ai/
+  "MISTRAL_API_KEY": null,
+  // OpenRouter: https://openrouter.ai/
+  "OPENROUTER_API_KEY": null,
+  // HuggingFace: https://huggingface.co/
+  "HUGGINGFACE_API_KEY": null,
+  // Perplexity AI: https://www.perplexity.ai/
+  "PERPLEXITYAI_API_KEY": null,
+  // Replicate: https://replicate.com/
+  "REPLICATE_API_KEY": null,
+  // Cloudflare Workers AI: https://dash.cloudflare.com/
+  "CLOUDFLARE_API_KEY": null,
+
+  // --- Configurations ---
+  "DEV": false,
+  "DEFAULT_MODEL": null
+}
