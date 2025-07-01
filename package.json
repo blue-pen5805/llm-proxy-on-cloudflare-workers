@@ -24,7 +24,7 @@
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.8.47",
     "@trivago/prettier-plugin-sort-imports": "^5.2.2",
-    "@types/node": "^24.0.7",
+    "@types/node": "^24.0.8",
     "@typescript-eslint/eslint-plugin": "^8.35.0",
     "@typescript-eslint/parser": "^8.35.0",
     "eslint": "^9.30.0",
