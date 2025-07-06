@@ -8,43 +8,50 @@ import { universalEndpoint } from "~/src/requests/universal_endpoint";
 import { authenticate } from "~/src/utils/authorization";
 import { Config } from "~/src/utils/config";
 
+vi.mock("~/src/ai_gateway", () => {
+  const MockCloudflareAIGateway = vi.fn().mockImplementation(() => ({
+    baseUrl: vi.fn(() => "https://gateway.ai.cloudflare.com"),
+    buildHeaders: vi.fn(() => ({})),
+    buildUniversalEndpointRequest: vi.fn(() => ["", {}]),
+    buildProviderEndpointRequest: vi.fn(() => ["", {}]),
+    buildChatCompletionsRequest: vi.fn(() => ["", {}]),
+  }));
+
+  // Add static methods as properties
+  (MockCloudflareAIGateway as any).configure = vi.fn();
+  (MockCloudflareAIGateway as any).isAvailable = vi.fn(() => true);
+  (MockCloudflareAIGateway as any).isSupportedProvider = vi.fn(() => true);
+
+  return {
+    CloudflareAIGateway: MockCloudflareAIGateway,
+  };
+});
 vi.mock("~/src/providers", () => ({
   Providers: {
-    openai: {
-      providerClass: vi.fn(),
-    },
+    openai: vi.fn(() => ({
+      name: "openai",
+      baseUrl: "https://api.openai.com",
+    })),
   },
 }));
-
 vi.mock("~/src/requests/options", () => ({
   handleOptions: vi.fn(async () => new Response()),
 }));
-
 vi.mock("~/src/requests/proxy", () => ({
   proxy: vi.fn(async () => new Response()),
 }));
-
 vi.mock("~/src/requests/chat_completions", () => ({
   chatCompletions: vi.fn(async () => new Response()),
 }));
-
 vi.mock("~/src/requests/models", () => ({
   models: vi.fn(async () => new Response()),
 }));
-
 vi.mock("~/src/requests/universal_endpoint", () => ({
   universalEndpoint: vi.fn(async () => new Response()),
 }));
-
-vi.mock("~/src/utils/authorization", () => ({
-  authenticate: vi.fn(),
-}));
-
+vi.mock("~/src/utils/authorization", () => ({ authenticate: vi.fn() }));
 vi.mock("~/src/utils/config", () => ({
-  Config: {
-    isDevelopment: vi.fn(),
-    aiGateway: vi.fn(),
-  },
+  Config: { isDevelopment: vi.fn(), aiGateway: vi.fn() },
 }));
 
 describe("fetch", () => {
@@ -95,14 +102,18 @@ describe("fetch", () => {
     expect(response.status).toBe(200);
   });
 
-  it("should handle requests starting with {PROVIDER_NAME}", async () => {
-    await SELF.fetch("https://example.com/openai/notfound");
-
-    expect(proxy).toHaveBeenCalledOnce();
-  });
-
   it("should handle chat completions request", async () => {
     const request = new Request("https://example.com/chat/completions", {
+      method: "POST",
+    });
+
+    await SELF.fetch(request);
+
+    expect(chatCompletions).toHaveBeenCalledOnce();
+  });
+
+  it("should handle v1 chat completions request", async () => {
+    const request = new Request("https://example.com/v1/chat/completions", {
       method: "POST",
     });
 
@@ -121,6 +132,55 @@ describe("fetch", () => {
     expect(models).toHaveBeenCalledOnce();
   });
 
+  it("should handle v1 models request", async () => {
+    const request = new Request("https://example.com/v1/models", {
+      method: "GET",
+    });
+
+    await SELF.fetch(request);
+
+    expect(models).toHaveBeenCalledOnce();
+  });
+
+  it("should handle AI Gateway chat completions request", async () => {
+    const request = new Request(
+      "https://example.com/g/test-gateway/chat/completions",
+      {
+        method: "POST",
+      },
+    );
+
+    await SELF.fetch(request);
+
+    expect(chatCompletions).toHaveBeenCalledOnce();
+  });
+
+  it("should handle AI Gateway models request", async () => {
+    const request = new Request("https://example.com/g/test-gateway/models", {
+      method: "GET",
+    });
+
+    await SELF.fetch(request);
+
+    expect(models).toHaveBeenCalledOnce();
+  });
+
+  it("should handle AI Gateway universal endpoint request", async () => {
+    const request = new Request("https://example.com/g/test-gateway/", {
+      method: "POST",
+    });
+
+    await SELF.fetch(request);
+
+    expect(universalEndpoint).toHaveBeenCalledOnce();
+  });
+
+  it("should handle requests starting with {PROVIDER_NAME}", async () => {
+    await SELF.fetch("https://example.com/openai/notfound");
+
+    expect(proxy).toHaveBeenCalledOnce();
+  });
+
   it("should handle universal endpoint request", async () => {
     const request = new Request("https://example.com", {
       method: "POST",
@@ -129,5 +189,11 @@ describe("fetch", () => {
     await SELF.fetch(request);
 
     expect(universalEndpoint).toHaveBeenCalledOnce();
+  });
+
+  it("should return 404 for unknown routes", async () => {
+    const response = await SELF.fetch("https://example.com/unknown-route");
+
+    expect(response.status).toBe(404);
   });
 });
