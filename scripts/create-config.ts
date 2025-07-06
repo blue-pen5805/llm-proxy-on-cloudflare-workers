@@ -51,7 +51,9 @@ function createReadlineInterface(): Interface {
 
 function question(rl: Interface, prompt: string): Promise<string> {
   return new Promise((resolve) => {
-    rl.question(prompt, resolve);
+    rl.question(prompt, (answer) => {
+      resolve(answer);
+    });
   });
 }
 
@@ -59,6 +61,10 @@ function parseJsoncFile(content: string): {
   config: Record<string, any>;
   structure: ConfigValue[];
 } {
+  if (!content || typeof content !== "string") {
+    throw new Error("Invalid content provided to parseJsoncFile");
+  }
+
   const lines = content.split("\n");
   const structure: ConfigValue[] = [];
   const comments: string[] = [];
@@ -143,7 +149,7 @@ async function promptForValue(
   } while (isRequired && !value.trim());
 
   if (!value.trim()) {
-    return currentValue;
+    return null; // Return null for empty input instead of currentValue
   }
 
   // Try to parse as JSON, otherwise return as string
@@ -167,6 +173,12 @@ function reconstructJsonc(
       continue;
     }
 
+    // Skip null values (empty inputs)
+    const value = config[item.key];
+    if (value === null || value === undefined) {
+      continue;
+    }
+
     // Add section headers based on comments
     if (item.comment && item.comment.includes("---")) {
       if (currentSection) {
@@ -179,7 +191,6 @@ function reconstructJsonc(
     }
 
     // Add the key-value pair
-    const value = config[item.key];
     result += `  "${item.key}": ${JSON.stringify(value)},\n`;
   }
 
@@ -204,12 +215,14 @@ async function main(): Promise<void> {
     if (overwrite.toLowerCase() !== "y" && overwrite.toLowerCase() !== "yes") {
       console.log("Cancelled.");
       process.exit(0);
+      return; // Add return to prevent further execution in tests
     }
   }
 
   if (!existsSync(CONFIG_EXAMPLE_PATH)) {
     console.error(`Error: ${CONFIG_EXAMPLE_PATH} not found.`);
     process.exit(1);
+    return; // Add return to prevent further execution in tests
   }
 
   const exampleContent = readFileSync(CONFIG_EXAMPLE_PATH, "utf8");
@@ -267,9 +280,15 @@ async function main(): Promise<void> {
       error instanceof Error ? error.message : String(error),
     );
     process.exit(1);
+    return; // Add return to prevent further execution in tests
   } finally {
     rl.close();
   }
 }
 
-main().catch(console.error);
+export { main };
+
+// Run main function if this script is executed directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch(console.error);
+}
