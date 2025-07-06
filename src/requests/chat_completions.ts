@@ -30,7 +30,7 @@ export async function chatCompletions(
 
   // Validate provider name
   const provider = Providers[providerName];
-  if (!Providers[providerName]) {
+  if (!provider) {
     return new Response(
       JSON.stringify({
         error: "Invalid provider.",
@@ -40,7 +40,7 @@ export async function chatCompletions(
   }
 
   // Generate chat completions request
-  const providerClass = new provider.providerClass();
+  const providerClass = new provider();
   const [requestInfo, requestInit] = providerClass.buildChatCompletionsRequest({
     body: JSON.stringify({
       ...data,

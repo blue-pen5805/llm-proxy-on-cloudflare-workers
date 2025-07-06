@@ -33,7 +33,7 @@ export async function universalEndpoint(
         throw new Error(`Provider ${providerName} is not supported.`);
       }
       const provider = Providers[providerName];
-      const providerClass = new provider.providerClass();
+      const providerClass = new provider();
       const endpoint =
         item.endpoint || providerClass.chatCompletionPath.replace("/", "");
       const headers = { ...providerClass.endpoint.headers(), ...item.headers };
