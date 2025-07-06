@@ -1,7 +1,3 @@
 {
-  "chat.instructionsFilesLocations": {
-    "AGENTS.md": true
-  },
-  "github.copilot.chat.agent.terminal.allowList": ["npm", "node"],
-  "geminicodeassist.rules": "First, always read AGENTS.md"
+  "github.copilot.chat.agent.terminal.allowList": ["npm", "node", "date"]
 }

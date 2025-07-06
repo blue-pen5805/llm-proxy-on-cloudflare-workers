@@ -180,4 +180,6 @@ config.*.jsonc
 # LLM resources
 # Ignore all files in .llm_resources except config files
 .llm_resources/*
-!.llm_resources/urls.jsonc
+!.llm_resources/.urls.jsonc
+!.llm_resources/PROJECT_INFO.md
+!.llm_resources/WORKFLOW.md

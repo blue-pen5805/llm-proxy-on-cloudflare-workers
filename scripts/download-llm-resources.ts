@@ -93,9 +93,9 @@ function extractPathFromUrl(url: string): string {
 
 async function main() {
   const baseDir = ".llm_resources";
-  const urlFile = join(baseDir, "urls.jsonc");
+  const urlFile = join(baseDir, ".urls.jsonc");
 
-  // Check if urls.jsonc exists
+  // Check if .urls.jsonc exists
   if (!existsSync(urlFile)) {
     console.error(`Error: ${urlFile} not found.`);
     process.exit(1);
