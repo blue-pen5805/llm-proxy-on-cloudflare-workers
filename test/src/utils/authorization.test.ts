@@ -51,8 +51,15 @@ describe("authenticate", () => {
     expect(authenticate(request)).toBe(true);
   });
 
+  // Test when API key is set and authentication succeeds with query parameter 'key'
+  it("should return true when valid 'key' query parameter is provided", () => {
+    const request = new Request("https://example.com?key=valid-key");
+
+    expect(authenticate(request)).toBe(true);
+  });
+
   // Test when authentication fails due to missing headers
-  it("should return false when no authorization header is provided", () => {
+  it("should return false when no authorization header or query key is provided", () => {
     const request = new Request("https://example.com");
 
     expect(authenticate(request)).toBe(false);
