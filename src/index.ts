@@ -5,10 +5,7 @@ import { models } from "./requests/models";
 import { handleOptions } from "./requests/options";
 import { proxy } from "./requests/proxy";
 import { universalEndpoint } from "./requests/universal_endpoint";
-import {
-  authenticate,
-  AUTHORIZATION_QUERY_PARAMETERS,
-} from "./utils/authorization";
+import { authenticate } from "./utils/authorization";
 import { Config } from "./utils/config";
 import { getPathname } from "./utils/helpers";
 
@@ -22,14 +19,6 @@ export default {
     if (!Config.isDevelopment() && authenticate(request) === false) {
       return new Response("Unauthorized", { status: 401 });
     }
-
-    // Remove authorization query parameters and extract pathname
-    const url = new URL(pathname, "http://localhost");
-    AUTHORIZATION_QUERY_PARAMETERS.forEach((param) => {
-      url.searchParams.delete(param);
-    });
-    // Use only the pathname part for routing (exclude query parameters)
-    pathname = url.pathname;
 
     // Ping
     // Example: /ping
