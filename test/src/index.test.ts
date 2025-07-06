@@ -49,7 +49,10 @@ vi.mock("~/src/requests/models", () => ({
 vi.mock("~/src/requests/universal_endpoint", () => ({
   universalEndpoint: vi.fn(async () => new Response()),
 }));
-vi.mock("~/src/utils/authorization", () => ({ authenticate: vi.fn() }));
+vi.mock("~/src/utils/authorization", () => ({
+  authenticate: vi.fn(),
+  AUTHORIZATION_QUERY_PARAMETERS: ["key"],
+}));
 vi.mock("~/src/utils/config", () => ({
   Config: { isDevelopment: vi.fn(), aiGateway: vi.fn() },
 }));
@@ -195,5 +198,23 @@ describe("fetch", () => {
     const response = await SELF.fetch("https://example.com/unknown-route");
 
     expect(response.status).toBe(404);
+  });
+
+  it("should remove authorization query parameters from pathname", async () => {
+    // Mock the proxy function to capture the arguments
+    const mockProxy = vi.mocked(proxy);
+
+    // Request with key parameter
+    await SELF.fetch(
+      "https://example.com/openai/v1/chat/completions?key=test-key&other=value",
+    );
+
+    // Check that proxy was called with the pathname without the key parameter
+    expect(mockProxy).toHaveBeenCalledWith(
+      expect.any(Request),
+      "openai",
+      "/v1/chat/completions",
+      expect.anything(),
+    );
   });
 });
