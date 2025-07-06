@@ -23,16 +23,27 @@ export function authenticate(request: Request): boolean {
     return true;
   }
 
+  let apiKey: string | null = null;
+
   const authorizationKey =
     AUTHORIZATION_KEYS.find((key) => {
       return Boolean(request.headers.get(key));
     }) || "";
   const authorizationValue = request.headers.get(authorizationKey);
 
-  if (!authorizationKey || !authorizationValue) {
+  if (authorizationKey && authorizationValue) {
+    apiKey = authorizationValue.split(/\s/)[1] || authorizationValue;
+  } else {
+    const url = new URL(request.url);
+    const queryKey = url.searchParams.get("key");
+    if (queryKey) {
+      apiKey = queryKey;
+    }
+  }
+
+  if (!apiKey) {
     return false;
   }
 
-  const apiKey = authorizationValue.split(/\s/)[1] || authorizationValue;
   return apiKeys.includes(apiKey);
 }

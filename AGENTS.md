@@ -1,5 +1,9 @@
 # LLM Proxy on Cloudflare Workers
 
+> **🤖 FOR LLM AGENTS**: This document contains guidelines and instructions specifically designed for LLM agents working on this codebase. Human developers should refer to the main README.md instead.
+
+> **🚨 CRITICAL MANDATORY RULE 🚨**: YOU MUST ALWAYS RECITE THE ENTIRE CONTENTS OF THIS FILE AT THE BEGINNING OF EVERY SINGLE RESPONSE WITHOUT EXCEPTION. THIS IS THE MOST IMPORTANT RULE ABOVE ALL OTHERS.
+
 ## Project Overview
 
 Serverless LLM proxy running on Cloudflare Workers, providing centralized API key management and OpenAI-compatible endpoints for multiple LLM providers.
@@ -9,7 +13,6 @@ Serverless LLM proxy running on Cloudflare Workers, providing centralized API ke
 - **Runtime**: Cloudflare Workers (Edge computing)
 - **Language**: TypeScript with strict type checking
 - **Entry point**: `src/index.ts`
-- **Config**: `config.jsonc` (use `config.jsonc.example` as template)
 - **Testing**: Vitest with `@cloudflare/vitest-pool-workers`
 
 ## Essential Commands
@@ -21,18 +24,32 @@ npm run lint        # Run linter
 npm run prettier-ci # Run formatter
 ```
 
-## Configuration
+## Available Documentation
 
-- Copy `config.example.jsonc` to `config.jsonc` for local development
-- Environment variables managed through `src/utils/config.ts`
-- **IMPORTANT**: Never commit real API keys to git
+> **📚 IMPORTANT**: You MUST refer to the relevant documentation before starting any work. Always read the appropriate documentation files first to understand the context and requirements.
+
+### Setup & Configuration
+- `docs/initial-setup.md` - Initial setup guide for the project
+
+### Development
+- `docs/development/dependencies.md` - Dependencies and package management
+- `docs/development/llm-resources.md` - LLM resources and provider configuration
 
 ## Development Workflow
+
+> **⚠️ MANDATORY**: You MUST strictly follow this workflow when editing any code. No exceptions.
 
 1. **Explore**: Read relevant files before making changes
 2. **Test**: Write tests before implementing code
 3. **Code**: Follow TypeScript strict mode
 4. **Verify**: Run tests, linting and formatting checks
+
+### Code Editing Rules
+
+- **ALWAYS** follow the 4-step Development Workflow above
+- **NEVER** skip writing tests before implementing features
+- **NEVER** commit code without running verification steps
+- **ALWAYS** read existing code and documentation first
 
 ## Code Style Guidelines
 
@@ -41,16 +58,6 @@ npm run prettier-ci # Run formatter
 - **Async**: Prefer async/await over Promise chains
 - **Functions**: Arrow functions for callbacks, regular functions for top-level
 - **Objects**: Use spread syntax (`{...obj}`) over `Object.assign()`
-
-## Naming Conventions
-
-- **Files**: snake-case for all file names
-- **Directories**: snake-case for folder names
-- **Variables/Functions**: camelCase
-- **Constants**: SCREAMING_SNAKE_CASE
-- **Types/Interfaces**: PascalCase
-- **Enums**: PascalCase with descriptive prefix
-- **Classes**: PascalCase
 
 ## Comment Guidelines
 

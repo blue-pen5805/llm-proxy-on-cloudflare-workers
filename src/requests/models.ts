@@ -9,7 +9,7 @@ export async function models(
 ) {
   const requests = Object.keys(Providers).map(async (providerName) => {
     const provider = Providers[providerName];
-    const providerClass = new provider.providerClass();
+    const providerClass = new provider();
 
     // Return empty list if the provider is not available
     if (providerClass.available() === false) {

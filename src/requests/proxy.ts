@@ -9,7 +9,7 @@ export async function proxy(
   aiGateway: CloudflareAIGateway | undefined = undefined,
 ) {
   const provider = Providers[providerName];
-  const providerClass = new provider.providerClass();
+  const providerClass = new provider();
 
   // Handle AI Gateway requests
   if (aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)) {

@@ -15,57 +15,27 @@ import { Replicate } from "./providers/replicate";
 import { WorkersAi } from "./providers/workers_ai";
 
 export const Providers: {
-  [providerName: string]: {
-    providerClass: typeof ProviderBase;
-  };
+  [providerName: string]: typeof ProviderBase;
 } = {
   // --- Cloudflare AI Gateway Supported Providers
-  "workers-ai": {
-    providerClass: WorkersAi,
-  },
+  "workers-ai": WorkersAi,
   // "aws-bedrock": {},
-  anthropic: {
-    providerClass: Anthropic,
-  },
+  anthropic: Anthropic,
   // "azure-openai": {},
   // "cartesia": {},
-  cerebras: {
-    providerClass: Cerebras,
-  },
-  cohere: {
-    providerClass: Cohere,
-  },
-  deepseek: {
-    providerClass: DeepSeek,
-  },
+  cerebras: Cerebras,
+  cohere: Cohere,
+  deepseek: DeepSeek,
   // elevenlabs: {},
-  "google-ai-studio": {
-    providerClass: GoogleAiStudio,
-  },
+  "google-ai-studio": GoogleAiStudio,
   // "google-vertex-ai": {},
-  grok: {
-    providerClass: Grok,
-  },
-  groq: {
-    providerClass: Groq,
-  },
-  huggingface: {
-    providerClass: HuggingFace,
-  },
-  mistral: {
-    providerClass: Mistral,
-  },
-  openai: {
-    providerClass: OpenAI,
-  },
-  openrouter: {
-    providerClass: OpenRouter,
-  },
-  "perplexity-ai": {
-    providerClass: PerplexityAi,
-  },
-  replicate: {
-    providerClass: Replicate,
-  },
+  grok: Grok,
+  groq: Groq,
+  huggingface: HuggingFace,
+  mistral: Mistral,
+  openai: OpenAI,
+  openrouter: OpenRouter,
+  "perplexity-ai": PerplexityAi,
+  replicate: Replicate,
   // --- Other Providers
 };
