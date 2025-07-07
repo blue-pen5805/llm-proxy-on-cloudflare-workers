@@ -6,6 +6,8 @@ export const AUTHORIZATION_KEYS = [
   "x-goog-api-key",
 ];
 
+export const AUTHORIZATION_QUERY_PARAMETERS = ["key"];
+
 /**
  * Authenticates a request by checking for valid API keys in the request headers.
  *
@@ -35,9 +37,11 @@ export function authenticate(request: Request): boolean {
     apiKey = authorizationValue.split(/\s/)[1] || authorizationValue;
   } else {
     const url = new URL(request.url);
-    const queryKey = url.searchParams.get("key");
+    const queryKey = AUTHORIZATION_QUERY_PARAMETERS.find((param) => {
+      return Boolean(url.searchParams.get(param));
+    });
     if (queryKey) {
-      apiKey = queryKey;
+      apiKey = url.searchParams.get(queryKey);
     }
   }
 

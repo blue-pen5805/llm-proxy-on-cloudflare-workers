@@ -5,7 +5,10 @@ import { models } from "./requests/models";
 import { handleOptions } from "./requests/options";
 import { proxy } from "./requests/proxy";
 import { universalEndpoint } from "./requests/universal_endpoint";
-import { authenticate } from "./utils/authorization";
+import {
+  authenticate,
+  AUTHORIZATION_QUERY_PARAMETERS,
+} from "./utils/authorization";
 import { Config } from "./utils/config";
 import { getPathname } from "./utils/helpers";
 
@@ -19,6 +22,29 @@ export default {
     if (!Config.isDevelopment() && authenticate(request) === false) {
       return new Response("Unauthorized", { status: 401 });
     }
+
+    // Remove authorization query parameters using regex
+    AUTHORIZATION_QUERY_PARAMETERS.forEach((param) => {
+      // Pattern to match: &key=value or ?key=value
+      const paramPattern = new RegExp(`[?&]${param}=([^&]*)`, "g");
+      pathname = pathname.replace(paramPattern, (match, value, offset, str) => {
+        // If it's the first parameter (?key=value), replace with ? if there are other params
+        if (match.startsWith("?")) {
+          // Find the next parameter after this one
+          const nextAmpersand = str.indexOf("&", offset + match.length);
+          if (nextAmpersand !== -1) {
+            return "?";
+          } else {
+            return "";
+          }
+        }
+        // If it's not the first parameter (&key=value), just remove it
+        return "";
+      });
+    });
+
+    // Clean up any invalid query string formats like ?&param=value
+    pathname = pathname.replace(/\?\&/, "?");
 
     // Ping
     // Example: /ping
