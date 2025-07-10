@@ -59,7 +59,7 @@ export async function chatCompletions(
         provider: providerName,
         body: requestInit.body as string,
         headers: {
-          ...headers,
+          ...requestInit.headers,
         },
         apiKeyName: providerClass.apiKeyName as keyof Env,
       }),

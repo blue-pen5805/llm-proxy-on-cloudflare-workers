@@ -82,7 +82,7 @@ export class CloudflareAIGateway {
    * Build headers for the AI Gateway request.
    * Includes the API key and any additional headers provided.
    */
-  buildHeaders(additionalHeaders: HeadersInit = {}): Record<string, string> {
+  buildHeaders(additionalHeaders: HeadersInit = {}): HeadersInit {
     return {
       "Content-Type": "application/json",
       "cf-aig-authorization": `Bearer ${this.apiKey}` || "",
@@ -163,19 +163,29 @@ export class CloudflareAIGateway {
     };
 
     const apiKeys = Secrets.getAll(apiKeyName, true);
+
     const data: CloudflareAIGatewayUniversalEndpointData = apiKeys.map(
-      (apiKey) => ({
-        provider: "compat",
-        endpoint: "chat/completions",
-        headers: {
-          ...headers,
-          authorization: `Bearer ${apiKey}`,
-        },
-        query: {
-          ...parsedBody,
-          model: `${provider}/${parsedBody.model}`,
-        },
-      }),
+      (apiKey) => {
+        // Overwrite authorization header with the provider's API key
+        const newHeaders = new Headers(headers);
+        newHeaders.set("authorization", `Bearer ${apiKey}`);
+
+        // Convert Headers to plain object
+        const headersObject: Record<string, string> = {};
+        newHeaders.forEach((value, key) => {
+          headersObject[key] = value;
+        });
+
+        return {
+          provider: "compat",
+          endpoint: "chat/completions",
+          headers: headersObject,
+          query: {
+            ...parsedBody,
+            model: `${provider}/${parsedBody.model}`,
+          },
+        };
+      },
     );
 
     return [

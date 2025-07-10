@@ -441,8 +441,8 @@ describe("CloudflareAIGateway", () => {
             provider: "compat",
             endpoint: "chat/completions",
             headers: {
-              "Custom-Header": "custom-value",
               authorization: "Bearer sk-test-1",
+              "custom-header": "custom-value",
             },
             query: {
               model: "openai/gpt-4",
@@ -453,8 +453,8 @@ describe("CloudflareAIGateway", () => {
             provider: "compat",
             endpoint: "chat/completions",
             headers: {
-              "Custom-Header": "custom-value",
               authorization: "Bearer sk-test-2",
+              "custom-header": "custom-value",
             },
             query: {
               model: "openai/gpt-4",
