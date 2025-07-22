@@ -76,7 +76,7 @@ export function parseArgs(argv: string[] = process.argv.slice(2)): CliArgs {
  */
 export function showHelp(): string {
   return `
-Usage: deploy-secrets [options]
+Usage: secrets:deploy [options]
 
 Options:
   --env <name>          Specify environment name for both config file and wrangler deployment
@@ -86,10 +86,10 @@ Options:
   --help, -h            Show this help message
 
 Examples:
-  npm run deploy-secrets                      # Deploy from config.jsonc to default environment
-  npm run deploy-secrets -- --env example    # Deploy from config.example.jsonc to example environment
-  npm run deploy-secrets -- --env production # Deploy from config.production.jsonc to production environment
-  npm run deploy-secrets -- --dry-run        # Show what would be deployed
+  npm run secrets:deploy                      # Deploy from config.jsonc to default environment
+  npm run secrets:deploy -- --env example    # Deploy from config.example.jsonc to example environment
+  npm run secrets:deploy -- --env production # Deploy from config.production.jsonc to production environment
+  npm run secrets:deploy -- --dry-run        # Show what would be deployed
 
 Note: This script deploys secrets to Cloudflare Workers using 'wrangler secret bulk'.
 Make sure you have authenticated with Wrangler before running this script.

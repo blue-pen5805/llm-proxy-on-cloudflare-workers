@@ -336,7 +336,7 @@ describe("deploy-secrets", () => {
   describe("showHelp", () => {
     it("should return help text", () => {
       const help = showHelp();
-      expect(help).toContain("Usage: deploy-secrets");
+      expect(help).toContain("Usage: secrets:deploy");
       expect(help).toContain("--env");
       expect(help).toContain("--dry-run");
       expect(help).toContain("--help");
