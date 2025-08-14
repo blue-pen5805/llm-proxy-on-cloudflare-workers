@@ -292,6 +292,16 @@
           "type": "null"
         }
       ]
+    },
+    "REGION_ANCHOR_URL": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "required": ["$schema", "PROXY_API_KEY"],

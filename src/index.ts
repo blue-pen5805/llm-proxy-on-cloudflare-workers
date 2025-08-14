@@ -10,10 +10,11 @@ import {
   AUTHORIZATION_QUERY_PARAMETERS,
 } from "./utils/authorization";
 import { Config } from "./utils/config";
-import { getPathname } from "./utils/helpers";
+import { fetch2, getPathname } from "./utils/helpers";
+import { Secrets } from "./utils/secrets";
 
 export default {
-  async fetch(request, _env, _ctx): Promise<Response> {
+  async fetch(request, _env, ctx): Promise<Response> {
     if (request.method === "OPTIONS") {
       return handleOptions(request);
     }
@@ -50,6 +51,16 @@ export default {
     // Example: /ping
     if (pathname === "/ping") {
       return new Response("Pong", { status: 200 });
+    }
+
+    const anchorUrl = Secrets.get("REGION_ANCHOR_URL");
+    if (anchorUrl) {
+      ctx.waitUntil(
+        fetch2("https://" + anchorUrl, {
+          method: "GET",
+          cache: "no-store",
+        }).catch(() => {}),
+      );
     }
 
     // Setup AI Gateway
