@@ -22,7 +22,7 @@
     "download-llm-resources": "ts-node scripts/download-llm-resources.ts"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.8.63",
+    "@cloudflare/vitest-pool-workers": "^0.9.2",
     "@trivago/prettier-plugin-sort-imports": "^5.2.2",
     "@types/node": "^24.2.1",
     "@typescript-eslint/eslint-plugin": "^8.39.1",
