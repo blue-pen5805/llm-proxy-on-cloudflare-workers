@@ -37,6 +37,7 @@ export const OPENAI_COMPATIBLE_PROVIDERS = [
   "grok",
   "deepseek",
   "cerebras",
+  "openrouter",
 ] as const;
 
 export type CloudflareAIGatewayOpenAICompatibleProvider =

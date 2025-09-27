@@ -88,7 +88,7 @@ describe("AI Gateway Utils", () => {
         false,
       );
       expect(isCloudflareAIGatewayOpenAICompatibleProvider("openrouter")).toBe(
-        false,
+        true,
       );
       expect(isCloudflareAIGatewayOpenAICompatibleProvider("replicate")).toBe(
         false,
