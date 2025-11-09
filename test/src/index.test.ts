@@ -1,11 +1,11 @@
 import { SELF } from "cloudflare:test";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { chatCompletions } from "~/src/requests/chat_completions";
+import { compat } from "~/src/requests/compat";
 import { models } from "~/src/requests/models";
 import { handleOptions } from "~/src/requests/options";
 import { proxy } from "~/src/requests/proxy";
 import { universalEndpoint } from "~/src/requests/universal_endpoint";
-import { compat } from "~/src/requests/compat";
 import { authenticate } from "~/src/utils/authorization";
 import { Config } from "~/src/utils/config";
 
