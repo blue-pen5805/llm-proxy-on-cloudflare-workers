@@ -5,6 +5,7 @@ import { models } from "~/src/requests/models";
 import { handleOptions } from "~/src/requests/options";
 import { proxy } from "~/src/requests/proxy";
 import { universalEndpoint } from "~/src/requests/universal_endpoint";
+import { compat } from "~/src/requests/compat";
 import { authenticate } from "~/src/utils/authorization";
 import { Config } from "~/src/utils/config";
 
@@ -15,6 +16,7 @@ vi.mock("~/src/ai_gateway", () => {
     buildUniversalEndpointRequest: vi.fn(() => ["", {}]),
     buildProviderEndpointRequest: vi.fn(() => ["", {}]),
     buildChatCompletionsRequest: vi.fn(() => ["", {}]),
+    buildCompatRequest: vi.fn(() => ["", {}]),
   }));
 
   // Add static methods as properties
@@ -48,6 +50,9 @@ vi.mock("~/src/requests/models", () => ({
 }));
 vi.mock("~/src/requests/universal_endpoint", () => ({
   universalEndpoint: vi.fn(async () => new Response()),
+}));
+vi.mock("~/src/requests/compat", () => ({
+  compat: vi.fn(async () => new Response()),
 }));
 vi.mock("~/src/utils/authorization", () => ({
   authenticate: vi.fn(),
@@ -176,6 +181,19 @@ describe("fetch", () => {
     await SELF.fetch(request);
 
     expect(universalEndpoint).toHaveBeenCalledOnce();
+  });
+
+  it("should handle AI Gateway compat request", async () => {
+    const request = new Request(
+      "https://example.com/g/test-gateway/compat/chat/completions",
+      {
+        method: "POST",
+      },
+    );
+
+    await SELF.fetch(request);
+
+    expect(compat).toHaveBeenCalledOnce();
   });
 
   it("should handle requests starting with {PROVIDER_NAME}", async () => {

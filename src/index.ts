@@ -1,6 +1,7 @@
 import { CloudflareAIGateway } from "./ai_gateway";
 import { Providers } from "./providers";
 import { chatCompletions } from "./requests/chat_completions";
+import { compat } from "./requests/compat";
 import { models } from "./requests/models";
 import { handleOptions } from "./requests/options";
 import { proxy } from "./requests/proxy";
@@ -86,6 +87,10 @@ export default {
     const aiGateway = CloudflareAIGateway.isAvailable()
       ? new CloudflareAIGateway()
       : undefined;
+
+    if (aiGateway && /^\/compat(?:$|\/|\?)/.test(pathname)) {
+      return await compat(request, pathname, aiGateway);
+    }
 
     // OpenAI compatible endpoints
     // Chat Completions - https://platform.openai.com/docs/api-reference/chat

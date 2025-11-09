@@ -142,6 +142,46 @@ export class CloudflareAIGateway {
     ];
   }
 
+  buildCompatRequest({
+    path,
+    method,
+    headers = {},
+    body,
+    signal,
+  }: {
+    path: string;
+    method: string;
+    headers?: HeadersInit;
+    body?: BodyInit | null;
+    signal?: AbortSignal | null;
+  }): [RequestInfo, RequestInit] {
+    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+
+    const gatewayHeaders = new Headers(this.buildHeaders());
+    const additionalHeaders = new Headers(headers);
+    additionalHeaders.forEach((value, key) => {
+      gatewayHeaders.set(key, value);
+    });
+
+    const upperMethod = method.toUpperCase();
+    const requestInit: RequestInit = {
+      method,
+      headers: gatewayHeaders,
+      ...(body !== undefined &&
+      body !== null &&
+      upperMethod !== "GET" &&
+      upperMethod !== "HEAD"
+        ? { body }
+        : {}),
+    };
+
+    if (signal) {
+      requestInit.signal = signal;
+    }
+
+    return [`${this.baseUrl()}${normalizedPath}`, requestInit];
+  }
+
   /**
    * Build a request for OpenAI-compatible chat completions.
    * https://developers.cloudflare.com/ai-gateway/chat-completion/
