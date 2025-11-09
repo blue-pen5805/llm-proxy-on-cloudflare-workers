@@ -1,6 +1,5 @@
 export const fetch2: typeof fetch = async (input, init) => {
-  const url = input.toString();
-  console.info(`Sub-Request: ${init?.method} ${url}`);
+  // Logging of URL removed to avoid exposing sensitive data
 
   return await fetch(input, init);
 };
