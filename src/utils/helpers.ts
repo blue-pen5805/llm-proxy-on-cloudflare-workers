@@ -1,4 +1,9 @@
 export function maskUrl(url: string): string {
+  // Constants for masking behavior
+  const MASK_THRESHOLD = 10; // Minimum length to show prefix
+  const MASK_PREFIX_LENGTH = 3; // Number of characters to show before masking
+  const MASK_PLACEHOLDER = "***";
+
   // List of sensitive parameter names that should be masked
   const sensitiveParams = [
     "apikey",
@@ -24,16 +29,17 @@ export function maskUrl(url: string): string {
 
       for (const [key, value] of params.entries()) {
         const keyLower = key.toLowerCase();
-        const isSensitive = sensitiveParams.some((param) =>
-          keyLower === param,
-        );
+        const isSensitive = sensitiveParams.some((param) => keyLower === param);
 
         if (isSensitive) {
-          // Mask the value, keeping first 3 chars if longer than 10 chars
-          if (value.length > 10) {
-            maskedParams.set(key, `${value.slice(0, 3)}***`);
+          // Mask the value, keeping prefix for longer values
+          if (value.length > MASK_THRESHOLD) {
+            maskedParams.set(
+              key,
+              `${value.slice(0, MASK_PREFIX_LENGTH)}${MASK_PLACEHOLDER}`,
+            );
           } else if (value.length > 0) {
-            maskedParams.set(key, "***");
+            maskedParams.set(key, MASK_PLACEHOLDER);
           } else {
             maskedParams.set(key, value);
           }
@@ -49,7 +55,10 @@ export function maskUrl(url: string): string {
     return urlObj.toString();
   } catch {
     // If URL parsing fails, return masked version
-    return url.split("?")[0] + (url.includes("?") ? "?***" : "");
+    const MASK_PLACEHOLDER = "***";
+    return (
+      url.split("?")[0] + (url.includes("?") ? `?${MASK_PLACEHOLDER}` : "")
+    );
   }
 }
 
