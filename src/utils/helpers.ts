@@ -30,6 +30,7 @@ export function maskUrl(url: string): string {
 
 export const fetch2: typeof fetch = async (input, init) => {
   const url = input.toString();
+  // URL is masked to prevent exposing sensitive data like API keys
   const maskedUrl = maskUrl(url);
   console.info(`Sub-Request: ${init?.method} ${maskedUrl}`);
 
