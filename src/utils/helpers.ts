@@ -1,5 +1,37 @@
+export function maskUrl(url: string): string {
+  try {
+    const urlObj = new URL(url);
+
+    // Mask query parameters
+    if (urlObj.search) {
+      const params = new URLSearchParams(urlObj.search);
+      const maskedParams = new URLSearchParams();
+
+      for (const [key, value] of params.entries()) {
+        // Mask the value, keeping first 3 chars if longer than 10 chars
+        if (value.length > 10) {
+          maskedParams.set(key, `${value.slice(0, 3)}***`);
+        } else if (value.length > 0) {
+          maskedParams.set(key, "***");
+        } else {
+          maskedParams.set(key, value);
+        }
+      }
+
+      urlObj.search = maskedParams.toString();
+    }
+
+    return urlObj.toString();
+  } catch {
+    // If URL parsing fails, return masked version
+    return url.split("?")[0] + (url.includes("?") ? "?***" : "");
+  }
+}
+
 export const fetch2: typeof fetch = async (input, init) => {
-  // Logging of URL removed to avoid exposing sensitive data
+  const url = input.toString();
+  const maskedUrl = maskUrl(url);
+  console.info(`Sub-Request: ${init?.method} ${maskedUrl}`);
 
   return await fetch(input, init);
 };

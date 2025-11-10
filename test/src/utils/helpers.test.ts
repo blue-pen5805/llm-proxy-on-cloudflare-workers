@@ -4,6 +4,7 @@ import {
   getPathname,
   shuffleArray,
   formatString,
+  maskUrl,
 } from "~/src/utils/helpers";
 
 describe("safeJsonParse", () => {
@@ -54,5 +55,40 @@ describe("formatString", () => {
     const args = { greeting: "Hello", name: "World" };
     const result = formatString(template, args);
     expect(result).toBe("Hello, World! Hello again!");
+  });
+});
+
+describe("maskUrl", () => {
+  it("should mask query parameters with long values", () => {
+    const url = "https://api.example.com/v1/chat?apiKey=sk-1234567890abcdef";
+    const result = maskUrl(url);
+    expect(result).toBe("https://api.example.com/v1/chat?apiKey=sk-***");
+  });
+
+  it("should mask query parameters with short values", () => {
+    const url = "https://api.example.com/v1/chat?key=short";
+    const result = maskUrl(url);
+    expect(result).toBe("https://api.example.com/v1/chat?key=***");
+  });
+
+  it("should handle URLs without query parameters", () => {
+    const url = "https://api.example.com/v1/chat";
+    const result = maskUrl(url);
+    expect(result).toBe("https://api.example.com/v1/chat");
+  });
+
+  it("should mask multiple query parameters", () => {
+    const url =
+      "https://api.example.com/v1/chat?apiKey=sk-1234567890&token=abc123456789";
+    const result = maskUrl(url);
+    expect(result).toBe(
+      "https://api.example.com/v1/chat?apiKey=sk-***&token=abc***",
+    );
+  });
+
+  it("should handle invalid URLs gracefully", () => {
+    const url = "not a valid url?param=value";
+    const result = maskUrl(url);
+    expect(result).toBe("not a valid url?***");
   });
 });
