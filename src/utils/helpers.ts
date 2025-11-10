@@ -1,19 +1,44 @@
 export function maskUrl(url: string): string {
+  // List of sensitive parameter names that should be masked
+  const sensitiveParams = [
+    "apikey",
+    "api_key",
+    "token",
+    "access_token",
+    "accesstoken",
+    "auth",
+    "authorization",
+    "password",
+    "secret",
+    "key",
+    "api-key",
+  ];
+
   try {
     const urlObj = new URL(url);
 
-    // Mask query parameters
+    // Mask only sensitive query parameters
     if (urlObj.search) {
       const params = new URLSearchParams(urlObj.search);
       const maskedParams = new URLSearchParams();
 
       for (const [key, value] of params.entries()) {
-        // Mask the value, keeping first 3 chars if longer than 10 chars
-        if (value.length > 10) {
-          maskedParams.set(key, `${value.slice(0, 3)}***`);
-        } else if (value.length > 0) {
-          maskedParams.set(key, "***");
+        const keyLower = key.toLowerCase();
+        const isSensitive = sensitiveParams.some((param) =>
+          keyLower.includes(param),
+        );
+
+        if (isSensitive) {
+          // Mask the value, keeping first 3 chars if longer than 10 chars
+          if (value.length > 10) {
+            maskedParams.set(key, `${value.slice(0, 3)}***`);
+          } else if (value.length > 0) {
+            maskedParams.set(key, "***");
+          } else {
+            maskedParams.set(key, value);
+          }
         } else {
+          // Keep non-sensitive parameters as-is
           maskedParams.set(key, value);
         }
       }

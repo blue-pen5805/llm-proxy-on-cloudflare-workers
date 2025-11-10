@@ -59,16 +59,33 @@ describe("formatString", () => {
 });
 
 describe("maskUrl", () => {
-  it("should mask query parameters with long values", () => {
+  it("should mask sensitive parameters with long values", () => {
     const url = "https://api.example.com/v1/chat?apiKey=sk-1234567890abcdef";
     const result = maskUrl(url);
     expect(result).toBe("https://api.example.com/v1/chat?apiKey=sk-***");
   });
 
-  it("should mask query parameters with short values", () => {
+  it("should mask sensitive parameters with short values", () => {
     const url = "https://api.example.com/v1/chat?key=short";
     const result = maskUrl(url);
     expect(result).toBe("https://api.example.com/v1/chat?key=***");
+  });
+
+  it("should not mask non-sensitive parameters", () => {
+    const url = "https://api.example.com/v1/chat?model=gpt-4&temperature=0.7";
+    const result = maskUrl(url);
+    expect(result).toBe(
+      "https://api.example.com/v1/chat?model=gpt-4&temperature=0.7",
+    );
+  });
+
+  it("should mask only sensitive parameters in mixed query strings", () => {
+    const url =
+      "https://api.example.com/v1/chat?apiKey=sk-1234567890&model=gpt-4&token=abc123456789&temperature=0.7";
+    const result = maskUrl(url);
+    expect(result).toBe(
+      "https://api.example.com/v1/chat?apiKey=sk-***&model=gpt-4&token=abc***&temperature=0.7",
+    );
   });
 
   it("should handle URLs without query parameters", () => {
@@ -77,18 +94,18 @@ describe("maskUrl", () => {
     expect(result).toBe("https://api.example.com/v1/chat");
   });
 
-  it("should mask multiple query parameters", () => {
-    const url =
-      "https://api.example.com/v1/chat?apiKey=sk-1234567890&token=abc123456789";
-    const result = maskUrl(url);
-    expect(result).toBe(
-      "https://api.example.com/v1/chat?apiKey=sk-***&token=abc***",
-    );
-  });
-
   it("should handle invalid URLs gracefully", () => {
     const url = "not a valid url?param=value";
     const result = maskUrl(url);
     expect(result).toBe("not a valid url?***");
+  });
+
+  it("should mask various sensitive parameter names", () => {
+    const url =
+      "https://api.example.com/v1?api_key=key1&access_token=token12345678901&password=pass1&secret=sec1";
+    const result = maskUrl(url);
+    expect(result).toBe(
+      "https://api.example.com/v1?api_key=***&access_token=tok***&password=***&secret=***",
+    );
   });
 });
