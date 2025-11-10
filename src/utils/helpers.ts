@@ -25,7 +25,7 @@ export function maskUrl(url: string): string {
       for (const [key, value] of params.entries()) {
         const keyLower = key.toLowerCase();
         const isSensitive = sensitiveParams.some((param) =>
-          keyLower.includes(param),
+          keyLower === param,
         );
 
         if (isSensitive) {
