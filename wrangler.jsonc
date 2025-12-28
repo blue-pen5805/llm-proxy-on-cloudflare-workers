@@ -30,8 +30,8 @@
   },
   "migrations": [
     {
-      "tag": "v1",
-      "new_classes": ["KeyRotationManager"]
+      "tag": "v1.0",
+      "new_sqlite_classes": ["KeyRotationManager"]
     }
   ]
 }

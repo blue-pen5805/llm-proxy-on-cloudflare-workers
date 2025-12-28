@@ -12,33 +12,62 @@ export class KeyRotationManager extends DurableObject {
    * @returns The next index to use (0 to length - 1)
    */
   async getNextIndex(keyName: string, length: number): Promise<number> {
-    return KeyRotationManager.getNextIndexFromStorage(
-      this.ctx.storage,
+    return KeyRotationManager.getNextIndexFromSql(
+      this.ctx.storage.sql,
       keyName,
       length,
     );
   }
 
   /**
-   * static version of getNextIndex for easier testing without DurableObject state
+   * static version of getNextIndex for easier testing
    */
-  static async getNextIndexFromStorage(
-    storage: DurableObjectStorage,
+  static async getNextIndexFromSql(
+    sql: SqlStorage,
     keyName: string,
     length: number,
   ): Promise<number> {
     if (length <= 1) return 0;
 
-    let index = (await storage.get<number>(`counter:${keyName}`)) || 0;
+    // Ensure the table exists
+    sql.exec(`
+      CREATE TABLE IF NOT EXISTS counters (
+        key_name TEXT PRIMARY KEY,
+        current_index INTEGER NOT NULL DEFAULT 0
+      )
+    `);
 
-    // Ensure index is within current bounds in case length decreased
+    // Get current index
+    const cursor = sql.exec(
+      "SELECT current_index FROM counters WHERE key_name = ?",
+      keyName,
+    );
+    const row = cursor.next().value;
+
+    let index = 0;
+    if (row) {
+      index = row.current_index as number;
+    } else {
+      // Initialize if not exists
+      sql.exec(
+        "INSERT INTO counters (key_name, current_index) VALUES (?, 0)",
+        keyName,
+      );
+    }
+
+    // Ensure index is within current bounds
     if (index >= length) {
       index = 0;
     }
 
     const nextIndex = (index + 1) % length;
 
-    await storage.put(`counter:${keyName}`, nextIndex);
+    // Update to next index
+    sql.exec(
+      "UPDATE counters SET current_index = ? WHERE key_name = ?",
+      nextIndex,
+      keyName,
+    );
 
     return index;
   }

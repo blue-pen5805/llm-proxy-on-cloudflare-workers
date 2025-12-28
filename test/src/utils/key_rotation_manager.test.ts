@@ -2,94 +2,112 @@ import { KeyRotationManager } from "../../../src/utils/key_rotation_manager";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
 describe("KeyRotationManager", () => {
-  let storage: any;
+  let sql: any;
+  let data: Record<string, number> = {};
 
   beforeEach(() => {
-    const data: Record<string, any> = {};
-    storage = {
-      get: vi.fn(async (key: string) => data[key]),
-      put: vi.fn(async (key: string, value: any) => {
-        data[key] = value;
+    data = {};
+    sql = {
+      exec: vi.fn((query: string, ...bindings: any[]) => {
+        if (query.includes("SELECT")) {
+          const keyName = bindings[0];
+          const row = keyName in data ? { current_index: data[keyName] } : null;
+          return {
+            next: () => ({ value: row, done: row === null }),
+          };
+        }
+        if (query.includes("INSERT")) {
+          const keyName = bindings[0];
+          data[keyName] = 0;
+          return { next: () => ({ value: undefined, done: true }) };
+        }
+        if (query.includes("UPDATE")) {
+          const nextIndex = bindings[0];
+          const keyName = bindings[1];
+          data[keyName] = nextIndex;
+          return { next: () => ({ value: undefined, done: true }) };
+        }
+        return { next: () => ({ value: undefined, done: true }) };
       }),
     };
   });
 
   it("should return index and increment counter for a new keyName", async () => {
-    const index1 = await KeyRotationManager.getNextIndexFromStorage(
-      storage,
+    const index1 = await KeyRotationManager.getNextIndexFromSql(
+      sql,
       "TEST_KEY",
       3,
     );
     expect(index1).toBe(0);
-    expect(storage.put).toHaveBeenCalledWith("counter:TEST_KEY", 1);
+    expect(data["TEST_KEY"]).toBe(1);
 
-    const index2 = await KeyRotationManager.getNextIndexFromStorage(
-      storage,
+    const index2 = await KeyRotationManager.getNextIndexFromSql(
+      sql,
       "TEST_KEY",
       3,
     );
     expect(index2).toBe(1);
-    expect(storage.put).toHaveBeenCalledWith("counter:TEST_KEY", 2);
+    expect(data["TEST_KEY"]).toBe(2);
 
-    const index3 = await KeyRotationManager.getNextIndexFromStorage(
-      storage,
+    const index3 = await KeyRotationManager.getNextIndexFromSql(
+      sql,
       "TEST_KEY",
       3,
     );
     expect(index3).toBe(2);
-    expect(storage.put).toHaveBeenCalledWith("counter:TEST_KEY", 0); // Wraps around at length 3
+    expect(data["TEST_KEY"]).toBe(0); // Wraps around at length 3
   });
 
   it("should wrap around when total is reached", async () => {
-    await KeyRotationManager.getNextIndexFromStorage(storage, "TEST_KEY", 2); // 0 -> 1
-    await KeyRotationManager.getNextIndexFromStorage(storage, "TEST_KEY", 2); // 1 -> 0
-    const index3 = await KeyRotationManager.getNextIndexFromStorage(
-      storage,
+    await KeyRotationManager.getNextIndexFromSql(sql, "TEST_KEY", 2); // 0 -> 1
+    await KeyRotationManager.getNextIndexFromSql(sql, "TEST_KEY", 2); // 1 -> 0
+    const index3 = await KeyRotationManager.getNextIndexFromSql(
+      sql,
       "TEST_KEY",
       2,
     );
     expect(index3).toBe(0);
-    expect(storage.put).toHaveBeenCalledWith("counter:TEST_KEY", 1);
+    expect(data["TEST_KEY"]).toBe(1);
   });
 
   it("should handle multiple keys independently", async () => {
-    const indexA = await KeyRotationManager.getNextIndexFromStorage(
-      storage,
+    const indexA = await KeyRotationManager.getNextIndexFromSql(
+      sql,
       "KEY_A",
       2,
     );
-    const indexB = await KeyRotationManager.getNextIndexFromStorage(
-      storage,
+    const indexB = await KeyRotationManager.getNextIndexFromSql(
+      sql,
       "KEY_B",
       2,
     );
     expect(indexA).toBe(0);
     expect(indexB).toBe(0);
 
-    const indexA2 = await KeyRotationManager.getNextIndexFromStorage(
-      storage,
+    const indexA2 = await KeyRotationManager.getNextIndexFromSql(
+      sql,
       "KEY_A",
       2,
     );
     expect(indexA2).toBe(1);
-    expect(storage.get).toHaveBeenCalledWith("counter:KEY_A");
-    expect(storage.get).toHaveBeenCalledWith("counter:KEY_B");
+    expect(data["KEY_A"]).toBe(0);
+    expect(data["KEY_B"]).toBe(1);
   });
 
   it("should handle a decrease in length gracefully", async () => {
     // Set counter to 9 for a length of 10
-    await storage.put("counter:TEST_KEY", 9);
+    data["TEST_KEY"] = 9;
 
     // Now length decreases to 5
-    const index = await KeyRotationManager.getNextIndexFromStorage(
-      storage,
+    const index = await KeyRotationManager.getNextIndexFromSql(
+      sql,
       "TEST_KEY",
       5,
     );
 
     // It should reset or adjust to be within bounds [0, 4]
     expect(index).toBeLessThan(5);
-    expect(index).toBe(0); // My implementation resets to 0 if out of bounds
-    expect(storage.put).toHaveBeenCalledWith("counter:TEST_KEY", 1);
+    expect(index).toBe(0);
+    expect(data["TEST_KEY"]).toBe(1);
   });
 });
