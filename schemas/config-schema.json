@@ -293,10 +293,10 @@
         }
       ]
     },
-    "REGION_ANCHOR_URL": {
+    "ENABLE_GLOBAL_ROUND_ROBIN": {
       "oneOf": [
         {
-          "type": "string"
+          "type": "boolean"
         },
         {
           "type": "null"

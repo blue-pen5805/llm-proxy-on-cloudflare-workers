@@ -43,5 +43,5 @@
   // --- Configurations ---
   "DEV": false,
   "DEFAULT_MODEL": null,
-  "REGION_ANCHOR_URL": null
+  "ENABLE_GLOBAL_ROUND_ROBIN": false
 }
