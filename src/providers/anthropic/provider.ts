@@ -1,4 +1,3 @@
-import { Secrets } from "../../utils/secrets";
 import { OpenAIModelsListResponseBody } from "../openai/types";
 import { ProviderBase } from "../provider";
 import { AnthropicEndpoint } from "./endpoint";
@@ -14,7 +13,7 @@ export class Anthropic extends ProviderBase {
 
   constructor() {
     super();
-    this.endpoint = new AnthropicEndpoint(Secrets.get(this.apiKeyName));
+    this.endpoint = new AnthropicEndpoint(this.apiKeyName);
   }
 
   // Convert model list to OpenAI format

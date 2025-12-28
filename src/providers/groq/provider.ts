@@ -1,4 +1,3 @@
-import { Secrets } from "../../utils/secrets";
 import { OpenAIModelsListResponseBody } from "../openai/types";
 import { ProviderBase } from "../provider";
 import { GroqEndpoint } from "./endpoint";
@@ -11,7 +10,7 @@ export class Groq extends ProviderBase {
 
   constructor() {
     super();
-    this.endpoint = new GroqEndpoint(Secrets.get(this.apiKeyName));
+    this.endpoint = new GroqEndpoint(this.apiKeyName);
   }
 
   // Convert model list to OpenAI format

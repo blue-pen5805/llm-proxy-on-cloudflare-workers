@@ -5,85 +5,56 @@ import * as Secrets from "~/src/utils/secrets";
 vi.mock("~/src/utils/secrets");
 
 describe("OpenRouterEndpoint", () => {
-  const mockSecretsGet = vi.fn();
+  const testApiKey = "test_openrouter_api_key";
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(Secrets.Secrets.get).mockImplementation(mockSecretsGet);
+    vi.mocked(Secrets.Secrets.getAsync).mockImplementation((key) => {
+      if (key === "OPENROUTER_API_KEY") return Promise.resolve(testApiKey);
+      return Promise.resolve("");
+    });
+    vi.mocked(Secrets.Secrets.getAll).mockImplementation((key) => {
+      if (key === "OPENROUTER_API_KEY") return [testApiKey];
+      return [];
+    });
   });
 
   describe("constructor", () => {
-    it("should initialize with API key", () => {
-      const testApiKey = "test_openrouter_api_key";
-      const endpoint = new OpenRouterEndpoint(testApiKey);
-
-      expect(endpoint).toBeInstanceOf(OpenRouterEndpoint);
+    it("should initialize with API key name", () => {
+      const endpoint = new OpenRouterEndpoint("OPENROUTER_API_KEY");
+      expect(endpoint.apiKeyName).toBe("OPENROUTER_API_KEY");
     });
   });
 
   describe("available", () => {
     it("should return true when API key is provided", () => {
-      const testApiKey = "test_openrouter_api_key";
-      const endpoint = new OpenRouterEndpoint(testApiKey);
-
+      const endpoint = new OpenRouterEndpoint("OPENROUTER_API_KEY");
       expect(endpoint.available()).toBe(true);
     });
 
-    it("should return false when API key is empty", () => {
-      const endpoint = new OpenRouterEndpoint("");
-
+    it("should return false when API key is missing", () => {
+      vi.mocked(Secrets.Secrets.getAll).mockReturnValue([]);
+      const endpoint = new OpenRouterEndpoint("OPENROUTER_API_KEY");
       expect(endpoint.available()).toBe(false);
-    });
-
-    it("should return false when API key is undefined", () => {
-      const endpoint = new OpenRouterEndpoint(undefined as any);
-
-      expect(endpoint.available()).toBe(false);
-    });
-  });
-
-  describe("headers", () => {
-    it("should return headers with Authorization bearer token", () => {
-      const testApiKey = "test_openrouter_api_key";
-      const endpoint = new OpenRouterEndpoint(testApiKey);
-
-      const headers = endpoint.headers();
-
-      expect(headers).toEqual({
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${testApiKey}`,
-      });
-    });
-
-    it("should return headers with empty Authorization when no API key", () => {
-      const endpoint = new OpenRouterEndpoint("");
-
-      const headers = endpoint.headers();
-
-      expect(headers).toEqual({
-        "Content-Type": "application/json",
-        Authorization: "Bearer ",
-      });
     });
   });
 
   describe("baseUrl", () => {
     it("should return OpenRouter API base URL", () => {
-      const testApiKey = "test_openrouter_api_key";
-      const endpoint = new OpenRouterEndpoint(testApiKey);
-
+      const endpoint = new OpenRouterEndpoint("OPENROUTER_API_KEY");
       expect(endpoint.baseUrl()).toBe("https://openrouter.ai/api");
     });
   });
 
-  describe("inheritance", () => {
-    it("should extend EndpointBase", () => {
-      const testApiKey = "test_openrouter_api_key";
-      const endpoint = new OpenRouterEndpoint(testApiKey);
+  describe("headers", () => {
+    it("should return correct headers with authorization", async () => {
+      const endpoint = new OpenRouterEndpoint("OPENROUTER_API_KEY");
+      const headers = await endpoint.headers();
 
-      expect(endpoint).toHaveProperty("available");
-      expect(endpoint).toHaveProperty("headers");
-      expect(endpoint).toHaveProperty("baseUrl");
+      expect(headers).toEqual({
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${testApiKey}`,
+      });
     });
   });
 });

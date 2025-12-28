@@ -1,4 +1,3 @@
-import { Secrets } from "../../utils/secrets";
 import { ProviderBase, ProviderNotSupportedError } from "../provider";
 import { ReplicateEndpoint } from "./endpoint";
 
@@ -12,23 +11,23 @@ export class Replicate extends ProviderBase {
 
   constructor() {
     super();
-    this.endpoint = new ReplicateEndpoint(Secrets.get(this.apiKeyName));
+    this.endpoint = new ReplicateEndpoint(this.apiKeyName);
   }
 
-  buildChatCompletionsRequest({
+  async buildChatCompletionsRequest({
     body, // eslint-disable-line @typescript-eslint/no-unused-vars
     headers = {}, // eslint-disable-line @typescript-eslint/no-unused-vars
   }: {
     body: string;
     headers: HeadersInit;
-  }): [string, RequestInit] {
+  }): Promise<[string, RequestInit]> {
     throw new ProviderNotSupportedError(
       "Replicate does not support chat completions",
     );
   }
-  buildModelsRequest(): [string, RequestInit] {
+  async buildModelsRequest(): Promise<[string, RequestInit]> {
     throw new ProviderNotSupportedError(
-      "Replicate does not support list models",
+      "Replicate does not support models list via this proxy.",
     );
   }
 }

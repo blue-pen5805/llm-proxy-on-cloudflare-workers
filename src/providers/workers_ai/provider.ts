@@ -1,4 +1,3 @@
-import { Secrets } from "../../utils/secrets";
 import { OpenAIModelsListResponseBody } from "../openai/types";
 import { ProviderBase } from "../provider";
 import { WorkersAiEndpoint } from "./endpoint";
@@ -15,10 +14,7 @@ export class WorkersAi extends ProviderBase {
 
   constructor() {
     super();
-    this.endpoint = new WorkersAiEndpoint(
-      Secrets.get(this.apiKeyName),
-      Secrets.get(this.accountIdName),
-    );
+    this.endpoint = new WorkersAiEndpoint(this.apiKeyName, this.accountIdName);
   }
 
   // Convert model list to OpenAI format

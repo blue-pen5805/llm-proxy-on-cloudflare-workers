@@ -11,11 +11,16 @@ import {
   AUTHORIZATION_QUERY_PARAMETERS,
 } from "./utils/authorization";
 import { Config } from "./utils/config";
+import { Environments } from "./utils/environments";
 import { fetch2, getPathname } from "./utils/helpers";
+import { KeyRotationManager } from "./utils/key_rotation_manager";
 import { Secrets } from "./utils/secrets";
+
+export { KeyRotationManager };
 
 export default {
   async fetch(request, _env, ctx): Promise<Response> {
+    Environments.setEnv(_env);
     if (request.method === "OPTIONS") {
       return handleOptions(request);
     }

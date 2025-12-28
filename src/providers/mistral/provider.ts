@@ -1,4 +1,3 @@
-import { Secrets } from "../../utils/secrets";
 import { OpenAIModelsListResponseBody } from "../openai/types";
 import { ProviderBase } from "../provider";
 import { MistralEndpoint } from "./endpoint";
@@ -14,7 +13,7 @@ export class Mistral extends ProviderBase {
 
   constructor() {
     super();
-    this.endpoint = new MistralEndpoint(Secrets.get(this.apiKeyName));
+    this.endpoint = new MistralEndpoint(this.apiKeyName);
   }
 
   // Convert model list to OpenAI format

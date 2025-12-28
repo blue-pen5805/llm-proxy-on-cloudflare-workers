@@ -1,25 +1,27 @@
+import { Secrets } from "../../utils/secrets";
 import { EndpointBase } from "../endpoint";
 
 export class GoogleAiStudioEndpoint extends EndpointBase {
-  apiKey: string;
+  apiKeyName: keyof Env;
 
-  constructor(apikey: string) {
+  constructor(apiKeyName: keyof Env) {
     super();
-    this.apiKey = apikey;
+    this.apiKeyName = apiKeyName;
   }
 
   available() {
-    return Boolean(this.apiKey);
+    return Secrets.getAll(this.apiKeyName).length > 0;
   }
 
   baseUrl() {
     return "https://generativelanguage.googleapis.com";
   }
 
-  headers() {
+  async headers() {
+    const apiKey = await Secrets.getAsync(this.apiKeyName);
     return {
       "Content-Type": "application/json",
-      "x-goog-api-key": this.apiKey,
+      "x-goog-api-key": apiKey,
     };
   }
 }
@@ -44,13 +46,17 @@ export class GoogleAiStudioOpenAICompatibleEndpoint extends EndpointBase {
     return "/v1beta/openai";
   }
 
-  headers() {
-    const newHeaders = this.endpoint.headers() as Record<string, string>;
-    delete newHeaders["x-goog-api-key"];
+  async headers() {
+    const endpointHeaders = (await this.endpoint.headers()) as Record<
+      string,
+      string
+    >;
+    const apiKey = endpointHeaders["x-goog-api-key"];
+    const { "x-goog-api-key": _, ...newHeaders } = endpointHeaders;
 
     return {
       ...newHeaders,
-      Authorization: `Bearer ${this.endpoint.headers()["x-goog-api-key"]}`,
+      Authorization: `Bearer ${apiKey}`,
     };
   }
 }

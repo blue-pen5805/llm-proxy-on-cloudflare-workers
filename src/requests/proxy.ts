@@ -20,7 +20,7 @@ export async function proxy(
         path: pathname,
         body: request.body,
         headers: {
-          ...providerClass.endpoint.headers(),
+          ...(await providerClass.endpoint.headers()),
           ...request.headers,
         },
       }),

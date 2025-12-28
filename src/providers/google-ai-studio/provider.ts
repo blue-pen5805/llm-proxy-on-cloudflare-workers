@@ -1,4 +1,3 @@
-import { Secrets } from "../../utils/secrets";
 import {
   OpenAIChatCompletionsRequestBody,
   OpenAIModelsListResponseBody,
@@ -37,7 +36,7 @@ export class GoogleAiStudio extends ProviderBase {
 
   constructor() {
     super();
-    this.endpoint = new GoogleAiStudioEndpoint(Secrets.get(this.apiKeyName));
+    this.endpoint = new GoogleAiStudioEndpoint(this.apiKeyName);
   }
 
   async fetch(
@@ -47,12 +46,12 @@ export class GoogleAiStudio extends ProviderBase {
     if (pathname.startsWith("/v1beta/openai")) {
       const openaiCompatibleEndpoint =
         new GoogleAiStudioOpenAICompatibleEndpoint(this.endpoint);
-      return openaiCompatibleEndpoint.fetch(
+      return await openaiCompatibleEndpoint.fetch(
         pathname.replace("/v1beta/openai", ""),
         init,
       );
     } else {
-      return this.endpoint.fetch(pathname, init);
+      return await this.endpoint.fetch(pathname, init);
     }
   }
 

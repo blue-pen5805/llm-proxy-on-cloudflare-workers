@@ -1,4 +1,3 @@
-import { Secrets } from "../../utils/secrets";
 import { ProviderBase, ProviderNotSupportedError } from "../provider";
 import { HuggingFaceEndpoint } from "./endpoint";
 
@@ -12,24 +11,24 @@ export class HuggingFace extends ProviderBase {
 
   constructor() {
     super();
-    this.endpoint = new HuggingFaceEndpoint(Secrets.get(this.apiKeyName));
+    this.endpoint = new HuggingFaceEndpoint(this.apiKeyName);
   }
 
-  buildChatCompletionsRequest({
+  async buildChatCompletionsRequest({
     body, // eslint-disable-line @typescript-eslint/no-unused-vars
     headers = {}, // eslint-disable-line @typescript-eslint/no-unused-vars
   }: {
     body: string;
     headers: HeadersInit;
-  }): [string, RequestInit] {
+  }): Promise<[string, RequestInit]> {
     throw new ProviderNotSupportedError(
       "HuggingFace does not support chat completions",
     );
   }
 
-  buildModelsRequest(): [string, RequestInit] {
+  async buildModelsRequest(): Promise<[string, RequestInit]> {
     throw new ProviderNotSupportedError(
-      "HuggingFace does not support list models",
+      "HuggingFace does not support models list via this proxy.",
     );
   }
 }

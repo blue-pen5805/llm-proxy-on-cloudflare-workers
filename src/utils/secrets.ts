@@ -1,3 +1,4 @@
+import { Config } from "./config";
 import { Environments } from "./environments";
 import { shuffleArray } from "./helpers";
 
@@ -33,13 +34,36 @@ export class Secrets {
   }
 
   /**
-   * Retrieves a single value for a specified environment key.
-   * When rotation is enabled, it cycles through available values in a round-robin fashion.
-   * When rotation is disabled, it returns a random value from the available options.
+   * Retrieves a single value for a specified environment key asynchronously.
+   * If global round-robin is enabled, it uses a Durable Object to maintain consistency.
+   * Otherwise, it falls back to the synchronous rotation logic.
    *
    * @param keyName - The name of the environment variable to retrieve
-   * @param rotate - Whether to rotate through available values (defaults to true)
-   * @returns A string value for the specified key
+   * @returns A Promise that resolves to a string value for the specified key
+   */
+  static async getAsync(keyName: keyof Env): Promise<string> {
+    const allKeys = this.getAll(keyName);
+    if (allKeys.length <= 1) {
+      return allKeys[0] || "";
+    }
+
+    const env = Environments.getEnv();
+    if (env && env.KEY_ROTATION_MANAGER && Config.isGlobalRoundRobinEnabled()) {
+      const id = env.KEY_ROTATION_MANAGER.idFromName(keyName);
+      const obj = env.KEY_ROTATION_MANAGER.get(id);
+      const index = await obj.getNextIndex(keyName, allKeys.length);
+      return allKeys[index];
+    }
+
+    return this.get(keyName, true);
+  }
+
+  /**
+   * Retrieves a single secret for a given key name.
+   *
+   * @param keyName - The name of the environment variable to retrieve
+   * @param rotate - Whether to rotate through multiple keys if available
+   * @returns A single string value for the specified key
    */
   static get(keyName: keyof Env, rotate: boolean = true): string {
     if (rotate) {

@@ -41,13 +41,14 @@ export async function chatCompletions(
 
   // Generate chat completions request
   const providerClass = new provider();
-  const [requestInfo, requestInit] = providerClass.buildChatCompletionsRequest({
-    body: JSON.stringify({
-      ...data,
-      model,
-    }),
-    headers,
-  });
+  const [requestInfo, requestInit] =
+    await providerClass.buildChatCompletionsRequest({
+      body: JSON.stringify({
+        ...data,
+        model,
+      }),
+      headers,
+    });
 
   // If AI Gateway is enabled and the provider supports it, use AI Gateway
   if (
@@ -55,14 +56,14 @@ export async function chatCompletions(
     CloudflareAIGateway.isSupportedProvider(providerName, true)
   ) {
     return fetch2(
-      ...aiGateway.buildChatCompletionsRequest({
+      ...(await aiGateway.buildChatCompletionsRequest({
         provider: providerName,
         body: requestInit.body as string,
         headers: {
           ...requestInit.headers,
         },
         apiKeyName: providerClass.apiKeyName as keyof Env,
-      }),
+      })),
     );
   }
 

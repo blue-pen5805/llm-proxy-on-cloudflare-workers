@@ -1,4 +1,3 @@
-import { Secrets } from "../../utils/secrets";
 import { ProviderBase, ProviderNotSupportedError } from "../provider";
 import { PerplexityAiEndpoint } from "./endpoint";
 
@@ -12,12 +11,12 @@ export class PerplexityAi extends ProviderBase {
 
   constructor() {
     super();
-    this.endpoint = new PerplexityAiEndpoint(Secrets.get(this.apiKeyName));
+    this.endpoint = new PerplexityAiEndpoint(this.apiKeyName);
   }
 
-  buildModelsRequest(): [string, RequestInit] {
+  async buildModelsRequest(): Promise<[string, RequestInit]> {
     throw new ProviderNotSupportedError(
-      "Perplexity AI does not support list models",
+      "Perplexity AI does not support models list via this proxy.",
     );
   }
 }

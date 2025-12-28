@@ -13,14 +13,14 @@ export async function models(
 
     // Return empty list if the provider is not available
     if (providerClass.available() === false) {
-      return Promise.resolve({
+      return {
         object: "list",
         data: [],
-      } as OpenAIModelsListResponseBody);
+      } as OpenAIModelsListResponseBody;
     }
 
     // Generate models request
-    const [requestInfo, requestInit] = providerClass.buildModelsRequest();
+    const [requestInfo, requestInit] = await providerClass.buildModelsRequest();
 
     // If AI Gateway is enabled and the provider supports it, use AI Gateway
     if (aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)) {
@@ -29,7 +29,7 @@ export async function models(
           provider: providerName,
           method: requestInit.method,
           path: requestInfo,
-          headers: providerClass.endpoint.headers(),
+          headers: await providerClass.endpoint.headers(),
         }),
       );
       const models = await response.json();

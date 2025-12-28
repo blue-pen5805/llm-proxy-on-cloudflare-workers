@@ -1,27 +1,33 @@
+import { Secrets } from "../../utils/secrets";
 import { EndpointBase } from "../endpoint";
 
 export class WorkersAiEndpoint extends EndpointBase {
-  apiKey: string;
-  accountId: string;
+  apiKeyName: keyof Env;
+  accountIdName: keyof Env;
 
-  constructor(apikey: string, accountId: string) {
+  constructor(apiKeyName: keyof Env, accountIdName: keyof Env) {
     super();
-    this.apiKey = apikey;
-    this.accountId = accountId;
+    this.apiKeyName = apiKeyName;
+    this.accountIdName = accountIdName;
   }
 
   available() {
-    return Boolean(this.apiKey);
+    return (
+      Secrets.getAll(this.apiKeyName).length > 0 &&
+      Secrets.getAll(this.accountIdName).length > 0
+    );
   }
 
   baseUrl() {
-    return `https://api.cloudflare.com/client/v4/accounts/${this.accountId}/ai`;
+    const accountId = Secrets.get(this.accountIdName, false);
+    return `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai`;
   }
 
-  headers() {
+  async headers() {
+    const apiKey = await Secrets.getAsync(this.apiKeyName);
     return {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${this.apiKey}`,
+      Authorization: `Bearer ${apiKey}`,
     };
   }
 }

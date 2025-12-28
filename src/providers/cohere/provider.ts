@@ -1,4 +1,3 @@
-import { Secrets } from "../../utils/secrets";
 import {
   OpenAIChatCompletionsRequestBody,
   OpenAIModelsListResponseBody,
@@ -33,7 +32,7 @@ export class Cohere extends ProviderBase {
 
   constructor() {
     super();
-    this.endpoint = new CohereEndpoint(Secrets.get(this.apiKeyName));
+    this.endpoint = new CohereEndpoint(this.apiKeyName);
   }
 
   // Convert model list to OpenAI format

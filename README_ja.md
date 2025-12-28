@@ -13,6 +13,7 @@
   - `/v1/chat/completions`
   - `/v1/models`
 - **Cloudflare AI Gateway統合:** ログ、分析、その他の機能のために [Cloudflare AI Gateway](https://www.cloudflare.com/developer-platform/products/ai-gateway/) の [Universal Endpoint](https://developers.cloudflare.com/ai-gateway/providers/universal/) を含む統合を活用。
+- **グローバル・ラウンドロビン・キーローテーション:** Cloudflare Durable Objects を使用して、すべてのアイソレート間で一貫したローテーションを実現。
 
 ```mermaid
 flowchart
@@ -85,6 +86,19 @@ Cloudflare AI Gateway を使用している場合は、これらを設定して�
 ### プロバイダーAPIキー
 
 使用する予定の各プロバイダーのAPIキーを設定してください。APIキーは、単一の文字列、カンマ区切りの文字列、またはJSON形式の文字列配列にできます。
+
+### グローバル・ラウンドロビン・キーローテーション（オプション）
+
+Cloudflare Durable Objects を使用して、すべてのリクエスト間で一貫したラウンドロビン順序で API キーをローテーションする機能です。
+
+- `ENABLE_GLOBAL_ROUND_ROBIN`: `true` に設定すると有効になります。（デフォルト: `false`）
+
+> [!IMPORTANT]
+> この機能を有効にするには、Durable Objects をサポートする Cloudflare アカウントが必要です。
+
+### ローカル開発
+
+`npm run dev` でローカル実行する場合、Wrangler は自動的に Durable Objects をシミュレートします。Durable Object クラス（`KeyRotationCounter`）がエントリーポイント（`src/index.ts`）からエクスポートされていることを確認してください。
 
 ## 使用例
 

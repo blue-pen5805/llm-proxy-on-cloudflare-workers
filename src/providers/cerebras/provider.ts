@@ -1,4 +1,3 @@
-import { Secrets } from "../../utils/secrets";
 import { OpenAIChatCompletionsRequestBody } from "../openai/types";
 import { ProviderBase } from "../provider";
 import { CerebrasEndpoint } from "./endpoint";
@@ -38,6 +37,6 @@ export class Cerebras extends ProviderBase {
 
   constructor() {
     super();
-    this.endpoint = new CerebrasEndpoint(Secrets.get(this.apiKeyName));
+    this.endpoint = new CerebrasEndpoint(this.apiKeyName);
   }
 }

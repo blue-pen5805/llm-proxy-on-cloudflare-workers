@@ -8,36 +8,25 @@ vi.mock("~/src/utils/secrets");
 vi.mock("~/src/providers/workers_ai/endpoint");
 
 describe("WorkersAi Provider", () => {
-  const mockSecretsGet = vi.fn();
   const MockWorkersAiEndpoint = vi.mocked(WorkersAiEndpoint);
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(Secrets.Secrets.get).mockImplementation(mockSecretsGet);
   });
 
   describe("constructor", () => {
-    it("should initialize with API key and account ID from secrets", () => {
-      const testApiKey = "test_workers_ai_api_key";
-      const testAccountId = "test_account_id";
-      mockSecretsGet
-        .mockReturnValueOnce(testApiKey)
-        .mockReturnValueOnce(testAccountId);
-
+    it("should initialize with API key and account ID names", () => {
       const provider = new WorkersAi();
 
-      expect(Secrets.Secrets.get).toHaveBeenCalledWith("CLOUDFLARE_API_KEY");
-      expect(Secrets.Secrets.get).toHaveBeenCalledWith("CLOUDFLARE_ACCOUNT_ID");
-      expect(MockWorkersAiEndpoint).toHaveBeenCalledWith(
-        testApiKey,
-        testAccountId,
-      );
       expect(provider.apiKeyName).toBe("CLOUDFLARE_API_KEY");
       expect(provider.accountIdName).toBe("CLOUDFLARE_ACCOUNT_ID");
+      expect(MockWorkersAiEndpoint).toHaveBeenCalledWith(
+        "CLOUDFLARE_API_KEY",
+        "CLOUDFLARE_ACCOUNT_ID",
+      );
     });
 
     it("should have correct paths", () => {
-      mockSecretsGet.mockReturnValue("test-key");
       const provider = new WorkersAi();
 
       expect(provider.chatCompletionPath).toBe("/v1/chat/completions");
@@ -47,7 +36,6 @@ describe("WorkersAi Provider", () => {
 
   describe("modelsToOpenAIFormat", () => {
     it("should convert Workers AI models response to OpenAI format", () => {
-      mockSecretsGet.mockReturnValue("test-key");
       const provider = new WorkersAi();
 
       const workersAiResponse: WorkersAiModelsListResponseBody = {
@@ -146,7 +134,6 @@ describe("WorkersAi Provider", () => {
     });
 
     it("should handle empty models list", () => {
-      mockSecretsGet.mockReturnValue("test-key");
       const provider = new WorkersAi();
 
       const workersAiResponse: WorkersAiModelsListResponseBody = {
@@ -173,7 +160,6 @@ describe("WorkersAi Provider", () => {
 
   describe("inheritance", () => {
     it("should extend ProviderBase", () => {
-      mockSecretsGet.mockReturnValue("test-key");
       const provider = new WorkersAi();
 
       expect(provider).toHaveProperty("available");
@@ -184,7 +170,6 @@ describe("WorkersAi Provider", () => {
 
   describe("endpoint property", () => {
     it("should have WorkersAiEndpoint instance", () => {
-      mockSecretsGet.mockReturnValue("test-key");
       const provider = new WorkersAi();
 
       expect(provider.endpoint).toBeInstanceOf(MockWorkersAiEndpoint);

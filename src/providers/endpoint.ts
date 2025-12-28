@@ -13,27 +13,30 @@ export class EndpointBase {
     return "";
   }
 
-  headers(): HeadersInit {
+  async headers(): Promise<HeadersInit> {
     return {};
   }
 
-  fetch(pathname: string, init?: RequestInit): Promise<Response> {
-    return fetch2(...this.buildRequest(pathname, init));
+  async fetch(pathname: string, init?: RequestInit): Promise<Response> {
+    return fetch2(...(await this.buildRequest(pathname, init)));
   }
 
-  buildRequest(pathname: string, init?: RequestInit): [string, RequestInit] {
+  async buildRequest(
+    pathname: string,
+    init?: RequestInit,
+  ): Promise<[string, RequestInit]> {
     return [
       this.baseUrl() + this.pathnamePrefix() + pathname,
-      this.requestData(init),
+      await this.requestData(init),
     ];
   }
 
-  requestData(init?: RequestInit): RequestInit {
+  async requestData(init?: RequestInit): Promise<RequestInit> {
     return {
       ...init,
       headers: {
         ...init?.headers,
-        ...this.headers(),
+        ...(await this.headers()),
       },
     };
   }

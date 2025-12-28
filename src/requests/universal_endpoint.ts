@@ -23,30 +23,36 @@ export async function universalEndpoint(
 ) {
   const items: UniversalEndpointRequest[] = await request.json();
 
-  const mappedItems: CloudflareAIGatewayUniversalEndpointData = items.map(
-    (item): CloudflareAIGatewayUniversalEndpointStep => {
-      const providerName = item.provider;
-      if (!providerName) {
-        throw new Error(`Provider not specified.`);
-      }
-      if (isCloudflareAIGatewayProvider(providerName) === false) {
-        throw new Error(`Provider ${providerName} is not supported.`);
-      }
-      const provider = Providers[providerName];
-      const providerClass = new provider();
-      const endpoint =
-        item.endpoint || providerClass.chatCompletionPath.replace("/", "");
-      const headers = { ...providerClass.endpoint.headers(), ...item.headers };
-      const query = item.query;
+  const mappedItems: CloudflareAIGatewayUniversalEndpointData =
+    await Promise.all(
+      items.map(
+        async (item): Promise<CloudflareAIGatewayUniversalEndpointStep> => {
+          const providerName = item.provider;
+          if (!providerName) {
+            throw new Error(`Provider not specified.`);
+          }
+          if (isCloudflareAIGatewayProvider(providerName) === false) {
+            throw new Error(`Provider ${providerName} is not supported.`);
+          }
+          const provider = Providers[providerName];
+          const providerClass = new provider();
+          const endpoint =
+            item.endpoint || providerClass.chatCompletionPath.replace("/", "");
+          const headers = {
+            ...(await providerClass.endpoint.headers()),
+            ...item.headers,
+          };
+          const query = item.query;
 
-      return {
-        provider: providerName,
-        endpoint,
-        headers,
-        query,
-      };
-    },
-  );
+          return {
+            provider: providerName,
+            endpoint,
+            headers,
+            query,
+          };
+        },
+      ),
+    );
 
   return await fetch2(
     ...aiGateway.buildUniversalEndpointRequest({

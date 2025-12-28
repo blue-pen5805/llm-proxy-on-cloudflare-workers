@@ -1,25 +1,27 @@
+import { Secrets } from "../../utils/secrets";
 import { EndpointBase } from "../endpoint";
 
 export class GrokEndpoint extends EndpointBase {
-  apiKey: string;
+  apiKeyName: keyof Env;
 
-  constructor(apikey: string) {
+  constructor(apiKeyName: keyof Env) {
     super();
-    this.apiKey = apikey;
+    this.apiKeyName = apiKeyName;
   }
 
   available() {
-    return Boolean(this.apiKey);
+    return Secrets.getAll(this.apiKeyName).length > 0;
   }
 
   baseUrl() {
     return "https://api.x.ai";
   }
 
-  headers() {
+  async headers() {
+    const apiKey = await Secrets.getAsync(this.apiKeyName);
     return {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${this.apiKey}`,
+      Authorization: `Bearer ${apiKey}`,
     };
   }
 }

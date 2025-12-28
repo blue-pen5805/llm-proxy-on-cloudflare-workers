@@ -2,36 +2,25 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { DeepSeekEndpoint } from "~/src/providers/deepseek/endpoint";
 import { DeepSeek } from "~/src/providers/deepseek/provider";
 import type { DeepSeekModelsListResponseBody } from "~/src/providers/deepseek/types";
-import * as Secrets from "~/src/utils/secrets";
 
-vi.mock("~/src/utils/secrets");
 vi.mock("~/src/providers/deepseek/endpoint");
 
 describe("DeepSeek Provider", () => {
-  const mockSecretsGet = vi.fn();
   const MockDeepSeekEndpoint = vi.mocked(DeepSeekEndpoint);
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(Secrets.Secrets.get).mockImplementation(mockSecretsGet);
   });
 
   describe("constructor", () => {
-    it("should initialize with API key from secrets", () => {
-      const testApiKey = "test_deepseek_api_key";
-      mockSecretsGet.mockReturnValue(testApiKey);
-
+    it("should initialize with API key name", () => {
       const provider = new DeepSeek();
-
-      expect(Secrets.Secrets.get).toHaveBeenCalledWith("DEEPSEEK_API_KEY");
-      expect(MockDeepSeekEndpoint).toHaveBeenCalledWith(testApiKey);
+      expect(MockDeepSeekEndpoint).toHaveBeenCalledWith("DEEPSEEK_API_KEY");
       expect(provider.apiKeyName).toBe("DEEPSEEK_API_KEY");
     });
 
     it("should have correct paths", () => {
-      mockSecretsGet.mockReturnValue("test-key");
       const provider = new DeepSeek();
-
       expect(provider.chatCompletionPath).toBe("/chat/completions");
       expect(provider.modelsPath).toBe("/models");
     });
@@ -39,7 +28,6 @@ describe("DeepSeek Provider", () => {
 
   describe("modelsToOpenAIFormat", () => {
     it("should convert DeepSeek models response to OpenAI format", () => {
-      mockSecretsGet.mockReturnValue("test-key");
       const provider = new DeepSeek();
 
       const deepseekResponse: DeepSeekModelsListResponseBody = {
@@ -82,7 +70,6 @@ describe("DeepSeek Provider", () => {
     });
 
     it("should handle empty models list", () => {
-      mockSecretsGet.mockReturnValue("test-key");
       const provider = new DeepSeek();
 
       const deepseekResponse: DeepSeekModelsListResponseBody = {
@@ -101,9 +88,7 @@ describe("DeepSeek Provider", () => {
 
   describe("inheritance", () => {
     it("should extend ProviderBase", () => {
-      mockSecretsGet.mockReturnValue("test-key");
       const provider = new DeepSeek();
-
       expect(provider).toHaveProperty("available");
       expect(provider).toHaveProperty("buildModelsRequest");
       expect(provider).toHaveProperty("buildChatCompletionsRequest");
@@ -112,9 +97,7 @@ describe("DeepSeek Provider", () => {
 
   describe("endpoint property", () => {
     it("should have DeepSeekEndpoint instance", () => {
-      mockSecretsGet.mockReturnValue("test-key");
       const provider = new DeepSeek();
-
       expect(provider.endpoint).toBeInstanceOf(MockDeepSeekEndpoint);
     });
   });

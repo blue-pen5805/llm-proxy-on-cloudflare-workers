@@ -8,28 +8,21 @@ vi.mock("~/src/utils/secrets");
 vi.mock("~/src/providers/google-ai-studio/endpoint");
 
 describe("GoogleAiStudio Provider", () => {
-  const mockSecretsGet = vi.fn();
   const MockGoogleAiStudioEndpoint = vi.mocked(GoogleAiStudioEndpoint);
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(Secrets.Secrets.get).mockImplementation(mockSecretsGet);
   });
 
   describe("constructor", () => {
-    it("should initialize with API key from secrets", () => {
-      const testApiKey = "test_google_ai_studio_api_key";
-      mockSecretsGet.mockReturnValue(testApiKey);
-
+    it("should initialize with API key name", () => {
       const provider = new GoogleAiStudio();
 
-      expect(Secrets.Secrets.get).toHaveBeenCalledWith("GEMINI_API_KEY");
-      expect(MockGoogleAiStudioEndpoint).toHaveBeenCalledWith(testApiKey);
       expect(provider.apiKeyName).toBe("GEMINI_API_KEY");
+      expect(MockGoogleAiStudioEndpoint).toHaveBeenCalledWith("GEMINI_API_KEY");
     });
 
     it("should have correct paths", () => {
-      mockSecretsGet.mockReturnValue("test-key");
       const provider = new GoogleAiStudio();
 
       expect(provider.chatCompletionPath).toBe(
@@ -41,7 +34,6 @@ describe("GoogleAiStudio Provider", () => {
 
   describe("modelsToOpenAIFormat", () => {
     it("should convert Google AI Studio models response to OpenAI format", () => {
-      mockSecretsGet.mockReturnValue("test-key");
       const provider = new GoogleAiStudio();
 
       const googleResponse: GoogleAiStudioModelsListResponseBody = {
@@ -121,7 +113,6 @@ describe("GoogleAiStudio Provider", () => {
     });
 
     it("should handle empty models list", () => {
-      mockSecretsGet.mockReturnValue("test-key");
       const provider = new GoogleAiStudio();
 
       const googleResponse: GoogleAiStudioModelsListResponseBody = {
@@ -139,7 +130,6 @@ describe("GoogleAiStudio Provider", () => {
 
   describe("inheritance", () => {
     it("should extend ProviderBase", () => {
-      mockSecretsGet.mockReturnValue("test-key");
       const provider = new GoogleAiStudio();
 
       expect(provider).toHaveProperty("available");
@@ -150,7 +140,6 @@ describe("GoogleAiStudio Provider", () => {
 
   describe("endpoint property", () => {
     it("should have GoogleAiStudioEndpoint instance", () => {
-      mockSecretsGet.mockReturnValue("test-key");
       const provider = new GoogleAiStudio();
 
       expect(provider.endpoint).toBeInstanceOf(MockGoogleAiStudioEndpoint);

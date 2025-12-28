@@ -1,4 +1,3 @@
-import { Secrets } from "../../utils/secrets";
 import { OpenAIModelsListResponseBody } from "../openai/types";
 import { ProviderBase } from "../provider";
 import { OpenRouterEndpoint } from "./endpoint";
@@ -14,7 +13,7 @@ export class OpenRouter extends ProviderBase {
 
   constructor() {
     super();
-    this.endpoint = new OpenRouterEndpoint(Secrets.get(this.apiKeyName));
+    this.endpoint = new OpenRouterEndpoint(this.apiKeyName);
   }
 
   // Convert model list to OpenAI format

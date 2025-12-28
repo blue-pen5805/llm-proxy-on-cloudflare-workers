@@ -1,88 +1,60 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GroqEndpoint } from "~/src/providers/groq/endpoint";
+import * as Secrets from "~/src/utils/secrets";
+
+vi.mock("~/src/utils/secrets");
 
 describe("GroqEndpoint", () => {
-  describe("constructor", () => {
-    it("should initialize with API key", () => {
-      const apiKey = "gsk_test_api_key";
-      const endpoint = new GroqEndpoint(apiKey);
+  const testApiKey = "test_groq_api_key";
 
-      expect(endpoint.apiKey).toBe(apiKey);
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(Secrets.Secrets.getAsync).mockImplementation((key) => {
+      if (key === "GROQ_API_KEY") return Promise.resolve(testApiKey);
+      return Promise.resolve("");
     });
+    vi.mocked(Secrets.Secrets.getAll).mockImplementation((key) => {
+      if (key === "GROQ_API_KEY") return [testApiKey];
+      return [];
+    });
+  });
 
-    it("should initialize with undefined API key", () => {
-      const endpoint = new GroqEndpoint(undefined as any);
-
-      expect(endpoint.apiKey).toBeUndefined();
+  describe("constructor", () => {
+    it("should initialize with API key name", () => {
+      const endpoint = new GroqEndpoint("GROQ_API_KEY");
+      expect(endpoint.apiKeyName).toBe("GROQ_API_KEY");
     });
   });
 
   describe("available", () => {
     it("should return true when API key is provided", () => {
-      const endpoint = new GroqEndpoint("gsk_test_api_key");
-
+      const endpoint = new GroqEndpoint("GROQ_API_KEY");
       expect(endpoint.available()).toBe(true);
     });
 
-    it("should return false when API key is empty string", () => {
-      const endpoint = new GroqEndpoint("");
-
-      expect(endpoint.available()).toBe(false);
-    });
-
-    it("should return false when API key is undefined", () => {
-      const endpoint = new GroqEndpoint(undefined as any);
-
-      expect(endpoint.available()).toBe(false);
-    });
-
-    it("should return false when API key is null", () => {
-      const endpoint = new GroqEndpoint(null as any);
-
+    it("should return false when API key is missing", () => {
+      vi.mocked(Secrets.Secrets.getAll).mockReturnValue([]);
+      const endpoint = new GroqEndpoint("GROQ_API_KEY");
       expect(endpoint.available()).toBe(false);
     });
   });
 
   describe("baseUrl", () => {
     it("should return Groq API base URL", () => {
-      const endpoint = new GroqEndpoint("test-key");
-
+      const endpoint = new GroqEndpoint("GROQ_API_KEY");
       expect(endpoint.baseUrl()).toBe("https://api.groq.com/openai/v1");
     });
   });
 
   describe("headers", () => {
-    it("should return headers with Authorization bearer token", () => {
-      const apiKey = "gsk_test_api_key";
-      const endpoint = new GroqEndpoint(apiKey);
-
-      const headers = endpoint.headers();
+    it("should return correct headers with authorization", async () => {
+      const endpoint = new GroqEndpoint("GROQ_API_KEY");
+      const headers = await endpoint.headers();
 
       expect(headers).toEqual({
         "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${testApiKey}`,
       });
-    });
-
-    it("should handle undefined API key in headers", () => {
-      const endpoint = new GroqEndpoint(undefined as any);
-
-      const headers = endpoint.headers();
-
-      expect(headers).toEqual({
-        "Content-Type": "application/json",
-        Authorization: "Bearer undefined",
-      });
-    });
-  });
-
-  describe("inheritance", () => {
-    it("should extend EndpointBase", () => {
-      const endpoint = new GroqEndpoint("test-key");
-
-      expect(endpoint).toHaveProperty("pathnamePrefix");
-      expect(endpoint).toHaveProperty("requestData");
-      expect(endpoint).toHaveProperty("fetch");
     });
   });
 });

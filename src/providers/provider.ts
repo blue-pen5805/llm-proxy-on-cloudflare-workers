@@ -60,13 +60,13 @@ export class ProviderBase {
   }
 
   // OpenAI Compatible API - Chat Completions
-  buildChatCompletionsRequest({
+  async buildChatCompletionsRequest({
     body,
     headers = {},
   }: {
     body: string;
     headers: HeadersInit;
-  }): [string, RequestInit] {
+  }): Promise<[string, RequestInit]> {
     const data = JSON.parse(body) as OpenAIChatCompletionsRequestBody;
     const trimmedData = Object.fromEntries(
       (Object.keys(data) as (keyof OpenAIChatCompletionsRequestBody)[])
@@ -84,7 +84,7 @@ export class ProviderBase {
         method: "POST",
         body: JSON.stringify(trimmedData),
         headers: {
-          ...this.endpoint.headers(),
+          ...(await this.endpoint.headers()),
           ...headers,
         },
       },
@@ -92,12 +92,12 @@ export class ProviderBase {
   }
 
   // Model List
-  buildModelsRequest(): [string, RequestInit] {
+  async buildModelsRequest(): Promise<[string, RequestInit]> {
     return [
       this.modelsPath,
       {
         method: "GET",
-        headers: this.endpoint.headers(),
+        headers: await this.endpoint.headers(),
       },
     ];
   }

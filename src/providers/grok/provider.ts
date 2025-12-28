@@ -1,4 +1,3 @@
-import { Secrets } from "../../utils/secrets";
 import { ProviderBase } from "../provider";
 import { GrokEndpoint } from "./endpoint";
 
@@ -12,6 +11,6 @@ export class Grok extends ProviderBase {
 
   constructor() {
     super();
-    this.endpoint = new GrokEndpoint(Secrets.get(this.apiKeyName));
+    this.endpoint = new GrokEndpoint(this.apiKeyName);
   }
 }

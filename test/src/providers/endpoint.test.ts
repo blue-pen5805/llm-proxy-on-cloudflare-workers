@@ -34,37 +34,39 @@ describe("EndpointBase", () => {
   });
 
   describe("headers", () => {
-    it("should return empty object by default", () => {
-      expect(endpoint.headers()).toEqual({});
+    it("should return empty object by default", async () => {
+      expect(await endpoint.headers()).toEqual({});
     });
   });
 
   describe("requestData", () => {
-    it("should construct proper request data", () => {
+    it("should construct proper request data", async () => {
       const init = {
         method: "POST",
         headers: { "X-Custom-Header": "value" },
         body: JSON.stringify({ test: "data" }),
       };
 
-      const result = endpoint.requestData(init);
+      const result = await endpoint.requestData(init);
 
       expect(result).toEqual({
         ...init,
         headers: {
           ...init.headers,
-          ...endpoint.headers(),
+          ...(await endpoint.headers()),
         },
       });
     });
 
-    it("should combine custom headers with endpoint headers", () => {
-      vi.spyOn(endpoint, "headers").mockReturnValue({
-        "Content-Type": "application/json",
-      });
+    it("should combine custom headers with endpoint headers", async () => {
+      vi.spyOn(endpoint, "headers").mockReturnValue(
+        Promise.resolve({
+          "Content-Type": "application/json",
+        }),
+      );
 
       const init = { headers: { Authorization: "Bearer token" } };
-      const resultInit = endpoint.requestData(init);
+      const resultInit = await endpoint.requestData(init);
 
       expect(resultInit?.headers).toEqual({
         Authorization: "Bearer token",
@@ -81,7 +83,9 @@ describe("EndpointBase", () => {
         typeof fetch
       >[1];
 
-      vi.spyOn(endpoint, "requestData").mockReturnValue(requestDataResult);
+      vi.spyOn(endpoint, "requestData").mockReturnValue(
+        Promise.resolve(requestDataResult),
+      );
 
       await endpoint.fetch(pathname, init);
 
