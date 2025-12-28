@@ -17,8 +17,8 @@ export class ReplicateEndpoint extends EndpointBase {
     return "https://api.replicate.com/v1";
   }
 
-  async headers() {
-    const apiKey = await Secrets.getAsync(this.apiKeyName);
+  async headers(apiKeyIndex?: number) {
+    const apiKey = Secrets.get(this.apiKeyName, apiKeyIndex);
     return {
       "Content-Type": "application/json",
       Authorization: `Token ${apiKey}`,

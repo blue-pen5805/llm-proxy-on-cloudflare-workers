@@ -55,17 +55,20 @@ export class ProviderBase {
   async fetch(
     pathname: string,
     init?: Parameters<typeof fetch>[1],
+    apiKeyIndex?: number,
   ): ReturnType<typeof fetch> {
-    return this.endpoint.fetch(pathname, init);
+    return this.endpoint.fetch(pathname, init, apiKeyIndex);
   }
 
   // OpenAI Compatible API - Chat Completions
   async buildChatCompletionsRequest({
     body,
     headers = {},
+    apiKeyIndex,
   }: {
     body: string;
     headers: HeadersInit;
+    apiKeyIndex?: number;
   }): Promise<[string, RequestInit]> {
     const data = JSON.parse(body) as OpenAIChatCompletionsRequestBody;
     const trimmedData = Object.fromEntries(
@@ -84,7 +87,7 @@ export class ProviderBase {
         method: "POST",
         body: JSON.stringify(trimmedData),
         headers: {
-          ...(await this.endpoint.headers()),
+          ...(await this.endpoint.headers(apiKeyIndex)),
           ...headers,
         },
       },
@@ -92,12 +95,14 @@ export class ProviderBase {
   }
 
   // Model List
-  async buildModelsRequest(): Promise<[string, RequestInit]> {
+  async buildModelsRequest(
+    apiKeyIndex?: number,
+  ): Promise<[string, RequestInit]> {
     return [
       this.modelsPath,
       {
         method: "GET",
-        headers: await this.endpoint.headers(),
+        headers: await this.endpoint.headers(apiKeyIndex),
       },
     ];
   }

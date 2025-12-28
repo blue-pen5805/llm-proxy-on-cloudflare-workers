@@ -17,8 +17,8 @@ export class OpenRouterEndpoint extends EndpointBase {
     return "https://openrouter.ai/api";
   }
 
-  async headers() {
-    const apiKey = await Secrets.getAsync(this.apiKeyName);
+  async headers(apiKeyIndex?: number) {
+    const apiKey = Secrets.get(this.apiKeyName, apiKeyIndex);
     return {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,

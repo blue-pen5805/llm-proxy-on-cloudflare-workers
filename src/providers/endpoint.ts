@@ -13,30 +13,38 @@ export class EndpointBase {
     return "";
   }
 
-  async headers(): Promise<HeadersInit> {
+  async headers(_apiKeyIndex?: number): Promise<HeadersInit> {
     return {};
   }
 
-  async fetch(pathname: string, init?: RequestInit): Promise<Response> {
-    return fetch2(...(await this.buildRequest(pathname, init)));
+  async fetch(
+    pathname: string,
+    init?: RequestInit,
+    apiKeyIndex?: number,
+  ): Promise<Response> {
+    return fetch2(...(await this.buildRequest(pathname, init, apiKeyIndex)));
   }
 
   async buildRequest(
     pathname: string,
     init?: RequestInit,
+    apiKeyIndex?: number,
   ): Promise<[string, RequestInit]> {
     return [
       this.baseUrl() + this.pathnamePrefix() + pathname,
-      await this.requestData(init),
+      await this.requestData(init, apiKeyIndex),
     ];
   }
 
-  async requestData(init?: RequestInit): Promise<RequestInit> {
+  async requestData(
+    init?: RequestInit,
+    apiKeyIndex?: number,
+  ): Promise<RequestInit> {
     return {
       ...init,
       headers: {
         ...init?.headers,
-        ...(await this.headers()),
+        ...(await this.headers(apiKeyIndex)),
       },
     };
   }

@@ -2,10 +2,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Providers } from "~/src/providers";
 import { universalEndpoint } from "~/src/requests/universal_endpoint";
 import * as helpers from "~/src/utils/helpers";
+import { Secrets } from "~/src/utils/secrets";
 
 vi.mock("~/src/ai_gateway");
 vi.mock("~/src/providers");
 vi.mock("~/src/utils/helpers");
+vi.mock("~/src/utils/secrets");
 
 describe("universalEndpoint", () => {
   const mockProviderClass = {
@@ -27,6 +29,8 @@ describe("universalEndpoint", () => {
       "Content-Type": "application/json",
       Authorization: "Bearer sk-test",
     });
+    vi.mocked(Secrets.getAll).mockReturnValue(["test-key"]);
+    vi.mocked(Secrets.getNext).mockResolvedValue(0);
   });
 
   it("should handle single provider request", async () => {

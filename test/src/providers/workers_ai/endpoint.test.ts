@@ -10,11 +10,11 @@ describe("WorkersAiEndpoint", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(Secrets.Secrets.getAsync).mockImplementation((key) => {
-      if (key === "CLOUDFLARE_API_KEY") return Promise.resolve(testApiKey);
+    vi.mocked(Secrets.Secrets.get).mockImplementation((key) => {
+      if (key === "CLOUDFLARE_API_KEY") return testApiKey;
       if (key === "CLOUDFLARE_ACCOUNT_ID")
         return Promise.resolve(testAccountId);
-      return Promise.resolve("");
+      return "";
     });
     vi.mocked(Secrets.Secrets.get).mockImplementation((key) => {
       if (key === "CLOUDFLARE_API_KEY") return testApiKey;

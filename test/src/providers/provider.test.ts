@@ -49,9 +49,13 @@ describe("ProviderBase", () => {
   describe("fetch", () => {
     it("should call endpoint.fetch with correct parameters", async () => {
       await providerBase.fetch("/test", { method: "GET" });
-      expect(mockEndpoint.fetch).toHaveBeenCalledWith("/test", {
-        method: "GET",
-      });
+      expect(mockEndpoint.fetch).toHaveBeenCalledWith(
+        "/test",
+        {
+          method: "GET",
+        },
+        undefined,
+      );
     });
   });
 });

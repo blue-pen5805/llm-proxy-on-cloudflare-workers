@@ -19,12 +19,12 @@ export class WorkersAiEndpoint extends EndpointBase {
   }
 
   baseUrl() {
-    const accountId = Secrets.get(this.accountIdName, false);
+    const accountId = Secrets.get(this.accountIdName, 0);
     return `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai`;
   }
 
-  async headers() {
-    const apiKey = await Secrets.getAsync(this.apiKeyName);
+  async headers(apiKeyIndex?: number) {
+    const apiKey = Secrets.get(this.apiKeyName, apiKeyIndex);
     return {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,

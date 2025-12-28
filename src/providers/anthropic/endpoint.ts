@@ -17,8 +17,8 @@ export class AnthropicEndpoint extends EndpointBase {
     return `https://api.anthropic.com`;
   }
 
-  async headers() {
-    const apiKey = await Secrets.getAsync(this.apiKeyName);
+  async headers(apiKeyIndex?: number) {
+    const apiKey = Secrets.get(this.apiKeyName, apiKeyIndex);
     return {
       "Content-Type": "application/json",
       "x-api-key": `${apiKey}`,

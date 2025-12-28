@@ -1,6 +1,5 @@
 import { Providers } from "../providers";
 import { Config } from "../utils/config";
-import { Environments } from "../utils/environments";
 import { Secrets } from "../utils/secrets";
 
 /**
@@ -25,26 +24,21 @@ function maskApiKey(key: string): string {
 async function checkConnectivity(
   providerName: string,
   apiKeyName: keyof Env,
-  apiKey: string,
+  apiKeyIndex: number,
 ): Promise<"valid" | "invalid" | "unknown"> {
   const providerClass = Providers[providerName];
   if (!providerClass) return "unknown";
 
-  const originalEnv = Environments.getEnv();
-  // Create a pseudo-environment where only this specific API key is returned
-  const mockEnv = {
-    ...originalEnv,
-    [apiKeyName]: apiKey,
-  } as Env;
-
-  // Temporarily set the environment to the mock environment
-  Environments.setEnv(mockEnv);
-
   try {
     const instance = new providerClass();
-    const [requestInfo, requestInit] = await instance.buildModelsRequest();
+    const [requestInfo, requestInit] =
+      await instance.buildModelsRequest(apiKeyIndex);
 
-    const response = await instance.fetch(requestInfo, requestInit);
+    const response = await instance.fetch(
+      requestInfo,
+      requestInit,
+      apiKeyIndex,
+    );
 
     if (response.ok) {
       return "valid";
@@ -56,9 +50,6 @@ async function checkConnectivity(
   } catch (error) {
     console.error(`Error checking connectivity for ${providerName}:`, error);
     return "invalid";
-  } finally {
-    // Restore the original environment
-    Environments.setEnv(originalEnv!);
   }
 }
 
@@ -87,9 +78,9 @@ export async function status() {
 
     const allKeys = Secrets.getAll(apiKeyName);
     const keyStatuses = await Promise.all(
-      allKeys.map(async (key) => ({
+      allKeys.map(async (key, apiKeyIndex) => ({
         key: maskApiKey(key),
-        status: await checkConnectivity(providerName, apiKeyName, key),
+        status: await checkConnectivity(providerName, apiKeyName, apiKeyIndex),
       })),
     );
 

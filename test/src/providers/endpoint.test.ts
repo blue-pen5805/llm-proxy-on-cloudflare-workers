@@ -53,7 +53,7 @@ describe("EndpointBase", () => {
         ...init,
         headers: {
           ...init.headers,
-          ...(await endpoint.headers()),
+          ...(await endpoint.headers(undefined)),
         },
       });
     });
@@ -89,7 +89,7 @@ describe("EndpointBase", () => {
 
       await endpoint.fetch(pathname, init);
 
-      expect(endpoint.requestData).toHaveBeenCalledWith(init);
+      expect(endpoint.requestData).toHaveBeenCalledWith(init, undefined);
       expect(fetch2).toHaveBeenCalledWith(
         endpoint.baseUrl() + pathname,
         requestDataResult,

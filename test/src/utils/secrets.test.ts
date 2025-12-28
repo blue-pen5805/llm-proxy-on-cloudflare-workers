@@ -11,8 +11,6 @@ describe("Secrets", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Clear static cache in Secrets
-    Object.keys(Secrets.loaded).forEach((key) => delete Secrets.loaded[key]);
     env = {
       OPENAI_API_KEY: "openai-key",
       GEMINI_API_KEY: ["gemini-key1", "gemini-key2", "gemini-key3"],
@@ -34,36 +32,33 @@ describe("Secrets", () => {
   });
 
   describe("get", () => {
-    it("should return a single secret for a given key name", () => {
-      const key = Secrets.get("OPENAI_API_KEY", false);
-      expect(key).toBe("openai-key");
+    it("should return a single secret for a given key name with apiKeyIndex", () => {
+      const key0 = Secrets.get("GEMINI_API_KEY", 0);
+      const key1 = Secrets.get("GEMINI_API_KEY", 1);
+      const key2 = Secrets.get("GEMINI_API_KEY", 2);
+      expect(key0).toBe("gemini-key1");
+      expect(key1).toBe("gemini-key2");
+      expect(key2).toBe("gemini-key3");
     });
 
-    it("should rotate secrets when requested (local round-robin)", () => {
-      const key1 = Secrets.get("GEMINI_API_KEY", true);
-      const key2 = Secrets.get("GEMINI_API_KEY", true);
-      expect(key1).toBe("gemini-key1");
-      expect(key2).toBe("gemini-key2");
-
-      const key3 = Secrets.get("GEMINI_API_KEY", true);
-      expect(key3).toBe("gemini-key3");
-
-      const key4 = Secrets.get("GEMINI_API_KEY", true);
-      expect(key4).toBe("gemini-key1");
+    it("should wrap around if apiKeyIndex exceeds length", () => {
+      const key3 = Secrets.get("GEMINI_API_KEY", 3);
+      expect(key3).toBe("gemini-key1");
     });
   });
 
-  describe("getAsync", () => {
-    it("should fall back to local rotation if global round-robin is disabled", async () => {
+  describe("getNext", () => {
+    it("should return a random apiKeyIndex if global round-robin is disabled", async () => {
       vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(false);
-      const key = await Secrets.getAsync("GEMINI_API_KEY");
-      expect(key).toBe("gemini-key1");
+      vi.spyOn(Math, "random").mockReturnValue(0.5); // (0.5 * 3) = 1.5 -> 1
+      const apiKeyIndex = await Secrets.getNext("GEMINI_API_KEY");
+      expect(apiKeyIndex).toBe(1);
     });
 
     it("should use global counter if global round-robin is enabled", async () => {
       vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(true);
 
-      const mockGetNextIndex = vi.fn().mockResolvedValue(1); // Return index 1
+      const mockGetNextIndex = vi.fn().mockResolvedValue(1); // Return apiKeyIndex 1
       const mockEnv = {
         KEY_ROTATION_MANAGER: {
           idFromName: vi.fn().mockReturnValue("mock-id"),
@@ -75,8 +70,8 @@ describe("Secrets", () => {
 
       vi.mocked(Environments.getEnv).mockReturnValue(mockEnv as any);
 
-      const key = await Secrets.getAsync("GEMINI_API_KEY");
-      expect(key).toBe("gemini-key2");
+      const apiKeyIndex = await Secrets.getNext("GEMINI_API_KEY");
+      expect(apiKeyIndex).toBe(1);
       expect(mockGetNextIndex).toHaveBeenCalledWith("GEMINI_API_KEY", 3);
     });
   });

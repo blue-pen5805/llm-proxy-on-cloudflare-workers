@@ -17,8 +17,8 @@ export class MistralEndpoint extends EndpointBase {
     return "https://api.mistral.ai";
   }
 
-  async headers() {
-    const apiKey = await Secrets.getAsync(this.apiKeyName);
+  async headers(apiKeyIndex?: number) {
+    const apiKey = Secrets.get(this.apiKeyName, apiKeyIndex);
     return {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,

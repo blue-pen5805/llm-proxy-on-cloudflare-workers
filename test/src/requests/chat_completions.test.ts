@@ -4,11 +4,13 @@ import { Providers } from "~/src/providers";
 import { chatCompletions } from "~/src/requests/chat_completions";
 import { Config } from "~/src/utils/config";
 import * as helpers from "~/src/utils/helpers";
+import { Secrets } from "~/src/utils/secrets";
 
 vi.mock("~/src/ai_gateway");
 vi.mock("~/src/providers");
 vi.mock("~/src/utils/config");
 vi.mock("~/src/utils/helpers");
+vi.mock("~/src/utils/secrets");
 
 describe("chatCompletions", () => {
   const mockProviderClass = {
@@ -32,8 +34,10 @@ describe("chatCompletions", () => {
     });
     vi.mocked(helpers.fetch2).mockResolvedValue(new Response());
     vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(true);
-    Providers.openai = vi.fn().mockReturnValue(mockProviderClass);
+    Providers.openai = vi.fn().mockImplementation(() => mockProviderClass);
     vi.mocked(Config.defaultModel).mockReturnValue("openai/gpt-4");
+    vi.mocked(Secrets.getAll).mockReturnValue(["test-key"]);
+    vi.mocked(Secrets.getNext).mockResolvedValue(0);
   });
 
   it("should handle valid chat completions request", async () => {
@@ -62,6 +66,7 @@ describe("chatCompletions", () => {
     expect(mockProviderClass.buildChatCompletionsRequest).toHaveBeenCalledWith({
       body: JSON.stringify({ ...requestBody, model: "gpt-4" }),
       headers: expect.any(Headers),
+      apiKeyIndex: 0,
     });
     expect(mockProviderClass.fetch).toHaveBeenCalled();
   });
@@ -93,6 +98,7 @@ describe("chatCompletions", () => {
     expect(mockProviderClass.buildChatCompletionsRequest).toHaveBeenCalledWith({
       body: JSON.stringify({ ...requestBody, model: "gpt-4" }),
       headers: expect.any(Headers),
+      apiKeyIndex: 0,
     });
   });
 
@@ -225,6 +231,7 @@ describe("chatCompletions", () => {
     expect(mockProviderClass.buildChatCompletionsRequest).toHaveBeenCalledWith({
       body: JSON.stringify({ ...requestBody, model: "gpt-4/turbo" }),
       headers: expect.any(Headers),
+      apiKeyIndex: 0,
     });
   });
 });

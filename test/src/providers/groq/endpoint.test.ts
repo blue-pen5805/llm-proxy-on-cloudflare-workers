@@ -9,9 +9,9 @@ describe("GroqEndpoint", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(Secrets.Secrets.getAsync).mockImplementation((key) => {
-      if (key === "GROQ_API_KEY") return Promise.resolve(testApiKey);
-      return Promise.resolve("");
+    vi.mocked(Secrets.Secrets.get).mockImplementation((key) => {
+      if (key === "GROQ_API_KEY") return testApiKey;
+      return "";
     });
     vi.mocked(Secrets.Secrets.getAll).mockImplementation((key) => {
       if (key === "GROQ_API_KEY") return [testApiKey];

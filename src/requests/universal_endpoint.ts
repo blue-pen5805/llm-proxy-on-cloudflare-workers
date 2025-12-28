@@ -6,6 +6,7 @@ import {
 import { isCloudflareAIGatewayProvider } from "../ai_gateway/utils";
 import { Providers } from "../providers";
 import { fetch2 } from "../utils/helpers";
+import { Secrets } from "../utils/secrets";
 
 type UniversalEndpointRequest = {
   provider?: string;
@@ -38,8 +39,10 @@ export async function universalEndpoint(
           const providerClass = new provider();
           const endpoint =
             item.endpoint || providerClass.chatCompletionPath.replace("/", "");
+          const apiKeyName = providerClass.apiKeyName as keyof Env;
+          const apiKeyIndex = await Secrets.getNext(apiKeyName);
           const headers = {
-            ...(await providerClass.endpoint.headers()),
+            ...(await providerClass.endpoint.headers(apiKeyIndex)),
             ...item.headers,
           };
           const query = item.query;

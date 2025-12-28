@@ -17,8 +17,8 @@ export class GoogleAiStudioEndpoint extends EndpointBase {
     return "https://generativelanguage.googleapis.com";
   }
 
-  async headers() {
-    const apiKey = await Secrets.getAsync(this.apiKeyName);
+  async headers(apiKeyIndex?: number) {
+    const apiKey = Secrets.get(this.apiKeyName, apiKeyIndex);
     return {
       "Content-Type": "application/json",
       "x-goog-api-key": apiKey,
@@ -46,11 +46,10 @@ export class GoogleAiStudioOpenAICompatibleEndpoint extends EndpointBase {
     return "/v1beta/openai";
   }
 
-  async headers() {
-    const endpointHeaders = (await this.endpoint.headers()) as Record<
-      string,
-      string
-    >;
+  async headers(apiKeyIndex?: number) {
+    const endpointHeaders = (await this.endpoint.headers(
+      apiKeyIndex,
+    )) as Record<string, string>;
     const apiKey = endpointHeaders["x-goog-api-key"];
     const { "x-goog-api-key": _, ...newHeaders } = endpointHeaders;
 
