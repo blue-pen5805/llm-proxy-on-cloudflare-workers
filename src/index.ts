@@ -5,6 +5,7 @@ import { compat } from "./requests/compat";
 import { models } from "./requests/models";
 import { handleOptions } from "./requests/options";
 import { proxy } from "./requests/proxy";
+import { status } from "./requests/status";
 import { universalEndpoint } from "./requests/universal_endpoint";
 import {
   authenticate,
@@ -12,14 +13,13 @@ import {
 } from "./utils/authorization";
 import { Config } from "./utils/config";
 import { Environments } from "./utils/environments";
-import { fetch2, getPathname } from "./utils/helpers";
+import { getPathname } from "./utils/helpers";
 import { KeyRotationManager } from "./utils/key_rotation_manager";
-import { Secrets } from "./utils/secrets";
 
 export { KeyRotationManager };
 
 export default {
-  async fetch(request, _env, ctx): Promise<Response> {
+  async fetch(request, _env, _ctx): Promise<Response> {
     Environments.setEnv(_env);
     if (request.method === "OPTIONS") {
       return handleOptions(request);
@@ -59,14 +59,10 @@ export default {
       return new Response("Pong", { status: 200 });
     }
 
-    const anchorUrl = Secrets.get("REGION_ANCHOR_URL");
-    if (anchorUrl) {
-      ctx.waitUntil(
-        fetch2("https://" + anchorUrl, {
-          method: "GET",
-          cache: "no-store",
-        }).catch(() => {}),
-      );
+    // Status
+    // Example: /status
+    if (pathname === "/status") {
+      return await status();
     }
 
     // Setup AI Gateway
