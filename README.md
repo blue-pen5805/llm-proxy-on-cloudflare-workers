@@ -180,6 +180,10 @@ curl -X POST https://your-worker-url/google-ai-studio/v1beta/models/gemini-1.5-p
   }'
 ```
 
+## Documentation
+
+For detailed architectural and design information, please refer to the [Design Documentation](docs/design/overview.md).
+
 ## Known Issues and Limitations
 
 This project is under active development and has the following known issues and limitations:

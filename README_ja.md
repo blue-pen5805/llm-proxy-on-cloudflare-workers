@@ -180,6 +180,10 @@ curl -X POST https://your-worker-url/google-ai-studio/v1beta/models/gemini-1.5-p
   }'
 ```
 
+## ドキュメント
+
+プロジェクトのアーキテクチャや技術的な設計の詳細については、[設計書 (English)](docs/design/overview.md) を参照してください。
+
 ## 既知の問題と制限事項
 
 このプロジェクトは現在開発中で、以下の既知の問題と制限事項があります：
