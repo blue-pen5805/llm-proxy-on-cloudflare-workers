@@ -7,6 +7,7 @@ import { models } from "../requests/models";
 import { proxy } from "../requests/proxy";
 import { status } from "../requests/status";
 import { universalEndpoint } from "../requests/universal_endpoint";
+import { NotFoundError } from "../utils/error";
 
 export async function handleRouting(
   request: Request,
@@ -74,7 +75,7 @@ export async function handleRouting(
     return await universalEndpoint(request, aiGateway);
   }
 
-  return new Response("Not Found", { status: 404 });
+  throw new NotFoundError();
 }
 
 export const routerMiddleware: Middleware = async (context) => {

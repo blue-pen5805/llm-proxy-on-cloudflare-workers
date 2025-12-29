@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
 import { handleRouting } from "~/src/middlewares/router";
+import { NotFoundError } from "~/src/utils/error";
 
 // Mock the request handlers
 vi.mock("~/src/requests/chat_completions", () => ({
@@ -61,8 +62,9 @@ describe("handleRouting", () => {
     expect(await response.text()).toBe("universal");
   });
 
-  it("should return 404 for unknown routes", async () => {
-    const response = await handleRouting(request, "/unknown");
-    expect(response.status).toBe(404);
+  it("should throw NotFoundError for unknown routes", async () => {
+    await expect(handleRouting(request, "/unknown")).rejects.toThrow(
+      NotFoundError,
+    );
   });
 });

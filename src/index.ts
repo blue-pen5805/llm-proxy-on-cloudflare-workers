@@ -3,6 +3,7 @@ import { aiGatewayMiddleware } from "./middlewares/ai_gateway";
 import { authMiddleware } from "./middlewares/auth";
 import { corsMiddleware } from "./middlewares/cors";
 import { envMiddleware } from "./middlewares/env";
+import { errorMiddleware } from "./middlewares/error";
 import { routerMiddleware } from "./middlewares/router";
 // Cloudflare Durable Objects
 import { KeyRotationManager } from "./utils/key_rotation_manager";
@@ -10,6 +11,7 @@ import { KeyRotationManager } from "./utils/key_rotation_manager";
 export { KeyRotationManager };
 
 const middlewareChain = compose([
+  errorMiddleware,
   envMiddleware,
   corsMiddleware,
   authMiddleware,

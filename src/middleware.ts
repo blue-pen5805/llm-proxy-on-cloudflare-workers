@@ -1,4 +1,5 @@
 import { CloudflareAIGateway } from "./ai_gateway";
+import { NotFoundError } from "./utils/error";
 
 export interface MiddlewareContext {
   request: Request;
@@ -31,12 +32,12 @@ export function compose(
       index = i;
       const fn = middlewares[i];
       if (i === middlewares.length) {
-        return Promise.resolve(new Response("Not Found", { status: 404 }));
+        throw new NotFoundError();
       }
       try {
-        return Promise.resolve(fn(context, dispatch.bind(null, i + 1)));
+        return fn(context, dispatch.bind(null, i + 1));
       } catch (err) {
-        return Promise.reject(err);
+        throw err;
       }
     }
 
