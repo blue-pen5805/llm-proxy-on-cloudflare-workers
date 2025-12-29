@@ -1,10 +1,4 @@
-import { KeyRotationManager } from "./key_rotation_manager";
 import * as process from "node:process";
-
-export interface Env extends Cloudflare.Env {
-  KEY_ROTATION_MANAGER: DurableObjectNamespace<KeyRotationManager>;
-  ENABLE_GLOBAL_ROUND_ROBIN?: string;
-}
 
 /**
  * Utility class for accessing and manipulating environment variables
