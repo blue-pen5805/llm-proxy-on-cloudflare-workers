@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
-import { handleRouting } from "~/src/router";
+import { handleRouting } from "~/src/middlewares/router";
 
 // Mock the request handlers
 vi.mock("~/src/requests/chat_completions", () => ({
@@ -31,9 +31,9 @@ describe("handleRouting", () => {
   });
 
   it("should route to ping", async () => {
-    // wait, ping was in index.ts or router.ts?
-    // In my refactoring, I moved it to index.ts but then it was removed from index.ts in the second phase?
-    // Let me check index.ts and router.ts again.
+    const response = await handleRouting(request, "/ping");
+    expect(await response.text()).toBe("Pong");
+    expect(response.status).toBe(200);
   });
 
   it("should route to chat completions", async () => {
@@ -55,7 +55,7 @@ describe("handleRouting", () => {
   });
 
   it("should route to universal endpoint", async () => {
-    const aiGateway = new CloudflareAIGateway("acc", "gate");
+    const aiGateway = new CloudflareAIGateway("acc", "gate", "key");
     const postRequest = new Request("http://localhost/", { method: "POST" });
     const response = await handleRouting(postRequest, "/", aiGateway);
     expect(await response.text()).toBe("universal");

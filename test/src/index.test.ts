@@ -20,8 +20,6 @@ vi.mock("~/src/ai_gateway", () => {
   }));
 
   // Add static methods as properties
-  (MockCloudflareAIGateway as any).configure = vi.fn();
-  (MockCloudflareAIGateway as any).isAvailable = vi.fn(() => true);
   (MockCloudflareAIGateway as any).isSupportedProvider = vi.fn(() => true);
 
   return {

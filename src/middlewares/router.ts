@@ -1,19 +1,25 @@
-import { CloudflareAIGateway } from "./ai_gateway";
-import { Providers } from "./providers";
-import { chatCompletions } from "./requests/chat_completions";
-import { compat } from "./requests/compat";
-import { models } from "./requests/models";
-import { proxy } from "./requests/proxy";
-import { status } from "./requests/status";
-import { universalEndpoint } from "./requests/universal_endpoint";
+import { CloudflareAIGateway } from "../ai_gateway";
+import { Middleware } from "../middleware";
+import { Providers } from "../providers";
+import { chatCompletions } from "../requests/chat_completions";
+import { compat } from "../requests/compat";
+import { models } from "../requests/models";
+import { proxy } from "../requests/proxy";
+import { status } from "../requests/status";
+import { universalEndpoint } from "../requests/universal_endpoint";
 
 export async function handleRouting(
   request: Request,
   pathname: string,
   aiGateway?: CloudflareAIGateway,
 ): Promise<Response> {
-  // Example: /status
+  // Example: /ping
+  //          /status
   //          /g/{AI_GATEWAY_NAME}/status
+  if (pathname === "/ping") {
+    return new Response("Pong", { status: 200 });
+  }
+
   if (pathname === "/status") {
     return await status(aiGateway);
   }
@@ -70,3 +76,11 @@ export async function handleRouting(
 
   return new Response("Not Found", { status: 404 });
 }
+
+export const routerMiddleware: Middleware = async (context) => {
+  return await handleRouting(
+    context.request,
+    context.pathname,
+    context.aiGateway,
+  );
+};

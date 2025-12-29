@@ -1,59 +1,31 @@
-import { CloudflareAIGateway } from "./ai_gateway";
-import { handleRouting } from "./router";
-import { authenticate } from "./utils/authorization";
-import { Config } from "./utils/config";
-import { Environments } from "./utils/environments";
-import { cleanPathname, getPathname } from "./utils/helpers";
+import { compose, MiddlewareContext } from "./middleware";
+import { aiGatewayMiddleware } from "./middlewares/ai_gateway";
+import { authMiddleware } from "./middlewares/auth";
+import { corsMiddleware } from "./middlewares/cors";
+import { envMiddleware } from "./middlewares/env";
+import { routerMiddleware } from "./middlewares/router";
 // Cloudflare Durable Objects
 import { KeyRotationManager } from "./utils/key_rotation_manager";
 
 export { KeyRotationManager };
 
+const middlewareChain = compose([
+  envMiddleware,
+  corsMiddleware,
+  authMiddleware,
+  aiGatewayMiddleware,
+  routerMiddleware,
+]);
+
 export default {
-  async fetch(request, _env, _ctx): Promise<Response> {
-    Environments.setEnv(_env);
-    if (request.method === "OPTIONS") {
-      const { handleOptions } = await import("./requests/options");
-      return handleOptions(request);
-    }
+  async fetch(request, env, ctx): Promise<Response> {
+    const context: MiddlewareContext = {
+      request,
+      env,
+      ctx,
+      pathname: "", // Will be set by authMiddleware
+    };
 
-    let pathname = cleanPathname(getPathname(request));
-    if (!Config.isDevelopment() && authenticate(request) === false) {
-      return new Response("Unauthorized", { status: 401 });
-    }
-
-    // Ping
-    // Example: /ping
-    if (pathname === "/ping") {
-      return new Response("Pong", { status: 200 });
-    }
-
-    // AI Gateway Setup
-    let aiGateway: CloudflareAIGateway | undefined;
-    const { accountId, name: defaultGatewayId, token } = Config.aiGateway();
-
-    if (pathname.startsWith("/g/")) {
-      const parts = pathname.split("/");
-      const aiGatewayName = parts[2];
-      pathname = `/${parts.slice(3).join("/")}`;
-
-      CloudflareAIGateway.configure({
-        accountId,
-        gatewayId: aiGatewayName,
-        apiKey: token,
-      });
-    } else {
-      CloudflareAIGateway.configure({
-        accountId,
-        gatewayId: defaultGatewayId,
-        apiKey: token,
-      });
-    }
-
-    if (CloudflareAIGateway.isAvailable()) {
-      aiGateway = new CloudflareAIGateway();
-    }
-
-    return await handleRouting(request, pathname, aiGateway);
+    return await middlewareChain(context);
   },
 } satisfies ExportedHandler<Env>;
