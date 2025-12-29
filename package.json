@@ -6,8 +6,8 @@
   "type": "module",
   "scripts": {
     "deploy": "wrangler deploy",
-    "dev": "npm run secrets:dev-vars -- --env develop && wrangler dev --env develop",
-    "cf-typegen": "npm run secrets:dev-vars -- --env example && wrangler types --env example",
+    "dev": "ts-node scripts/with-secrets.ts --env develop -- wrangler dev --env develop",
+    "cf-typegen": "ts-node scripts/with-secrets.ts --env example -- wrangler types --env example",
     "cf:login": "wrangler login",
     "cf:logout": "wrangler logout",
     "test": "vitest run",
@@ -18,9 +18,7 @@
     "lint": "eslint 'src/**/*.ts'",
     "lint:fix": "eslint --fix 'src/**/*.ts'",
     "secrets:deploy": "ts-node scripts/deploy-secrets.ts",
-    "secrets:dev-vars": "ts-node scripts/generate-dev-vars.ts",
-    "secrets:create": "ts-node scripts/create-config.ts",
-    "download-llm-resources": "ts-node scripts/download-llm-resources.ts"
+    "secrets:create": "ts-node scripts/create-config.ts"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.11.1",
