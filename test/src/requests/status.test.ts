@@ -140,7 +140,7 @@ describe("status", () => {
     expect(body.providers.openai.keys[0].key).toBe("**ort"); // Math.min(10, 5-3) = 2 stars
     expect(body.providers.openai.keys[1].key).toBe("**********123"); // max 10 stars
   });
- 
+
   it("should skip connectivity check when modelsPath is missing", async () => {
     Providers.skip = vi.fn().mockImplementation(() => ({
       apiKeyName: "SKIP_API_KEY",
@@ -148,10 +148,10 @@ describe("status", () => {
       available: vi.fn().mockReturnValue(true),
     }));
     vi.mocked(Secrets.getAll).mockReturnValue(["any-key"]);
- 
+
     const response = await status();
     const body = await response.json();
- 
+
     expect(body.providers.skip.keys[0].status).toBe("unknown");
   });
 });
