@@ -33,7 +33,7 @@ export async function models(
           provider: providerName,
           method: requestInit.method,
           path: requestInfo,
-          headers: await providerClass.endpoint.headers(apiKeyIndex),
+          headers: await providerClass.headers(apiKeyIndex),
         }),
       );
       const models = await response.json();

@@ -1,13 +1,6 @@
-import { ProviderBase } from "../provider";
-import { DeepSeekEndpoint } from "./endpoint";
+import { OpenAICompatibleProvider } from "../provider";
 
-export class DeepSeek extends ProviderBase {
+export class DeepSeek extends OpenAICompatibleProvider {
   readonly apiKeyName: keyof Env = "DEEPSEEK_API_KEY";
-
-  endpoint: DeepSeekEndpoint;
-
-  constructor() {
-    super();
-    this.endpoint = new DeepSeekEndpoint(this.apiKeyName);
-  }
+  readonly baseUrlProp: string = "https://api.deepseek.com";
 }

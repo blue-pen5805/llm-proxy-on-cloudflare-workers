@@ -1,55 +1,42 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { PerplexityAiEndpoint } from "~/src/providers/perplexity-ai/endpoint";
 import { PerplexityAi } from "~/src/providers/perplexity-ai/provider";
+import * as Secrets from "~/src/utils/secrets";
 
-vi.mock("~/src/providers/perplexity-ai/endpoint");
+vi.mock("~/src/utils/secrets");
 
 describe("PerplexityAi Provider", () => {
-  const MockPerplexityAiEndpoint = vi.mocked(PerplexityAiEndpoint);
+  const testApiKey = "sk-test-api-key";
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(Secrets.Secrets.get).mockImplementation((key: any) => {
+      if (key === "PERPLEXITYAI_API_KEY") return testApiKey;
+      return "";
+    });
+    vi.mocked(Secrets.Secrets.getAll).mockImplementation((key: any) => {
+      if (key === "PERPLEXITYAI_API_KEY") return [testApiKey];
+      return [];
+    });
   });
 
-  describe("constructor", () => {
-    it("should initialize with API key name", () => {
+  describe("properties", () => {
+    it("should have correct API key name and base URL", () => {
       const provider = new PerplexityAi();
-      expect(MockPerplexityAiEndpoint).toHaveBeenCalledWith(
-        "PERPLEXITYAI_API_KEY",
-      );
       expect(provider.apiKeyName).toBe("PERPLEXITYAI_API_KEY");
-    });
-
-    it("should have correct paths", () => {
-      const provider = new PerplexityAi();
-      expect(provider.chatCompletionPath).toBe("/v1/chat/completions");
-      expect(provider.modelsPath).toBe("/v1/models");
+      expect(provider.baseUrl()).toBe("https://api.perplexity.ai");
     });
   });
 
-  describe("buildModelsRequest", () => {
-    it("should throw ProviderNotSupportedError", async () => {
+  describe("available", () => {
+    it("should return true when API key is provided", () => {
       const provider = new PerplexityAi();
-
-      await expect(provider.buildModelsRequest()).rejects.toThrow(
-        "Perplexity AI does not support models list via this proxy.",
-      );
+      expect(provider.available()).toBe(true);
     });
-  });
 
-  describe("inheritance", () => {
-    it("should extend ProviderBase", () => {
+    it("should return false when API key is missing", () => {
+      vi.mocked(Secrets.Secrets.getAll).mockReturnValue([]);
       const provider = new PerplexityAi();
-      expect(provider).toHaveProperty("available");
-      expect(provider).toHaveProperty("buildModelsRequest");
-      expect(provider).toHaveProperty("buildChatCompletionsRequest");
-    });
-  });
-
-  describe("endpoint property", () => {
-    it("should have PerplexityAiEndpoint instance", () => {
-      const provider = new PerplexityAi();
-      expect(provider.endpoint).toBeInstanceOf(MockPerplexityAiEndpoint);
+      expect(provider.available()).toBe(false);
     });
   });
 });

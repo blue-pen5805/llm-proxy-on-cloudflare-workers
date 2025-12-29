@@ -29,9 +29,7 @@ describe("models", () => {
     buildModelsRequest: vi.fn(),
     modelsToOpenAIFormat: vi.fn(),
     fetch: vi.fn(),
-    endpoint: {
-      headers: vi.fn(),
-    },
+    headers: vi.fn(),
   };
 
   const mockAIGateway = {
@@ -73,7 +71,7 @@ describe("models", () => {
         },
       ],
     });
-    mockProviderClass.endpoint.headers.mockReturnValue({
+    mockProviderClass.headers.mockReturnValue({
       "Content-Type": "application/json",
     });
     mockProviderClass.fetch.mockImplementation(() =>

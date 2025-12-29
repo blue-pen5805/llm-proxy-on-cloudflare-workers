@@ -1,17 +1,10 @@
 import { OpenAIModelsListResponseBody } from "../openai/types";
-import { ProviderBase } from "../provider";
-import { GroqEndpoint } from "./endpoint";
+import { OpenAICompatibleProvider } from "../provider";
 import { GroqModelsListResponseBody } from "./types";
 
-export class Groq extends ProviderBase {
+export class Groq extends OpenAICompatibleProvider {
   readonly apiKeyName: keyof Env = "GROQ_API_KEY";
-
-  endpoint: GroqEndpoint;
-
-  constructor() {
-    super();
-    this.endpoint = new GroqEndpoint(this.apiKeyName);
-  }
+  readonly baseUrlProp: string = "https://api.groq.com/openai/v1";
 
   // Convert model list to OpenAI format
   modelsToOpenAIFormat(

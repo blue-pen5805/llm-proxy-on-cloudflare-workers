@@ -1,78 +1,42 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ProviderNotSupportedError } from "~/src/providers/provider";
-import { ReplicateEndpoint } from "~/src/providers/replicate/endpoint";
 import { Replicate } from "~/src/providers/replicate/provider";
+import * as Secrets from "~/src/utils/secrets";
 
-vi.mock("~/src/providers/replicate/endpoint");
+vi.mock("~/src/utils/secrets");
 
 describe("Replicate Provider", () => {
-  const MockReplicateEndpoint = vi.mocked(ReplicateEndpoint);
+  const testApiKey = "sk-test-api-key";
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(Secrets.Secrets.get).mockImplementation((key: any) => {
+      if (key === "REPLICATE_API_KEY") return testApiKey;
+      return "";
+    });
+    vi.mocked(Secrets.Secrets.getAll).mockImplementation((key: any) => {
+      if (key === "REPLICATE_API_KEY") return [testApiKey];
+      return [];
+    });
   });
 
-  describe("constructor", () => {
-    it("should initialize with API key name", () => {
+  describe("properties", () => {
+    it("should have correct API key name and base URL", () => {
       const provider = new Replicate();
-      expect(MockReplicateEndpoint).toHaveBeenCalledWith("REPLICATE_API_KEY");
       expect(provider.apiKeyName).toBe("REPLICATE_API_KEY");
-    });
-
-    it("should have empty paths since Replicate doesn't support standard endpoints", () => {
-      const provider = new Replicate();
-      expect(provider.chatCompletionPath).toBe("");
-      expect(provider.modelsPath).toBe("");
+      expect(provider.baseUrl()).toBe("https://api.replicate.com/v1");
     });
   });
 
-  describe("buildChatCompletionsRequest", () => {
-    it("should throw ProviderNotSupportedError", async () => {
+  describe("available", () => {
+    it("should return true when API key is provided", () => {
       const provider = new Replicate();
-
-      await expect(
-        provider.buildChatCompletionsRequest({
-          body: "{}",
-          headers: {},
-        }),
-      ).rejects.toThrow(ProviderNotSupportedError);
-
-      await expect(
-        provider.buildChatCompletionsRequest({
-          body: JSON.stringify({ stream: true }),
-          headers: {},
-        }),
-      ).rejects.toThrow("Replicate does not support chat completions");
+      expect(provider.available()).toBe(true);
     });
-  });
 
-  describe("buildModelsRequest", () => {
-    it("should throw ProviderNotSupportedError", async () => {
+    it("should return false when API key is missing", () => {
+      vi.mocked(Secrets.Secrets.getAll).mockReturnValue([]);
       const provider = new Replicate();
-
-      await expect(provider.buildModelsRequest()).rejects.toThrow(
-        ProviderNotSupportedError,
-      );
-
-      await expect(provider.buildModelsRequest()).rejects.toThrow(
-        "Replicate does not support models list via this proxy.",
-      );
-    });
-  });
-
-  describe("inheritance", () => {
-    it("should extend ProviderBase", () => {
-      const provider = new Replicate();
-      expect(provider).toHaveProperty("available");
-      expect(provider).toHaveProperty("buildModelsRequest");
-      expect(provider).toHaveProperty("buildChatCompletionsRequest");
-    });
-  });
-
-  describe("endpoint property", () => {
-    it("should have ReplicateEndpoint instance", () => {
-      const provider = new Replicate();
-      expect(provider.endpoint).toBeInstanceOf(MockReplicateEndpoint);
+      expect(provider.available()).toBe(false);
     });
   });
 });

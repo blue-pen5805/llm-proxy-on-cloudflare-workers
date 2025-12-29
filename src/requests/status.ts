@@ -42,7 +42,7 @@ async function checkConnectivity(
           provider: providerName as any,
           method: "GET",
           path: instance.modelsPath,
-          headers: await instance.endpoint.headers(apiKeyIndex),
+          headers: await instance.headers(apiKeyIndex),
         },
       );
 

@@ -1,5 +1,4 @@
 export { Replicate } from "./provider";
-export { ReplicateEndpoint } from "./endpoint";
 
 /*
 # Replicate

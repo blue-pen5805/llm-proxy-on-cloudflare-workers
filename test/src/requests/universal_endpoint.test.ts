@@ -12,9 +12,7 @@ vi.mock("~/src/utils/secrets");
 describe("universalEndpoint", () => {
   const mockProviderClass = {
     chatCompletionPath: "/chat/completions",
-    endpoint: {
-      headers: vi.fn(),
-    },
+    headers: vi.fn(),
   };
 
   const mockAIGateway = {
@@ -25,7 +23,7 @@ describe("universalEndpoint", () => {
     vi.clearAllMocks();
     vi.mocked(helpers.fetch2).mockResolvedValue(new Response());
     Providers.openai = vi.fn().mockReturnValue(mockProviderClass);
-    mockProviderClass.endpoint.headers.mockReturnValue({
+    mockProviderClass.headers.mockReturnValue({
       "Content-Type": "application/json",
       Authorization: "Bearer sk-test",
     });
@@ -79,12 +77,10 @@ describe("universalEndpoint", () => {
   it("should handle multiple provider requests", async () => {
     const anthropicProviderClass = {
       chatCompletionPath: "/v1/messages",
-      endpoint: {
-        headers: vi.fn().mockReturnValue({
-          "Content-Type": "application/json",
-          Authorization: "Bearer sk-ant-test",
-        }),
-      },
+      headers: vi.fn().mockReturnValue({
+        "Content-Type": "application/json",
+        Authorization: "Bearer sk-ant-test",
+      }),
     };
 
     Providers.anthropic = vi.fn().mockReturnValue(anthropicProviderClass);
@@ -328,12 +324,10 @@ describe("universalEndpoint", () => {
   it("should handle provider without explicit chatCompletionPath", async () => {
     const customProviderClass = {
       chatCompletionPath: "/v1/chat/completions",
-      endpoint: {
-        headers: vi.fn().mockReturnValue({
-          "Content-Type": "application/json",
-          "X-API-Key": "test-key",
-        }),
-      },
+      headers: vi.fn().mockReturnValue({
+        "Content-Type": "application/json",
+        "X-API-Key": "test-key",
+      }),
     };
 
     // Use a supported provider instead of 'custom'

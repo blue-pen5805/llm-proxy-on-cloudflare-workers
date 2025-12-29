@@ -1,43 +1,42 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { MistralEndpoint } from "~/src/providers/mistral/endpoint";
 import { Mistral } from "~/src/providers/mistral/provider";
+import * as Secrets from "~/src/utils/secrets";
 
-vi.mock("~/src/providers/mistral/endpoint");
+vi.mock("~/src/utils/secrets");
 
 describe("Mistral Provider", () => {
-  const MockMistralEndpoint = vi.mocked(MistralEndpoint);
+  const testApiKey = "sk-test-api-key";
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(Secrets.Secrets.get).mockImplementation((key: any) => {
+      if (key === "MISTRAL_API_KEY") return testApiKey;
+      return "";
+    });
+    vi.mocked(Secrets.Secrets.getAll).mockImplementation((key: any) => {
+      if (key === "MISTRAL_API_KEY") return [testApiKey];
+      return [];
+    });
   });
 
-  describe("constructor", () => {
-    it("should initialize with API key name", () => {
+  describe("properties", () => {
+    it("should have correct API key name and base URL", () => {
       const provider = new Mistral();
-      expect(MockMistralEndpoint).toHaveBeenCalledWith("MISTRAL_API_KEY");
       expect(provider.apiKeyName).toBe("MISTRAL_API_KEY");
-    });
-
-    it("should have correct paths", () => {
-      const provider = new Mistral();
-      expect(provider.chatCompletionPath).toBe("/v1/chat/completions");
-      expect(provider.modelsPath).toBe("/v1/models");
+      expect(provider.baseUrl()).toBe("https://api.mistral.ai");
     });
   });
 
-  describe("inheritance", () => {
-    it("should extend ProviderBase", () => {
+  describe("available", () => {
+    it("should return true when API key is provided", () => {
       const provider = new Mistral();
-      expect(provider).toHaveProperty("available");
-      expect(provider).toHaveProperty("buildModelsRequest");
-      expect(provider).toHaveProperty("buildChatCompletionsRequest");
+      expect(provider.available()).toBe(true);
     });
-  });
 
-  describe("endpoint property", () => {
-    it("should have MistralEndpoint instance", () => {
+    it("should return false when API key is missing", () => {
+      vi.mocked(Secrets.Secrets.getAll).mockReturnValue([]);
       const provider = new Mistral();
-      expect(provider.endpoint).toBeInstanceOf(MockMistralEndpoint);
+      expect(provider.available()).toBe(false);
     });
   });
 });

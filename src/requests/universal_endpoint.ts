@@ -42,7 +42,7 @@ export async function universalEndpoint(
           const apiKeyName = providerClass.apiKeyName as keyof Env;
           const apiKeyIndex = await Secrets.getNext(apiKeyName);
           const headers = {
-            ...(await providerClass.endpoint.headers(apiKeyIndex)),
+            ...(await providerClass.headers(apiKeyIndex)),
             ...item.headers,
           };
           const query = item.query;

@@ -1,18 +1,11 @@
 import { ProviderBase, ProviderNotSupportedError } from "../provider";
-import { ReplicateEndpoint } from "./endpoint";
 
 export class Replicate extends ProviderBase {
   readonly chatCompletionPath: string = "";
   readonly modelsPath: string = "";
 
   readonly apiKeyName: keyof Env = "REPLICATE_API_KEY";
-
-  endpoint: ReplicateEndpoint;
-
-  constructor() {
-    super();
-    this.endpoint = new ReplicateEndpoint(this.apiKeyName);
-  }
+  readonly baseUrlProp: string = "https://api.replicate.com/v1";
 
   async buildChatCompletionsRequest({
     body, // eslint-disable-line @typescript-eslint/no-unused-vars

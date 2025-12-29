@@ -1,16 +1,9 @@
-import { ProviderBase } from "../provider";
-import { GrokEndpoint } from "./endpoint";
+import { OpenAICompatibleProvider } from "../provider";
 
-export class Grok extends ProviderBase {
+export class Grok extends OpenAICompatibleProvider {
   readonly chatCompletionPath: string = "/v1/chat/completions";
   readonly modelsPath: string = "/v1/models";
 
   readonly apiKeyName: keyof Env = "GROK_API_KEY";
-
-  endpoint: GrokEndpoint;
-
-  constructor() {
-    super();
-    this.endpoint = new GrokEndpoint(this.apiKeyName);
-  }
+  readonly baseUrlProp: string = "https://api.x.ai";
 }

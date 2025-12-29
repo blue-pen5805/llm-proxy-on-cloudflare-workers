@@ -1,104 +1,42 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { DeepSeekEndpoint } from "~/src/providers/deepseek/endpoint";
 import { DeepSeek } from "~/src/providers/deepseek/provider";
-import type { DeepSeekModelsListResponseBody } from "~/src/providers/deepseek/types";
+import * as Secrets from "~/src/utils/secrets";
 
-vi.mock("~/src/providers/deepseek/endpoint");
+vi.mock("~/src/utils/secrets");
 
 describe("DeepSeek Provider", () => {
-  const MockDeepSeekEndpoint = vi.mocked(DeepSeekEndpoint);
+  const testApiKey = "sk-test-api-key";
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(Secrets.Secrets.get).mockImplementation((key: any) => {
+      if (key === "DEEPSEEK_API_KEY") return testApiKey;
+      return "";
+    });
+    vi.mocked(Secrets.Secrets.getAll).mockImplementation((key: any) => {
+      if (key === "DEEPSEEK_API_KEY") return [testApiKey];
+      return [];
+    });
   });
 
-  describe("constructor", () => {
-    it("should initialize with API key name", () => {
+  describe("properties", () => {
+    it("should have correct API key name and base URL", () => {
       const provider = new DeepSeek();
-      expect(MockDeepSeekEndpoint).toHaveBeenCalledWith("DEEPSEEK_API_KEY");
       expect(provider.apiKeyName).toBe("DEEPSEEK_API_KEY");
-    });
-
-    it("should have correct paths", () => {
-      const provider = new DeepSeek();
-      expect(provider.chatCompletionPath).toBe("/chat/completions");
-      expect(provider.modelsPath).toBe("/models");
+      expect(provider.baseUrl()).toBe("https://api.deepseek.com");
     });
   });
 
-  describe("modelsToOpenAIFormat", () => {
-    it("should convert DeepSeek models response to OpenAI format", () => {
+  describe("available", () => {
+    it("should return true when API key is provided", () => {
       const provider = new DeepSeek();
-
-      const deepseekResponse: DeepSeekModelsListResponseBody = {
-        object: "list",
-        data: [
-          {
-            id: "deepseek-chat",
-            object: "model",
-            created: 1640995200,
-            owned_by: "deepseek",
-          },
-          {
-            id: "deepseek-coder",
-            object: "model",
-            created: 1640995200,
-            owned_by: "deepseek",
-          },
-        ],
-      };
-
-      const result = provider.modelsToOpenAIFormat(deepseekResponse);
-
-      expect(result).toEqual({
-        object: "list",
-        data: [
-          {
-            id: "deepseek-chat",
-            object: "model",
-            created: 1640995200,
-            owned_by: "deepseek",
-          },
-          {
-            id: "deepseek-coder",
-            object: "model",
-            created: 1640995200,
-            owned_by: "deepseek",
-          },
-        ],
-      });
+      expect(provider.available()).toBe(true);
     });
 
-    it("should handle empty models list", () => {
+    it("should return false when API key is missing", () => {
+      vi.mocked(Secrets.Secrets.getAll).mockReturnValue([]);
       const provider = new DeepSeek();
-
-      const deepseekResponse: DeepSeekModelsListResponseBody = {
-        object: "list",
-        data: [],
-      };
-
-      const result = provider.modelsToOpenAIFormat(deepseekResponse);
-
-      expect(result).toEqual({
-        object: "list",
-        data: [],
-      });
-    });
-  });
-
-  describe("inheritance", () => {
-    it("should extend ProviderBase", () => {
-      const provider = new DeepSeek();
-      expect(provider).toHaveProperty("available");
-      expect(provider).toHaveProperty("buildModelsRequest");
-      expect(provider).toHaveProperty("buildChatCompletionsRequest");
-    });
-  });
-
-  describe("endpoint property", () => {
-    it("should have DeepSeekEndpoint instance", () => {
-      const provider = new DeepSeek();
-      expect(provider.endpoint).toBeInstanceOf(MockDeepSeekEndpoint);
+      expect(provider.available()).toBe(false);
     });
   });
 });

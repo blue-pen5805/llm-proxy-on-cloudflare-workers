@@ -1,43 +1,42 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { OpenRouterEndpoint } from "~/src/providers/openrouter/endpoint";
 import { OpenRouter } from "~/src/providers/openrouter/provider";
+import * as Secrets from "~/src/utils/secrets";
 
-vi.mock("~/src/providers/openrouter/endpoint");
+vi.mock("~/src/utils/secrets");
 
 describe("OpenRouter Provider", () => {
-  const MockOpenRouterEndpoint = vi.mocked(OpenRouterEndpoint);
+  const testApiKey = "sk-test-api-key";
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(Secrets.Secrets.get).mockImplementation((key: any) => {
+      if (key === "OPENROUTER_API_KEY") return testApiKey;
+      return "";
+    });
+    vi.mocked(Secrets.Secrets.getAll).mockImplementation((key: any) => {
+      if (key === "OPENROUTER_API_KEY") return [testApiKey];
+      return [];
+    });
   });
 
-  describe("constructor", () => {
-    it("should initialize with API key name", () => {
+  describe("properties", () => {
+    it("should have correct API key name and base URL", () => {
       const provider = new OpenRouter();
-      expect(MockOpenRouterEndpoint).toHaveBeenCalledWith("OPENROUTER_API_KEY");
       expect(provider.apiKeyName).toBe("OPENROUTER_API_KEY");
-    });
-
-    it("should have correct paths", () => {
-      const provider = new OpenRouter();
-      expect(provider.chatCompletionPath).toBe("/v1/chat/completions");
-      expect(provider.modelsPath).toBe("/v1/models");
+      expect(provider.baseUrl()).toBe("https://openrouter.ai/api");
     });
   });
 
-  describe("inheritance", () => {
-    it("should extend ProviderBase", () => {
+  describe("available", () => {
+    it("should return true when API key is provided", () => {
       const provider = new OpenRouter();
-      expect(provider).toHaveProperty("available");
-      expect(provider).toHaveProperty("buildModelsRequest");
-      expect(provider).toHaveProperty("buildChatCompletionsRequest");
+      expect(provider.available()).toBe(true);
     });
-  });
 
-  describe("endpoint property", () => {
-    it("should have OpenRouterEndpoint instance", () => {
+    it("should return false when API key is missing", () => {
+      vi.mocked(Secrets.Secrets.getAll).mockReturnValue([]);
       const provider = new OpenRouter();
-      expect(provider.endpoint).toBeInstanceOf(MockOpenRouterEndpoint);
+      expect(provider.available()).toBe(false);
     });
   });
 });

@@ -1,6 +1,6 @@
+import { Secrets } from "../../utils/secrets";
 import { OpenAIModelsListResponseBody } from "../openai/types";
 import { ProviderBase } from "../provider";
-import { WorkersAiEndpoint } from "./endpoint";
 import { WorkersAiModelsListResponseBody } from "./types";
 
 export class WorkersAi extends ProviderBase {
@@ -10,11 +10,24 @@ export class WorkersAi extends ProviderBase {
   readonly apiKeyName: keyof Env = "CLOUDFLARE_API_KEY";
   readonly accountIdName: keyof Env = "CLOUDFLARE_ACCOUNT_ID";
 
-  endpoint: WorkersAiEndpoint;
+  available() {
+    return (
+      Secrets.getAll(this.apiKeyName).length > 0 &&
+      Secrets.getAll(this.accountIdName).length > 0
+    );
+  }
 
-  constructor() {
-    super();
-    this.endpoint = new WorkersAiEndpoint(this.apiKeyName, this.accountIdName);
+  baseUrl() {
+    const accountId = Secrets.get(this.accountIdName);
+    return `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai`;
+  }
+
+  async headers(apiKeyIndex?: number): Promise<HeadersInit> {
+    const apiKey = Secrets.get(this.apiKeyName, apiKeyIndex);
+    return {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    };
   }
 
   // Convert model list to OpenAI format

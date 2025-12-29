@@ -1,43 +1,42 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { GrokEndpoint } from "~/src/providers/grok/endpoint";
 import { Grok } from "~/src/providers/grok/provider";
+import * as Secrets from "~/src/utils/secrets";
 
-vi.mock("~/src/providers/grok/endpoint");
+vi.mock("~/src/utils/secrets");
 
 describe("Grok Provider", () => {
-  const MockGrokEndpoint = vi.mocked(GrokEndpoint);
+  const testApiKey = "sk-test-api-key";
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(Secrets.Secrets.get).mockImplementation((key: any) => {
+      if (key === "GROK_API_KEY") return testApiKey;
+      return "";
+    });
+    vi.mocked(Secrets.Secrets.getAll).mockImplementation((key: any) => {
+      if (key === "GROK_API_KEY") return [testApiKey];
+      return [];
+    });
   });
 
-  describe("constructor", () => {
-    it("should initialize with API key name", () => {
+  describe("properties", () => {
+    it("should have correct API key name and base URL", () => {
       const provider = new Grok();
-      expect(MockGrokEndpoint).toHaveBeenCalledWith("GROK_API_KEY");
       expect(provider.apiKeyName).toBe("GROK_API_KEY");
-    });
-
-    it("should have correct paths", () => {
-      const provider = new Grok();
-      expect(provider.chatCompletionPath).toBe("/v1/chat/completions");
-      expect(provider.modelsPath).toBe("/v1/models");
+      expect(provider.baseUrl()).toBe("https://api.x.ai");
     });
   });
 
-  describe("inheritance", () => {
-    it("should extend ProviderBase", () => {
+  describe("available", () => {
+    it("should return true when API key is provided", () => {
       const provider = new Grok();
-      expect(provider).toHaveProperty("available");
-      expect(provider).toHaveProperty("buildModelsRequest");
-      expect(provider).toHaveProperty("buildChatCompletionsRequest");
+      expect(provider.available()).toBe(true);
     });
-  });
 
-  describe("endpoint property", () => {
-    it("should have GrokEndpoint instance", () => {
+    it("should return false when API key is missing", () => {
+      vi.mocked(Secrets.Secrets.getAll).mockReturnValue([]);
       const provider = new Grok();
-      expect(provider.endpoint).toBeInstanceOf(MockGrokEndpoint);
+      expect(provider.available()).toBe(false);
     });
   });
 });

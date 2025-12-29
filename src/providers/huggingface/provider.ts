@@ -1,18 +1,11 @@
 import { ProviderBase, ProviderNotSupportedError } from "../provider";
-import { HuggingFaceEndpoint } from "./endpoint";
 
 export class HuggingFace extends ProviderBase {
   readonly chatCompletionPath: string = "";
   readonly modelsPath: string = "";
 
   readonly apiKeyName: keyof Env = "HUGGINGFACE_API_KEY";
-
-  endpoint: HuggingFaceEndpoint;
-
-  constructor() {
-    super();
-    this.endpoint = new HuggingFaceEndpoint(this.apiKeyName);
-  }
+  readonly baseUrlProp: string = "https://api-inference.huggingface.co/models";
 
   async buildChatCompletionsRequest({
     body, // eslint-disable-line @typescript-eslint/no-unused-vars
