@@ -1,5 +1,5 @@
 import { Config } from "./config";
-import { Environments, Env } from "./environments";
+import { Environments } from "./environments";
 import { shuffleArray } from "./helpers";
 
 /**

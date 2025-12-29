@@ -12,6 +12,7 @@
     "cf:logout": "wrangler logout",
     "test": "vitest run",
     "test-watch": "vitest watch",
+    "tsc": "tsc --noEmit",
     "prettier": "prettier --write .",
     "prettier-ci": "prettier --check .",
     "lint": "eslint 'src/**/*.ts'",

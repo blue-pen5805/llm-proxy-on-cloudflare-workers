@@ -4,22 +4,28 @@ description: Run prettier, lint, and tests to verify the changes
 
 // turbo-all
 
-1. Run prettier to fix formatting
+1. Run tsc to check for type errors
+
+```bash
+npm run tsc
+```
+
+2. Run prettier to fix formatting
 
 ```bash
 npm run prettier
 ```
 
-2. Run lint to check for errors
+3. Run lint to check for errors
 
 ```bash
 npm run lint
 ```
 
-3. Run tests to ensure everything works
+4. Run tests to ensure everything works
 
 ```bash
 npm run test
 ```
 
-4. Verify that all steps above succeeded before proceeding.
+5. Verify that all steps above succeeded before proceeding.
