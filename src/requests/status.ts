@@ -1,4 +1,6 @@
+import { CloudflareAIGateway } from "../ai_gateway";
 import { Providers } from "../providers";
+import { ProviderBase, ProviderNotSupportedError } from "../providers/provider";
 import { Config } from "../utils/config";
 import { Secrets } from "../utils/secrets";
 
@@ -16,21 +18,40 @@ function maskApiKey(key: string): string {
 
 /**
  * Checks connectivity for a specific API key of a provider.
+ * @param instance The provider instance.
  * @param providerName The name of the provider.
- * @param apiKeyName The environment variable name for the API key.
- * @param apiKey The API key to check.
+ * @param apiKeyIndex The index of the API key.
+ * @param aiGateway The AI Gateway instance.
  * @returns Connectivity status.
  */
 async function checkConnectivity(
+  instance: ProviderBase,
   providerName: string,
-  apiKeyName: keyof Env,
   apiKeyIndex: number,
+  aiGateway?: CloudflareAIGateway,
 ): Promise<"valid" | "invalid" | "unknown"> {
-  const providerClass = Providers[providerName];
-  if (!providerClass) return "unknown";
-
   try {
-    const instance = new providerClass();
+    if (aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)) {
+      const [requestInfo, requestInit] = aiGateway.buildProviderEndpointRequest(
+        {
+          provider: providerName as any,
+          method: "GET",
+          path: instance.modelsPath,
+          headers: await instance.endpoint.headers(apiKeyIndex),
+        },
+      );
+
+      const response = await fetch(requestInfo, requestInit);
+
+      if (response.ok) {
+        return "valid";
+      } else if (response.status === 401 || response.status === 403) {
+        return "invalid";
+      } else {
+        return "unknown";
+      }
+    }
+
     const [requestInfo, requestInit] =
       await instance.buildModelsRequest(apiKeyIndex);
 
@@ -48,12 +69,15 @@ async function checkConnectivity(
       return "unknown";
     }
   } catch (error) {
+    if (error instanceof ProviderNotSupportedError) {
+      return "unknown";
+    }
     console.error(`Error checking connectivity for ${providerName}:`, error);
     return "invalid";
   }
 }
 
-export async function status() {
+export async function status(aiGateway?: CloudflareAIGateway) {
   const config = {
     DEV: Config.isDevelopment(),
     DEFAULT_MODEL: Config.defaultModel() || null,
@@ -63,9 +87,8 @@ export async function status() {
 
   const providersStatus: Record<string, any> = {};
 
-  for (const providerName of Object.keys(Providers)) {
-    const providerClass = Providers[providerName];
-    const instance = new providerClass();
+  for (const [providerName, ProviderClass] of Object.entries(Providers)) {
+    const instance = new ProviderClass();
     const apiKeyName = instance.apiKeyName;
 
     if (!apiKeyName) {
@@ -78,9 +101,14 @@ export async function status() {
 
     const allKeys = Secrets.getAll(apiKeyName);
     const keyStatuses = await Promise.all(
-      allKeys.map(async (key, apiKeyIndex) => ({
-        key: maskApiKey(key),
-        status: await checkConnectivity(providerName, apiKeyName, apiKeyIndex),
+      allKeys.map(async (_key, apiKeyIndex) => ({
+        key: maskApiKey(_key),
+        status: await checkConnectivity(
+          instance,
+          providerName,
+          apiKeyIndex,
+          aiGateway,
+        ),
       })),
     );
 

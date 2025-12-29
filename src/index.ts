@@ -60,12 +60,6 @@ export default {
       return new Response("Pong", { status: 200 });
     }
 
-    // Status
-    // Example: /status
-    if (pathname === "/status") {
-      return await status();
-    }
-
     // Setup AI Gateway
     const { accountId, name, token } = Config.aiGateway();
     CloudflareAIGateway.configure({
@@ -89,6 +83,13 @@ export default {
     const aiGateway = CloudflareAIGateway.isAvailable()
       ? new CloudflareAIGateway()
       : undefined;
+
+    // Status
+    // Example: /status
+    //          /g/{AI_GATEWAY_NAME}/status
+    if (pathname === "/status") {
+      return await status(aiGateway);
+    }
 
     if (aiGateway && /^\/compat(?:$|\/|\?)/.test(pathname)) {
       return await compat(request, pathname, aiGateway);
