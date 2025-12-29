@@ -13,6 +13,7 @@ vi.mock("~/src/utils/secrets");
 describe("status", () => {
   const mockProviderClass = {
     apiKeyName: "OPENAI_API_KEY",
+    modelsPath: "/models",
     available: vi.fn(),
     buildModelsRequest: vi.fn(),
     fetch: vi.fn(),
@@ -60,7 +61,7 @@ describe("status", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe("application/json");
 
-    const body = await response.json();
+    const body = (await response.json()) as any;
     expect(body.config).toEqual({
       DEV: false,
       DEFAULT_MODEL: "gpt-4",
@@ -92,7 +93,7 @@ describe("status", () => {
     );
 
     const response = await status();
-    const body = await response.json();
+    const body = (await response.json()) as any;
 
     expect(body.providers.openai.keys[0].status).toBe("invalid");
   });
@@ -104,7 +105,7 @@ describe("status", () => {
     );
 
     const response = await status();
-    const body = await response.json();
+    const body = (await response.json()) as any;
 
     expect(body.providers.openai.keys[0].status).toBe("unknown");
   });
@@ -116,7 +117,7 @@ describe("status", () => {
     }));
 
     const response = await status();
-    const body = await response.json();
+    const body = (await response.json()) as any;
 
     expect(body.providers.nokeys).toEqual({
       available: true,
@@ -134,9 +135,23 @@ describe("status", () => {
     );
 
     const response = await status();
-    const body = await response.json();
+    const body = (await response.json()) as any;
 
     expect(body.providers.openai.keys[0].key).toBe("**ort"); // Math.min(10, 5-3) = 2 stars
     expect(body.providers.openai.keys[1].key).toBe("**********123"); // max 10 stars
+  });
+ 
+  it("should skip connectivity check when modelsPath is missing", async () => {
+    Providers.skip = vi.fn().mockImplementation(() => ({
+      apiKeyName: "SKIP_API_KEY",
+      modelsPath: "",
+      available: vi.fn().mockReturnValue(true),
+    }));
+    vi.mocked(Secrets.getAll).mockReturnValue(["any-key"]);
+ 
+    const response = await status();
+    const body = await response.json();
+ 
+    expect(body.providers.skip.keys[0].status).toBe("unknown");
   });
 });

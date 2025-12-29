@@ -2,6 +2,7 @@ import { CloudflareAIGateway } from "../ai_gateway";
 import { Providers } from "../providers";
 import { ProviderBase, ProviderNotSupportedError } from "../providers/provider";
 import { Config } from "../utils/config";
+import { fetch2 } from "../utils/helpers";
 import { Secrets } from "../utils/secrets";
 
 /**
@@ -30,6 +31,10 @@ async function checkConnectivity(
   apiKeyIndex: number,
   aiGateway?: CloudflareAIGateway,
 ): Promise<"valid" | "invalid" | "unknown"> {
+  if (!instance.modelsPath) {
+    return "unknown";
+  }
+
   try {
     if (aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)) {
       const [requestInfo, requestInit] = aiGateway.buildProviderEndpointRequest(
@@ -41,7 +46,7 @@ async function checkConnectivity(
         },
       );
 
-      const response = await fetch(requestInfo, requestInit);
+      const response = await fetch2(requestInfo, requestInit);
 
       if (response.ok) {
         return "valid";
