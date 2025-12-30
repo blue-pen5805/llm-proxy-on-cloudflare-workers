@@ -3,7 +3,6 @@ import { Providers } from "../providers";
 import { OpenAIModelsListResponseBody } from "../providers/openai/types";
 import { ProviderNotSupportedError } from "../providers/provider";
 import { fetch2 } from "../utils/helpers";
-import { Secrets } from "../utils/secrets";
 
 export async function models(
   aiGateway: CloudflareAIGateway | undefined = undefined,
@@ -21,8 +20,9 @@ export async function models(
     }
 
     // Generate models request
-    const apiKeyName = providerClass.apiKeyName as keyof Env;
-    const apiKeyIndex = await Secrets.getNext(apiKeyName);
+
+    // Always use the first API key for models endpoint
+    const apiKeyIndex = 0;
     const [requestInfo, requestInit] =
       await providerClass.buildModelsRequest(apiKeyIndex);
 

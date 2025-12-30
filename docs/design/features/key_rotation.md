@@ -27,6 +27,10 @@ Resilience is prioritized over strictness.
 - If `GLOBAL_ROUND_ROBIN` is disabled or the Durable Object binding is missing, the system automatically falls back to **Random Selection**.
 - This ensures that the proxy remains functional even if the stateful coordination layer encounters issues or is not configured for the environment.
 
+### Exceptions
+
+- **Model Listing**: The `/models` endpoint explicitly bypasses rotation and always uses the first key (index 0) to ensure deterministic responses when aggregating model lists.
+
 ## Logic Flow
 
 1.  Check for multiple keys in the `{PROVIDER}_API_KEY` environment variable.

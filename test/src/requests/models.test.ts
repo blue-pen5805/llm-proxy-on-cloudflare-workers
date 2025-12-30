@@ -103,6 +103,7 @@ describe("models", () => {
         },
       ],
     });
+    expect(Secrets.getNext).not.toHaveBeenCalled();
   });
 
   it("should skip unavailable providers", async () => {
