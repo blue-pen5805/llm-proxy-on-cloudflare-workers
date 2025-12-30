@@ -2,27 +2,42 @@
 // Docs: https://developers.cloudflare.com/workers/wrangler/configuration/
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-
   "name": "llm-proxy",
   "main": "src/index.ts",
-
   // Compatibility dates
   // Docs: https://developers.cloudflare.com/workers/configuration/compatibility-dates/
-  "compatibility_date": "2025-05-05",
-
+  "compatibility_date": "2025-11-17",
   // Compatibility flags
   // Docs: https://developers.cloudflare.com/workers/configuration/compatibility-flags/
   "compatibility_flags": ["nodejs_compat"],
-
   // Workers Logs
   // Docs: https://developers.cloudflare.com/workers/observability/logs/workers-logs/
   "observability": {
-    "enabled": true
+    "logs": {
+      "enabled": true
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.05
+    }
   },
-
   // Smart Placement
   // Docs: https://developers.cloudflare.com/workers/configuration/smart-placement/
   "placement": {
     "mode": "off"
-  }
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "KEY_ROTATION_MANAGER",
+        "class_name": "KeyRotationManager"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1.0",
+      "new_sqlite_classes": ["KeyRotationManager"]
+    }
+  ]
 }

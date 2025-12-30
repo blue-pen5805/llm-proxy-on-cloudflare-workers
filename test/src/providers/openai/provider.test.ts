@@ -1,61 +1,42 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { OpenAIEndpoint } from "~/src/providers/openai/endpoint";
 import { OpenAI } from "~/src/providers/openai/provider";
 import * as Secrets from "~/src/utils/secrets";
 
 vi.mock("~/src/utils/secrets");
-vi.mock("~/src/providers/openai/endpoint");
 
 describe("OpenAI Provider", () => {
-  const mockSecretsGet = vi.fn();
-  const MockOpenAIEndpoint = vi.mocked(OpenAIEndpoint);
+  const testApiKey = "sk-test-api-key";
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(Secrets.Secrets.get).mockImplementation(mockSecretsGet);
+    vi.mocked(Secrets.Secrets.get).mockImplementation((key: any) => {
+      if (key === "OPENAI_API_KEY") return testApiKey;
+      return "";
+    });
+    vi.mocked(Secrets.Secrets.getAll).mockImplementation((key: any) => {
+      if (key === "OPENAI_API_KEY") return [testApiKey];
+      return [];
+    });
   });
 
-  describe("constructor", () => {
-    it("should initialize with API key from secrets", () => {
-      const testApiKey = "sk-test-api-key";
-      mockSecretsGet.mockReturnValue(testApiKey);
-
+  describe("properties", () => {
+    it("should have correct API key name and base URL", () => {
       const provider = new OpenAI();
-
-      expect(Secrets.Secrets.get).toHaveBeenCalledWith("OPENAI_API_KEY");
-      expect(MockOpenAIEndpoint).toHaveBeenCalledWith(testApiKey);
       expect(provider.apiKeyName).toBe("OPENAI_API_KEY");
-    });
-
-    it("should initialize with undefined API key when not found", () => {
-      mockSecretsGet.mockReturnValue(undefined);
-
-      new OpenAI();
-
-      expect(Secrets.Secrets.get).toHaveBeenCalledWith("OPENAI_API_KEY");
-      expect(MockOpenAIEndpoint).toHaveBeenCalledWith(undefined);
+      expect(provider.baseUrl()).toBe("https://api.openai.com/v1");
     });
   });
 
-  describe("inheritance", () => {
-    it("should extend ProviderBase", () => {
-      mockSecretsGet.mockReturnValue("test-key");
+  describe("available", () => {
+    it("should return true when API key is provided", () => {
       const provider = new OpenAI();
-
-      expect(provider).toHaveProperty("chatCompletionPath");
-      expect(provider).toHaveProperty("modelsPath");
-      expect(provider).toHaveProperty("available");
-      expect(provider).toHaveProperty("buildModelsRequest");
-      expect(provider).toHaveProperty("buildChatCompletionsRequest");
+      expect(provider.available()).toBe(true);
     });
-  });
 
-  describe("endpoint property", () => {
-    it("should have OpenAIEndpoint instance", () => {
-      mockSecretsGet.mockReturnValue("test-key");
+    it("should return false when API key is missing", () => {
+      vi.mocked(Secrets.Secrets.getAll).mockReturnValue([]);
       const provider = new OpenAI();
-
-      expect(provider.endpoint).toBeInstanceOf(MockOpenAIEndpoint);
+      expect(provider.available()).toBe(false);
     });
   });
 });

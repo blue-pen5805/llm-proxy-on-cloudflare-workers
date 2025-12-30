@@ -14,32 +14,6 @@ import {
 export class CloudflareAIGateway {
   static readonly origin = "https://gateway.ai.cloudflare.com/v1";
 
-  static globalAccountId: string | undefined = undefined;
-  static globalGatewayId: string | undefined = undefined;
-  static globalApiKey: string | undefined = undefined;
-
-  static configure(values: {
-    accountId?: string | undefined;
-    gatewayId?: string | undefined;
-    apiKey?: string | undefined;
-  }): void {
-    if (values.hasOwnProperty("accountId")) {
-      CloudflareAIGateway.globalAccountId = values.accountId;
-    }
-    if (values.hasOwnProperty("gatewayId")) {
-      CloudflareAIGateway.globalGatewayId = values.gatewayId;
-    }
-    if (values.hasOwnProperty("apiKey")) {
-      CloudflareAIGateway.globalApiKey = values.apiKey;
-    }
-  }
-
-  static isAvailable(): boolean {
-    return !!(
-      CloudflareAIGateway.globalAccountId && CloudflareAIGateway.globalGatewayId
-    );
-  }
-
   static isSupportedProvider<T extends boolean = false>(
     providerName: string,
     hasOpenAiCompatibility?: T,
@@ -54,17 +28,13 @@ export class CloudflareAIGateway {
   }
 
   constructor(
-    public accountId: string | undefined = undefined,
-    public gatewayId: string | undefined = undefined,
+    public accountId: string,
+    public gatewayId: string,
     public apiKey: string | undefined = undefined,
   ) {
-    this.accountId = accountId || CloudflareAIGateway.globalAccountId;
-    this.gatewayId = gatewayId || CloudflareAIGateway.globalGatewayId;
-    this.apiKey = apiKey || CloudflareAIGateway.globalApiKey;
-
     if (!this.accountId || !this.gatewayId) {
       throw new Error(
-        "Cloudflare AI Gateway is not configured. Please set accountId, gatewayId.",
+        "Cloudflare AI Gateway configuration is incomplete. accountId and gatewayId are required.",
       );
     }
   }

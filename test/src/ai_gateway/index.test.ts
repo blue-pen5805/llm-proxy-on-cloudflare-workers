@@ -11,73 +11,6 @@ vi.mock("~/src/utils/secrets", () => ({
 describe("CloudflareAIGateway", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset static properties
-    CloudflareAIGateway.configure({
-      accountId: undefined,
-      gatewayId: undefined,
-      apiKey: undefined,
-    });
-  });
-
-  describe("configure", () => {
-    it("should configure global settings", () => {
-      CloudflareAIGateway.configure({
-        accountId: "test-account",
-        gatewayId: "test-gateway",
-        apiKey: "test-key",
-      });
-
-      expect(CloudflareAIGateway.globalAccountId).toBe("test-account");
-      expect(CloudflareAIGateway.globalGatewayId).toBe("test-gateway");
-      expect(CloudflareAIGateway.globalApiKey).toBe("test-key");
-    });
-
-    it("should configure only provided values", () => {
-      CloudflareAIGateway.configure({
-        accountId: "test-account",
-        gatewayId: "test-gateway",
-        apiKey: "test-key",
-      });
-
-      CloudflareAIGateway.configure({
-        gatewayId: "new-gateway",
-      });
-
-      expect(CloudflareAIGateway.globalAccountId).toBe("test-account");
-      expect(CloudflareAIGateway.globalGatewayId).toBe("new-gateway");
-      expect(CloudflareAIGateway.globalApiKey).toBe("test-key");
-    });
-  });
-
-  describe("isAvailable", () => {
-    it("should return true when both accountId and gatewayId are configured", () => {
-      CloudflareAIGateway.configure({
-        accountId: "test-account",
-        gatewayId: "test-gateway",
-      });
-
-      expect(CloudflareAIGateway.isAvailable()).toBe(true);
-    });
-
-    it("should return false when accountId is missing", () => {
-      CloudflareAIGateway.configure({
-        gatewayId: "test-gateway",
-      });
-
-      expect(CloudflareAIGateway.isAvailable()).toBe(false);
-    });
-
-    it("should return false when gatewayId is missing", () => {
-      CloudflareAIGateway.configure({
-        accountId: "test-account",
-      });
-
-      expect(CloudflareAIGateway.isAvailable()).toBe(false);
-    });
-
-    it("should return false when both are missing", () => {
-      expect(CloudflareAIGateway.isAvailable()).toBe(false);
-    });
   });
 
   describe("isSupportedProvider", () => {
@@ -124,41 +57,15 @@ describe("CloudflareAIGateway", () => {
       expect(gateway.apiKey).toBe("key");
     });
 
-    it("should use global values when not provided", () => {
-      CloudflareAIGateway.configure({
-        accountId: "global-account",
-        gatewayId: "global-gateway",
-        apiKey: "global-key",
-      });
-
-      const gateway = new CloudflareAIGateway();
-
-      expect(gateway.accountId).toBe("global-account");
-      expect(gateway.gatewayId).toBe("global-gateway");
-      expect(gateway.apiKey).toBe("global-key");
-    });
-
-    it("should prefer instance values over global values", () => {
-      CloudflareAIGateway.configure({
-        accountId: "global-account",
-        gatewayId: "global-gateway",
-        apiKey: "global-key",
-      });
-
-      const gateway = new CloudflareAIGateway(
-        "instance-account",
-        "instance-gateway",
-        "instance-key",
+    it("should throw error when accountId is missing", () => {
+      expect(() => new CloudflareAIGateway("", "gateway")).toThrow(
+        "Cloudflare AI Gateway configuration is incomplete. accountId and gatewayId are required.",
       );
-
-      expect(gateway.accountId).toBe("instance-account");
-      expect(gateway.gatewayId).toBe("instance-gateway");
-      expect(gateway.apiKey).toBe("instance-key");
     });
 
-    it("should throw error when required values are missing", () => {
-      expect(() => new CloudflareAIGateway()).toThrow(
-        "Cloudflare AI Gateway is not configured. Please set accountId, gatewayId.",
+    it("should throw error when gatewayId is missing", () => {
+      expect(() => new CloudflareAIGateway("account", "")).toThrow(
+        "Cloudflare AI Gateway configuration is incomplete. accountId and gatewayId are required.",
       );
     });
   });

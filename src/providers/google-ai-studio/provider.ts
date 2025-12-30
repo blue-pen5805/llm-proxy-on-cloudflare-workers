@@ -4,10 +4,6 @@ import {
   OpenAIModelsListResponseBody,
 } from "../openai/types";
 import { ProviderBase } from "../provider";
-import {
-  GoogleAiStudioEndpoint,
-  GoogleAiStudioOpenAICompatibleEndpoint,
-} from "./endpoint";
 import { GoogleAiStudioModelsListResponseBody } from "./types";
 
 export class GoogleAiStudio extends ProviderBase {
@@ -15,6 +11,7 @@ export class GoogleAiStudio extends ProviderBase {
   readonly modelsPath: string = "/v1beta/models";
 
   readonly apiKeyName: keyof Env = "GEMINI_API_KEY";
+  readonly baseUrlProp: string = "https://generativelanguage.googleapis.com";
 
   readonly CHAT_COMPLETIONS_SUPPORTED_PARAMETERS: (keyof OpenAIChatCompletionsRequestBody)[] =
     [
@@ -33,26 +30,39 @@ export class GoogleAiStudio extends ProviderBase {
       "tool_choice",
     ];
 
-  endpoint: GoogleAiStudioEndpoint;
-
-  constructor() {
-    super();
-    this.endpoint = new GoogleAiStudioEndpoint(Secrets.get(this.apiKeyName));
+  async headers(apiKeyIndex?: number): Promise<HeadersInit> {
+    const apiKey = Secrets.get(this.apiKeyName, apiKeyIndex);
+    return {
+      "Content-Type": "application/json",
+      "x-goog-api-key": apiKey,
+    };
   }
 
   async fetch(
     pathname: string,
     init?: Parameters<typeof fetch>[1],
+    apiKeyIndex?: number,
   ): ReturnType<typeof fetch> {
     if (pathname.startsWith("/v1beta/openai")) {
-      const openaiCompatibleEndpoint =
-        new GoogleAiStudioOpenAICompatibleEndpoint(this.endpoint);
-      return openaiCompatibleEndpoint.fetch(
-        pathname.replace("/v1beta/openai", ""),
-        init,
+      const apiKey = Secrets.get(this.apiKeyName, apiKeyIndex);
+      const targetPathname = pathname.replace("/v1beta/openai", "");
+
+      const newHeaders: Record<string, string> = {
+        ...(init?.headers as Record<string, string>),
+        Authorization: `Bearer ${apiKey}`,
+      };
+      delete newHeaders["x-goog-api-key"];
+
+      return super.fetch(
+        targetPathname,
+        {
+          ...init,
+          headers: newHeaders,
+        },
+        apiKeyIndex,
       );
     } else {
-      return this.endpoint.fetch(pathname, init);
+      return super.fetch(pathname, init, apiKeyIndex);
     }
   }
 

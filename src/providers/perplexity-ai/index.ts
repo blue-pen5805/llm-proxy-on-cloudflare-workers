@@ -1,5 +1,4 @@
 export { PerplexityAi } from "./provider";
-export { PerplexityAiEndpoint } from "./endpoint";
 
 /*
 # Perplexity

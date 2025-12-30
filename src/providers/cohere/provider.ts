@@ -1,17 +1,16 @@
-import { Secrets } from "../../utils/secrets";
 import {
   OpenAIChatCompletionsRequestBody,
   OpenAIModelsListResponseBody,
 } from "../openai/types";
-import { ProviderBase } from "../provider";
-import { CohereEndpoint } from "./endpoint";
+import { OpenAICompatibleProvider } from "../provider";
 import { CohereModelsListResponseBody } from "./types";
 
-export class Cohere extends ProviderBase {
+export class Cohere extends OpenAICompatibleProvider {
   readonly chatCompletionPath: string = "/compatibility/v1/chat/completions";
   readonly modelsPath: string = "/v1/models?page_size=100&endpoint=chat";
 
   readonly apiKeyName: keyof Env = "COHERE_API_KEY";
+  readonly baseUrlProp: string = "https://api.cohere.com";
 
   readonly CHAT_COMPLETIONS_SUPPORTED_PARAMETERS: (keyof OpenAIChatCompletionsRequestBody)[] =
     [
@@ -28,13 +27,6 @@ export class Cohere extends ProviderBase {
       "top_p",
       "tools",
     ];
-
-  endpoint: CohereEndpoint;
-
-  constructor() {
-    super();
-    this.endpoint = new CohereEndpoint(Secrets.get(this.apiKeyName));
-  }
 
   // Convert model list to OpenAI format
   modelsToOpenAIFormat(

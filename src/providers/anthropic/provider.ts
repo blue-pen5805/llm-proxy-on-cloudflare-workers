@@ -1,7 +1,6 @@
 import { Secrets } from "../../utils/secrets";
 import { OpenAIModelsListResponseBody } from "../openai/types";
 import { ProviderBase } from "../provider";
-import { AnthropicEndpoint } from "./endpoint";
 import { AnthropicModelsListResponseBody } from "./types";
 
 export class Anthropic extends ProviderBase {
@@ -9,12 +8,15 @@ export class Anthropic extends ProviderBase {
   readonly modelsPath: string = "/v1/models";
 
   readonly apiKeyName: keyof Env = "ANTHROPIC_API_KEY";
+  readonly baseUrlProp: string = "https://api.anthropic.com";
 
-  endpoint: AnthropicEndpoint;
-
-  constructor() {
-    super();
-    this.endpoint = new AnthropicEndpoint(Secrets.get(this.apiKeyName));
+  async headers(apiKeyIndex?: number): Promise<HeadersInit> {
+    const apiKey = Secrets.get(this.apiKeyName, apiKeyIndex);
+    return {
+      "Content-Type": "application/json",
+      "x-api-key": `${apiKey}`,
+      "anthropic-version": "2023-06-01",
+    };
   }
 
   // Convert model list to OpenAI format

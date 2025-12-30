@@ -1,3 +1,4 @@
+import { Config } from "./config";
 import { Environments } from "./environments";
 import { shuffleArray } from "./helpers";
 
@@ -6,12 +7,11 @@ import { shuffleArray } from "./helpers";
  * Provides functionality to access all values for a key or get a single value with optional rotation.
  */
 export class Secrets {
-  static readonly loaded: { [key: string]: string[] } = {};
-
   /**
    * Retrieves all values for a specified environment key.
    *
    * @param keyName - The name of the environment variable to retrieve
+   * @param shuffle - Whether to shuffle the array of values (default: false)
    * @returns An array of string values, or an empty array if the key doesn't exist
    */
   static getAll(keyName: keyof Env, shuffle: boolean = false): string[] {
@@ -21,40 +21,55 @@ export class Secrets {
       return [];
     }
 
+    let result: string[] = [];
     if (Array.isArray(value)) {
-      return shuffle ? shuffleArray(value) : value;
+      result = [...value];
+    } else if (typeof value === "string") {
+      result = [value];
     }
 
-    if (typeof value === "string") {
-      return [value];
+    if (shuffle && result.length > 1) {
+      return shuffleArray(result);
     }
 
-    return [];
+    return result;
   }
 
   /**
-   * Retrieves a single value for a specified environment key.
-   * When rotation is enabled, it cycles through available values in a round-robin fashion.
-   * When rotation is disabled, it returns a random value from the available options.
+   * Retrieves a single value for a specified environment key at the given apiKeyIndex.
    *
    * @param keyName - The name of the environment variable to retrieve
-   * @param rotate - Whether to rotate through available values (defaults to true)
-   * @returns A string value for the specified key
+   * @param apiKeyIndex - The apiKeyIndex of the value to retrieve (default: 0)
+   * @returns A single string value for the specified key and apiKeyIndex
    */
-  static get(keyName: keyof Env, rotate: boolean = true): string {
-    if (rotate) {
-      if (!Secrets.loaded[keyName]) {
-        Secrets.loaded[keyName] = this.getAll(keyName, true);
-      }
-
-      const apiKey = Secrets.loaded[keyName][0];
-      Secrets.loaded[keyName].push(Secrets.loaded[keyName].shift() as string);
-
-      return apiKey;
-    } else {
-      const secrets = this.getAll(keyName, true);
-
-      return secrets[0];
+  static get(keyName: keyof Env, apiKeyIndex: number = 0): string {
+    const allKeys = this.getAll(keyName);
+    if (allKeys.length === 0) {
+      return "";
     }
+    return allKeys[apiKeyIndex % allKeys.length];
+  }
+
+  /**
+   * Determines the next apiKeyIndex to use for a specified key, considering global round-robin configuration.
+   *
+   * @param keyName - The name of the environment variable
+   * @returns A Promise that resolves to the next apiKeyIndex (0 to length - 1)
+   */
+  static async getNext(keyName: keyof Env): Promise<number> {
+    const length = this.getAll(keyName).length;
+    if (length <= 1) {
+      return 0;
+    }
+
+    const env = Environments.getEnv();
+    if (env && env.KEY_ROTATION_MANAGER && Config.isGlobalRoundRobinEnabled()) {
+      const id = env.KEY_ROTATION_MANAGER.idFromName(keyName);
+      const obj = env.KEY_ROTATION_MANAGER.get(id);
+      return await obj.getNextIndex(keyName, length);
+    }
+
+    // Default to random if global round-robin is not enabled
+    return Math.floor(Math.random() * length);
   }
 }

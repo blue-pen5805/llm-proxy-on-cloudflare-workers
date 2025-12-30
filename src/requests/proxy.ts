@@ -1,6 +1,7 @@
 import { CloudflareAIGateway } from "../ai_gateway";
 import { Providers } from "../providers";
 import { fetch2 } from "../utils/helpers";
+import { Secrets } from "../utils/secrets";
 
 export async function proxy(
   request: Request,
@@ -11,6 +12,9 @@ export async function proxy(
   const provider = Providers[providerName];
   const providerClass = new provider();
 
+  const apiKeyName = providerClass.apiKeyName as keyof Env;
+  const apiKeyIndex = await Secrets.getNext(apiKeyName);
+
   // Handle AI Gateway requests
   if (aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)) {
     return fetch2(
@@ -20,7 +24,7 @@ export async function proxy(
         path: pathname,
         body: request.body,
         headers: {
-          ...providerClass.endpoint.headers(),
+          ...(await providerClass.headers(apiKeyIndex)),
           ...request.headers,
         },
       }),
@@ -28,9 +32,13 @@ export async function proxy(
   }
 
   // Send request to the provider directly
-  return providerClass.fetch(pathname, {
-    method: request.method,
-    body: request.body,
-    headers: request.headers,
-  });
+  return providerClass.fetch(
+    pathname,
+    {
+      method: request.method,
+      body: request.body,
+      headers: request.headers,
+    },
+    apiKeyIndex,
+  );
 }

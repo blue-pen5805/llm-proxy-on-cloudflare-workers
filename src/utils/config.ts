@@ -40,4 +40,9 @@ export class Config {
 
     return defaultModel;
   }
+
+  static isGlobalRoundRobinEnabled(): boolean {
+    const enabled = Environments.get("ENABLE_GLOBAL_ROUND_ROBIN", false);
+    return enabled === "true";
+  }
 }

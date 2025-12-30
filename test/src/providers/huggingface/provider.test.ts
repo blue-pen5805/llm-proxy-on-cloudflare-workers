@@ -1,95 +1,44 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { HuggingFaceEndpoint } from "~/src/providers/huggingface/endpoint";
 import { HuggingFace } from "~/src/providers/huggingface/provider";
-import { ProviderNotSupportedError } from "~/src/providers/provider";
 import * as Secrets from "~/src/utils/secrets";
 
 vi.mock("~/src/utils/secrets");
-vi.mock("~/src/providers/huggingface/endpoint");
 
 describe("HuggingFace Provider", () => {
-  const mockSecretsGet = vi.fn();
-  const MockHuggingFaceEndpoint = vi.mocked(HuggingFaceEndpoint);
+  const testApiKey = "sk-test-api-key";
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(Secrets.Secrets.get).mockImplementation(mockSecretsGet);
+    vi.mocked(Secrets.Secrets.get).mockImplementation((key: any) => {
+      if (key === "HUGGINGFACE_API_KEY") return testApiKey;
+      return "";
+    });
+    vi.mocked(Secrets.Secrets.getAll).mockImplementation((key: any) => {
+      if (key === "HUGGINGFACE_API_KEY") return [testApiKey];
+      return [];
+    });
   });
 
-  describe("constructor", () => {
-    it("should initialize with API key from secrets", () => {
-      const testApiKey = "test_huggingface_api_key";
-      mockSecretsGet.mockReturnValue(testApiKey);
-
+  describe("properties", () => {
+    it("should have correct API key name and base URL", () => {
       const provider = new HuggingFace();
-
-      expect(Secrets.Secrets.get).toHaveBeenCalledWith("HUGGINGFACE_API_KEY");
-      expect(MockHuggingFaceEndpoint).toHaveBeenCalledWith(testApiKey);
       expect(provider.apiKeyName).toBe("HUGGINGFACE_API_KEY");
-    });
-
-    it("should have empty paths since HuggingFace doesn't support standard endpoints", () => {
-      mockSecretsGet.mockReturnValue("test-key");
-      const provider = new HuggingFace();
-
-      expect(provider.chatCompletionPath).toBe("");
-      expect(provider.modelsPath).toBe("");
+      expect(provider.baseUrl()).toBe(
+        "https://api-inference.huggingface.co/models",
+      );
     });
   });
 
-  describe("buildChatCompletionsRequest", () => {
-    it("should throw ProviderNotSupportedError", () => {
-      mockSecretsGet.mockReturnValue("test-key");
+  describe("available", () => {
+    it("should return true when API key is provided", () => {
       const provider = new HuggingFace();
-
-      expect(() => {
-        provider.buildChatCompletionsRequest({
-          body: "{}",
-          headers: {},
-        });
-      }).toThrow(ProviderNotSupportedError);
-
-      expect(() => {
-        provider.buildChatCompletionsRequest({
-          body: "{}",
-          headers: {},
-        });
-      }).toThrow("HuggingFace does not support chat completions");
+      expect(provider.available()).toBe(true);
     });
-  });
 
-  describe("buildModelsRequest", () => {
-    it("should throw ProviderNotSupportedError", () => {
-      mockSecretsGet.mockReturnValue("test-key");
+    it("should return false when API key is missing", () => {
+      vi.mocked(Secrets.Secrets.getAll).mockReturnValue([]);
       const provider = new HuggingFace();
-
-      expect(() => {
-        provider.buildModelsRequest();
-      }).toThrow(ProviderNotSupportedError);
-
-      expect(() => {
-        provider.buildModelsRequest();
-      }).toThrow("HuggingFace does not support list models");
-    });
-  });
-
-  describe("inheritance", () => {
-    it("should extend ProviderBase", () => {
-      mockSecretsGet.mockReturnValue("test-key");
-      const provider = new HuggingFace();
-
-      expect(provider).toHaveProperty("available");
-      expect(provider).toHaveProperty("buildModelsRequest");
-      expect(provider).toHaveProperty("buildChatCompletionsRequest");
-    });
-  });
-
-  describe("endpoint property", () => {
-    it("should have HuggingFaceEndpoint instance", () => {
-      mockSecretsGet.mockReturnValue("test-key");
-      const provider = new HuggingFace();
-
-      expect(provider.endpoint).toBeInstanceOf(MockHuggingFaceEndpoint);
+      expect(provider.available()).toBe(false);
     });
   });
 });

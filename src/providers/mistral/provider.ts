@@ -1,21 +1,13 @@
-import { Secrets } from "../../utils/secrets";
 import { OpenAIModelsListResponseBody } from "../openai/types";
-import { ProviderBase } from "../provider";
-import { MistralEndpoint } from "./endpoint";
+import { OpenAICompatibleProvider } from "../provider";
 import { MistralModelsListResponseBody } from "./types";
 
-export class Mistral extends ProviderBase {
+export class Mistral extends OpenAICompatibleProvider {
   readonly chatCompletionPath: string = "/v1/chat/completions";
   readonly modelsPath: string = "/v1/models";
 
   readonly apiKeyName: keyof Env = "MISTRAL_API_KEY";
-
-  endpoint: MistralEndpoint;
-
-  constructor() {
-    super();
-    this.endpoint = new MistralEndpoint(Secrets.get(this.apiKeyName));
-  }
+  readonly baseUrlProp: string = "https://api.mistral.ai";
 
   // Convert model list to OpenAI format
   modelsToOpenAIFormat(

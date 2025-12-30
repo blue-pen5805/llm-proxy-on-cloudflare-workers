@@ -7,13 +7,33 @@ import * as process from "node:process";
  * @class Environments
  */
 export class Environments {
+  private static currentEnv: Env | undefined;
+
+  /**
+   * Sets the current environment object.
+   *
+   * @param {Env} env - The environment object from Cloudflare Workers
+   */
+  static setEnv(env: Env): void {
+    this.currentEnv = env;
+  }
+
+  /**
+   * Gets the current environment object.
+   *
+   * @returns {Env | undefined} The current environment object
+   */
+  static getEnv(): Env | undefined {
+    return this.currentEnv;
+  }
+
   /**
    * Returns all environment variables cast as the Env type.
    *
    * @returns {Env} All environment variables
    */
   static all(): Env {
-    return process.env as unknown as Env;
+    return (this.currentEnv || process.env) as unknown as Env;
   }
 
   /**

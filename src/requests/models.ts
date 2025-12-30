@@ -13,14 +13,18 @@ export async function models(
 
     // Return empty list if the provider is not available
     if (providerClass.available() === false) {
-      return Promise.resolve({
+      return {
         object: "list",
         data: [],
-      } as OpenAIModelsListResponseBody);
+      } as OpenAIModelsListResponseBody;
     }
 
     // Generate models request
-    const [requestInfo, requestInit] = providerClass.buildModelsRequest();
+
+    // Always use the first API key for models endpoint
+    const apiKeyIndex = 0;
+    const [requestInfo, requestInit] =
+      await providerClass.buildModelsRequest(apiKeyIndex);
 
     // If AI Gateway is enabled and the provider supports it, use AI Gateway
     if (aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)) {
@@ -29,7 +33,7 @@ export async function models(
           provider: providerName,
           method: requestInit.method,
           path: requestInfo,
-          headers: providerClass.endpoint.headers(),
+          headers: await providerClass.headers(apiKeyIndex),
         }),
       );
       const models = await response.json();
@@ -46,8 +50,8 @@ export async function models(
   });
 
   const responses = await Promise.allSettled(requests);
-  const models = responses.map((response, index) => {
-    const provider = Object.keys(Providers)[index];
+  const models = responses.map((response, apiKeyIndex) => {
+    const provider = Object.keys(Providers)[apiKeyIndex];
 
     if (response.status === "rejected") {
       if (response.reason instanceof ProviderNotSupportedError) {

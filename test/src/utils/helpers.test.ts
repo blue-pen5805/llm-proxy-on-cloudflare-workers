@@ -5,6 +5,7 @@ import {
   shuffleArray,
   formatString,
   maskUrl,
+  cleanPathname,
 } from "~/src/utils/helpers";
 
 describe("safeJsonParse", () => {
@@ -107,5 +108,38 @@ describe("maskUrl", () => {
     expect(result).toBe(
       "https://api.example.com/v1?api_key=***&access_token=tok***&password=***&secret=***",
     );
+  });
+});
+
+describe("cleanPathname", () => {
+  it("should return the same pathname if no authorization params", () => {
+    const pathname = "/v1/chat/completions";
+    const result = cleanPathname(pathname);
+    expect(result).toBe("/v1/chat/completions");
+  });
+
+  it("should remove authorization query parameters (single)", () => {
+    const pathname = "/v1/chat/completions?key=val";
+    const result = cleanPathname(pathname);
+    expect(result).toBe("/v1/chat/completions");
+  });
+
+  it("should remove authorization query parameters (with others)", () => {
+    const pathname = "/v1/chat/completions?key=val&model=gpt-4";
+    const result = cleanPathname(pathname);
+    expect(result).toBe("/v1/chat/completions?model=gpt-4");
+  });
+
+  it("should remove authorization query parameters (multiple auth params)", () => {
+    // Current only "key" is in AUTHORIZATION_QUERY_PARAMETERS, but test the logic
+    const pathname = "/v1/chat/completions?key=val&other=123&key=val2";
+    const result = cleanPathname(pathname);
+    expect(result).toBe("/v1/chat/completions?other=123");
+  });
+
+  it("should clean up invalid query string formats like ?&", () => {
+    const pathname = "/v1/chat/completions?&model=gpt-4";
+    const result = cleanPathname(pathname);
+    expect(result).toBe("/v1/chat/completions?model=gpt-4");
   });
 });

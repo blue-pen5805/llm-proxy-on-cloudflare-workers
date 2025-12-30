@@ -13,6 +13,7 @@ This is a serverless proxy built on [Cloudflare Workers](https://www.cloudflare.
   - `/v1/chat/completions`
   - `/v1/models`
 - **Cloudflare AI Gateway Integration:** Leverage [Cloudflare AI Gateway](https://www.cloudflare.com/developer-platform/products/ai-gateway/), including its [Universal Endpoint](https://developers.cloudflare.com/ai-gateway/providers/universal/), for logging, analytics, and other features.
+- **Global Round-Robin Key Rotation:** Consistency across all isolates using Cloudflare Durable Objects.
 
 ```mermaid
 flowchart
@@ -86,7 +87,18 @@ Set these if you are using the Cloudflare AI Gateway.
 
 Set the API key(s) for each provider you intend to use. API keys can be a single string, a comma-separated string, or a JSON-formatted string array.
 
-### Proxy Configuration:
+### Global Round-Robin Key Rotation (Optional)
+
+This feature ensures that API keys are rotated in a consistent round-robin order across all requests globally, using Cloudflare Durable Objects.
+
+- `ENABLE_GLOBAL_ROUND_ROBIN`: Set to `true` to enable this feature. (Default: `false`)
+
+> [!IMPORTANT]
+> Enabling this feature requires a Cloudflare account that supports Durable Objects.
+
+### Local Development
+
+When running locally with `npm run dev`, Wrangler automatically simulates Durable Objects. Ensure that the `KeyRotationCounter` class is exported from your entry point (`src/index.ts`).
 
 ## Usage Example
 
@@ -167,6 +179,10 @@ curl -X POST https://your-worker-url/google-ai-studio/v1beta/models/gemini-1.5-p
     "contents": [{"role": "user", "parts": [{"text": "Hello, world!"}]}]
   }'
 ```
+
+## Documentation
+
+For detailed architectural and design information, please refer to the [Design Documentation](docs/design/overview.md).
 
 ## Known Issues and Limitations
 

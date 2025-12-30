@@ -1,14 +1,6 @@
-import { Secrets } from "../../utils/secrets";
-import { ProviderBase } from "../provider";
-import { OpenAIEndpoint } from "./endpoint";
+import { OpenAICompatibleProvider } from "../provider";
 
-export class OpenAI extends ProviderBase {
+export class OpenAI extends OpenAICompatibleProvider {
   readonly apiKeyName: keyof Env = "OPENAI_API_KEY";
-
-  endpoint: OpenAIEndpoint;
-
-  constructor() {
-    super();
-    this.endpoint = new OpenAIEndpoint(Secrets.get(this.apiKeyName));
-  }
+  readonly baseUrlProp: string = "https://api.openai.com/v1";
 }

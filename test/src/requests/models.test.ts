@@ -4,10 +4,12 @@ import { Providers } from "~/src/providers";
 import { ProviderNotSupportedError } from "~/src/providers/provider";
 import { models } from "~/src/requests/models";
 import * as helpers from "~/src/utils/helpers";
+import { Secrets } from "~/src/utils/secrets";
 
 vi.mock("~/src/ai_gateway");
 vi.mock("~/src/providers");
 vi.mock("~/src/utils/helpers");
+vi.mock("~/src/utils/secrets");
 
 interface ModelData {
   id: string;
@@ -27,9 +29,7 @@ describe("models", () => {
     buildModelsRequest: vi.fn(),
     modelsToOpenAIFormat: vi.fn(),
     fetch: vi.fn(),
-    endpoint: {
-      headers: vi.fn(),
-    },
+    headers: vi.fn(),
   };
 
   const mockAIGateway = {
@@ -48,6 +48,8 @@ describe("models", () => {
       Promise.resolve(new Response(JSON.stringify({ data: [] }))),
     );
     vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(true);
+    vi.mocked(Secrets.getAll).mockReturnValue(["test-key"]);
+    vi.mocked(Secrets.getNext).mockResolvedValue(0);
 
     // Set up default mock providers in a specific order
     Providers.openai = vi.fn().mockReturnValue(mockProviderClass);
@@ -69,7 +71,7 @@ describe("models", () => {
         },
       ],
     });
-    mockProviderClass.endpoint.headers.mockReturnValue({
+    mockProviderClass.headers.mockReturnValue({
       "Content-Type": "application/json",
     });
     mockProviderClass.fetch.mockImplementation(() =>
@@ -101,6 +103,7 @@ describe("models", () => {
         },
       ],
     });
+    expect(Secrets.getNext).not.toHaveBeenCalled();
   });
 
   it("should skip unavailable providers", async () => {
