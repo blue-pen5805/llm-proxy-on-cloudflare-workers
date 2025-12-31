@@ -14,8 +14,10 @@ const IGNORED_FIELDS = [
   "CLOUDFLARE_ACCOUNT_ID",
   "AI_GATEWAY_NAME",
   "CF_AIG_TOKEN",
+  "CUSTOM_OPENAI_ENDPOINTS",
   "DEV",
   "DEFAULT_MODEL",
+  "ENABLE_GLOBAL_ROUND_ROBIN",
 ];
 
 // Configuration: Fields that require at least one to be set
@@ -34,6 +36,7 @@ const API_KEY_FIELDS_GROUP = [
   "PERPLEXITYAI_API_KEY",
   "REPLICATE_API_KEY",
   "CLOUDFLARE_API_KEY",
+  "OLLAMA_API_KEY",
 ];
 
 interface ConfigValue {
