@@ -2,13 +2,15 @@
 
 [English](README.md) | 日本語
 
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/blue-pen5805/llm-proxy-on-cloudflare-workers)
+
 これは [Cloudflare Workers](https://www.cloudflare.com/developer-platform/products/workers/) 上に構築されたサーバーレスプロキシで、複数の大規模言語モデル（LLM）API と統合します。[LiteLLM](https://github.com/BerriAI/litellm) にインスパイアされています。
 
 ## 機能
 
 - **一元化されたAPIキー管理:** すべてのLLM APIキーを一箇所で管理。
 - **パススルーエンドポイント:** 最小限の変更でリクエストを任意のLLM APIに直接転送。
-  - 例: `/openai/chat/completions`, `/google-ai-studio/v1beta/models/gemini-1.5-pro:generateContent`
+  - 例: `/openai/chat/completions`, `/google-ai-studio/v1beta/models/gemini-2.5-pro:generateContent`
 - **OpenAI互換エンドポイント:** 既存のツールやライブラリとのシームレスな統合のための標準OpenAIエンドポイント。
   - `/v1/chat/completions`
   - `/v1/models`
@@ -44,6 +46,7 @@ flowchart
 | Workers AI       | ✅           | ✅   | ✅                  | `workers-ai`       | `CLOUDFLARE_ACCOUNT_ID` `CLOUDFLARE_API_KEY` |
 | HuggingFace      | ❌           | ✅   | ✅                  | `huggingface`      | `HUGGINGFACE_API_KEY`                        |
 | Replicate        | ❌           | ✅   | ✅                  | `replicate`        | `REPLICATE_API_KEY`                          |
+| Ollama           | ✅           | ✅   | ❌                  | `ollama`           | `OLLAMA_API_KEY`                             |
 
 **注意**: ⚠️でマークされたプロバイダーは、特定の機能（例：ツール使用、マルチモーダル機能）に対して限定的なサポートがあります。
 
@@ -87,6 +90,28 @@ Cloudflare AI Gateway を使用している場合は、これらを設定して�
 
 使用する予定の各プロバイダーのAPIキーを設定してください。APIキーは、単一の文字列、カンマ区切りの文字列、またはJSON形式の文字列配列にできます。
 
+### カスタム OpenAI 互換エンドポイント（オプション）
+
+`config.jsonc` の `CUSTOM_OPENAI_ENDPOINTS` 配列を設定することで、独自の OpenAI 互換エンドポイントを追加できます。
+
+設定例:
+
+```jsonc
+"CUSTOM_OPENAI_ENDPOINTS": [
+  {
+    "name": "my-custom-llm",
+    "baseUrl": "https://llm.example.com",
+    "apiKeys": ["your-api-key"],
+    "models": ["model-1", "model-2"] // オプション: /v1/models エンドポイント用の事前定義したモデルリスト
+  }
+]
+```
+
+設定後、その名前をパススルールートとして使用してカスタムエンドポイントにアクセスできます：
+
+- パススルー: `https://your-worker-url/my-custom-llm/chat/completions`
+- OpenAI互換: `/v1/chat/completions` でモデル名として `my-custom-llm/<model-id>` を指定します（例: `my-custom-llm/model-1`）。
+
 ### グローバル・ラウンドロビン・キーローテーション（オプション）
 
 Cloudflare Durable Objects を使用して、すべてのリクエスト間で一貫したラウンドロビン順序で API キーをローテーションする機能です。
@@ -98,7 +123,7 @@ Cloudflare Durable Objects を使用して、すべてのリクエスト間で�
 
 ### ローカル開発
 
-`npm run dev` でローカル実行する場合、Wrangler は自動的に Durable Objects をシミュレートします。Durable Object クラス（`KeyRotationCounter`）がエントリーポイント（`src/index.ts`）からエクスポートされていることを確認してください。
+`npm run dev` でローカル実行する場合、Wrangler は自動的に Durable Objects をシミュレートします。
 
 ## 使用例
 
@@ -148,7 +173,7 @@ client = OpenAI(
     base_url="https://your-worker-url"
 )
 response = client.chat.completions.create(
-    model: "google-ai-studio/gemini-1.5-pro",
+    model: "google-ai-studio/gemini-2.5-pro",
     messages: [{ "role": "user", "content": "Hello, world!" }],
 )
 
@@ -172,7 +197,7 @@ curl -X POST https://your-worker-url/openai/chat/completions \
 ```
 
 ```bash
-curl -X POST https://your-worker-url/google-ai-studio/v1beta/models/gemini-1.5-pro:generateContent \
+curl -X POST https://your-worker-url/google-ai-studio/v1beta/models/gemini-2.5-pro:generateContent \
   -H "Authorization: Bearer $PROXY_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -188,7 +213,4 @@ curl -X POST https://your-worker-url/google-ai-studio/v1beta/models/gemini-1.5-p
 
 このプロジェクトは現在開発中で、以下の既知の問題と制限事項があります：
 
-- **限定的なテスト:** プロジェクトには現在、包括的なテストカバレッジが不足しています。これにより予期しない動作やバグが発生する可能性があります。
 - **不完全なプロバイダーサポート:** すべてのLLMプロバイダーが完全にサポートされているわけではありません。一部のプロバイダーは機能サポートが限定的であったり、まったくサポートされていない場合があります。
-- **不十分な検証:** 異なるプロバイダーや入力に対する動作の十分な検証はまだ完了していません。
-- **エラーハンドリング:** エラーハンドリングはより堅牢である可能性があります。一部のエラーが適切にキャッチまたは報告されない場合があります。

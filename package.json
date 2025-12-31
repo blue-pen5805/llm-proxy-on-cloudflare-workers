@@ -1,5 +1,6 @@
 {
   "name": "llm-proxy-on-cloudflare-workers",
+  "description": "A serverless proxy on Cloudflare Workers for multiple LLM APIs with unified authentication and key rotation.",
   "author": "blue.pen5805",
   "version": "0.1.1",
   "private": true,
@@ -36,5 +37,18 @@
     "vite": "^7.3.0",
     "vitest": "^3.2.4",
     "wrangler": "^4.54.0"
+  },
+  "cloudflare": {
+    "bindings": {
+      "PROXY_API_KEY": {
+        "description": "API key to authenticate requests to the LLM Proxy server. (Any string can be used)"
+      },
+      "OPENAI_API_KEY": {
+        "description": "Your OpenAI API key."
+      },
+      "GEMINI_API_KEY": {
+        "description": "Your Google AI Studio (Gemini) API key."
+      }
+    }
   }
 }

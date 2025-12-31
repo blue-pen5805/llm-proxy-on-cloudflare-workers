@@ -2,13 +2,15 @@
 
 English | [日本語](README_ja.md)
 
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/blue-pen5805/llm-proxy-on-cloudflare-workers)
+
 This is a serverless proxy built on [Cloudflare Workers](https://www.cloudflare.com/developer-platform/products/workers/) that integrates with multiple Large Language Model (LLM) APIs. Inspired by [LiteLLM](https://github.com/BerriAI/litellm).
 
 ## Features
 
 - **Centralized API Key Management:** Manage all your LLM API keys in one place.
 - **Pass-through Endpoints:** Forward requests directly to any LLM API with minimal changes.
-  - Examples: `/openai/chat/completions`, `/google-ai-studio/v1beta/models/gemini-1.5-pro:generateContent`
+  - Examples: `/openai/chat/completions`, `/google-ai-studio/v1beta/models/gemini-2.5-pro:generateContent`
 - **OpenAI-Compatible Endpoints:** Use standard OpenAI endpoints for seamless integration with existing tools and libraries.
   - `/v1/chat/completions`
   - `/v1/models`
@@ -44,6 +46,7 @@ flowchart
 | Workers AI       | ✅               | ✅     | ✅                 | `workers-ai`        | `CLOUDFLARE_ACCOUNT_ID` `CLOUDFLARE_API_KEY` |
 | HuggingFace      | ❌               | ✅     | ✅                 | `huggingface`       | `HUGGINGFACE_API_KEY`                        |
 | Replicate        | ❌               | ✅     | ✅                 | `replicate`         | `REPLICATE_API_KEY`                          |
+| Ollama           | ✅               | ✅     | ❌                 | `ollama`            | `OLLAMA_API_KEY`                             |
 
 **Note**: Providers marked with ⚠️ have limited support for certain features (e.g., Tool Use, multimodal capabilities).
 
@@ -87,6 +90,28 @@ Set these if you are using the Cloudflare AI Gateway.
 
 Set the API key(s) for each provider you intend to use. API keys can be a single string, a comma-separated string, or a JSON-formatted string array.
 
+### Custom OpenAI-Compatible Endpoints (Optional)
+
+You can add your own OpenAI-compatible endpoints by configuring the `CUSTOM_OPENAI_ENDPOINTS` array in `config.jsonc`.
+
+Example:
+
+```jsonc
+"CUSTOM_OPENAI_ENDPOINTS": [
+  {
+    "name": "my-custom-llm",
+    "baseUrl": "https://llm.example.com",
+    "apiKeys": ["your-api-key"],
+    "models": ["model-1", "model-2"] // Optional, pre-defined models list for /v1/models
+  }
+]
+```
+
+Once configured, you can access the custom endpoint using its name as a pass-through route:
+
+- Pass-through: `https://your-worker-url/my-custom-llm/chat/completions`
+- OpenAI-Compatible: Use `my-custom-llm/<model-id>` as the model name in `/v1/chat/completions` (e.g., `my-custom-llm/model-1`).
+
 ### Global Round-Robin Key Rotation (Optional)
 
 This feature ensures that API keys are rotated in a consistent round-robin order across all requests globally, using Cloudflare Durable Objects.
@@ -98,7 +123,7 @@ This feature ensures that API keys are rotated in a consistent round-robin order
 
 ### Local Development
 
-When running locally with `npm run dev`, Wrangler automatically simulates Durable Objects. Ensure that the `KeyRotationCounter` class is exported from your entry point (`src/index.ts`).
+When running locally with `npm run dev`, Wrangler automatically simulates Durable Objects.
 
 ## Usage Example
 
@@ -148,7 +173,7 @@ client = OpenAI(
     base_url="https://your-worker-url"
 )
 response = client.chat.completions.create(
-    model: "google-ai-studio/gemini-1.5-pro",
+    model: "google-ai-studio/gemini-2.5-pro",
     messages: [{ "role": "user", "content": "Hello, world!" }],
 )
 
@@ -172,7 +197,7 @@ curl -X POST https://your-worker-url/openai/chat/completions \
 ```
 
 ```bash
-curl -X POST https://your-worker-url/google-ai-studio/v1beta/models/gemini-1.5-pro:generateContent \
+curl -X POST https://your-worker-url/google-ai-studio/v1beta/models/gemini-2.5-pro:generateContent \
   -H "Authorization: Bearer $PROXY_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -188,7 +213,4 @@ For detailed architectural and design information, please refer to the [Design D
 
 This project is under active development and has the following known issues and limitations:
 
-- **Limited Testing:** The project currently lacks comprehensive test coverage. This may lead to unexpected behavior or bugs.
 - **Incomplete Provider Support:** Not all LLM providers are fully supported. Some providers may have limited feature support or may not be supported at all.
-- **Insufficient Validation:** Thorough validation of the behavior against different providers and inputs is not yet completed.
-- **Error Handling:**: Error handling could be more robust. Some errors may not be caught or reported properly.
