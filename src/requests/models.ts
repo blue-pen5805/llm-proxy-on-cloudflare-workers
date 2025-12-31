@@ -22,6 +22,12 @@ export async function models(
 
       // Generate models request
 
+      // Check for static models
+      const staticModels = providerInstance.staticModels();
+      if (staticModels) {
+        return staticModels;
+      }
+
       // Always use the first API key for models endpoint
       const apiKeyIndex = 0;
       const [requestInfo, requestInit] =

@@ -47,7 +47,12 @@ export class Config {
   }
 
   static customOpenAIEndpoints():
-    | { name: string; baseUrl: string; apiKeys?: string | string[] }[]
+    | {
+        name: string;
+        baseUrl: string;
+        apiKeys?: string | string[];
+        models?: string[];
+      }[]
     | undefined {
     const endpoints = Environments.get("CUSTOM_OPENAI_ENDPOINTS", false);
 

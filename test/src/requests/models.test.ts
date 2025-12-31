@@ -39,6 +39,7 @@ describe("models", () => {
     modelsToOpenAIFormat: vi.fn(),
     fetch: vi.fn(),
     headers: vi.fn(),
+    staticModels: vi.fn(),
   };
 
   const mockAIGateway = {
@@ -330,5 +331,37 @@ describe("models", () => {
     expect(body.data).toHaveLength(2);
     expect(body.data[0].id).toBe("openai/gpt-4");
     expect(body.data[1].id).toBe("openai/gpt-3.5-turbo");
+  });
+
+  it("should return static models for custom providers when configured", async () => {
+    const staticModelsProviderClass = {
+      ...mockProviderClass,
+      staticModels: vi.fn().mockReturnValue({
+        object: "list",
+        data: [
+          {
+            id: "custom-model-1",
+            object: "model",
+            created: 1234567890,
+            owned_by: "custom",
+          },
+        ],
+      }),
+    };
+
+    // Clear and reset providers
+    Object.keys(Providers).forEach((key) => {
+      delete Providers[key];
+    });
+
+    Providers.custom = vi.fn().mockReturnValue(staticModelsProviderClass);
+
+    const response = await models();
+    const body = (await response.json()) as ModelsResponse;
+
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].id).toBe("custom/custom-model-1");
+    expect(mockProviderClass.fetch).not.toHaveBeenCalled();
+    expect(staticModelsProviderClass.staticModels).toHaveBeenCalled();
   });
 });

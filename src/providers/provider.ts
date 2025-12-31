@@ -116,6 +116,10 @@ export class ProviderBase {
     return data as OpenAIModelsListResponseBody;
   }
 
+  staticModels(): OpenAIModelsListResponseBody | undefined {
+    return undefined;
+  }
+
   // --- Constants & Metadata ---
   readonly CHAT_COMPLETIONS_SUPPORTED_PARAMETERS: (keyof OpenAIChatCompletionsRequestBody)[] =
     [

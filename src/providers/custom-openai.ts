@@ -1,9 +1,11 @@
+import { OpenAIModelsListResponseBody } from "./openai/types";
 import { OpenAICompatibleProvider } from "./provider";
 
 export interface CustomOpenAIEndpointConfig {
   name: string;
   baseUrl: string;
   apiKeys?: string | string[];
+  models?: string[];
 }
 
 export class CustomOpenAI extends OpenAICompatibleProvider {
@@ -49,6 +51,22 @@ export class CustomOpenAI extends OpenAICompatibleProvider {
   available(): boolean {
     // Custom endpoints are considered available if they are defined in config
     return true;
+  }
+
+  staticModels(): OpenAIModelsListResponseBody | undefined {
+    if (!this.config.models || this.config.models.length === 0) {
+      return undefined;
+    }
+
+    return {
+      object: "list",
+      data: this.config.models.map((modelId) => ({
+        id: modelId,
+        object: "model",
+        created: Math.floor(Date.now() / 1000),
+        owned_by: this.name,
+      })),
+    };
   }
 
   getApiKeys(): string[] {

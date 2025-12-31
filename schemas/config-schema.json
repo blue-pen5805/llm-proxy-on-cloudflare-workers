@@ -343,6 +343,12 @@
                 }
               }
             ]
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": ["name", "baseUrl"]

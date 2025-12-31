@@ -47,7 +47,8 @@
     // {
     //   "name": "my-custom-llm",
     //   "baseUrl": "https://llm.example.com/v1",
-    //   "apiKeys": []
+    //   "apiKeys": [],
+    //   "models": ["model-1", "model-2"] // Optional
     // }
   ],
 
