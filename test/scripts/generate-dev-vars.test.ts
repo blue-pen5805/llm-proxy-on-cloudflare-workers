@@ -141,6 +141,20 @@ describe("parseJsonc", () => {
     });
   });
 
+  it("should parse JSON with URLs containing // and /* */", () => {
+    const jsonString = `{
+      "url1": "https://example.com",
+      "url2": "http://test.com/path",
+      "text": "This is not a /* block comment */"
+    }`;
+    const result = parseJsonc(jsonString);
+    expect(result).toEqual({
+      url1: "https://example.com",
+      url2: "http://test.com/path",
+      text: "This is not a /* block comment */",
+    });
+  });
+
   it("should throw error for invalid JSON", () => {
     const invalidJson = "{ invalid json }";
     expect(() => parseJsonc(invalidJson)).toThrow();
