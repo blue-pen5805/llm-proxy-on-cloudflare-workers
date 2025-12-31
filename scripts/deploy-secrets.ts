@@ -100,20 +100,19 @@ Make sure you have authenticated with Wrangler before running this script.
  * Remove JSON comments and parse JSON with comments (JSONC)
  */
 export function parseJsonc(content: string): Record<string, any> {
-  // Remove single-line comments (// ...)
-  const withoutLineComments = content.replace(/\/\/.*$/gm, "");
+  // Use a regex that matches both strings and comments.
+  // When a string is matched, we keep it as is.
+  // When a comment is matched, we remove it.
+  const regex = /"(?:[^"\\]|\\.)*"|(\/\/.*$|\/\*[\s\S]*?\*\/)/gm;
 
-  // Remove multi-line comments (/* ... */)
-  const withoutBlockComments = withoutLineComments.replace(
-    /\/\*[\s\S]*?\*\//g,
-    "",
-  );
+  const withoutComments = content.replace(regex, (match, comment) => {
+    // If we matched a comment (capture group 1), return an empty string
+    // Otherwise, we matched a string, so return it as is
+    return comment ? "" : match;
+  });
 
   // Remove trailing commas
-  const withoutTrailingCommas = withoutBlockComments.replace(
-    /,(\s*[}\]])/g,
-    "$1",
-  );
+  const withoutTrailingCommas = withoutComments.replace(/,(\s*[}\]])/g, "$1");
 
   return JSON.parse(withoutTrailingCommas);
 }

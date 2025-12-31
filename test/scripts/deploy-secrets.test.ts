@@ -148,6 +148,20 @@ describe("deploy-secrets", () => {
       const result = parseJsonc(jsonc);
       expect(result).toEqual({ key: "value", another: "test" });
     });
+
+    it("should parse JSON with URLs containing // and /* */", () => {
+      const jsonString = `{
+        "url1": "https://example.com",
+        "url2": "http://test.com/path",
+        "text": "This is not a /* block comment */"
+      }`;
+      const result = parseJsonc(jsonString);
+      expect(result).toEqual({
+        url1: "https://example.com",
+        url2: "http://test.com/path",
+        text: "This is not a /* block comment */",
+      });
+    });
   });
 
   describe("valueToSecret", () => {
