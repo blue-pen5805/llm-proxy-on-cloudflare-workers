@@ -29,3 +29,4 @@ To understand the architecture and design of specific capabilities, please refer
 
 - [**AI Gateway Integration**](./features/ai_gateway.md): The design of the transparent proxy bridge to Cloudflare AI Gateway.
 - [**Monitoring & Diagnostics**](./features/monitoring_diagnostics.md): The architecture of the `/status` system and health checks.
+- [**Custom OpenAI-Compatible Endpoints**](./features/custom-openai-endpoints.md)

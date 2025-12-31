@@ -1,13 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
 import { Providers } from "~/src/providers";
+import { getAllProviders, getProvider } from "~/src/providers";
 import { ProviderNotSupportedError } from "~/src/providers/provider";
 import { models } from "~/src/requests/models";
 import * as helpers from "~/src/utils/helpers";
 import { Secrets } from "~/src/utils/secrets";
 
 vi.mock("~/src/ai_gateway");
-vi.mock("~/src/providers");
+vi.mock("~/src/providers", async () => {
+  const actual =
+    await vi.importActual<typeof import("~/src/providers")>("~/src/providers");
+  return {
+    ...actual,
+    getProvider: vi.fn(),
+    getAllProviders: vi.fn(),
+  };
+});
 vi.mock("~/src/utils/helpers");
 vi.mock("~/src/utils/secrets");
 
@@ -50,6 +59,20 @@ describe("models", () => {
     vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(true);
     vi.mocked(Secrets.getAll).mockReturnValue(["test-key"]);
     vi.mocked(Secrets.getNext).mockResolvedValue(0);
+
+    vi.mocked(getAllProviders).mockImplementation(() => {
+      return Object.fromEntries(
+        Object.entries(Providers).map(([name, ProviderClass]) => [
+          name,
+          new (ProviderClass as any)(),
+        ]),
+      );
+    });
+
+    vi.mocked(getProvider).mockImplementation((name) => {
+      const ProviderClass = Providers[name];
+      return ProviderClass ? new (ProviderClass as any)() : undefined;
+    });
 
     // Set up default mock providers in a specific order
     Providers.openai = vi.fn().mockReturnValue(mockProviderClass);

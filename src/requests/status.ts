@@ -1,7 +1,9 @@
 import { CloudflareAIGateway } from "../ai_gateway";
-import { Providers } from "../providers";
+import { getAllProviders } from "../providers";
+import { CustomOpenAI } from "../providers/custom-openai";
 import { ProviderBase, ProviderNotSupportedError } from "../providers/provider";
 import { Config } from "../utils/config";
+import { Environments } from "../utils/environments";
 import { fetch2 } from "../utils/helpers";
 import { Secrets } from "../utils/secrets";
 
@@ -91,20 +93,28 @@ export async function status(aiGateway?: CloudflareAIGateway) {
   };
 
   const providersStatus: Record<string, any> = {};
+  const env = Environments.all();
+  const allProviders = getAllProviders(env);
 
-  for (const [providerName, ProviderClass] of Object.entries(Providers)) {
-    const instance = new ProviderClass();
-    const apiKeyName = instance.apiKeyName;
+  for (const [providerName, instance] of Object.entries(allProviders)) {
+    let allKeys: string[] = [];
 
-    if (!apiKeyName) {
+    if (instance instanceof CustomOpenAI) {
+      allKeys = instance.getApiKeys();
+    } else {
+      const apiKeyName = instance.apiKeyName;
+      if (apiKeyName) {
+        allKeys = Secrets.getAll(apiKeyName);
+      }
+    }
+
+    if (allKeys.length === 0) {
       providersStatus[providerName] = {
         available: instance.available(),
         keys: [],
       };
       continue;
     }
-
-    const allKeys = Secrets.getAll(apiKeyName);
     const keyStatuses = await Promise.all(
       allKeys.map(async (_key, apiKeyIndex) => ({
         key: maskApiKey(_key),

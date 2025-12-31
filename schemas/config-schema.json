@@ -319,6 +319,34 @@
           "type": "null"
         }
       ]
+    },
+    "CUSTOM_OPENAI_ENDPOINTS": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "baseUrl": {
+            "type": "string"
+          },
+          "apiKeys": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          }
+        },
+        "required": ["name", "baseUrl"]
+      }
     }
   },
   "required": ["$schema", "PROXY_API_KEY"],

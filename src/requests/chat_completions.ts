@@ -1,6 +1,7 @@
 import { CloudflareAIGateway } from "../ai_gateway";
-import { Providers } from "../providers";
+import { getProvider } from "../providers";
 import { Config } from "../utils/config";
+import { Environments } from "../utils/environments";
 import { fetch2, safeJsonParse } from "../utils/helpers";
 import { Secrets } from "../utils/secrets";
 
@@ -30,7 +31,7 @@ export async function chatCompletions(
   const model = modelParts.join("/");
 
   // Validate provider name
-  const provider = Providers[providerName];
+  const provider = getProvider(providerName, Environments.all());
   if (!provider) {
     return new Response(
       JSON.stringify({
@@ -41,20 +42,20 @@ export async function chatCompletions(
   }
 
   // Get API key apiKeyIndex
-  const providerClass = new provider();
-  const apiKeyName = providerClass.apiKeyName as keyof Env;
-  const apiKeyIndex = await Secrets.getNext(apiKeyName);
+  const apiKeyName = provider.apiKeyName as keyof Env | undefined;
+  const apiKeyIndex = apiKeyName ? await Secrets.getNext(apiKeyName) : 0;
 
   // Generate chat completions request
-  const [requestInfo, requestInit] =
-    await providerClass.buildChatCompletionsRequest({
+  const [requestInfo, requestInit] = await provider.buildChatCompletionsRequest(
+    {
       body: JSON.stringify({
         ...data,
         model,
       }),
       headers,
       apiKeyIndex,
-    });
+    },
+  );
 
   // If AI Gateway is enabled and the provider supports it, use AI Gateway
   if (
@@ -68,11 +69,11 @@ export async function chatCompletions(
         headers: {
           ...requestInit.headers,
         },
-        apiKeyName: providerClass.apiKeyName as keyof Env,
+        apiKeyName: provider.apiKeyName as keyof Env,
       })),
     );
   }
 
   // Request to the provider endpoint
-  return providerClass.fetch(requestInfo, requestInit);
+  return provider.fetch(requestInfo, requestInit);
 }

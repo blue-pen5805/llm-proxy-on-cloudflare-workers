@@ -1,11 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Providers } from "~/src/providers";
+import { getProvider } from "~/src/providers";
 import { proxy } from "~/src/requests/proxy";
+import { Environments } from "~/src/utils/environments";
 import { Secrets } from "~/src/utils/secrets";
 
-vi.mock("~/src/providers");
+vi.mock("~/src/providers", async () => {
+  const actual =
+    await vi.importActual<typeof import("~/src/providers")>("~/src/providers");
+  return {
+    ...actual,
+    getProvider: vi.fn(),
+  };
+});
 vi.mock("~/src/providers/ai_gateway");
 vi.mock("~/src/utils/helpers");
+vi.mock("~/src/utils/environments");
 vi.mock("~/src/utils/secrets");
 
 describe("proxy", () => {
@@ -20,6 +30,12 @@ describe("proxy", () => {
     vi.clearAllMocks();
     vi.mocked(Secrets.getAll).mockReturnValue(["test-key"]);
     vi.mocked(Secrets.getNext).mockResolvedValue(0);
+    vi.mocked(Environments.all).mockReturnValue({} as any);
+
+    vi.mocked(getProvider).mockImplementation((name) => {
+      const ProviderClass = Providers[name];
+      return ProviderClass ? new (ProviderClass as any)() : undefined;
+    });
   });
 
   it("should call providerClass.fetch with correct arguments", async () => {

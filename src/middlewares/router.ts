@@ -1,12 +1,13 @@
 import { CloudflareAIGateway } from "../ai_gateway";
 import { Middleware } from "../middleware";
-import { Providers } from "../providers";
+import { getAllProviders } from "../providers";
 import { chatCompletions } from "../requests/chat_completions";
 import { compat } from "../requests/compat";
 import { models } from "../requests/models";
 import { proxy } from "../requests/proxy";
 import { status } from "../requests/status";
 import { universalEndpoint } from "../requests/universal_endpoint";
+import { Environments } from "../utils/environments";
 import { NotFoundError } from "../utils/error";
 
 export async function handleRouting(
@@ -57,7 +58,9 @@ export async function handleRouting(
   // Example: /openai/v1/chat/completions
   //          /google-ai-studio/v1beta/models/{MODEL_NAME}:generateContent
   //          /g/{AI_GATEWAY_NAME}/openai/v1/chat/completions
-  const providerName = Object.keys(Providers).find((p) =>
+  const env = Environments.all();
+  const allProviders = getAllProviders(env);
+  const providerName = Object.keys(allProviders).find((p) =>
     pathname.startsWith(`/${p}/`),
   );
   if (providerName) {

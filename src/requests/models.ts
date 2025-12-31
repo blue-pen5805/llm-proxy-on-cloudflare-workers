@@ -1,57 +1,58 @@
 import { CloudflareAIGateway } from "../ai_gateway";
-import { Providers } from "../providers";
+import { getAllProviders } from "../providers";
 import { OpenAIModelsListResponseBody } from "../providers/openai/types";
 import { ProviderNotSupportedError } from "../providers/provider";
+import { Environments } from "../utils/environments";
 import { fetch2 } from "../utils/helpers";
 
 export async function models(
   aiGateway: CloudflareAIGateway | undefined = undefined,
 ) {
-  const requests = Object.keys(Providers).map(async (providerName) => {
-    const provider = Providers[providerName];
-    const providerClass = new provider();
+  const env = Environments.all();
+  const allProviders = getAllProviders(env);
+  const requests = Object.entries(allProviders).map(
+    async ([providerName, providerInstance]) => {
+      // Return empty list if the provider is not available
+      if (providerInstance.available() === false) {
+        return {
+          object: "list",
+          data: [],
+        } as OpenAIModelsListResponseBody;
+      }
 
-    // Return empty list if the provider is not available
-    if (providerClass.available() === false) {
-      return {
-        object: "list",
-        data: [],
-      } as OpenAIModelsListResponseBody;
-    }
+      // Generate models request
 
-    // Generate models request
+      // Always use the first API key for models endpoint
+      const apiKeyIndex = 0;
+      const [requestInfo, requestInit] =
+        await providerInstance.buildModelsRequest(apiKeyIndex);
 
-    // Always use the first API key for models endpoint
-    const apiKeyIndex = 0;
-    const [requestInfo, requestInit] =
-      await providerClass.buildModelsRequest(apiKeyIndex);
+      if (aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)) {
+        const response = await fetch2(
+          ...aiGateway.buildProviderEndpointRequest({
+            provider: providerName,
+            method: requestInit.method,
+            path: requestInfo,
+            headers: await providerInstance.headers(apiKeyIndex),
+          }),
+        );
+        const models = await response.json();
 
-    // If AI Gateway is enabled and the provider supports it, use AI Gateway
-    if (aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)) {
-      const response = await fetch2(
-        ...aiGateway.buildProviderEndpointRequest({
-          provider: providerName,
-          method: requestInit.method,
-          path: requestInfo,
-          headers: await providerClass.headers(apiKeyIndex),
-        }),
-      );
+        return providerInstance.modelsToOpenAIFormat(models);
+      }
+
+      // Request to the provider endpoint
+      const response = await providerInstance.fetch(requestInfo, requestInit);
       const models = await response.json();
 
-      return providerClass.modelsToOpenAIFormat(models);
-    }
-
-    // Request to the provider endpoint
-    const response = await providerClass.fetch(requestInfo, requestInit);
-    const models = await response.json();
-
-    // Convert models to OpenAI format
-    return providerClass.modelsToOpenAIFormat(models);
-  });
+      // Convert models to OpenAI format
+      return providerInstance.modelsToOpenAIFormat(models);
+    },
+  );
 
   const responses = await Promise.allSettled(requests);
-  const models = responses.map((response, apiKeyIndex) => {
-    const provider = Object.keys(Providers)[apiKeyIndex];
+  const models = responses.map((response, index) => {
+    const provider = Object.keys(allProviders)[index];
 
     if (response.status === "rejected") {
       if (response.reason instanceof ProviderNotSupportedError) {

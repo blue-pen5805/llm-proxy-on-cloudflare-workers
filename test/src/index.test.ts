@@ -1,5 +1,6 @@
 import { SELF } from "cloudflare:test";
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { Providers, getAllProviders, getProvider } from "~/src/providers";
 import { chatCompletions } from "~/src/requests/chat_completions";
 import { compat } from "~/src/requests/compat";
 import { models } from "~/src/requests/models";
@@ -8,6 +9,7 @@ import { proxy } from "~/src/requests/proxy";
 import { universalEndpoint } from "~/src/requests/universal_endpoint";
 import { authenticate } from "~/src/utils/authorization";
 import { Config } from "~/src/utils/config";
+import { Environments } from "~/src/utils/environments";
 
 vi.mock("~/src/ai_gateway", () => {
   const MockCloudflareAIGateway = vi.fn().mockImplementation(() => ({
@@ -28,10 +30,20 @@ vi.mock("~/src/ai_gateway", () => {
 });
 vi.mock("~/src/providers", () => ({
   Providers: {
-    openai: vi.fn(() => ({
+    openai: vi.fn().mockImplementation(() => ({
       name: "openai",
       baseUrl: "https://api.openai.com",
+      headers: vi.fn().mockResolvedValue({}),
     })),
+  },
+  getAllProviders: vi.fn(),
+  getProvider: vi.fn(),
+}));
+vi.mock("~/src/utils/environments", () => ({
+  Environments: {
+    all: vi.fn(() => ({})),
+    get: vi.fn(),
+    setEnv: vi.fn(),
   },
 }));
 vi.mock("~/src/requests/options", () => ({
@@ -71,6 +83,23 @@ describe("fetch", () => {
       name: "test-gateway",
       token: "test-token",
     });
+    vi.mocked(getAllProviders).mockImplementation(() => ({
+      openai: new (Providers.openai as any)(),
+    }));
+
+    vi.mocked(getProvider).mockImplementation((name) => {
+      if (name === "openai") return new (Providers.openai as any)();
+      return undefined;
+    });
+
+    vi.mocked(Environments.all).mockReturnValue({} as any);
+
+    // Ensure Providers.openai is set up correctly for routing
+    Providers.openai = vi.fn().mockImplementation(() => ({
+      name: "openai",
+      baseUrl: "https://api.openai.com",
+      headers: vi.fn().mockResolvedValue({}),
+    }));
   });
 
   it("should handle OPTIONS request", async () => {

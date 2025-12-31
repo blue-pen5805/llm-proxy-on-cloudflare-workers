@@ -45,4 +45,28 @@ export class Config {
     const enabled = Environments.get("ENABLE_GLOBAL_ROUND_ROBIN", false);
     return enabled === "true";
   }
+
+  static customOpenAIEndpoints():
+    | { name: string; baseUrl: string; apiKeys?: string | string[] }[]
+    | undefined {
+    const endpoints = Environments.get("CUSTOM_OPENAI_ENDPOINTS", false);
+
+    if (endpoints === undefined || endpoints === null) {
+      return undefined;
+    }
+
+    if (typeof endpoints === "string") {
+      try {
+        return JSON.parse(endpoints);
+      } catch {
+        return undefined;
+      }
+    }
+
+    if (Array.isArray(endpoints)) {
+      return endpoints;
+    }
+
+    return undefined;
+  }
 }

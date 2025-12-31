@@ -42,6 +42,15 @@
   // Ollama Cloud: https://ollama.com/
   "OLLAMA_API_KEY": null,
 
+  // --- Custom OpenAI Compatible Endpoints ---
+  // "CUSTOM_OPENAI_ENDPOINTS": [
+  //   {
+  //     "name": "my-custom-vllm",
+  //     "baseUrl": "https://vllm.example.com/v1",
+  //     "apiKeys": ["sk-1234567890"]
+  //   }
+  // ],
+
   // --- Configurations ---
   "DEV": false,
   "DEFAULT_MODEL": null,

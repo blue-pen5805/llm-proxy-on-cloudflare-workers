@@ -1,5 +1,7 @@
 import { CloudflareAIGateway } from "../ai_gateway";
-import { Providers } from "../providers";
+import { getProvider } from "../providers";
+import { Environments } from "../utils/environments";
+import { NotFoundError } from "../utils/error";
 import { fetch2 } from "../utils/helpers";
 import { Secrets } from "../utils/secrets";
 
@@ -9,11 +11,15 @@ export async function proxy(
   pathname: string,
   aiGateway: CloudflareAIGateway | undefined = undefined,
 ) {
-  const provider = Providers[providerName];
-  const providerClass = new provider();
+  const env = Environments.all();
+  const providerInstance = getProvider(providerName, env);
 
-  const apiKeyName = providerClass.apiKeyName as keyof Env;
-  const apiKeyIndex = await Secrets.getNext(apiKeyName);
+  if (!providerInstance) {
+    throw new NotFoundError();
+  }
+
+  const apiKeyName = providerInstance.apiKeyName as keyof Env;
+  const apiKeyIndex = apiKeyName ? await Secrets.getNext(apiKeyName) : 0;
 
   // Handle AI Gateway requests
   if (aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)) {
@@ -24,7 +30,7 @@ export async function proxy(
         path: pathname,
         body: request.body,
         headers: {
-          ...(await providerClass.headers(apiKeyIndex)),
+          ...(await providerInstance.headers(apiKeyIndex)),
           ...request.headers,
         },
       }),
@@ -32,7 +38,7 @@ export async function proxy(
   }
 
   // Send request to the provider directly
-  return providerClass.fetch(
+  return providerInstance.fetch(
     pathname,
     {
       method: request.method,

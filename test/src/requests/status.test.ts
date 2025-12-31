@@ -1,11 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Providers } from "~/src/providers";
+import { getAllProviders } from "~/src/providers";
+import { CustomOpenAI } from "~/src/providers/custom-openai";
 import { status } from "~/src/requests/status";
 import { Config } from "~/src/utils/config";
 import { Environments } from "~/src/utils/environments";
 import { Secrets } from "~/src/utils/secrets";
 
-vi.mock("~/src/providers");
+vi.mock("~/src/providers", async () => {
+  const actual =
+    await vi.importActual<typeof import("~/src/providers")>("~/src/providers");
+  return {
+    ...actual,
+    getAllProviders: vi.fn(),
+  };
+});
 vi.mock("~/src/utils/config");
 vi.mock("~/src/utils/environments");
 vi.mock("~/src/utils/secrets");
@@ -37,11 +46,21 @@ describe("status", () => {
     vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(true);
 
     vi.mocked(Environments.getEnv).mockReturnValue({} as Env);
+    vi.mocked(Environments.all).mockReturnValue({} as any);
 
     Providers.openai = vi.fn().mockImplementation(() => {
       const instance = Object.create(mockProviderClass);
       instance.apiKeyName = "OPENAI_API_KEY";
       return instance;
+    });
+
+    vi.mocked(getAllProviders).mockImplementation(() => {
+      return Object.fromEntries(
+        Object.keys(Providers).map((key) => [
+          key,
+          new (Providers[key] as any)(),
+        ]),
+      );
     });
 
     mockProviderClass.available.mockReturnValue(true);
