@@ -43,13 +43,13 @@
   "OLLAMA_API_KEY": null,
 
   // --- Custom OpenAI Compatible Endpoints ---
-  // "CUSTOM_OPENAI_ENDPOINTS": [
-  //   {
-  //     "name": "my-custom-vllm",
-  //     "baseUrl": "https://vllm.example.com/v1",
-  //     "apiKeys": ["sk-1234567890"]
-  //   }
-  // ],
+  "CUSTOM_OPENAI_ENDPOINTS": [
+    // {
+    //   "name": "my-custom-llm",
+    //   "baseUrl": "https://llm.example.com/v1",
+    //   "apiKeys": []
+    // }
+  ],
 
   // --- Configurations ---
   "DEV": false,

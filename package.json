@@ -6,8 +6,8 @@
   "type": "module",
   "scripts": {
     "deploy": "wrangler deploy",
-    "dev": "ts-node scripts/with-secrets.ts --env develop -- wrangler dev --env develop",
-    "cf-typegen": "ts-node scripts/with-secrets.ts --env example -- wrangler types --env example",
+    "dev": "ts-node scripts/with-secrets.ts --env develop -- wrangler dev --env-file .dev.vars.develop",
+    "cf-typegen": "ts-node scripts/with-secrets.ts --env example -- wrangler types --env-file .dev.vars.example",
     "cf:login": "wrangler login",
     "cf:logout": "wrangler logout",
     "test": "vitest run",
