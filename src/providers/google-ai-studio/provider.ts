@@ -45,7 +45,6 @@ export class GoogleAiStudio extends ProviderBase {
   ): ReturnType<typeof fetch> {
     if (pathname.startsWith("/v1beta/openai")) {
       const apiKey = Secrets.get(this.apiKeyName, apiKeyIndex);
-      const targetPathname = pathname.replace("/v1beta/openai", "");
 
       const newHeaders: Record<string, string> = {
         ...(init?.headers as Record<string, string>),
@@ -54,7 +53,7 @@ export class GoogleAiStudio extends ProviderBase {
       delete newHeaders["x-goog-api-key"];
 
       return super.fetch(
-        targetPathname,
+        pathname,
         {
           ...init,
           headers: newHeaders,
