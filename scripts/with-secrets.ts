@@ -108,7 +108,7 @@ async function main() {
 
   const child = spawn(cmd, cmdArgs, {
     stdio: "inherit",
-    shell: true, // Use shell to resolve commands like 'wrangler'
+    shell: process.platform === "win32", // Use shell only on Windows to resolve commands like 'wrangler'
   });
 
   child.on("close", (code) => {
