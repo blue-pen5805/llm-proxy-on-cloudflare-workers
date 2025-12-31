@@ -273,6 +273,23 @@
         }
       ]
     },
+    "OLLAMA_API_KEY": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+
     "DEV": {
       "oneOf": [
         {

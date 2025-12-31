@@ -7,6 +7,7 @@ import { Grok } from "./providers/grok";
 import { Groq } from "./providers/groq";
 import { HuggingFace } from "./providers/huggingface";
 import { Mistral } from "./providers/mistral";
+import { Ollama } from "./providers/ollama";
 import { OpenAI } from "./providers/openai";
 import { OpenRouter } from "./providers/openrouter";
 import { PerplexityAi } from "./providers/perplexity-ai";
@@ -37,5 +38,6 @@ export const Providers: {
   openrouter: OpenRouter,
   "perplexity-ai": PerplexityAi,
   replicate: Replicate,
+  ollama: Ollama,
   // --- Other Providers
 };
