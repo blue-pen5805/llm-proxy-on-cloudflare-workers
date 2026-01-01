@@ -349,6 +349,12 @@
             "items": {
               "type": "string"
             }
+          },
+          "chatCompletionPath": {
+            "type": "string"
+          },
+          "modelsPath": {
+            "type": "string"
           }
         },
         "required": ["name", "baseUrl"]

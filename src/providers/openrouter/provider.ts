@@ -3,8 +3,12 @@ import { OpenAICompatibleProvider } from "../provider";
 import { OpenRouterModelsListResponseBody } from "./types";
 
 export class OpenRouter extends OpenAICompatibleProvider {
-  readonly chatCompletionPath: string = "/v1/chat/completions";
-  readonly modelsPath: string = "/v1/models";
+  get chatCompletionPath(): string {
+    return "/v1/chat/completions";
+  }
+  get modelsPath(): string {
+    return "/v1/models";
+  }
 
   readonly apiKeyName: keyof Env = "OPENROUTER_API_KEY";
   readonly baseUrlProp: string = "https://openrouter.ai/api";

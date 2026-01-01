@@ -1,8 +1,12 @@
 import { ProviderBase, ProviderNotSupportedError } from "../provider";
 
 export class HuggingFace extends ProviderBase {
-  readonly chatCompletionPath: string = "";
-  readonly modelsPath: string = "";
+  get chatCompletionPath(): string {
+    return "";
+  }
+  get modelsPath(): string {
+    return "";
+  }
 
   readonly apiKeyName: keyof Env = "HUGGINGFACE_API_KEY";
   readonly baseUrlProp: string = "https://api-inference.huggingface.co/models";

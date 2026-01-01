@@ -10,8 +10,12 @@ export class ProviderBase {
   readonly apiKeyName: keyof Env | undefined = undefined;
   readonly baseUrlProp: string = "https://example.com";
   readonly pathnamePrefixProp: string = "";
-  readonly chatCompletionPath: string = "/chat/completions";
-  readonly modelsPath: string = "/models";
+  get chatCompletionPath(): string {
+    return "/chat/completions";
+  }
+  get modelsPath(): string {
+    return "/models";
+  }
 
   // --- Core Methods ---
   available(): boolean {

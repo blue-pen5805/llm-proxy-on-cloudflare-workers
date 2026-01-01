@@ -6,8 +6,12 @@ import { OpenAICompatibleProvider } from "../provider";
 import { CohereModelsListResponseBody } from "./types";
 
 export class Cohere extends OpenAICompatibleProvider {
-  readonly chatCompletionPath: string = "/compatibility/v1/chat/completions";
-  readonly modelsPath: string = "/v1/models?page_size=100&endpoint=chat";
+  get chatCompletionPath(): string {
+    return "/compatibility/v1/chat/completions";
+  }
+  get modelsPath(): string {
+    return "/v1/models?page_size=100&endpoint=chat";
+  }
 
   readonly apiKeyName: keyof Env = "COHERE_API_KEY";
   readonly baseUrlProp: string = "https://api.cohere.com";

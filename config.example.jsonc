@@ -49,6 +49,8 @@
     //   "baseUrl": "https://llm.example.com/v1",
     //   "apiKeys": [],
     //   "models": ["model-1", "model-2"] // Optional
+    //   "chatCompletionPath": "/v1/chat/completions", // Optional
+    //   "modelsPath": "/v1/models" // Optional
     // }
   ],
 

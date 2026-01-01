@@ -3,8 +3,12 @@ import { OpenAICompatibleProvider } from "../provider";
 import { MistralModelsListResponseBody } from "./types";
 
 export class Mistral extends OpenAICompatibleProvider {
-  readonly chatCompletionPath: string = "/v1/chat/completions";
-  readonly modelsPath: string = "/v1/models";
+  get chatCompletionPath(): string {
+    return "/v1/chat/completions";
+  }
+  get modelsPath(): string {
+    return "/v1/models";
+  }
 
   readonly apiKeyName: keyof Env = "MISTRAL_API_KEY";
   readonly baseUrlProp: string = "https://api.mistral.ai";

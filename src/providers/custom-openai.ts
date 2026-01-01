@@ -6,6 +6,8 @@ export interface CustomOpenAIEndpointConfig {
   baseUrl: string;
   apiKeys?: string | string[];
   models?: string[];
+  chatCompletionPath?: string;
+  modelsPath?: string;
 }
 
 export class CustomOpenAI extends OpenAICompatibleProvider {
@@ -14,6 +16,14 @@ export class CustomOpenAI extends OpenAICompatibleProvider {
   constructor(private config: CustomOpenAIEndpointConfig) {
     super();
     this.name = config.name;
+  }
+
+  get chatCompletionPath(): string {
+    return this.config.chatCompletionPath ?? super.chatCompletionPath;
+  }
+
+  get modelsPath(): string {
+    return this.config.modelsPath ?? super.modelsPath;
   }
 
   baseUrl(): string {

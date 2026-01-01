@@ -4,8 +4,12 @@ import { ProviderBase } from "../provider";
 import { WorkersAiModelsListResponseBody } from "./types";
 
 export class WorkersAi extends ProviderBase {
-  readonly chatCompletionPath: string = "/v1/chat/completions";
-  readonly modelsPath: string = "/models/search?task=Text Generation";
+  get chatCompletionPath(): string {
+    return "/v1/chat/completions";
+  }
+  get modelsPath(): string {
+    return "/models/search?task=Text Generation";
+  }
 
   readonly apiKeyName: keyof Env = "CLOUDFLARE_API_KEY";
   readonly accountIdName: keyof Env = "CLOUDFLARE_ACCOUNT_ID";

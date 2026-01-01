@@ -7,8 +7,12 @@ import { ProviderBase } from "../provider";
 import { GoogleAiStudioModelsListResponseBody } from "./types";
 
 export class GoogleAiStudio extends ProviderBase {
-  readonly chatCompletionPath: string = "/v1beta/openai/chat/completions";
-  readonly modelsPath: string = "/v1beta/models";
+  get chatCompletionPath(): string {
+    return "/v1beta/openai/chat/completions";
+  }
+  get modelsPath(): string {
+    return "/v1beta/models";
+  }
 
   readonly apiKeyName: keyof Env = "GEMINI_API_KEY";
   readonly baseUrlProp: string = "https://generativelanguage.googleapis.com";
