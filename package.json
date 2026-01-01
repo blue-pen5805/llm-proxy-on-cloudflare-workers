@@ -2,7 +2,7 @@
   "name": "llm-proxy-on-cloudflare-workers",
   "description": "A serverless proxy on Cloudflare Workers for multiple LLM APIs with unified authentication and key rotation.",
   "author": "blue.pen5805",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "scripts": {
