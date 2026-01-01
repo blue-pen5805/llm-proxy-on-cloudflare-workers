@@ -1,3 +1,7 @@
 {
-  "github.copilot.chat.agent.terminal.allowList": ["npm", "node", "date"]
+  "chat.tools.terminal.autoApprove": {
+    "npm": true,
+    "node": true,
+    "date": true
+  }
 }
