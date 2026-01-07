@@ -50,7 +50,19 @@ describe("Secrets", () => {
   describe("getNext", () => {
     it("should return a random apiKeyIndex if global round-robin is disabled", async () => {
       vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(false);
-      vi.spyOn(Math, "random").mockReturnValue(0.5); // (0.5 * 3) = 1.5 -> 1
+      
+      // Mock crypto.getRandomValues to return a specific value
+      const mockArray = new Uint32Array([1]); // This will return 1 % 3 = 1
+      const mockGetRandomValues = vi.fn((array: Uint32Array) => {
+        array[0] = mockArray[0];
+        return array;
+      });
+      
+      // @ts-ignore - Mock crypto for test
+      globalThis.crypto = {
+        getRandomValues: mockGetRandomValues,
+      } as Crypto;
+      
       const apiKeyIndex = await Secrets.getNext("GEMINI_API_KEY");
       expect(apiKeyIndex).toBe(1);
     });
