@@ -3,7 +3,7 @@ import { Environments } from "./environments";
 import { shuffleArray } from "./helpers";
 
 // Returns a cryptographically secure random integer in the range [0, max - 1].
-function getSecureRandomIndex(max: number): number {
+export function getSecureRandomIndex(max: number): number {
   if (max <= 0) {
     throw new Error("max must be greater than 0");
   }
@@ -11,8 +11,16 @@ function getSecureRandomIndex(max: number): number {
   // Browser / Cloudflare Workers / environments with Web Crypto
   if (typeof crypto !== "undefined" && "getRandomValues" in crypto) {
     const array = new Uint32Array(1);
-    (crypto as Crypto).getRandomValues(array);
-    return array[0] % max;
+    const maxUint32 = 0xffffffff;
+    const limit = Math.floor((maxUint32 + 1) / max) * max;
+
+    let value: number;
+    do {
+      (crypto as Crypto).getRandomValues(array);
+      value = array[0]!;
+    } while (value >= limit);
+
+    return value % max;
   }
 
   // Node.js fallback using built-in crypto.randomInt
