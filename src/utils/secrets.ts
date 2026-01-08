@@ -17,7 +17,7 @@ export function getSecureRandomIndex(max: number): number {
     let value: number;
     do {
       (crypto as Crypto).getRandomValues(array);
-      value = array[0]!;
+      value = array[0];
     } while (value >= limit);
 
     return value % max;
