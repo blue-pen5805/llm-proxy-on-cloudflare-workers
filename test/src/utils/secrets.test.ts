@@ -89,7 +89,6 @@ describe("Secrets", () => {
     });
 
     vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(false);
-    vi.spyOn(Math, "random").mockReturnValue(0.999);
   });
 
   describe("getAll", () => {
