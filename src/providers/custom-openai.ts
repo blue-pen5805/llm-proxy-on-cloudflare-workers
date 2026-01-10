@@ -1,5 +1,6 @@
 import { OpenAIModelsListResponseBody } from "./openai/types";
 import { OpenAICompatibleProvider } from "./provider";
+import { randomInt } from "crypto";
 
 export interface CustomOpenAIEndpointConfig {
   name: string;
@@ -49,7 +50,7 @@ export class CustomOpenAI extends OpenAICompatibleProvider {
     const index =
       apiKeyIndex !== undefined
         ? apiKeyIndex % keys.length
-        : Math.floor(Math.random() * keys.length);
+        : randomInt(keys.length);
     const apiKey = keys[index];
 
     return {
