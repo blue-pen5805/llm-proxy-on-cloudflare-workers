@@ -19,10 +19,28 @@ export class ProviderBase {
 
   // --- Core Methods ---
   available(): boolean {
+    return this.getApiKeys().length > 0;
+  }
+
+  getApiKeys(): string[] {
     if (this.apiKeyName) {
-      return Secrets.getAll(this.apiKeyName).length > 0;
+      return Secrets.getAll(this.apiKeyName);
     }
-    return false;
+    return [];
+  }
+
+  async getNextApiKeyIndex(): Promise<number> {
+    const keys = this.getApiKeys();
+    if (keys.length <= 1) {
+      return 0;
+    }
+
+    if (this.apiKeyName) {
+      return await Secrets.getNext(this.apiKeyName);
+    }
+
+    // Fallback for providers without apiKeyName (like CustomOpenAI will override this)
+    return 0;
   }
 
   async fetch(
@@ -161,8 +179,12 @@ export class ProviderBase {
 
 export class OpenAICompatibleProvider extends ProviderBase {
   async headers(apiKeyIndex?: number): Promise<HeadersInit> {
-    if (!this.apiKeyName) return {};
-    const apiKey = Secrets.get(this.apiKeyName, apiKeyIndex);
+    const keys = this.getApiKeys();
+    if (keys.length === 0) return {};
+
+    const index = apiKeyIndex !== undefined ? apiKeyIndex % keys.length : 0;
+    const apiKey = keys[index];
+
     return {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,

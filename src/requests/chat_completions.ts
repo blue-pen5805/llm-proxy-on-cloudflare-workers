@@ -1,4 +1,5 @@
 import { CloudflareAIGateway } from "../ai_gateway";
+import { MiddlewareContext } from "../middleware";
 import { getProvider } from "../providers";
 import { Config } from "../utils/config";
 import { Environments } from "../utils/environments";
@@ -6,9 +7,10 @@ import { fetch2, safeJsonParse } from "../utils/helpers";
 import { Secrets } from "../utils/secrets";
 
 export async function chatCompletions(
-  request: Request,
+  context: MiddlewareContext,
   aiGateway: CloudflareAIGateway | undefined = undefined,
 ) {
+  const { request, apiKeyIndex: contextApiKeyIndex } = context;
   // Remove Authorization header to prevent it from being sent to the provider
   const headers = new Headers(request.headers);
   headers.delete("Authorization");
@@ -42,8 +44,13 @@ export async function chatCompletions(
   }
 
   // Get API key apiKeyIndex
-  const apiKeyName = provider.apiKeyName as keyof Env | undefined;
-  const apiKeyIndex = apiKeyName ? await Secrets.getNext(apiKeyName) : 0;
+  const apiKeyIndex =
+    contextApiKeyIndex !== undefined
+      ? Secrets.resolveApiKeyIndex(
+          contextApiKeyIndex,
+          provider.getApiKeys().length,
+        )
+      : await provider.getNextApiKeyIndex();
 
   // Generate chat completions request
   const [requestInfo, requestInit] = await provider.buildChatCompletionsRequest(

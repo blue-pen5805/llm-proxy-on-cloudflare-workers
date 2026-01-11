@@ -10,7 +10,7 @@ We utilize the **Adapter Pattern** to normalize communication with different LLM
 
 ### Component Structure
 
-- **`ProviderBase`**: The single foundation class for all providers. It handles both the raw communication layer (base URL, headers, fetch) and LLM-specific logic (request building, response normalization).
+- **`ProviderBase`**: The single foundation class for all providers. It handles both the raw communication layer (base URL, headers, fetch) and LLM-specific logic (request building, response normalization). It centralizes API key management via `getApiKeys()` and stateful rotation coordination through `getNextApiKeyIndex()`.
 - **`OpenAICompatibleProvider`**: A specialized base for providers that use standard OpenAI-style headers and paths.
 - **Provider Adapters**: Individual classes (e.g., `Anthropic`, `GoogleAiStudio`) that extend `ProviderBase` (or `OpenAICompatibleProvider`). This consolidated architecture eliminates redundant abstraction layers and minimizes boilerplate.
 

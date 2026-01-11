@@ -1,13 +1,17 @@
 import { CloudflareAIGateway } from "../ai_gateway";
+import { MiddlewareContext } from "../middleware";
 import { getAllProviders } from "../providers";
 import { OpenAIModelsListResponseBody } from "../providers/openai/types";
 import { ProviderNotSupportedError } from "../providers/provider";
 import { Environments } from "../utils/environments";
 import { fetch2 } from "../utils/helpers";
+import { Secrets } from "../utils/secrets";
 
 export async function models(
+  context: MiddlewareContext,
   aiGateway: CloudflareAIGateway | undefined = undefined,
 ) {
+  const { apiKeyIndex: contextApiKeyIndex } = context;
   const env = Environments.all();
   const allProviders = getAllProviders(env);
   const requests = Object.entries(allProviders).map(
@@ -28,8 +32,14 @@ export async function models(
         return staticModels;
       }
 
-      // Always use the first API key for models endpoint
-      const apiKeyIndex = 0;
+      // Use the provided API key index if available, otherwise default to 0
+      const apiKeyIndex =
+        contextApiKeyIndex !== undefined
+          ? Secrets.resolveApiKeyIndex(
+              contextApiKeyIndex,
+              providerInstance.getApiKeys().length,
+            )
+          : 0;
       const [requestInfo, requestInit] =
         await providerInstance.buildModelsRequest(apiKeyIndex);
 

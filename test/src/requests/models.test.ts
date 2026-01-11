@@ -40,6 +40,8 @@ describe("models", () => {
     fetch: vi.fn(),
     headers: vi.fn(),
     staticModels: vi.fn(),
+    getApiKeys: vi.fn().mockReturnValue(["test-key"]),
+    getNextApiKeyIndex: vi.fn().mockResolvedValue(0),
   };
 
   const mockAIGateway = {
@@ -104,7 +106,7 @@ describe("models", () => {
   });
 
   it("should return models from all available providers", async () => {
-    const response = await models();
+    const response = await models({} as any);
 
     expect(response).toBeInstanceOf(Response);
     expect(response.headers.get("Content-Type")).toBe("application/json");
@@ -144,7 +146,7 @@ describe("models", () => {
     Providers.openai = vi.fn().mockReturnValue(mockProviderClass);
     Providers.unavailable = vi.fn().mockReturnValue(unavailableProviderClass);
 
-    const response = await models();
+    const response = await models({} as any);
     const body = (await response.json()) as ModelsResponse;
 
     expect(body.data).toHaveLength(1);
@@ -157,7 +159,7 @@ describe("models", () => {
       { method: "GET", headers: {} },
     ]);
 
-    await models(mockAIGateway as any);
+    await models({} as any, mockAIGateway as any);
 
     expect(CloudflareAIGateway.isSupportedProvider).toHaveBeenCalledWith(
       "openai",
@@ -187,7 +189,7 @@ describe("models", () => {
 
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const response = await models();
+    const response = await models({} as any);
     const body = (await response.json()) as ModelsResponse;
 
     expect(body.data).toHaveLength(1);
@@ -218,7 +220,7 @@ describe("models", () => {
 
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const response = await models();
+    const response = await models({} as any);
     const body = (await response.json()) as ModelsResponse;
 
     expect(body.data).toHaveLength(1);
@@ -249,7 +251,7 @@ describe("models", () => {
 
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const response = await models();
+    const response = await models({} as any);
     const body = (await response.json()) as ModelsResponse;
 
     expect(body.data).toHaveLength(1);
@@ -283,7 +285,7 @@ describe("models", () => {
 
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const response = await models();
+    const response = await models({} as any);
     const body = (await response.json()) as ModelsResponse;
 
     expect(body.data).toHaveLength(1);
@@ -325,7 +327,7 @@ describe("models", () => {
 
     Providers.openai = vi.fn().mockReturnValue(multiModelProviderClass);
 
-    const response = await models();
+    const response = await models({} as any);
     const body = (await response.json()) as ModelsResponse;
 
     expect(body.data).toHaveLength(2);
@@ -356,7 +358,7 @@ describe("models", () => {
 
     Providers.custom = vi.fn().mockReturnValue(staticModelsProviderClass);
 
-    const response = await models();
+    const response = await models({} as any);
     const body = (await response.json()) as ModelsResponse;
 
     expect(body.data).toHaveLength(1);

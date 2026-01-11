@@ -25,7 +25,6 @@ describe("authMiddleware", () => {
 
     expect(response).toBe(nextResponse);
     expect(next).toHaveBeenCalled();
-    expect(context.pathname).toBe("/v1/chat/completions");
   });
 
   it("should throw UnauthorizedError if authentication fails in non-development mode", async () => {

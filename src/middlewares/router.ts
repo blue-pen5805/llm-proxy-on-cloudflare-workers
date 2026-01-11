@@ -1,5 +1,5 @@
 import { CloudflareAIGateway } from "../ai_gateway";
-import { Middleware } from "../middleware";
+import { Middleware, MiddlewareContext } from "../middleware";
 import { getAllProviders } from "../providers";
 import { chatCompletions } from "../requests/chat_completions";
 import { compat } from "../requests/compat";
@@ -11,10 +11,10 @@ import { Environments } from "../utils/environments";
 import { NotFoundError } from "../utils/error";
 
 export async function handleRouting(
-  request: Request,
-  pathname: string,
+  context: MiddlewareContext,
   aiGateway?: CloudflareAIGateway,
 ): Promise<Response> {
+  const { request, pathname } = context;
   // Example: /ping
   //          /status
   //          /g/{AI_GATEWAY_NAME}/status
@@ -40,7 +40,7 @@ export async function handleRouting(
     request.method === "POST" &&
     (pathname === "/chat/completions" || pathname === "/v1/chat/completions")
   ) {
-    return await chatCompletions(request, aiGateway);
+    return await chatCompletions(context, aiGateway);
   }
 
   // Models - https://platform.openai.com/docs/api-reference/models
@@ -51,7 +51,7 @@ export async function handleRouting(
     request.method === "GET" &&
     (pathname === "/models" || pathname === "/v1/models")
   ) {
-    return await models(aiGateway);
+    return await models(context, aiGateway);
   }
 
   // Proxy
@@ -68,7 +68,7 @@ export async function handleRouting(
       new RegExp(`^/${providerName}/`),
       "/",
     );
-    return await proxy(request, providerName, targetPathname, aiGateway);
+    return await proxy(context, providerName, targetPathname, aiGateway);
   }
 
   // Universal Endpoint
@@ -82,9 +82,5 @@ export async function handleRouting(
 }
 
 export const routerMiddleware: Middleware = async (context) => {
-  return await handleRouting(
-    context.request,
-    context.pathname,
-    context.aiGateway,
-  );
+  return await handleRouting(context, context.aiGateway);
 };

@@ -24,6 +24,8 @@ describe("proxy", () => {
       baseUrl: vi.fn().mockReturnValue("https://api.example.com/test"),
     },
     fetch: vi.fn(),
+    getApiKeys: vi.fn().mockReturnValue(["test-key"]),
+    getNextApiKeyIndex: vi.fn().mockResolvedValue(0),
   };
 
   beforeEach(() => {
@@ -50,7 +52,7 @@ describe("proxy", () => {
       headers: new Headers(),
     });
 
-    await proxy(mockRequest, providerName, "/test/path");
+    await proxy({ request: mockRequest } as any, providerName, "/test/path");
 
     expect(mockProviderClass.fetch).toHaveBeenCalledWith(
       "/test/path",
@@ -75,7 +77,7 @@ describe("proxy", () => {
       headers: new Headers(),
     });
 
-    await proxy(mockRequest, providerName, "/test/path");
+    await proxy({ request: mockRequest } as any, providerName, "/test/path");
 
     expect(mockProviderClass.fetch).toHaveBeenCalledWith(
       "/test/path",

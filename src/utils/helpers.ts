@@ -1,4 +1,5 @@
 import { AUTHORIZATION_QUERY_PARAMETERS } from "./authorization";
+import { randomInt } from "node:crypto";
 
 export function maskUrl(url: string): string {
   // Constants for masking behavior
@@ -89,7 +90,7 @@ export function shuffleArray<T>(array: T[]): T[] {
   const cloneArray = [...array];
 
   for (let i = cloneArray.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = randomInt(i + 1);
     [cloneArray[i], cloneArray[j]] = [cloneArray[j], cloneArray[i]];
   }
 

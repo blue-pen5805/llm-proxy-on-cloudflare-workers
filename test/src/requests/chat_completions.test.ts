@@ -25,6 +25,8 @@ describe("chatCompletions", () => {
     buildChatCompletionsRequest: vi.fn(),
     fetch: vi.fn(),
     apiKeyName: "OPENAI_API_KEY",
+    getApiKeys: vi.fn().mockReturnValue(["test-key"]),
+    getNextApiKeyIndex: vi.fn().mockResolvedValue(0),
   };
 
   const mockAIGateway = {
@@ -74,7 +76,7 @@ describe("chatCompletions", () => {
     ]);
     mockProviderClass.fetch.mockResolvedValue(new Response());
 
-    await chatCompletions(request);
+    await chatCompletions({ request } as any);
 
     expect(mockProviderClass.buildChatCompletionsRequest).toHaveBeenCalledWith({
       body: JSON.stringify({ ...requestBody, model: "gpt-4" }),
@@ -105,7 +107,7 @@ describe("chatCompletions", () => {
     ]);
     mockProviderClass.fetch.mockResolvedValue(new Response());
 
-    await chatCompletions(request);
+    await chatCompletions({ request } as any);
 
     expect(Config.defaultModel).toHaveBeenCalled();
     expect(mockProviderClass.buildChatCompletionsRequest).toHaveBeenCalledWith({
@@ -122,7 +124,7 @@ describe("chatCompletions", () => {
       headers: { "Content-Type": "application/json" },
     });
 
-    const response = await chatCompletions(request);
+    const response = await chatCompletions({ request } as any);
 
     expect(response.status).toBe(400);
     const body = (await response.json()) as { error: string };
@@ -141,7 +143,7 @@ describe("chatCompletions", () => {
       headers: { "Content-Type": "application/json" },
     });
 
-    const response = await chatCompletions(request);
+    const response = await chatCompletions({ request } as any);
 
     expect(response.status).toBe(400);
     const body = (await response.json()) as { error: string };
@@ -172,7 +174,7 @@ describe("chatCompletions", () => {
       { method: "POST", body: JSON.stringify([]) },
     ]);
 
-    await chatCompletions(request, mockAIGateway as any);
+    await chatCompletions({ request } as any, mockAIGateway as any);
 
     expect(CloudflareAIGateway.isSupportedProvider).toHaveBeenCalledWith(
       "openai",
@@ -211,7 +213,7 @@ describe("chatCompletions", () => {
     ]);
     mockProviderClass.fetch.mockResolvedValue(new Response());
 
-    await chatCompletions(request);
+    await chatCompletions({ request } as any);
 
     const headersArg =
       mockProviderClass.buildChatCompletionsRequest.mock.calls[0][0].headers;
@@ -239,7 +241,7 @@ describe("chatCompletions", () => {
     ]);
     mockProviderClass.fetch.mockResolvedValue(new Response());
 
-    await chatCompletions(request);
+    await chatCompletions({ request } as any);
 
     expect(mockProviderClass.buildChatCompletionsRequest).toHaveBeenCalledWith({
       body: JSON.stringify({ ...requestBody, model: "gpt-4/turbo" }),

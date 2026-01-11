@@ -18,6 +18,7 @@ To understand the architecture and design of specific capabilities, please refer
 ### Core Architecture
 
 - [**Middleware Pipeline**](./features/middleware_pipeline.md): The structural design of the request processing chain.
+- [**Path Handling & Normalization**](./features/path_handling.md): Describes how request paths are initialized, decoded, and sanitized.
 - [**Provider Abstraction**](./features/provider_abstraction.md): How the proxy translates between various LLM backends and ensures OpenAI compatibility.
 
 ### Reliability & Management

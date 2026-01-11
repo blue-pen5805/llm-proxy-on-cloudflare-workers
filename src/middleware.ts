@@ -7,6 +7,7 @@ export interface MiddlewareContext {
   ctx: ExecutionContext;
   pathname: string;
   aiGateway?: CloudflareAIGateway;
+  apiKeyIndex?: number | { start?: number; end?: number };
 }
 
 export type NextFunction = () => Promise<Response>;

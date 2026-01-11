@@ -1,8 +1,12 @@
+import { randomInt } from "node:crypto";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Config } from "~/src/utils/config";
 import { Environments } from "~/src/utils/environments";
 import { Secrets, getSecureRandomIndex } from "~/src/utils/secrets";
 
+vi.mock("node:crypto", () => ({
+  randomInt: vi.fn(),
+}));
 vi.mock("~/src/utils/environments");
 vi.mock("~/src/utils/config");
 
@@ -117,20 +121,10 @@ describe("Secrets", () => {
   describe("getNext", () => {
     it("should return a random apiKeyIndex if global round-robin is disabled", async () => {
       vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(false);
-
-      // Mock crypto.getRandomValues to return a specific value
-      const mockArray = new Uint32Array([1]); // 1 passes the rejection check (1 < limit for max=3) and then 1 % 3 = 1
-      const mockGetRandomValues = vi.fn((array: Uint32Array) => {
-        array[0] = mockArray[0];
-        return array;
-      });
-
-      (globalThis as any).crypto = {
-        getRandomValues: mockGetRandomValues,
-      } as unknown as Crypto;
-
+      vi.mocked(randomInt).mockReturnValue(1 as any);
       const apiKeyIndex = await Secrets.getNext("GEMINI_API_KEY");
       expect(apiKeyIndex).toBe(1);
+      expect(randomInt).toHaveBeenCalledWith(3);
     });
 
     it("should use global counter if global round-robin is enabled", async () => {
@@ -151,6 +145,39 @@ describe("Secrets", () => {
       const apiKeyIndex = await Secrets.getNext("GEMINI_API_KEY");
       expect(apiKeyIndex).toBe(1);
       expect(mockGetNextIndex).toHaveBeenCalledWith("GEMINI_API_KEY", 3);
+    });
+  });
+
+  describe("resolveApiKeyIndex", () => {
+    it("should return the index itself for numeric selection", () => {
+      expect(Secrets.resolveApiKeyIndex(1, 3)).toBe(1);
+      expect(Secrets.resolveApiKeyIndex(4, 3)).toBe(1); // 4 % 3 = 1
+    });
+
+    it("should return a random index within range for range selection", () => {
+      vi.mocked(randomInt).mockReturnValue(2 as any);
+      const index = Secrets.resolveApiKeyIndex({ start: 1, end: 3 }, 5);
+      expect(index).toBe(2);
+      expect(randomInt).toHaveBeenCalledWith(1, 4); // start=1, end=3 -> randomInt(1, 4)
+    });
+
+    it("should use length-1 as default for end", () => {
+      vi.mocked(randomInt).mockReturnValue(4 as any);
+      const index = Secrets.resolveApiKeyIndex({ start: 2 }, 5);
+      expect(index).toBe(4);
+      expect(randomInt).toHaveBeenCalledWith(2, 5); // start=2, end=undefined(4) -> randomInt(2, 5)
+    });
+
+    it("should use 0 as default for start", () => {
+      vi.mocked(randomInt).mockReturnValue(1 as any);
+      const index = Secrets.resolveApiKeyIndex({ end: 2 }, 5);
+      expect(index).toBe(1);
+      expect(randomInt).toHaveBeenCalledWith(0, 3); // start=undefined(0), end=2 -> randomInt(0, 3)
+    });
+
+    it("should return start if start >= end", () => {
+      const index = Secrets.resolveApiKeyIndex({ start: 3, end: 1 }, 5);
+      expect(index).toBe(3);
     });
   });
 });

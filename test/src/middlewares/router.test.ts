@@ -27,12 +27,15 @@ describe("handleRouting", () => {
   const request = new Request("http://localhost/");
 
   it("should route to status", async () => {
-    const response = await handleRouting(request, "/status");
+    const response = await handleRouting({
+      request,
+      pathname: "/status",
+    } as any);
     expect(await response.text()).toBe("status");
   });
 
   it("should route to ping", async () => {
-    const response = await handleRouting(request, "/ping");
+    const response = await handleRouting({ request, pathname: "/ping" } as any);
     expect(await response.text()).toBe("Pong");
     expect(response.status).toBe(200);
   });
@@ -41,30 +44,42 @@ describe("handleRouting", () => {
     const postRequest = new Request("http://localhost/v1/chat/completions", {
       method: "POST",
     });
-    const response = await handleRouting(postRequest, "/v1/chat/completions");
+    const response = await handleRouting({
+      request: postRequest,
+      pathname: "/v1/chat/completions",
+    } as any);
     expect(await response.text()).toBe("chat");
   });
 
   it("should route to models", async () => {
-    const response = await handleRouting(request, "/v1/models");
+    const response = await handleRouting({
+      request,
+      pathname: "/v1/models",
+    } as any);
     expect(await response.text()).toBe("models");
   });
 
   it("should route to proxy for supported providers", async () => {
-    const response = await handleRouting(request, "/openai/v1/models");
+    const response = await handleRouting({
+      request,
+      pathname: "/openai/v1/models",
+    } as any);
     expect(await response.text()).toBe("proxy");
   });
 
   it("should route to universal endpoint", async () => {
     const aiGateway = new CloudflareAIGateway("acc", "gate", "key");
     const postRequest = new Request("http://localhost/", { method: "POST" });
-    const response = await handleRouting(postRequest, "/", aiGateway);
+    const response = await handleRouting(
+      { request: postRequest, pathname: "/" } as any,
+      aiGateway,
+    );
     expect(await response.text()).toBe("universal");
   });
 
   it("should throw NotFoundError for unknown routes", async () => {
-    await expect(handleRouting(request, "/unknown")).rejects.toThrow(
-      NotFoundError,
-    );
+    await expect(
+      handleRouting({ request, pathname: "/unknown" } as any),
+    ).rejects.toThrow(NotFoundError);
   });
 });

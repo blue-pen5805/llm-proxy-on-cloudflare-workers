@@ -256,7 +256,9 @@ describe("fetch", () => {
 
     // Check that proxy was called with the pathname without the key parameter
     expect(mockProxy).toHaveBeenCalledWith(
-      expect.any(Request),
+      expect.objectContaining({
+        request: expect.any(Request),
+      }),
       "openai",
       "/v1/chat/completions?other=value",
       expect.anything(),

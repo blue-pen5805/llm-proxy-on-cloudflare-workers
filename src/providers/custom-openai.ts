@@ -1,3 +1,4 @@
+import { Secrets } from "../utils/secrets";
 import { OpenAIModelsListResponseBody } from "./openai/types";
 import { OpenAICompatibleProvider } from "./provider";
 
@@ -30,26 +31,24 @@ export class CustomOpenAI extends OpenAICompatibleProvider {
     return this.config.baseUrl;
   }
 
-  async headers(apiKeyIndex?: number): Promise<HeadersInit> {
-    const apiKeys = this.config.apiKeys;
-    if (!apiKeys) {
-      return {
-        "Content-Type": "application/json",
-      };
+  async getNextApiKeyIndex(): Promise<number> {
+    const keys = this.getApiKeys();
+    if (keys.length <= 1) {
+      return 0;
     }
 
-    const keys = Array.isArray(apiKeys) ? apiKeys : [apiKeys];
+    return await Secrets.getNextIndex(this.name, keys.length);
+  }
+
+  async headers(apiKeyIndex?: number): Promise<HeadersInit> {
+    const keys = this.getApiKeys();
     if (keys.length === 0) {
       return {
         "Content-Type": "application/json",
       };
     }
 
-    // Use modulo for simple round-robin if apiKeyIndex is provided, otherwise random
-    const index =
-      apiKeyIndex !== undefined
-        ? apiKeyIndex % keys.length
-        : Math.floor(Math.random() * keys.length);
+    const index = apiKeyIndex !== undefined ? apiKeyIndex % keys.length : 0;
     const apiKey = keys[index];
 
     return {

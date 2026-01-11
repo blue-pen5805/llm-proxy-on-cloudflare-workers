@@ -21,8 +21,9 @@ The pipeline is a sequential chain where each component (middleware) can:
 ## Pipeline Components
 
 - **Fault Tolerance (`errorMiddleware`)**: Acts as the outermost layer to catch all unhandled exceptions and transform them into standardized JSON error responses, preventing worker crashes and ensuring client compatibility.
-- **Context Initialization (`envMiddleware`)**: Bridges the Cloudflare-provided `env` object to the internal `Environments` utility, enabling type-safe access throughout the request lifecycle.
-- **Security Enforcement (`authMiddleware`)**: Validates client-provided keys against the configured `PROXY_API_KEY`. It also handles pathname normalization for subsequent routing.
+- **Request Initialization (`requestMiddleware`)**: The first stage that decomposes the `context.request` into `context.pathname` and initializes the `Environments` utility, providing a consistent context for downstream middlewares.
+- **Resource Routing Paths (`apiKeyPathMiddleware`)**: Extracts API key indices or ranges from specific path parameters (e.g., `/key/i/`) and updates `context.pathname` to allow standard routing to proceed.
+- **Security Enforcement (`authMiddleware`)**: Validates client-provided keys against the configured `PROXY_API_KEY`. It also sanitizes the `pathname` by removing sensitive authorization query parameters (`cleanPathname`).
 - **Observability Bridge (`aiGatewayMiddleware`)**: Detects and modifies requests intended for Cloudflare AI Gateway, abstracting the complexity of gateway-specific hosts.
 - **Dispatch (`routerMiddleware`)**: The final stage that performs semantic routing to specialized request handlers.
 

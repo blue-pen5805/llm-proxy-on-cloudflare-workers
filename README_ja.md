@@ -16,6 +16,7 @@
   - `/v1/models`
 - **Cloudflare AI Gateway統合:** ログ、分析、その他の機能のために [Cloudflare AI Gateway](https://www.cloudflare.com/developer-platform/products/ai-gateway/) の [Universal Endpoint](https://developers.cloudflare.com/ai-gateway/providers/universal/) を含む統合を活用。
 - **グローバル・ラウンドロビン・キーローテーション:** Cloudflare Durable Objects を使用して、すべてのアイソレート間で一貫したローテーションを実現。
+- **パスパラメータによるAPIキー指定:** URLパスに `/key/{index|range}/` を含めることで、使用するAPIキーのインデックスや範囲を明示的に指定・制限可能。
 
 ```mermaid
 flowchart
@@ -124,6 +125,17 @@ Cloudflare Durable Objects を使用して、すべてのリクエスト間で�
 ### ローカル開発
 
 `npm run dev` でローカル実行する場合、Wrangler は自動的に Durable Objects をシミュレートします。
+
+### パスパラメータによるAPIキー指定
+
+URLパスの先頭に `/key/{index|range}/` を追加することで、使用するAPIキーを明示的に指定したり、特定の範囲内でのランダム選択に制限したりできます。この指定はデフォルトのグローバル・ラウンドロビン・ロジックを上書きします。
+
+- **単一指定:** `/key/0/v1/chat/completions` (1番目のキーを使用)
+- **範囲指定:** `/key/1-3/v1/chat/completions` (インデックス 1〜3 からランダムに選択)
+- **終端未指定:** `/key/2-/v1/chat/completions` (インデックス 2から最後までの間でランダムに選択)
+- **始点未指定:** `/key/-4/v1/chat/completions` (インデックス 0〜4 の間でランダムに選択)
+
+※範囲内でのランダム選択はステートレスであり、暗号学的に安全な乱数生成器 (`crypto.randomInt`) を使用します。
 
 ## 使用例
 

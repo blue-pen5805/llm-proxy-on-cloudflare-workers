@@ -16,6 +16,7 @@ This is a serverless proxy built on [Cloudflare Workers](https://www.cloudflare.
   - `/v1/models`
 - **Cloudflare AI Gateway Integration:** Leverage [Cloudflare AI Gateway](https://www.cloudflare.com/developer-platform/products/ai-gateway/), including its [Universal Endpoint](https://developers.cloudflare.com/ai-gateway/providers/universal/), for logging, analytics, and other features.
 - **Global Round-Robin Key Rotation:** Consistency across all isolates using Cloudflare Durable Objects.
+- **API Key Selection via Path Parameter:** Explicitly select or rotate within a range of API keys using `/key/{index|range}/` in the URL path.
 
 ```mermaid
 flowchart
@@ -124,6 +125,17 @@ This feature ensures that API keys are rotated in a consistent round-robin order
 ### Local Development
 
 When running locally with `npm run dev`, Wrangler automatically simulates Durable Objects.
+
+### API Key Selection via Path Parameter
+
+You can explicitly select an API key or a range for rotation by adding `/key/{index|range}/` to the start of the URL path. This bypasses the default global round-robin logic.
+
+- **Single Key:** `/key/0/v1/chat/completions` (Selects the 1st key)
+- **Range:** `/key/1-3/v1/chat/completions` (Selects a random key from index 1 to 3)
+- **Unspecified End:** `/key/2-/v1/chat/completions` (Selects a random key from index 2 to the end)
+- **Unspecified Start:** `/key/-4/v1/chat/completions` (Selects a random key from index 0 to 4)
+
+Note: Random selection within a range is stateless and uses a cryptographically secure random number generator (`crypto.randomInt`).
 
 ## Usage Example
 

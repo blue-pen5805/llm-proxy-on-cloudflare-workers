@@ -31,7 +31,8 @@ The `getProvider` and `getAllProviders` functions in `src/providers.ts` were upd
 The `CustomOpenAI` class extends `OpenAICompatibleProvider` and overrides:
 
 - `baseUrl()`: Returns the configured `baseUrl`.
-- `headers()`: Implements basic `Authorization: Bearer <key>` using the configured `apiKeys` (supporting simple round-robin).
+- `headers()`: Implements basic `Authorization: Bearer <key>` using the appropriate API key determined by `getNextApiKeyIndex()`.
+- `getNextApiKeyIndex()`: Overrides to perform stateful global round-robin rotation using the unique `name` as an identifier for coordinate through the stateful layer.
 - `available()`: Always returns `true`.
 
 ### Usage

@@ -27,16 +27,24 @@ Resilience is prioritized over strictness.
 - If `GLOBAL_ROUND_ROBIN` is disabled or the Durable Object binding is missing, the system automatically falls back to **Random Selection**.
 - This ensures that the proxy remains functional even if the stateful coordination layer encounters issues or is not configured for the environment.
 
+### Centralized Provider Integration
+
+The rotation logic is centralized in the `ProviderBase` class.
+
+- **CustomOpenAI Support**: Unlike static providers that depend on environment-level keys, `CustomOpenAI` utilizes its specific `name` from the configuration as the unique identifier for rotation coordination. This allows each custom endpoint to have its own independent round-robin state.
+- **Standardized Access**: Request handlers interact with providers via `getNextApiKeyIndex()`, which transparently handles either stateful global rotation or stateless random fallback.
+
 ### Exceptions
 
 - **Model Listing**: The `/models` endpoint explicitly bypasses rotation and always uses the first key (index 0) to ensure deterministic responses when aggregating model lists.
 
 ## Logic Flow
 
-1.  Check for multiple keys in the `{PROVIDER}_API_KEY` environment variable.
-2.  If multiple keys exist, request the "next index" from the `KeyRotationManager` (Durable Object).
-3.  The Durable Object executes a `SELECT` + `UPDATE` on its internal SQLite table to increment and return the index.
-4.  The handler uses the returned index to select the appropriate key for the upstream request.
+1.  Identify the target provider based on the request model or path.
+2.  Call `provider.getNextApiKeyIndex()` to determine which API key to use.
+3.  If multiple keys exist, the provider requests the "next index" from the `KeyRotationManager` (Durable Object) using its unique identifier.
+4.  The Durable Object executes a `SELECT` + `UPDATE` on its internal SQLite table to increment and return the index.
+5.  The handler uses the resolved index to select the appropriate key from `provider.getApiKeys()`.
 
 ## References
 
