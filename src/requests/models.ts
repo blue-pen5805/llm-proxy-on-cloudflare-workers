@@ -4,8 +4,11 @@ import { getAllProviders } from "../providers";
 import { OpenAIModelsListResponseBody } from "../providers/openai/types";
 import { ProviderNotSupportedError } from "../providers/provider";
 import { Environments } from "../utils/environments";
-import { fetch2 } from "../utils/helpers";
+import { fetch2, withTimeout } from "../utils/helpers";
 import { Secrets } from "../utils/secrets";
+
+// Timeout for individual provider model fetch operations (milliseconds)
+const PROVIDER_FETCH_TIMEOUT_MS = 5000;
 
 export async function models(
   context: MiddlewareContext,
@@ -43,26 +46,65 @@ export async function models(
       const [requestInfo, requestInit] =
         await providerInstance.buildModelsRequest(apiKeyIndex);
 
+      let models: OpenAIModelsListResponseBody;
       if (aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)) {
-        const response = await fetch2(
-          ...aiGateway.buildProviderEndpointRequest({
+        // Request through AI Gateway with timeout
+        const abortController = new AbortController();
+        const [gatewayUrl, gatewayInit] =
+          aiGateway.buildProviderEndpointRequest({
             provider: providerName,
             method: requestInit.method,
             path: requestInfo,
             headers: await providerInstance.headers(apiKeyIndex),
-          }),
-        );
-        const models = await response.json();
+          });
 
-        return providerInstance.modelsToOpenAIFormat(models);
+        const fetchPromise = fetch2(gatewayUrl, {
+          ...gatewayInit,
+          signal: abortController.signal,
+        }).then(async (response) => {
+          const responseJson = await response.json();
+          return providerInstance.modelsToOpenAIFormat(responseJson);
+        });
+
+        try {
+          models = await withTimeout(
+            fetchPromise,
+            abortController,
+            PROVIDER_FETCH_TIMEOUT_MS,
+            providerName,
+          );
+        } catch (error) {
+          // Re-throw the error to be handled by Promise.allSettled
+          throw error;
+        }
+      } else {
+        // Direct request to provider endpoint with timeout
+        const abortController = new AbortController();
+        const fetchPromise = providerInstance
+          .fetch(
+            requestInfo,
+            { ...requestInit, signal: abortController.signal },
+            apiKeyIndex,
+          )
+          .then(async (response) => {
+            const responseJson = await response.json();
+            return providerInstance.modelsToOpenAIFormat(responseJson);
+          });
+
+        try {
+          models = await withTimeout(
+            fetchPromise,
+            abortController,
+            PROVIDER_FETCH_TIMEOUT_MS,
+            providerName,
+          );
+        } catch (error) {
+          // Re-throw the error to be handled by Promise.allSettled
+          throw error;
+        }
       }
 
-      // Request to the provider endpoint
-      const response = await providerInstance.fetch(requestInfo, requestInit);
-      const models = await response.json();
-
-      // Convert models to OpenAI format
-      return providerInstance.modelsToOpenAIFormat(models);
+      return models;
     },
   );
 

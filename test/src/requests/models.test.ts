@@ -56,12 +56,27 @@ describe("models", () => {
       delete Providers[key];
     });
 
+    // Provide withTimeout implementation to the mocked helpers module
+    if (helpers.withTimeout !== undefined) {
+      vi.mocked(helpers.withTimeout).mockImplementation(
+        async (promise: Promise<any>, abortController: AbortController) => {
+          return promise;
+        },
+      );
+    }
+
     vi.mocked(helpers.fetch2).mockImplementation(() =>
       Promise.resolve(new Response(JSON.stringify({ data: [] }))),
     );
     vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(true);
     vi.mocked(Secrets.getAll).mockReturnValue(["test-key"]);
     vi.mocked(Secrets.getNext).mockResolvedValue(0);
+    vi.mocked(Secrets.resolveApiKeyIndex).mockImplementation((selection) => {
+      if (typeof selection === "number") {
+        return selection;
+      }
+      return 0;
+    });
 
     vi.mocked(getAllProviders).mockImplementation(() => {
       return Object.fromEntries(
@@ -365,5 +380,53 @@ describe("models", () => {
     expect(body.data[0].id).toBe("custom/custom-model-1");
     expect(mockProviderClass.fetch).not.toHaveBeenCalled();
     expect(staticModelsProviderClass.staticModels).toHaveBeenCalled();
+  });
+
+  it("should pass apiKeyIndex to provider.fetch call", async () => {
+    const testProviderClass = {
+      ...mockProviderClass,
+      fetch: vi
+        .fn()
+        .mockImplementation(
+          (_url: string, init: RequestInit, apiKeyIndex?: number) => {
+            // Verify apiKeyIndex is passed correctly
+            expect(apiKeyIndex).toBe(2);
+            return Promise.resolve(new Response(JSON.stringify({ data: [] })));
+          },
+        ),
+      modelsToOpenAIFormat: vi.fn().mockReturnValue({
+        object: "list",
+        data: [
+          {
+            id: "test-model",
+            object: "model",
+            created: 1234567890,
+            owned_by: "test",
+          },
+        ],
+      }),
+    };
+
+    // Clear and reset providers
+    Object.keys(Providers).forEach((key) => {
+      delete Providers[key];
+    });
+
+    Providers.test = vi.fn().mockReturnValue(testProviderClass);
+    testProviderClass.getApiKeys.mockReturnValue(["key1", "key2", "key3"]);
+
+    // Mock CloudflareAIGateway.isSupportedProvider to return false
+    vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(false);
+
+    const response = await models({ apiKeyIndex: 2 } as any);
+    const body = (await response.json()) as ModelsResponse;
+
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].id).toBe("test/test-model");
+    expect(testProviderClass.fetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Object),
+      2,
+    );
   });
 });

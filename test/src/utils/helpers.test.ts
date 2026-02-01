@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   safeJsonParse,
   getPathname,
@@ -6,6 +6,7 @@ import {
   formatString,
   maskUrl,
   cleanPathname,
+  withTimeout,
 } from "~/src/utils/helpers";
 
 describe("safeJsonParse", () => {
@@ -141,5 +142,70 @@ describe("cleanPathname", () => {
     const pathname = "/v1/chat/completions?&model=gpt-4";
     const result = cleanPathname(pathname);
     expect(result).toBe("/v1/chat/completions?model=gpt-4");
+  });
+});
+
+describe("withTimeout", () => {
+  it("should resolve successfully when promise completes before timeout", async () => {
+    const abortController = new AbortController();
+    const promise = Promise.resolve("success");
+
+    const result = await withTimeout(promise, abortController, 1000, "test");
+
+    expect(result).toBe("success");
+    expect(abortController.signal.aborted).toBe(false);
+  });
+
+  it("should reject with TimeoutError when promise takes longer than timeout", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const abortController = new AbortController();
+      const hangingPromise = new Promise<string>(() => {}); // Never resolves
+
+      const timeoutPromise = withTimeout(
+        hangingPromise,
+        abortController,
+        1000,
+        "test-provider",
+      );
+
+      // Advance time past the timeout
+      vi.advanceTimersByTime(1000);
+      vi.runAllTimers();
+
+      await expect(timeoutPromise).rejects.toThrow(
+        "Provider test-provider request timed out",
+      );
+      expect(abortController.signal.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("should pass through original error when promise rejects before timeout", async () => {
+    const abortController = new AbortController();
+    const promise = Promise.reject(new Error("Network error"));
+
+    await expect(
+      withTimeout(promise, abortController, 1000, "test-provider"),
+    ).rejects.toThrow("Network error");
+    expect(abortController.signal.aborted).toBe(false);
+  });
+
+  it("should clear timeout when promise resolves", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const abortController = new AbortController();
+      const promise = Promise.resolve("success");
+
+      await withTimeout(promise, abortController, 1000, "test");
+
+      // Verify that no timeout callbacks are pending
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

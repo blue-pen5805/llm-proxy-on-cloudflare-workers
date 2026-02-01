@@ -136,3 +136,36 @@ export function cleanPathname(pathname: string): string {
   // Clean up any invalid query string formats like ?&param=value
   return cleanedPathname.replace(/\?\&/, "?");
 }
+
+/**
+ * Wraps a promise with a timeout using a single timer and AbortController.
+ * Aborts the fetch request on timeout and rejects immediately with TimeoutError.
+ * Ensures the timer is always cleared and the Promise settles within timeoutMs.
+ */
+export async function withTimeout<T>(
+  promise: Promise<T>,
+  abortController: AbortController,
+  timeoutMs: number,
+  providerName: string,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      abortController.abort();
+      const timeoutError = new Error(
+        `Provider ${providerName} request timed out`,
+      );
+      timeoutError.name = "TimeoutError";
+      reject(timeoutError);
+    }, timeoutMs);
+
+    promise
+      .then((result) => {
+        clearTimeout(timeoutId);
+        resolve(result);
+      })
+      .catch((error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
+}

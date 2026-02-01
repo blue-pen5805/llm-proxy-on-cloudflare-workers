@@ -21,7 +21,7 @@ The proxy serves as a drop-in replacement for OpenAI API calls.
 ### Feature Mapping
 
 - **Chat Completions**: The proxy listens on standard `/v1/chat/completions`. It parses the `model` field to determine the target provider (e.g., `anthropic/claude-3-opus-20240229`).
-- **Model Aggregation**: The `GET /v1/models` endpoint aggregates models from all configured and available providers.
+- **Model Aggregation**: The `GET /v1/models` endpoint aggregates models from all configured and available providers. Aggregation is best-effort: each provider has an individual timeout, and providers that fail/time out are omitted so the endpoint can still return results from other providers.
 
 ## Routing Strategy
 
