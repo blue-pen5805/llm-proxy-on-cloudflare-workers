@@ -123,6 +123,11 @@ describe("chatCompletions", () => {
     expect(mockProviderClass.buildChatCompletionsRequest).toHaveBeenCalledWith(
       expect.objectContaining({ apiKeyIndex: 2 }),
     );
+    expect(mockProviderClass.fetch).toHaveBeenCalledWith(
+      "/chat/completions",
+      expect.any(Object),
+      2,
+    );
   });
 
   it("should handle default model", async () => {
@@ -298,6 +303,7 @@ describe("chatCompletions", () => {
     expect(mockProviderClass.fetch).toHaveBeenCalledWith(
       "/chat/completions",
       expect.objectContaining({ signal: request.signal }),
+      0,
     );
   });
 

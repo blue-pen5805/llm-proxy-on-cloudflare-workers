@@ -45,7 +45,12 @@ describe("errorMiddleware", () => {
     expect(response.status).toBe(500);
     const body = (await response.json()) as any;
     expect(body.error.message).toBe("Internal Server Error");
-    expect(consoleSpy).toHaveBeenCalled();
+    expect(consoleSpy).toHaveBeenCalledWith({
+      event: "request.unhandled_error",
+      request_id: null,
+      error_name: "Error",
+      error_message: "Something went wrong",
+    });
 
     consoleSpy.mockRestore();
   });
@@ -70,8 +75,11 @@ describe("errorMiddleware", () => {
     expect(await response.json()).toEqual({
       error: { message: "Internal Server Error", status: 500 },
     });
-    expect(consoleSpy).toHaveBeenCalledWith("Unknown Error Object:", {
-      reason: "not an Error",
+    expect(consoleSpy).toHaveBeenCalledWith({
+      event: "request.unhandled_error",
+      request_id: null,
+      error_name: "NonError",
+      error_message: "Non-Error value thrown",
     });
   });
 });

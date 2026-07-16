@@ -3,9 +3,11 @@ import { getAllProviders } from "../providers";
 import type { ProviderRegistry } from "../providers";
 import { CustomOpenAI } from "../providers/custom-openai";
 import { ProviderBase, ProviderNotSupportedError } from "../providers/provider";
+import { recordApiKeySelection } from "../utils/api_key_selection";
 import { Config } from "../utils/config";
 import { Environments } from "../utils/environments";
 import { fetch2, withTimeout } from "../utils/helpers";
+import { RequestLogger } from "../utils/logger";
 import { Secrets } from "../utils/secrets";
 
 const CONNECTIVITY_CHECK_TIMEOUT_MS = 5000;
@@ -54,6 +56,7 @@ async function checkConnectivity(
   instance: ProviderBase,
   providerName: string,
   apiKeyIndex: number,
+  keyCount: number,
   aiGateway?: CloudflareAIGateway,
 ): Promise<ConnectivityStatus> {
   if (!instance.modelsPath) {
@@ -61,32 +64,48 @@ async function checkConnectivity(
   }
 
   const abortController = new AbortController();
+  const aiGatewayProvider =
+    aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)
+      ? providerName
+      : undefined;
+  const keyLogFields = recordApiKeySelection({
+    provider: providerName,
+    operation: "connectivity_check",
+    keyIndex: apiKeyIndex,
+    keyCount,
+    selectionPolicy: "diagnostic_scan",
+    viaAiGateway: aiGatewayProvider !== undefined,
+  });
 
   try {
     let responsePromise: Promise<Response>;
 
-    if (aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)) {
+    if (aiGateway && aiGatewayProvider) {
       const [requestInfo, requestInit] = aiGateway.buildProviderEndpointRequest(
         {
-          provider: providerName,
+          provider: aiGatewayProvider,
           method: "GET",
           path: instance.modelsPath,
           headers: await instance.headers(apiKeyIndex),
         },
       );
 
-      responsePromise = fetch2(requestInfo, {
-        ...requestInit,
-        signal: abortController.signal,
-      });
+      responsePromise = RequestLogger.withFields(keyLogFields, () =>
+        fetch2(requestInfo, {
+          ...requestInit,
+          signal: abortController.signal,
+        }),
+      );
     } else {
       responsePromise = (async () => {
         const [requestInfo, requestInit] =
           await instance.buildModelsRequest(apiKeyIndex);
-        return instance.fetch(
-          requestInfo,
-          { ...requestInit, signal: abortController.signal },
-          apiKeyIndex,
+        return RequestLogger.withFields(keyLogFields, () =>
+          instance.fetch(
+            requestInfo,
+            { ...requestInit, signal: abortController.signal },
+            apiKeyIndex,
+          ),
         );
       })();
     }
@@ -106,7 +125,9 @@ async function checkConnectivity(
     ) {
       return "unknown";
     }
-    console.error(`Error checking connectivity for ${providerName}:`, error);
+    RequestLogger.error("provider.connectivity.failed", error, {
+      provider: providerName,
+    });
     return "invalid";
   }
 }
@@ -141,6 +162,7 @@ export async function status(
               instance,
               providerName,
               apiKeyIndex,
+              allKeys.length,
               aiGateway,
             ),
           })),

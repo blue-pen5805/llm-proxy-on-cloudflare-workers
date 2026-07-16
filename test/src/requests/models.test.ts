@@ -254,10 +254,13 @@ describe("models", () => {
     const body = (await response.json()) as ModelsResponse;
 
     expect(body.data).toEqual([]);
-    expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining("Error fetching models for provider"),
-      expect.any(Error),
-    );
+    expect(consoleSpy).toHaveBeenCalledWith({
+      event: "provider.models.failed",
+      request_id: null,
+      provider: "openai",
+      error_name: "Error",
+      error_message: "gateway failed",
+    });
   });
 
   it("should handle provider errors gracefully", async () => {
@@ -281,10 +284,13 @@ describe("models", () => {
 
     expect(body.data).toHaveLength(1);
     expect(body.data[0].id).toBe("openai/gpt-4");
-    expect(consoleSpy).toHaveBeenCalledWith(
-      "Error fetching models for provider error:",
-      expect.any(Error),
-    );
+    expect(consoleSpy).toHaveBeenCalledWith({
+      event: "provider.models.failed",
+      request_id: null,
+      provider: "error",
+      error_name: "Error",
+      error_message: "Network error",
+    });
 
     consoleSpy.mockRestore();
   });
@@ -336,17 +342,18 @@ describe("models", () => {
     Providers.openai = mockProviderConstructor(mockProviderClass);
     Providers.invalid = mockProviderConstructor(invalidResponseProviderClass);
 
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     const response = await models({} as any);
     const body = (await response.json()) as ModelsResponse;
 
     expect(body.data).toHaveLength(1);
     expect(body.data[0].id).toBe("openai/gpt-4");
-    expect(consoleSpy).toHaveBeenCalledWith(
-      "Invalid response for provider invalid:",
-      null,
-    );
+    expect(consoleSpy).toHaveBeenCalledWith({
+      event: "provider.models.invalid_response",
+      request_id: null,
+      provider: "invalid",
+    });
 
     consoleSpy.mockRestore();
   });
@@ -370,17 +377,18 @@ describe("models", () => {
     Providers.openai = mockProviderConstructor(mockProviderClass);
     Providers.nodata = mockProviderConstructor(noDataProviderClass);
 
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     const response = await models({} as any);
     const body = (await response.json()) as ModelsResponse;
 
     expect(body.data).toHaveLength(1);
     expect(body.data[0].id).toBe("openai/gpt-4");
-    expect(consoleSpy).toHaveBeenCalledWith(
-      "Invalid response for provider nodata:",
-      { object: "list" },
-    );
+    expect(consoleSpy).toHaveBeenCalledWith({
+      event: "provider.models.invalid_response",
+      request_id: null,
+      provider: "nodata",
+    });
 
     consoleSpy.mockRestore();
   });

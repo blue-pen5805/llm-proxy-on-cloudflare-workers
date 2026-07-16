@@ -5,6 +5,7 @@ import {
 } from "../ai_gateway/const";
 import { isCloudflareAIGatewayProvider } from "../ai_gateway/utils";
 import { Providers } from "../providers";
+import { recordApiKeySelection } from "../utils/api_key_selection";
 import { fetch2 } from "../utils/helpers";
 import { Secrets } from "../utils/secrets";
 
@@ -27,7 +28,10 @@ export async function universalEndpoint(
   const mappedItems: CloudflareAIGatewayUniversalEndpointData =
     await Promise.all(
       items.map(
-        async (item): Promise<CloudflareAIGatewayUniversalEndpointStep> => {
+        async (
+          item,
+          step,
+        ): Promise<CloudflareAIGatewayUniversalEndpointStep> => {
           const providerName = item.provider;
           if (!providerName) {
             throw new Error(`Provider not specified.`);
@@ -41,6 +45,15 @@ export async function universalEndpoint(
             item.endpoint || providerClass.chatCompletionPath.replace("/", "");
           const apiKeyName = providerClass.apiKeyName as keyof Env;
           const apiKeyIndex = await Secrets.getNext(apiKeyName);
+          recordApiKeySelection({
+            provider: providerName,
+            operation: "universal_endpoint",
+            keyIndex: apiKeyIndex,
+            keyCount: Secrets.getAll(apiKeyName).length,
+            selectionPolicy: "automatic_rotation",
+            viaAiGateway: true,
+            step,
+          });
           const headers = {
             ...(await providerClass.headers(apiKeyIndex)),
             ...item.headers,

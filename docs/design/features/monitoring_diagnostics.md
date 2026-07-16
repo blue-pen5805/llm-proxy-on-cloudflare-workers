@@ -43,13 +43,40 @@ its output as an unaudited monitoring payload.
 
 ## Platform observability
 
-`wrangler.jsonc` enables Workers Logs and sampled traces. `fetch2` emits one
-informational log per upstream subrequest with recognized sensitive query values
-masked. Unexpected errors and partial model-list failures are written to logs.
+`wrangler.jsonc` enables Workers Logs for every invocation and sampled traces.
+Application logs are structured JSON objects with a stable `event` field and a
+`request_id`. The request ID uses Cloudflare's `cf-ray` value when available and
+falls back to a generated UUID.
 
-The application does not currently emit structured metrics, request IDs, or
-provider latency histograms. Those are explicit future extensions rather than
-properties of the existing status endpoint.
+The following events support operational queries:
+
+| Event                              | Meaning                                    |
+| ---------------------------------- | ------------------------------------------ |
+| `request.completed`                | Handler completed, with status and latency |
+| `request.unhandled_error`          | An unexpected exception reached the guard  |
+| `subrequest.completed`             | Provider request returned an HTTP response |
+| `subrequest.failed`                | Provider request failed before a response  |
+| `provider.models.failed`           | A provider model-list operation failed     |
+| `provider.models.invalid_response` | A model-list response could not be used    |
+| `provider.connectivity.failed`     | A status connectivity check failed         |
+| `provider.key.selected`            | A credential slot was selected             |
+
+`duration_ms` on `request.completed` measures time until response headers are
+available; it does not wait for a streamed response body to finish. Subrequest
+events include their HTTP method, masked URL, status when available, and
+duration. Error events contain only a redacted, length-limited error name and
+message. Request bodies, response bodies, headers, stack traces, query strings
+on inbound requests, and arbitrary thrown objects are not logged.
+
+`provider.key.selected` reports `provider`, `operation`, zero-based
+`key_index`, `key_count`, `credential_configured`, `selection_policy`, and
+`via_ai_gateway`. For one-to-one provider requests, a generated
+`provider_request_id` links the selection to its
+`subrequest.completed` or `subrequest.failed` event. Universal Endpoint steps
+share one aggregate subrequest, so their selection events instead include a
+zero-based `step` number. Credential values, partial values, and derived
+fingerprints are never logged. Indexes identify configuration order only and
+can change when keys are reordered.
 
 ## References
 

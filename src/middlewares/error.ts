@@ -1,5 +1,6 @@
 import { Middleware } from "../middleware";
 import { AppError } from "../utils/error";
+import { RequestLogger } from "../utils/logger";
 
 export const errorMiddleware: Middleware = async (context, next) => {
   try {
@@ -11,10 +12,8 @@ export const errorMiddleware: Middleware = async (context, next) => {
     if (err instanceof AppError) {
       status = err.status;
       message = err.message;
-    } else if (err instanceof Error) {
-      console.error("Unhandled Error:", err);
     } else {
-      console.error("Unknown Error Object:", err);
+      RequestLogger.error("request.unhandled_error", err);
     }
 
     return new Response(

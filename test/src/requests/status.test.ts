@@ -269,10 +269,13 @@ describe("status", () => {
     const body = await response.json();
 
     expect(body.providers.openai.keys[0].status).toBe("invalid");
-    expect(consoleError).toHaveBeenCalledWith(
-      "Error checking connectivity for openai:",
-      error,
-    );
+    expect(consoleError).toHaveBeenCalledWith({
+      event: "provider.connectivity.failed",
+      request_id: null,
+      provider: "openai",
+      error_name: "Error",
+      error_message: "network unavailable",
+    });
   });
 
   it("checks supported providers through AI Gateway", async () => {

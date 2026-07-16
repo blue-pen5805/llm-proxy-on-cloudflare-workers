@@ -38,11 +38,28 @@ deployment output as sensitive too; do not retain it in public CI logs.
 
 ## Observability
 
-Workers Logs and traces are enabled in `wrangler.jsonc`; traces use head
-sampling. Upstream requests produce an informational `Sub-Request` log. Known
-sensitive query parameter values are masked before logging, but request or
-provider payloads may still contain sensitive application data. Configure log
-access and retention accordingly.
+Workers Logs are enabled for every invocation in `wrangler.jsonc`; traces use
+head sampling. Application records are structured JSON and can be filtered by
+their `event` and `request_id` fields. Start with `request.completed` for status
+and handler latency, then correlate `subrequest.completed`,
+`subrequest.failed`, or provider-specific failure events using the same request
+ID.
+
+Inbound logs contain the path but exclude the query string. Upstream URLs mask
+recognized credential parameters. Error messages are redacted and truncated;
+headers, payloads, stack traces, and arbitrary thrown objects are not recorded.
+`request.completed.duration_ms` ends when response headers are returned, so it
+does not measure completion of a streamed response body. Continue to restrict
+log access and retention as operational data can still be sensitive.
+
+Filter on `provider.key.selected` to audit credential-slot usage. `key_index`
+is zero based. For one-to-one provider requests, `provider_request_id`
+correlates the selection with its upstream result. Universal Endpoint selection
+events use a zero-based `step` because all steps share one aggregate subrequest.
+`selection_policy` distinguishes explicit indexes or ranges, automatic
+rotation, the default first key, and `/status` diagnostic scans. No credential
+value or fingerprint is emitted. These numbers follow configuration order and
+therefore change if keys are reordered.
 
 Use health endpoints deliberately:
 

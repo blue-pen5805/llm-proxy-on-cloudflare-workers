@@ -3,9 +3,14 @@ import { MiddlewareContext } from "../middleware";
 import { getAllProviders } from "../providers";
 import { OpenAIModelsListResponseBody } from "../providers/openai/types";
 import { ProviderBase, ProviderNotSupportedError } from "../providers/provider";
-import { selectApiKeyIndex } from "../utils/api_key_selection";
+import {
+  apiKeySelectionPolicy,
+  recordApiKeySelection,
+  selectApiKeyIndex,
+} from "../utils/api_key_selection";
 import { Environments } from "../utils/environments";
 import { fetch2, withTimeout } from "../utils/helpers";
+import { RequestLogger } from "../utils/logger";
 
 // Timeout for individual provider model fetch operations (milliseconds)
 const PROVIDER_FETCH_TIMEOUT_MS = 5000;
@@ -31,26 +36,42 @@ async function fetchProviderModels(
   }
 
   const apiKeyIndex = await selectApiKeyIndex(provider, selection, "first");
+  const aiGatewayProvider =
+    aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)
+      ? providerName
+      : undefined;
+  const keyLogFields = recordApiKeySelection({
+    provider: providerName,
+    operation: "models",
+    keyIndex: apiKeyIndex,
+    keyCount: provider.getApiKeys().length,
+    selectionPolicy: apiKeySelectionPolicy(selection, "first"),
+    viaAiGateway: aiGatewayProvider !== undefined,
+  });
   const [path, init] = await provider.buildModelsRequest(apiKeyIndex);
   const abortController = new AbortController();
 
   let responsePromise: Promise<Response>;
-  if (aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)) {
+  if (aiGateway && aiGatewayProvider) {
     const [gatewayUrl, gatewayInit] = aiGateway.buildProviderEndpointRequest({
-      provider: providerName,
+      provider: aiGatewayProvider,
       method: init.method,
       path,
       headers: await provider.headers(apiKeyIndex),
     });
-    responsePromise = fetch2(gatewayUrl, {
-      ...gatewayInit,
-      signal: abortController.signal,
-    });
+    responsePromise = RequestLogger.withFields(keyLogFields, () =>
+      fetch2(gatewayUrl, {
+        ...gatewayInit,
+        signal: abortController.signal,
+      }),
+    );
   } else {
-    responsePromise = provider.fetch(
-      path,
-      { ...init, signal: abortController.signal },
-      apiKeyIndex,
+    responsePromise = RequestLogger.withFields(keyLogFields, () =>
+      provider.fetch(
+        path,
+        { ...init, signal: abortController.signal },
+        apiKeyIndex,
+      ),
     );
   }
 
@@ -85,17 +106,13 @@ export async function models(
         return [];
       }
 
-      console.error(
-        `Error fetching models for provider ${provider}:`,
-        response.reason,
-      );
+      RequestLogger.error("provider.models.failed", response.reason, {
+        provider,
+      });
       return [];
     }
     if (!response.value?.data) {
-      console.error(
-        `Invalid response for provider ${provider}:`,
-        response.value,
-      );
+      RequestLogger.warn("provider.models.invalid_response", { provider });
       return [];
     }
 

@@ -1,11 +1,16 @@
 import { CloudflareAIGateway } from "../ai_gateway";
 import { MiddlewareContext } from "../middleware";
 import { getProvider } from "../providers";
-import { selectApiKeyIndex } from "../utils/api_key_selection";
+import {
+  apiKeySelectionPolicy,
+  recordApiKeySelection,
+  selectApiKeyIndex,
+} from "../utils/api_key_selection";
 import { stripProxyAuthorizationHeaders } from "../utils/authorization";
 import { Environments } from "../utils/environments";
 import { NotFoundError } from "../utils/error";
 import { fetch2 } from "../utils/helpers";
+import { RequestLogger } from "../utils/logger";
 
 export async function proxy(
   context: MiddlewareContext,
@@ -28,33 +33,49 @@ export async function proxy(
     contextApiKeyIndex,
     "rotate",
   );
+  const aiGatewayProvider =
+    aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)
+      ? providerName
+      : undefined;
+  const keyLogFields = recordApiKeySelection({
+    provider: providerName,
+    operation: "proxy",
+    keyIndex: apiKeyIndex,
+    keyCount: providerInstance.getApiKeys().length,
+    selectionPolicy: apiKeySelectionPolicy(contextApiKeyIndex, "rotate"),
+    viaAiGateway: aiGatewayProvider !== undefined,
+  });
   const sanitizedHeaders = stripProxyAuthorizationHeaders(request.headers);
 
   // Handle AI Gateway requests
-  if (aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)) {
+  if (aiGateway && aiGatewayProvider) {
     const providerHeaders = new Headers(
       await providerInstance.headers(apiKeyIndex),
     );
     providerHeaders.forEach((value, key) => sanitizedHeaders.set(key, value));
     const [requestInfo, requestInit] = aiGateway.buildProviderEndpointRequest({
-      provider: providerName,
+      provider: aiGatewayProvider,
       method: request.method,
       path: pathname,
       body: request.body,
       headers: Object.fromEntries(sanitizedHeaders.entries()),
     });
-    return fetch2(requestInfo, { ...requestInit, signal: request.signal });
+    return RequestLogger.withFields(keyLogFields, () =>
+      fetch2(requestInfo, { ...requestInit, signal: request.signal }),
+    );
   }
 
   // Send request to the provider directly
-  return providerInstance.fetch(
-    pathname,
-    {
-      method: request.method,
-      body: request.body,
-      headers: Object.fromEntries(sanitizedHeaders.entries()),
-      signal: request.signal,
-    },
-    apiKeyIndex,
+  return RequestLogger.withFields(keyLogFields, () =>
+    providerInstance.fetch(
+      pathname,
+      {
+        method: request.method,
+        body: request.body,
+        headers: Object.fromEntries(sanitizedHeaders.entries()),
+        signal: request.signal,
+      },
+      apiKeyIndex,
+    ),
   );
 }

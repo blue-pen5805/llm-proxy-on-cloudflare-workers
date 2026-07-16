@@ -1,11 +1,16 @@
 import { CloudflareAIGateway } from "../ai_gateway";
 import { MiddlewareContext } from "../middleware";
 import { getProvider } from "../providers";
-import { selectApiKeyIndex } from "../utils/api_key_selection";
+import {
+  apiKeySelectionPolicy,
+  recordApiKeySelection,
+  selectApiKeyIndex,
+} from "../utils/api_key_selection";
 import { stripProxyAuthorizationHeaders } from "../utils/authorization";
 import { Config } from "../utils/config";
 import { Environments } from "../utils/environments";
 import { fetch2, safeJsonParse } from "../utils/helpers";
+import { RequestLogger } from "../utils/logger";
 
 export async function chatCompletions(
   context: MiddlewareContext,
@@ -62,6 +67,18 @@ export async function chatCompletions(
     contextApiKeyIndex,
     "rotate",
   );
+  const aiGatewayProvider =
+    aiGateway && CloudflareAIGateway.isSupportedProvider(providerName, true)
+      ? providerName
+      : undefined;
+  const keyLogFields = recordApiKeySelection({
+    provider: providerName,
+    operation: "chat_completions",
+    keyIndex: apiKeyIndex,
+    keyCount: provider.getApiKeys().length,
+    selectionPolicy: apiKeySelectionPolicy(contextApiKeyIndex, "rotate"),
+    viaAiGateway: aiGatewayProvider !== undefined,
+  });
 
   // Generate chat completions request
   const filteredData = provider.filterChatCompletionsRequest({
@@ -78,27 +95,32 @@ export async function chatCompletions(
   );
 
   // If AI Gateway is enabled and the provider supports it, use AI Gateway
-  if (
-    aiGateway &&
-    CloudflareAIGateway.isSupportedProvider(providerName, true)
-  ) {
+  if (aiGateway && aiGatewayProvider) {
     const [gatewayRequestInfo, gatewayRequestInit] =
       await aiGateway.buildChatCompletionsRequest({
-        provider: providerName,
+        provider: aiGatewayProvider,
         body: requestInit.body as string,
         parsedBody: filteredData as { model: string; [key: string]: unknown },
         headers: requestInit.headers ?? {},
         apiKeyName: provider.apiKeyName as keyof Env,
       });
-    return fetch2(gatewayRequestInfo, {
-      ...gatewayRequestInit,
-      signal: request.signal,
-    });
+    return RequestLogger.withFields(keyLogFields, () =>
+      fetch2(gatewayRequestInfo, {
+        ...gatewayRequestInit,
+        signal: request.signal,
+      }),
+    );
   }
 
   // Request to the provider endpoint
-  return provider.fetch(requestInfo, {
-    ...requestInit,
-    signal: request.signal,
-  });
+  return RequestLogger.withFields(keyLogFields, () =>
+    provider.fetch(
+      requestInfo,
+      {
+        ...requestInit,
+        signal: request.signal,
+      },
+      apiKeyIndex,
+    ),
+  );
 }

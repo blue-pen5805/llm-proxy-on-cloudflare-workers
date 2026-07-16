@@ -6,8 +6,10 @@ import {
   formatString,
   maskUrl,
   cleanPathname,
+  fetch2,
   withTimeout,
 } from "~/src/utils/helpers";
+import { RequestLogger } from "~/src/utils/logger";
 
 describe("safeJsonParse", () => {
   it("should parse valid JSON string", () => {
@@ -123,6 +125,62 @@ describe("maskUrl", () => {
     expect(result).toBe(
       "https://api.example.com/v1?api_key=***&access_token=tok***&password=***&secret=***",
     );
+  });
+});
+
+describe("fetch2", () => {
+  it("logs a structured successful subrequest with a masked URL", async () => {
+    const response = new Response("ok", { status: 202 });
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(response);
+    const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    const result = await RequestLogger.withFields(
+      { provider: "openai", key_index: 1 },
+      () =>
+        fetch2(
+          new Request("https://example.com/models?api_key=private", {
+            method: "POST",
+          }),
+        ),
+    );
+
+    expect(result).toBe(response);
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(consoleInfo).toHaveBeenCalledWith({
+      event: "subrequest.completed",
+      request_id: null,
+      provider: "openai",
+      key_index: 1,
+      method: "POST",
+      url: "https://example.com/models?api_key=***",
+      status: 202,
+      duration_ms: expect.any(Number),
+    });
+
+    vi.restoreAllMocks();
+  });
+
+  it("logs a structured failure and rethrows the original error", async () => {
+    const error = new Error("request failed with token=private");
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(error);
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    await expect(
+      fetch2("https://example.com/models?key=private", { method: "DELETE" }),
+    ).rejects.toBe(error);
+    expect(consoleError).toHaveBeenCalledWith({
+      event: "subrequest.failed",
+      request_id: null,
+      method: "DELETE",
+      url: "https://example.com/models?key=***",
+      duration_ms: expect.any(Number),
+      error_name: "Error",
+      error_message: "request failed with token=***",
+    });
+
+    vi.restoreAllMocks();
   });
 });
 

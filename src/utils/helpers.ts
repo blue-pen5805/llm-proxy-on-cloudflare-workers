@@ -1,4 +1,5 @@
 import { AUTHORIZATION_QUERY_PARAMETERS } from "./authorization";
+import { RequestLogger } from "./logger";
 import { randomInt } from "node:crypto";
 
 export function maskUrl(url: string): string {
@@ -65,14 +66,34 @@ export function maskUrl(url: string): string {
   }
 }
 
-export const fetch2: typeof fetch = async (input, init) => {
-  const url = input.toString();
-  // URL is masked to prevent exposing sensitive data like API keys
+export async function fetch2(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  const url = input instanceof Request ? input.url : input.toString();
+  const method =
+    init?.method ?? (input instanceof Request ? input.method : "GET");
   const maskedUrl = maskUrl(url);
-  console.info(`Sub-Request: ${init?.method} ${maskedUrl}`);
+  const startedAt = performance.now();
 
-  return fetch(input, init);
-};
+  try {
+    const response = await fetch(input, init);
+    RequestLogger.info("subrequest.completed", {
+      method,
+      url: maskedUrl,
+      status: response.status,
+      duration_ms: RequestLogger.durationMs(startedAt),
+    });
+    return response;
+  } catch (error) {
+    RequestLogger.error("subrequest.failed", error, {
+      method,
+      url: maskedUrl,
+      duration_ms: RequestLogger.durationMs(startedAt),
+    });
+    throw error;
+  }
+}
 
 export function safeJsonParse(text: string): unknown {
   try {
