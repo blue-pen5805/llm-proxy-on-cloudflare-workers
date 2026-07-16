@@ -5,8 +5,8 @@
 The Worker uses a composed middleware chain to keep authentication, path
 rewriting, Gateway selection, and route handlers independent. A shared
 `MiddlewareContext` carries only request-scoped state: the request, Worker
-environment, execution context, normalized path, optional key selection, and
-optional AI Gateway client.
+environment, execution context, normalized path, optional key selection,
+optional AI Gateway client, and the request's provider registry.
 
 `compose` enforces single forward traversal. Calling `next()` twice rejects, and
 reaching the end of the chain produces a not-found error.
@@ -36,7 +36,10 @@ accepted as proxy credentials and then add the selected provider credential.
 The entry point runs the entire chain inside `Environments.run`, backed by
 `AsyncLocalStorage`. Provider instances and utility functions can read the
 current `Env` without a global mutable variable, which prevents concurrent
-requests in the same isolate from overwriting one another's configuration.
+requests in the same isolate from overwriting one another's configuration. It
+also creates one `ProviderRegistry` inside that scope. Routing uses provider
+names without eagerly constructing adapters, while downstream handlers reuse
+the lazily created adapter instances.
 
 ## Failure behavior
 

@@ -13,12 +13,22 @@ listing unsupported.
 
 ## Provider registry
 
-`src/providers.ts` is the authoritative registry. A route name maps to a class,
-and availability is normally determined by whether its configured key list is
-non-empty. Workers AI has additional account configuration, while custom
-endpoints are available by definition. Availability controls model aggregation
-and status metadata; routing still resolves a registered provider class even
-when it has no key.
+`src/providers.ts` is the authoritative built-in provider table.
+`ProviderRegistry` combines that table with the custom endpoint snapshot for a
+single request. It owns provider discovery, route-prefix matching, lazy
+construction, and instance reuse. Request handlers therefore consume one
+consistent provider view without rebuilding every adapter during route
+selection.
+
+The legacy `getProvider` and `getAllProviders` functions remain compatibility
+facades over the registry. Built-in provider lookup and aggregate listing keep
+their existing precedence when a custom endpoint reuses a built-in name.
+
+Availability is normally determined by whether a provider's configured key
+list is non-empty. Workers AI has additional account configuration, while
+custom endpoints are available by definition. Availability controls model
+aggregation and status metadata; routing still resolves a registered provider
+class even when it has no key.
 
 Commented imports or provider directories that are not registered are not
 supported routes. Documentation should distinguish three independent

@@ -1,6 +1,6 @@
 import { CloudflareAIGateway } from "../ai_gateway";
 import { Middleware, MiddlewareContext } from "../middleware";
-import { getAllProviders } from "../providers";
+import { createProviderRegistry } from "../providers";
 import { chatCompletions } from "../requests/chat_completions";
 import { compat } from "../requests/compat";
 import { models } from "../requests/models";
@@ -23,7 +23,7 @@ export async function handleRouting(
   }
 
   if (pathname === "/status") {
-    return await status(aiGateway);
+    return await status(aiGateway, context.providers);
   }
 
   // Example: /g/{AI_GATEWAY_NAME}/compat
@@ -58,17 +58,16 @@ export async function handleRouting(
   // Example: /openai/v1/chat/completions
   //          /google-ai-studio/v1beta/models/{MODEL_NAME}:generateContent
   //          /g/{AI_GATEWAY_NAME}/openai/v1/chat/completions
-  const env = Environments.all();
-  const allProviders = getAllProviders(env);
-  const providerName = Object.keys(allProviders).find((p) =>
-    pathname.startsWith(`/${p}/`),
-  );
-  if (providerName) {
-    const targetPathname = pathname.replace(
-      new RegExp(`^/${providerName}/`),
-      "/",
+  const providers =
+    context.providers ?? createProviderRegistry(Environments.all());
+  const providerRoute = providers.match(pathname);
+  if (providerRoute) {
+    return await proxy(
+      context,
+      providerRoute.providerName,
+      providerRoute.pathname,
+      aiGateway,
     );
-    return await proxy(context, providerName, targetPathname, aiGateway);
   }
 
   // Universal Endpoint

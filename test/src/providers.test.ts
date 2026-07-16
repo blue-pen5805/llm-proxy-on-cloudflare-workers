@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getAllProviders, getProvider, Providers } from "~/src/providers";
+import {
+  getAllProviders,
+  getProvider,
+  ProviderRegistry,
+  Providers,
+} from "~/src/providers";
 import { CustomOpenAI } from "~/src/providers/custom-openai";
 import { OpenAI } from "~/src/providers/openai";
 import { Config } from "~/src/utils/config";
@@ -51,6 +56,45 @@ describe("provider registry", () => {
     vi.spyOn(Config, "customOpenAIEndpoints").mockReturnValue(undefined);
     expect(Object.keys(getAllProviders({} as Env))).toEqual(
       Object.keys(Providers),
+    );
+    expect(new ProviderRegistry(Providers).names()).toEqual(
+      Object.keys(Providers),
+    );
+  });
+
+  it("reuses lazily constructed providers within a registry", () => {
+    const registry = new ProviderRegistry(Providers, [
+      { name: "internal", baseUrl: "https://internal.example" },
+    ]);
+
+    expect(registry.get("openai")).toBe(registry.get("openai"));
+    expect(registry.get("internal")).toBe(registry.get("internal"));
+    expect(registry.all().openai).toBe(registry.get("openai"));
+    expect(registry.all().internal).toBe(registry.get("internal"));
+  });
+
+  it("matches provider paths without interpreting names as regular expressions", () => {
+    const registry = new ProviderRegistry(Providers, [
+      { name: "internal.v2", baseUrl: "https://internal.example" },
+    ]);
+
+    expect(registry.match("/internal.v2/v1/models?limit=1")).toEqual({
+      providerName: "internal.v2",
+      pathname: "/v1/models?limit=1",
+    });
+    expect(registry.match("/internalXv2/v1/models")).toBeUndefined();
+    expect(registry.match("/openai")).toBeUndefined();
+  });
+
+  it("preserves existing built-in and listing precedence for name collisions", () => {
+    const registry = new ProviderRegistry(Providers, [
+      { name: "openai", baseUrl: "https://custom.example" },
+    ]);
+
+    expect(registry.get("openai")).toBeInstanceOf(OpenAI);
+    expect(registry.all().openai).toBeInstanceOf(CustomOpenAI);
+    expect(registry.names().filter((name) => name === "openai")).toHaveLength(
+      1,
     );
   });
 });

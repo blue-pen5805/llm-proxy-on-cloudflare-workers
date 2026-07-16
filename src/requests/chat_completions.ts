@@ -44,7 +44,9 @@ export async function chatCompletions(
   const model = modelParts.join("/");
 
   // Validate provider name
-  const provider = getProvider(providerName, Environments.all());
+  const provider = context.providers
+    ? context.providers.get(providerName)
+    : getProvider(providerName, Environments.all());
   if (!provider) {
     return new Response(
       JSON.stringify({

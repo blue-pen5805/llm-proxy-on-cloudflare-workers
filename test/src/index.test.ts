@@ -30,8 +30,8 @@ vi.mock("~/src/ai_gateway", () => {
     CloudflareAIGateway: MockCloudflareAIGateway,
   };
 });
-vi.mock("~/src/providers", () => ({
-  Providers: {
+vi.mock("~/src/providers", () => {
+  const Providers = {
     openai: vi.fn(function () {
       return {
         name: "openai",
@@ -39,10 +39,31 @@ vi.mock("~/src/providers", () => ({
         headers: vi.fn().mockResolvedValue({}),
       };
     }),
-  },
-  getAllProviders: vi.fn(),
-  getProvider: vi.fn(),
-}));
+  };
+  const getAllProviders = vi.fn();
+  const getProvider = vi.fn();
+
+  return {
+    Providers,
+    getAllProviders,
+    getProvider,
+    createProviderRegistry: vi.fn(() => ({
+      all: () => getAllProviders(),
+      get: (name: string) => getProvider(name),
+      match: (pathname: string) => {
+        const providerName = Object.keys(getAllProviders()).find((name) =>
+          pathname.startsWith(`/${name}/`),
+        );
+        return providerName
+          ? {
+              providerName,
+              pathname: pathname.slice(providerName.length + 1),
+            }
+          : undefined;
+      },
+    })),
+  };
+});
 vi.mock("~/src/utils/environments", () => ({
   Environments: {
     all: vi.fn(() => ({})),

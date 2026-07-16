@@ -15,8 +15,9 @@ export async function proxy(
 ) {
   const { apiKeyIndex: contextApiKeyIndex } = context;
   const { request } = context;
-  const env = Environments.all();
-  const providerInstance = getProvider(providerName, env);
+  const providerInstance = context.providers
+    ? context.providers.get(providerName)
+    : getProvider(providerName, Environments.all());
 
   if (!providerInstance) {
     throw new NotFoundError();

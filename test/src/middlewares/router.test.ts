@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
 import { handleRouting } from "~/src/middlewares/router";
+import { proxy } from "~/src/requests/proxy";
 import { NotFoundError } from "~/src/utils/error";
 
 // Mock the request handlers
@@ -65,6 +66,12 @@ describe("handleRouting", () => {
       pathname: "/openai/v1/models",
     } as any);
     expect(await response.text()).toBe("proxy");
+    expect(proxy).toHaveBeenCalledWith(
+      expect.anything(),
+      "openai",
+      "/v1/models",
+      undefined,
+    );
   });
 
   it("should route to universal endpoint", async () => {

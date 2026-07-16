@@ -1,5 +1,6 @@
 import { CloudflareAIGateway } from "../ai_gateway";
 import { getAllProviders } from "../providers";
+import type { ProviderRegistry } from "../providers";
 import { CustomOpenAI } from "../providers/custom-openai";
 import { ProviderBase, ProviderNotSupportedError } from "../providers/provider";
 import { Config } from "../utils/config";
@@ -110,7 +111,10 @@ async function checkConnectivity(
   }
 }
 
-export async function status(aiGateway?: CloudflareAIGateway) {
+export async function status(
+  aiGateway?: CloudflareAIGateway,
+  providerRegistry?: ProviderRegistry,
+) {
   const aiGatewayConfig = Config.aiGateway();
   const config = {
     DEV: Config.isDevelopment(),
@@ -123,7 +127,9 @@ export async function status(aiGateway?: CloudflareAIGateway) {
   };
 
   const env = Environments.all();
-  const providerEntries = Object.entries(getAllProviders(env));
+  const providerEntries = Object.entries(
+    providerRegistry?.all() ?? getAllProviders(env),
+  );
   const providersStatus = Object.fromEntries(
     await Promise.all(
       providerEntries.map(async ([providerName, instance]) => {

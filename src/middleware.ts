@@ -1,4 +1,5 @@
 import { CloudflareAIGateway } from "./ai_gateway";
+import type { ProviderRegistry } from "./providers";
 import { NotFoundError } from "./utils/error";
 
 export interface MiddlewareContext {
@@ -8,6 +9,7 @@ export interface MiddlewareContext {
   pathname: string;
   aiGateway?: CloudflareAIGateway;
   apiKeyIndex?: number | { start?: number; end?: number };
+  providers?: ProviderRegistry;
 }
 
 export type NextFunction = () => Promise<Response>;

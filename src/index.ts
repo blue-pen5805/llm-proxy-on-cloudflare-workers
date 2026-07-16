@@ -6,6 +6,7 @@ import { corsMiddleware } from "./middlewares/cors";
 import { errorMiddleware } from "./middlewares/error";
 import { requestMiddleware } from "./middlewares/request";
 import { routerMiddleware } from "./middlewares/router";
+import { createProviderRegistry } from "./providers";
 import { Environments } from "./utils/environments";
 // Cloudflare Durable Objects
 import { KeyRotationManager } from "./utils/key_rotation_manager";
@@ -24,13 +25,16 @@ const middlewareChain = compose([
 
 export default {
   async fetch(request, env, ctx): Promise<Response> {
-    const context: MiddlewareContext = {
-      request,
-      env,
-      ctx,
-      pathname: "",
-    };
+    return Environments.run(env, () => {
+      const context: MiddlewareContext = {
+        request,
+        env,
+        ctx,
+        pathname: "",
+        providers: createProviderRegistry(env),
+      };
 
-    return Environments.run(env, () => middlewareChain(context));
+      return middlewareChain(context);
+    });
   },
 } satisfies ExportedHandler<Env>;

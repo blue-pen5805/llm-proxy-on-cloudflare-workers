@@ -78,8 +78,10 @@ describe("chatCompletions", () => {
     ]);
     mockProviderClass.fetch.mockResolvedValue(new Response());
 
-    await chatCompletions({ request } as any);
+    const providers = { get: vi.fn(() => mockProviderClass) };
+    await chatCompletions({ request, providers } as any);
 
+    expect(providers.get).toHaveBeenCalledWith("openai");
     expect(mockProviderClass.buildChatCompletionsRequest).toHaveBeenCalledWith({
       body: JSON.stringify({ ...requestBody, model: "gpt-4" }),
       headers: expect.any(Headers),

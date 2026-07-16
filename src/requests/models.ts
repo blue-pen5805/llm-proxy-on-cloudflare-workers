@@ -69,7 +69,9 @@ export async function models(
   context: MiddlewareContext,
   aiGateway: CloudflareAIGateway | undefined = undefined,
 ) {
-  const providerEntries = Object.entries(getAllProviders(Environments.all()));
+  const providerEntries = Object.entries(
+    context.providers?.all() ?? getAllProviders(Environments.all()),
+  );
   const requests = providerEntries.map(([providerName, provider]) =>
     fetchProviderModels(providerName, provider, context.apiKeyIndex, aiGateway),
   );

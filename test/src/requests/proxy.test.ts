@@ -56,8 +56,14 @@ describe("proxy", () => {
       headers: new Headers(),
     });
 
-    await proxy({ request: mockRequest } as any, providerName, "/test/path");
+    const providers = { get: vi.fn(() => mockProviderClass) };
+    await proxy(
+      { request: mockRequest, providers } as any,
+      providerName,
+      "/test/path",
+    );
 
+    expect(providers.get).toHaveBeenCalledWith(providerName);
     expect(mockProviderClass.fetch).toHaveBeenCalledWith(
       "/test/path",
       {
