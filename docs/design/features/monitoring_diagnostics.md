@@ -1,29 +1,57 @@
-# Monitoring & Diagnostics Design
+# Monitoring and Diagnostics
 
-## Objectives
+## Health surfaces
 
-Transparency and health monitoring are critical for a proxy handling production LLM traffic. The system includes a built-in diagnostic interface to audit configuration and verify provider availability.
+The Worker exposes two authenticated health routes:
 
-## Endpoint Design: `/status`
+- `/ping` returns `Pong` without provider subrequests. It is a liveness check
+  for routing and Worker execution only.
+- `/status` returns sanitized configuration and runs credential connectivity
+  checks. It is an operator diagnostic, not a low-cost liveness probe.
 
-The `/status` endpoint is designed as a **Diagnostic Dashboard** for the proxy's internal state.
+## Status algorithm
 
-### Key Validation Logic
+The handler constructs every built-in and custom provider instance. For each
+configured credential, it calls the provider's model-list path, either directly
+or through the active AI Gateway. Checks run concurrently with an individual
+five-second timeout.
 
-The status system performs **Active Key Validation**:
+Responses are classified as follows:
 
-1.  It iterates through configured providers and their API keys.
-2.  For each key, it performs a minimal request (e.g., `List Models`) to the upstream provider.
-3.  The result determines the key's state: `valid`, `invalid`, or `unknown`.
+| Result                               | Status                  |
+| ------------------------------------ | ----------------------- |
+| Successful HTTP response             | `valid`                 |
+| HTTP 401 or 403                      | `invalid`               |
+| Other non-success HTTP response      | `unknown`               |
+| Unsupported model listing or timeout | `unknown`               |
+| Unexpected exception                 | `invalid` after logging |
 
-Provider and key checks run concurrently. Each upstream check has an individual five-second timeout and propagates an abort signal to the fetch request. A timeout is reported as `unknown`, because it does not prove that a credential is invalid.
+This is connectivity evidence, not proof that every model, quota, permission,
+or API operation works. Conversely, a transient failure can make a usable key
+appear invalid or unknown.
 
-## Design Rationale: Security vs. Utility
+## Disclosure controls
 
-- **Obfuscation**: API keys are masked to show only the identifying tail (e.g., `...abc`).
-- **Authentication**: The diagnostic endpoint is protected by the same security layer as the LLM proxying endpoints.
-- **Secret Redaction**: AI Gateway configuration remains visible for diagnostics, but its token is represented as `***` and is never returned verbatim.
+Keys of four or more characters reveal only their final three characters;
+shorter values become `***`. The AI Gateway token becomes `***`, but account and
+Gateway identifiers remain visible. Default model, development mode, global
+round-robin state, provider names, and key counts are also exposed.
+
+The route passes through normal authentication, except when authentication has
+been disabled by configuration. Operators should not expose it publicly or use
+its output as an unaudited monitoring payload.
+
+## Platform observability
+
+`wrangler.jsonc` enables Workers Logs and sampled traces. `fetch2` emits one
+informational log per upstream subrequest with recognized sensitive query values
+masked. Unexpected errors and partial model-list failures are written to logs.
+
+The application does not currently emit structured metrics, request IDs, or
+provider latency histograms. Those are explicit future extensions rather than
+properties of the existing status endpoint.
 
 ## References
 
-- [Cloudflare Workers Observability](https://developers.cloudflare.com/workers/observability/)
+- [Workers observability](https://developers.cloudflare.com/workers/observability/)
+- [Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/)

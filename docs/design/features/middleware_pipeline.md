@@ -1,34 +1,50 @@
-# Middleware Pipeline Design
+# Middleware Pipeline
 
-## Philosophy
+## Rationale
 
-The core request/response handling is designed using the **Pipe-and-Filter** architectural pattern, implemented as a composable middleware chain. This approach decouples cross-cutting concerns from the core routing and provider logic, allowing for a highly maintainable and extensible system.
+The Worker uses a composed middleware chain to keep authentication, path
+rewriting, Gateway selection, and route handlers independent. A shared
+`MiddlewareContext` carries only request-scoped state: the request, Worker
+environment, execution context, normalized path, optional key selection, and
+optional AI Gateway client.
 
-## Structural Design
+`compose` enforces single forward traversal. Calling `next()` twice rejects, and
+reaching the end of the chain produces a not-found error.
 
-The pipeline is a sequential chain where each component (middleware) can:
+## Ordered stages
 
-- Inspect and modify the request before passing it to the next component.
-- Intercept the response from the downstream components and modify it.
-- Short-circuit the pipeline by returning a response immediately (e.g., in case of unauthorized access).
+The order in `src/index.ts` is behaviorally significant:
 
-### Design Benefits
+1. `errorMiddleware` converts known application errors to JSON and redacts
+   unexpected error details from clients.
+2. `requestMiddleware` initializes the path, including its query string.
+3. `corsMiddleware` answers preflight requests immediately.
+4. `apiKeyPathMiddleware` extracts a `/key/...` prefix.
+5. `authMiddleware` removes the `key` query parameter and authenticates the
+   original request unless development mode is enabled.
+6. `aiGatewayMiddleware` selects the default or path-specific Gateway and
+   removes a `/g/<name>` prefix.
+7. `routerMiddleware` dispatches health, compatibility, OpenAI-compatible,
+   provider pass-through, and Universal Endpoint requests.
 
-- **Separation of Concerns**: Each middleware has a single responsibility (e.g., `authMiddleware` only handles security).
-- **Decoupled Context**: The `MiddlewareContext` object carries essential state (request, env, pathname) through the pipeline without polluting global scope.
-- **Request-Scoped Environment**: The Worker entry point runs the complete pipeline inside an `AsyncLocalStorage` context. Existing configuration and provider helpers can access the active `Env` without module-level request state leaking across concurrent requests.
-- **Predictable Flow**: The deterministic order of execution ensures that security and environment setup always occur before routing.
+The preflight short circuit intentionally occurs before authentication. Other
+routes are authenticated before dispatch. Provider handlers remove all headers
+accepted as proxy credentials and then add the selected provider credential.
 
-## Pipeline Components
+## Request-scoped environment
 
-- **Fault Tolerance (`errorMiddleware`)**: Acts as the outermost layer to catch all unhandled exceptions and transform them into standardized JSON error responses, preventing worker crashes and ensuring client compatibility.
-- **Request Initialization (`requestMiddleware`)**: The first stage that decomposes the `context.request` into `context.pathname` and initializes the `Environments` utility, providing a consistent context for downstream middlewares.
-- **Resource Routing Paths (`apiKeyPathMiddleware`)**: Extracts API key indices or ranges from specific path parameters (e.g., `/key/i/`) and updates `context.pathname` to allow standard routing to proceed.
-- **Security Enforcement (`authMiddleware`)**: Validates client-provided keys against the configured `PROXY_API_KEY`. It also sanitizes the `pathname` by removing sensitive authorization query parameters (`cleanPathname`).
-- **Observability Bridge (`aiGatewayMiddleware`)**: Detects and modifies requests intended for Cloudflare AI Gateway, abstracting the complexity of gateway-specific hosts.
-- **Dispatch (`routerMiddleware`)**: The final stage that performs semantic routing to specialized request handlers.
+The entry point runs the entire chain inside `Environments.run`, backed by
+`AsyncLocalStorage`. Provider instances and utility functions can read the
+current `Env` without a global mutable variable, which prevents concurrent
+requests in the same isolate from overwriting one another's configuration.
+
+## Failure behavior
+
+Handlers may return upstream responses directly or throw application errors.
+The outer error boundary preserves public messages for known errors. Unknown
+values are logged and converted to a generic HTTP 500 JSON response.
 
 ## References
 
-- [Cloudflare Workers Documentation](https://developers.cloudflare.com/workers/)
-- [Fetch API - MDN](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API)
+- [Cloudflare Workers](https://developers.cloudflare.com/workers/)
+- [Fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API)

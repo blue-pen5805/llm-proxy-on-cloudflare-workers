@@ -1,88 +1,96 @@
-# Initial Setup Guide
+# Initial Setup
 
-This guide explains the initial setup process for `cloudflare-workers-llm-proxy`.
+This guide deploys a minimally configured proxy and verifies it end to end. For
+all available settings, see the [Configuration reference](configuration.md).
 
 ## Prerequisites
 
-- [Node.js](https://nodejs.org/) (v22.12 or later) and npm are installed.
-- You have a [Cloudflare](https://www.cloudflare.com/) account.
+- Node.js 22.12 or later and npm
+- A Cloudflare account with permission to create Workers and secrets
+- At least one supported provider credential
 
-## 1. Clone the Project and Install Dependencies
-
-First, clone the project to your local machine and install the necessary dependencies.
+## 1. Install the project
 
 ```bash
-# Clone the project
-git clone https://github.com/your-username/cloudflare-workers-llm-proxy.git
-
-# Change to the project directory
-cd cloudflare-workers-llm-proxy
-
-# Install dependencies
-npm install
+git clone https://github.com/blue-pen5805/llm-proxy-on-cloudflare-workers.git
+cd llm-proxy-on-cloudflare-workers
+npm ci
 ```
 
-## 2. Authenticate with Cloudflare
-
-Before you can deploy to Cloudflare Workers, you need to authenticate with your Cloudflare account using `wrangler`.
+## 2. Authenticate Wrangler
 
 ```bash
-# Login to your Cloudflare account
 npm run cf:login
 ```
 
-This command will open a browser window where you can log in to your Cloudflare account and authorize `wrangler` to manage your Workers.
+Complete the browser authorization for the Cloudflare account that will own the
+Worker. The default Worker name is `llm-proxy`; change `name` in `wrangler.jsonc`
+before the first deployment if necessary.
 
-## 3. Create the Configuration File
+## 3. Create local configuration
 
-Create the configuration file using the provided script.
+Use the interactive helper:
 
 ```bash
 npm run secrets:create
 ```
 
-This will create `config.jsonc` from the template and guide you through the configuration process. You need to configure at least one provider.
-
-**Configuration Example (`config.jsonc`):**
+Alternatively, copy `config.example.jsonc` to `config.jsonc` and edit it. Set a
+strong, unique `PROXY_API_KEY` and at least one provider key:
 
 ```jsonc
 {
-  "$schema": "../schemas/config-schema.json",
-  "PROXY_API_KEY": "your-proxy-api-key",
-  "OPENAI_API_KEY": "sk-...",
-  "ANTHROPIC_API_KEY": "sk-ant-...",
-  "GEMINI_API_KEY": ["YOUR_GEMINI_API_KEY_1", "YOUR_GEMINI_API_KEY_2"],
+  "$schema": "schemas/config-schema.json",
+  "PROXY_API_KEY": "replace-with-a-long-random-value",
+  "OPENAI_API_KEY": "replace-with-your-provider-key",
 }
 ```
 
-The `PROXY_API_KEY` is the API key to use this proxy. Set any string you like.
-For the other `*_API_KEY` fields, set the actual API keys obtained from each provider. You can also specify multiple keys as an array, like `GEMINI_API_KEY`.
+Both files containing real values are ignored by Git. Confirm with
+`git status --short` before committing any work.
 
-## 4. Deploy to Cloudflare Workers
+## 4. Verify before deployment
 
-Once the configuration is complete, deploy the project to Cloudflare Workers.
+```bash
+npm run tsc
+npm run lint
+npm test
+npm run secrets:deploy -- --dry-run
+```
+
+The dry run prints values as well as names. Run it only in a private terminal;
+do not copy its output into logs or issues.
+
+## 5. Deploy code and configuration
 
 ```bash
 npm run deploy
+npm run secrets:deploy
 ```
 
-This command executes `wrangler deploy`, which deploys the application with `src/index.ts` as the entry point. On the first deployment, a new Worker will be created with the `name` specified in `wrangler.jsonc`.
+These are separate operations: the first deploys Worker code and bindings, and
+the second bulk-registers non-empty values from `config.jsonc` as Worker
+secrets. Run the second command again whenever configuration changes.
 
-## 5. Deploy API Keys as Secrets
+## 6. Verify the deployment
 
-As a security best practice, API keys should be managed securely using Cloudflare's Secrets feature.
-
-A script is provided to bulk-register the API keys from `config.jsonc` as Secrets.
+Wrangler prints the Worker URL after deployment. Replace the example host below:
 
 ```bash
-# Deploy to the default environment
-npm run secrets:deploy
+curl https://your-worker.example/ping \
+  --header "Authorization: Bearer $PROXY_API_KEY"
 
-# Deploy to the "production" environment (using config.production.jsonc)
-npm run secrets:deploy -- --env production
+curl https://your-worker.example/status \
+  --header "Authorization: Bearer $PROXY_API_KEY"
+
+curl https://your-worker.example/v1/models \
+  --header "Authorization: Bearer $PROXY_API_KEY"
 ```
 
-**Important:**
-If you change an `apiKey` in `config.jsonc` after deployment, you must run `npm run secrets:deploy` again to update the Secrets.
+`/ping` should return `Pong`. Review `/status` privately because it contains
+masked key suffixes and configuration metadata. `/v1/models` is best-effort and
+may omit a provider that times out or does not support model listing.
 
-This completes the initial setup. You can now send OpenAI-compatible requests to your deployed Worker's endpoint.
+Next, read [HTTP API and routing](api.md). For named environments, key rotation,
+AI Gateway, and custom endpoints, continue with [Configuration](configuration.md)
+and [Operations](operations.md).

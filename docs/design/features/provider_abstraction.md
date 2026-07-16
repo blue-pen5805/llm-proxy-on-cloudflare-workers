@@ -1,65 +1,67 @@
-# Provider Abstraction & Compatibility Design
+# Provider Abstraction and Compatibility
 
-## Core Objective
+## Responsibilities
 
-The system is designed to act as a **Universal Translator** for LLMs. It exposes a standardized interface (OpenAI compatibility) while hiding the proprietary details of various upstream providers.
+`ProviderBase` defines upstream URL construction, key access, request headers,
+chat request filtering, model request construction, and model response
+normalization. `OpenAICompatibleProvider` adds JSON and Bearer-authentication
+headers. Concrete adapters override only the parts their upstream requires.
 
-## Design Pattern: Adapter Pattern
+This is an adapter boundary rather than a promise of complete semantic parity.
+Provider adapters can filter chat fields, translate payloads, or declare model
+listing unsupported.
 
-We utilize the **Adapter Pattern** to normalize communication with different LLM backends.
+## Provider registry
 
-### Component Structure
+`src/providers.ts` is the authoritative registry. A route name maps to a class,
+and availability is normally determined by whether its configured key list is
+non-empty. Workers AI has additional account configuration, while custom
+endpoints are available by definition. Availability controls model aggregation
+and status metadata; routing still resolves a registered provider class even
+when it has no key.
 
-- **`ProviderBase`**: The single foundation class for all providers. It handles both the raw communication layer (base URL, headers, fetch) and LLM-specific logic (request building, response normalization). It centralizes API key management via `getApiKeys()` and stateful rotation coordination through `getNextApiKeyIndex()`.
-- **`OpenAICompatibleProvider`**: A specialized base for providers that use standard OpenAI-style headers and paths.
-- **Provider Adapters**: Individual classes (e.g., `Anthropic`, `GoogleAiStudio`) that extend `ProviderBase` (or `OpenAICompatibleProvider`). This consolidated architecture eliminates redundant abstraction layers and minimizes boilerplate.
+Commented imports or provider directories that are not registered are not
+supported routes. Documentation should distinguish three independent
+capabilities:
 
-## OpenAI Compatibility Layer
+- OpenAI-compatible chat translation;
+- model-list translation;
+- provider-specific pass-through.
 
-The proxy serves as a drop-in replacement for OpenAI API calls.
+Pass-through usually needs only a base URL and authentication. The other two
+require adapter methods and tests for the provider's actual formats.
 
-### Feature Mapping
+## OpenAI-compatible chat flow
 
-- **Chat Completions**: The proxy listens on standard `/v1/chat/completions`. It parses the `model` field to determine the target provider (e.g., `anthropic/claude-3-opus-20240229`).
-- **Model Aggregation**: The `GET /v1/models` endpoint aggregates models from all configured and available providers. Aggregation is best-effort: each provider has an individual timeout, and providers that fail/time out are omitted so the endpoint can still return results from other providers.
+1. Parse and validate the JSON body.
+2. Resolve `default` or split `<provider>/<model>` at the first slash.
+3. Resolve an API key index.
+4. Let the adapter filter or translate supported fields and remove the provider
+   prefix from the model.
+5. Send directly or construct an AI Gateway request.
+6. Forward the upstream response.
 
-## Routing Strategy
+The incoming abort signal is attached to the provider or Gateway subrequest so
+client cancellation can stop avoidable work. The Worker enables the
+`enable_request_signal` compatibility flag.
 
-1.  **Direct Provider Proxying**: Paths starting with `/{provider}/` bypass the default provider logic.
-2.  **Implicit Routing**: Standard endpoints (like `/v1/chat/completions`) use the provider prefix in the `model` string.
+## Model aggregation flow
 
-Client cancellation is propagated to provider and AI Gateway subrequests through the incoming request's `AbortSignal`, so disconnected clients do not leave avoidable inference requests running. The Worker enables the `enable_request_signal` compatibility flag so client disconnects abort those upstream requests.
+Every registered and custom provider is considered concurrently. Unavailable
+providers return no models. Static lists avoid network access; other providers
+receive a model-list request with a five-second timeout. Fulfilled results are
+converted to OpenAI model objects and prefixed with their route name. Rejected or
+malformed responses are logged and omitted.
 
-## Adding a New Provider
+## Extension requirements
 
-To add a new LLM provider, follow these steps:
-
-### 1. Implement the Provider Class
-
-Create a new directory in `src/providers/{provider-name}/` and implement the provider logic.
-
-- **`provider.ts`**: Extend `ProviderBase` or `OpenAICompatibleProvider`. Specify `apiKeyName` and `baseUrlProp`.
-- **`index.ts`**: Export the provider class and include documentation/references.
-- **`types.ts` (Optional)**: Define provider-specific request/response types.
-
-### 2. Configure Environment Variables
-
-Follow the [add-env-var.md](../../../.agent/workflows/add-env-var.md) workflow to correctly register the new API key in the configuration schemas, example files, and type definitions.
-
-### 3. Register the Provider
-
-In `src/providers.ts`, import the new provider and add it to the `Providers` object. Ensure the key matches the desired URL prefix (e.g., `ollama: Ollama`).
-
-### 4. Verification
-
-1.  **Unit Tests**: Create tests in `test/src/providers/{provider-name}/` (follow `provider.test.ts` pattern).
-2.  **Lint & Types**: Run `npm run lint` and `npm run tsc`.
-3.  **E2E/Manual**: Verify the provider appears in `GET /v1/models` and responds to `/v1/chat/completions`.
+A new provider requires registration, configuration/schema support, contract
+tests, and documentation. Tests should cover URL and header construction,
+availability, supported chat fields, model conversion, direct routing, and AI
+Gateway behavior independently. See [Development and verification](../../development.md).
 
 ## References
 
-- [OpenAI API Reference](https://platform.openai.com/docs/api-reference)
-- [Anthropic API Reference](https://docs.anthropic.com/en/api/reference)
-- [Google Gemini API Reference](https://ai.google.dev/api)
-- [Cloudflare Workers AI Documentation](https://developers.cloudflare.com/workers-ai/)
-- [Ollama Cloud Documentation](https://docs.ollama.com/cloud)
+- [OpenAI API reference](https://platform.openai.com/docs/api-reference)
+- [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/)
+- [Cloudflare AI Gateway providers](https://developers.cloudflare.com/ai-gateway/providers/)

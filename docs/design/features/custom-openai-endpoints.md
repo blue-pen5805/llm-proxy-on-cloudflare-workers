@@ -1,67 +1,56 @@
 # Custom OpenAI-Compatible Endpoints
 
-## Overview
+## Motivation
 
-The Custom OpenAI-Compatible Endpoints feature allows you to define additional, arbitrary OpenAI-compatible API providers via configuration (backed by the `CUSTOM_OPENAI_ENDPOINTS` environment variable). This enables the proxy to support self-hosted LLMs (e.g., vLLM, LocalAI) or niche providers without requiring changes to the core codebase.
+Deployment configuration can register OpenAI-compatible upstreams without a new
+provider class. This covers self-hosted inference and vendor endpoints whose
+authentication and response formats already follow the OpenAI contract.
 
-## Design Rationale
+## Configuration model
 
-Statically defining providers is insufficient for users who operate their own inference servers. By providing a dynamic configuration mechanism, the proxy becomes a truly universal LLM gateway.
+Each `CUSTOM_OPENAI_ENDPOINTS` entry requires a unique `name` and `baseUrl` and
+may define `apiKeys`, a static `models` array, `chatCompletionPath`, and
+`modelsPath`. The default paths are `/chat/completions` and `/models`.
 
-## Implementation Details
+Configuration is trusted operator input. The implementation does not currently
+reject duplicate names, built-in name collisions, non-HTTPS origins, or malformed
+path combinations. Documentation and deployment review therefore carry those
+validation responsibilities.
 
-### Configuration
+## Resolution and routing
 
-Custom endpoints are defined in the `CUSTOM_OPENAI_ENDPOINTS` environment variable (mapped from `config.jsonc`). Each endpoint configuration includes:
+`getProvider` resolves built-in providers before custom endpoints, so a custom
+name cannot override a built-in route. `getAllProviders` then adds custom entries
+to the provider map; a colliding custom name can replace the built-in instance in
+aggregate operations. Names must therefore be unique across both sets.
 
-- `name`: A unique identifier for the provider.
-- `baseUrl`: The base URL used as the upstream origin for requests (e.g., `https://my-vllm.internal/v1`).
-- `apiKeys`: (Optional) A single string or an array of strings for authentication.
-- `models`: (Optional) A list of model IDs to expose via `GET /v1/models` without querying the upstream.
-- `chatCompletionPath`: (Optional) Overrides the upstream chat completions path (default: `/chat/completions`).
-- `modelsPath`: (Optional) Overrides the upstream models path (default: `/models`).
+Once resolved, the endpoint supports:
 
-Note: If your upstream serves OpenAI-compatible routes under `/v1`, you can either include `/v1` in `baseUrl` (and keep default paths), or keep `baseUrl` at the server root and set `chatCompletionPath`/`modelsPath` to include `/v1/...`.
+- pass-through at `/<name>/<path>`;
+- chat translation using `<name>/<model>`;
+- model aggregation through a static list or the configured models path;
+- status checks for each configured key.
 
-### Provider Resolution
+## Authentication and rotation
 
-The `getProvider` and `getAllProviders` functions in `src/providers.ts` were updated to:
+Keys are optional. When present, the adapter adds Bearer authentication and uses
+the same explicit/random/global selection policy as built-in providers. Its
+Durable Object rotation identifier is the endpoint name. An unauthenticated
+custom endpoint is considered available, which is necessary for internal or
+public upstreams but places responsibility for origin access control on the
+operator.
 
-1. First, look for a matching static provider.
-2. If not found, look for a matching `name` in `CUSTOM_OPENAI_ENDPOINTS`.
-3. If a match is found, instantiate a `CustomOpenAI` provider.
+## Model discovery
 
-### CustomOpenAI Provider
+A non-empty static `models` list is converted to OpenAI model objects locally and
+avoids an upstream request. Otherwise, aggregation fetches `modelsPath` with a
+five-second timeout. Failure omits that endpoint from the aggregate response
+without failing the entire request.
 
-The `CustomOpenAI` class extends `OpenAICompatibleProvider` and overrides:
-
-- `baseUrl()`: Returns the configured `baseUrl`.
-- `headers()`: Implements basic `Authorization: Bearer <key>` using the appropriate API key determined by `getNextApiKeyIndex()`.
-- `getNextApiKeyIndex()`: Overrides to perform stateful global round-robin rotation using the unique `name` as an identifier for coordinate through the stateful layer.
-- `available()`: Always returns `true`.
-
-### Usage
-
-To use a custom endpoint, specify the model name as `${name}/${model_name}`.
-
-Example:
-If a custom endpoint is named `my-vllm`, a request to `my-vllm/llama-3` will be routed to the configured `baseUrl` with the model name `llama-3`.
-
-## Model Discovery and Aggregation
-
-### Best-effort `GET /v1/models`
-
-The aggregated `GET /v1/models` endpoint is designed to be best-effort:
-
-- The proxy attempts to collect models from each configured and available provider.
-- Each provider model list fetch has an individual 5 second timeout.
-- If a provider fails or times out, that provider's models are omitted, but the overall `GET /v1/models` response still returns models from other providers.
-
-### Prefer Static `models` for Custom Endpoints
-
-For custom endpoints, upstream model discovery is not always reliable (or may be slow). If you need a stable and fast `GET /v1/models`, set `models` in the custom endpoint configuration; when present, the proxy uses this list instead of calling the upstream models endpoint.
+Static model objects use the custom name as `owned_by` and are then prefixed by
+the aggregate handler, producing IDs of `<name>/<model>`.
 
 ## References
 
-- [OpenAI API Reference](https://platform.openai.com/docs/api-reference)
-- [Cloudflare Workers Environment Variables](https://developers.cloudflare.com/workers/configuration/environment-variables/)
+- [OpenAI API reference](https://platform.openai.com/docs/api-reference)
+- [Workers secrets](https://developers.cloudflare.com/workers/configuration/secrets/)

@@ -2,42 +2,37 @@
 description: Update project dependencies incrementally and safely
 ---
 
-// turbo-all
-
-1. Check for available updates using `npm-check-updates` (ncu).
+1. Inspect available updates without changing files.
 
 ```bash
-npx ncu
+npx npm-check-updates
 ```
 
-2. Choose a specific dependency to update. Update `package.json` for that dependency only.
-   Replace `PACKAGE_NAME` with the actual package name.
+2. Choose one dependency or a tightly related group. Read the upstream release
+   and migration notes before changing versions.
+
+3. Update only the selected dependency and refresh the lockfile.
 
 ```bash
-npx ncu -u PACKAGE_NAME
-```
-
-3. Install the updated package.
-
-```bash
+npx npm-check-updates --upgrade PACKAGE_NAME
 npm install
 ```
 
-4. Regenerate Cloudflare Worker types to ensure compatibility.
+4. Inspect both `package.json` and `package-lock.json`. Confirm that unrelated
+   direct dependencies were not upgraded.
+
+5. If Wrangler, Workers types, or configuration behavior changed, regenerate
+   bindings and compare the generated output.
 
 ```bash
 npm run cf-typegen
 ```
 
-5. Verify the changes using the `/verify` workflow (prettier, lint, tests).
-   Ensure that no existing code changes are required.
+6. Run `.agent/workflows/verify.md`.
 
-```bash
-/verify
-```
+7. Update design or developer documentation only when the dependency changes
+   architecture, commands, supported runtimes, or contributor workflow.
 
-6. If any step fails, or if the update requires significant code changes, revert the changes in `package.json` and `package-lock.json`.
-
-> [!IMPORTANT]
-> Always update dependencies one by one (or in small related groups) to isolate potential issues.
-> The goal is to keep dependencies up-to-date without breaking existing functionality or requiring immediate code refactoring.
+8. If the update cannot be made compatible within task scope, report the exact
+   failure and leave the working tree in its intentional pre-update state. Do
+   not discard unrelated user changes.
