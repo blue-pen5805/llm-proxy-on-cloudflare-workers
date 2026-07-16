@@ -144,11 +144,7 @@ export type OpenAIChatCompletionsResponseBody = {
   id: string;
   choices: {
     finish_reason:
-      | "stop"
-      | "length"
-      | "content_filter"
-      | "tool_calls"
-      | "function_call";
+      "stop" | "length" | "content_filter" | "tool_calls" | "function_call";
     index: number;
     message: {
       role: string;
