@@ -111,10 +111,14 @@ async function checkConnectivity(
 }
 
 export async function status(aiGateway?: CloudflareAIGateway) {
+  const aiGatewayConfig = Config.aiGateway();
   const config = {
     DEV: Config.isDevelopment(),
     DEFAULT_MODEL: Config.defaultModel() || null,
-    AI_GATEWAY: Config.aiGateway(),
+    AI_GATEWAY: {
+      ...aiGatewayConfig,
+      token: aiGatewayConfig.token ? "***" : undefined,
+    },
     GLOBAL_ROUND_ROBIN: Config.isGlobalRoundRobinEnabled(),
   };
 

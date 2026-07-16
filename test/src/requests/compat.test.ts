@@ -22,6 +22,9 @@ describe("compat", () => {
         headers: {
           "Content-Type": "application/json",
           Authorization: "Bearer proxy-api-key",
+          "x-api-key": "proxy-api-key",
+          "x-goog-api-key": "proxy-api-key",
+          "x-client-header": "preserved",
         },
         body,
       },
@@ -45,6 +48,10 @@ describe("compat", () => {
     expect(callArgs.path).toBe("/compat/chat/completions");
     expect(callArgs.body).toBe(request.body);
     expect(callArgs.headers.authorization).toBeUndefined();
+    expect(callArgs.headers["x-api-key"]).toBeUndefined();
+    expect(callArgs.headers["x-goog-api-key"]).toBeUndefined();
+    expect(callArgs.headers["x-client-header"]).toBe("preserved");
+    expect(callArgs.signal).toBe(request.signal);
 
     expect(fetch2).toHaveBeenCalledWith(
       "https://gateway.ai.cloudflare.com/v1/account/gateway/compat/chat/completions",

@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { authenticate } from "~/src/utils/authorization";
+import {
+  authenticate,
+  stripProxyAuthorizationHeaders,
+} from "~/src/utils/authorization";
 import { Config } from "~/src/utils/config";
 
 vi.mock("~/src/utils/config");
@@ -95,5 +98,24 @@ describe("authenticate", () => {
     });
 
     expect(authenticate(request)).toBe(false);
+  });
+});
+
+describe("stripProxyAuthorizationHeaders", () => {
+  it("removes proxy credentials while preserving other headers", () => {
+    const original = new Headers({
+      Authorization: "Bearer proxy-secret",
+      "x-api-key": "proxy-secret",
+      "x-goog-api-key": "proxy-secret",
+      "x-client-header": "preserved",
+    });
+
+    const sanitized = stripProxyAuthorizationHeaders(original);
+
+    expect(sanitized.has("Authorization")).toBe(false);
+    expect(sanitized.has("x-api-key")).toBe(false);
+    expect(sanitized.has("x-goog-api-key")).toBe(false);
+    expect(sanitized.get("x-client-header")).toBe("preserved");
+    expect(original.get("Authorization")).toBe("Bearer proxy-secret");
   });
 });

@@ -12,7 +12,6 @@ export const errorMiddleware: Middleware = async (context, next) => {
       status = err.status;
       message = err.message;
     } else if (err instanceof Error) {
-      message = err.message;
       console.error("Unhandled Error:", err);
     } else {
       console.error("Unknown Error Object:", err);

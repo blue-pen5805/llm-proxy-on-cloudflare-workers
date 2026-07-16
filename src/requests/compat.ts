@@ -1,4 +1,5 @@
 import { CloudflareAIGateway } from "../ai_gateway";
+import { stripProxyAuthorizationHeaders } from "../utils/authorization";
 import { fetch2 } from "../utils/helpers";
 
 export async function compat(
@@ -6,8 +7,7 @@ export async function compat(
   pathname: string,
   aiGateway: CloudflareAIGateway,
 ) {
-  const headers = new Headers(request.headers);
-  headers.delete("Authorization");
+  const headers = stripProxyAuthorizationHeaders(request.headers);
 
   const sanitizedHeaders = Object.fromEntries(headers.entries());
 

@@ -10,6 +10,8 @@ The proxy implements a **Shared Secret Authentication** model via API keys.
 - **Query Parameters**: Supports `?key=...`.
 - **Multi-Key Support**: `PROXY_API_KEY` can be an array of keys.
 - **Timing-Safe Comparison**: Candidate and configured keys are hashed to a fixed length and compared without an early return, reducing timing side channels without changing supported authentication formats.
+- **Credential Isolation**: Headers accepted for proxy authentication are removed before forwarding. Provider credentials are added separately, preventing proxy secrets from leaking to upstream APIs.
+- **Error Redaction**: Expected application errors retain their public messages, while unexpected failures return a generic message and keep diagnostic details in Worker logs.
 
 ## Configuration Principles: Environment as Single Source of Truth
 

@@ -246,10 +246,13 @@ describe("chatCompletions", () => {
       headers: expect.any(Object),
       apiKeyName: "OPENAI_API_KEY",
     });
-    expect(helpers.fetch2).toHaveBeenCalled();
+    expect(helpers.fetch2).toHaveBeenCalledWith(
+      "https://gateway.ai.cloudflare.com/v1/account/gateway",
+      expect.objectContaining({ signal: request.signal }),
+    );
   });
 
-  it("should remove Authorization header", async () => {
+  it("should remove all proxy authorization headers", async () => {
     const requestBody = {
       model: "openai/gpt-4",
       messages: [{ role: "user", content: "Hello" }],
@@ -261,6 +264,9 @@ describe("chatCompletions", () => {
       headers: {
         "Content-Type": "application/json",
         Authorization: "Bearer test-token",
+        "x-api-key": "test-token",
+        "x-goog-api-key": "test-token",
+        "x-client-header": "preserved",
       },
     });
 
@@ -278,6 +284,13 @@ describe("chatCompletions", () => {
     const headersArg =
       mockProviderClass.buildChatCompletionsRequest.mock.calls[0][0].headers;
     expect(headersArg.has("Authorization")).toBe(false);
+    expect(headersArg.has("x-api-key")).toBe(false);
+    expect(headersArg.has("x-goog-api-key")).toBe(false);
+    expect(headersArg.get("x-client-header")).toBe("preserved");
+    expect(mockProviderClass.fetch).toHaveBeenCalledWith(
+      "/chat/completions",
+      expect.objectContaining({ signal: request.signal }),
+    );
   });
 
   it("should handle complex model names with multiple slashes", async () => {

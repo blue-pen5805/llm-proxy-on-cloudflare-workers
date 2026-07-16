@@ -63,7 +63,8 @@ describe("proxy", () => {
       {
         method: mockRequest.method,
         body: mockRequest.body,
-        headers: mockRequest.headers,
+        headers: {},
+        signal: mockRequest.signal,
       },
       0,
     );
@@ -88,7 +89,8 @@ describe("proxy", () => {
       {
         method: mockRequest.method,
         body: mockRequest.body,
-        headers: mockRequest.headers,
+        headers: {},
+        signal: mockRequest.signal,
       },
       0,
     );
@@ -159,14 +161,38 @@ describe("proxy", () => {
       method: "GET",
       path: "/models",
       body: request.body,
-      headers: expect.objectContaining({
-        Authorization: "Bearer test-key",
-      }),
+      headers: expect.any(Object),
     });
+    const gatewayHeaders = new Headers(
+      buildProviderEndpointRequest.mock.calls[0][0].headers,
+    );
+    expect(gatewayHeaders.get("Authorization")).toBe("Bearer test-key");
+    expect(gatewayHeaders.get("X-Request")).toBe("value");
     expect(fetch2).toHaveBeenCalledWith(
       "https://gateway.example/openai/models",
-      { method: "GET" },
+      { method: "GET", signal: request.signal },
     );
     expect(await response.text()).toBe("gateway");
+  });
+
+  it("does not forward proxy credentials to a provider", async () => {
+    const providerName = "testProvider";
+    Providers[providerName] = vi.fn(function () {
+      return mockProviderClass;
+    });
+    const request = new Request("https://example.com/test", {
+      headers: {
+        Authorization: "Bearer proxy-secret",
+        "x-api-key": "proxy-secret",
+        "x-goog-api-key": "proxy-secret",
+        "x-client-header": "preserved",
+      },
+    });
+
+    await proxy({ request } as any, providerName, "/test");
+
+    const init = mockProviderClass.fetch.mock.calls[0][1];
+    expect(init.headers).toEqual({ "x-client-header": "preserved" });
+    expect(init.signal).toBe(request.signal);
   });
 });

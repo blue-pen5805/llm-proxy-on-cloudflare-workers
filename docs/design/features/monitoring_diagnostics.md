@@ -22,6 +22,7 @@ Provider and key checks run concurrently. Each upstream check has an individual 
 
 - **Obfuscation**: API keys are masked to show only the identifying tail (e.g., `...abc`).
 - **Authentication**: The diagnostic endpoint is protected by the same security layer as the LLM proxying endpoints.
+- **Secret Redaction**: AI Gateway configuration remains visible for diagnostics, but its token is represented as `***` and is never returned verbatim.
 
 ## References
 

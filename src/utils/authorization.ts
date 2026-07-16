@@ -9,6 +9,16 @@ export const AUTHORIZATION_KEYS = [
 
 export const AUTHORIZATION_QUERY_PARAMETERS = ["key"];
 
+/**
+ * Returns a copy of request headers without credentials accepted by this
+ * proxy. Provider credentials are added separately after this sanitization.
+ */
+export function stripProxyAuthorizationHeaders(headers: HeadersInit): Headers {
+  const sanitizedHeaders = new Headers(headers);
+  AUTHORIZATION_KEYS.forEach((key) => sanitizedHeaders.delete(key));
+  return sanitizedHeaders;
+}
+
 function hashApiKey(apiKey: string): Uint8Array {
   return createHash("sha256").update(apiKey).digest();
 }

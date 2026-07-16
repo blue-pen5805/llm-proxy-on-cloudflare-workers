@@ -2,6 +2,7 @@ import { CloudflareAIGateway } from "../ai_gateway";
 import { MiddlewareContext } from "../middleware";
 import { getProvider } from "../providers";
 import { selectApiKeyIndex } from "../utils/api_key_selection";
+import { stripProxyAuthorizationHeaders } from "../utils/authorization";
 import { Config } from "../utils/config";
 import { Environments } from "../utils/environments";
 import { fetch2, safeJsonParse } from "../utils/helpers";
@@ -11,9 +12,8 @@ export async function chatCompletions(
   aiGateway: CloudflareAIGateway | undefined = undefined,
 ) {
   const { request, apiKeyIndex: contextApiKeyIndex } = context;
-  // Remove Authorization header to prevent it from being sent to the provider
-  const headers = new Headers(request.headers);
-  headers.delete("Authorization");
+  // Remove proxy credentials before adding provider-specific authentication.
+  const headers = stripProxyAuthorizationHeaders(request.headers);
 
   // Validate Request Data Structure
   const data = safeJsonParse(await request.text());
@@ -78,18 +78,22 @@ export async function chatCompletions(
     aiGateway &&
     CloudflareAIGateway.isSupportedProvider(providerName, true)
   ) {
-    return fetch2(
-      ...(await aiGateway.buildChatCompletionsRequest({
+    const [gatewayRequestInfo, gatewayRequestInit] =
+      await aiGateway.buildChatCompletionsRequest({
         provider: providerName,
         body: requestInit.body as string,
-        headers: {
-          ...requestInit.headers,
-        },
+        headers: requestInit.headers ?? {},
         apiKeyName: provider.apiKeyName as keyof Env,
-      })),
-    );
+      });
+    return fetch2(gatewayRequestInfo, {
+      ...gatewayRequestInit,
+      signal: request.signal,
+    });
   }
 
   // Request to the provider endpoint
-  return provider.fetch(requestInfo, requestInit);
+  return provider.fetch(requestInfo, {
+    ...requestInit,
+    signal: request.signal,
+  });
 }

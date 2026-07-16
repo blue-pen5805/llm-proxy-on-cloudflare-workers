@@ -28,6 +28,8 @@ The proxy serves as a drop-in replacement for OpenAI API calls.
 1.  **Direct Provider Proxying**: Paths starting with `/{provider}/` bypass the default provider logic.
 2.  **Implicit Routing**: Standard endpoints (like `/v1/chat/completions`) use the provider prefix in the `model` string.
 
+Client cancellation is propagated to provider and AI Gateway subrequests through the incoming request's `AbortSignal`, so disconnected clients do not leave avoidable inference requests running. The Worker enables the `enable_request_signal` compatibility flag so client disconnects abort those upstream requests.
+
 ## Adding a New Provider
 
 To add a new LLM provider, follow these steps:

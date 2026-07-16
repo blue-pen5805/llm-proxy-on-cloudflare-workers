@@ -74,6 +74,10 @@ describe("universalEndpoint", () => {
       ],
     });
     expect(helpers.fetch2).toHaveBeenCalled();
+    expect(helpers.fetch2).toHaveBeenCalledWith(
+      "https://gateway.ai.cloudflare.com/v1/account/gateway",
+      expect.objectContaining({ signal: request.signal }),
+    );
   });
 
   it("should handle multiple provider requests", async () => {

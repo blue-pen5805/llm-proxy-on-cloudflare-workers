@@ -57,9 +57,8 @@ export async function universalEndpoint(
       ),
     );
 
-  return fetch2(
-    ...aiGateway.buildUniversalEndpointRequest({
-      data: mappedItems,
-    }),
-  );
+  const [requestInfo, requestInit] = aiGateway.buildUniversalEndpointRequest({
+    data: mappedItems,
+  });
+  return fetch2(requestInfo, { ...requestInit, signal: request.signal });
 }

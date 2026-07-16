@@ -93,7 +93,7 @@ describe("status", () => {
       AI_GATEWAY: {
         accountId: "acc-123",
         name: "gw-123",
-        token: "tok-123",
+        token: "***",
       },
       GLOBAL_ROUND_ROBIN: true,
     });
@@ -149,6 +149,22 @@ describe("status", () => {
     expect(body.providers.nokeys).toEqual({
       available: true,
       keys: [],
+    });
+  });
+
+  it("omits the AI Gateway token field when no token is configured", async () => {
+    vi.mocked(Config.aiGateway).mockReturnValue({
+      accountId: "acc-123",
+      name: "gw-123",
+      token: undefined,
+    });
+    vi.mocked(Secrets.getAll).mockReturnValue([]);
+
+    const body = await (await status()).json();
+
+    expect(body.config.AI_GATEWAY).toEqual({
+      accountId: "acc-123",
+      name: "gw-123",
     });
   });
 

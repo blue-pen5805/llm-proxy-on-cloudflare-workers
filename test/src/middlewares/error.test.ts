@@ -44,7 +44,7 @@ describe("errorMiddleware", () => {
 
     expect(response.status).toBe(500);
     const body = (await response.json()) as any;
-    expect(body.error.message).toBe("Something went wrong");
+    expect(body.error.message).toBe("Internal Server Error");
     expect(consoleSpy).toHaveBeenCalled();
 
     consoleSpy.mockRestore();
