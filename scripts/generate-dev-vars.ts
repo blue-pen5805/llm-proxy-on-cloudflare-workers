@@ -1,7 +1,14 @@
 #!/usr/bin/env node
+import {
+  getErrorMessage,
+  parseJsonc,
+  validateEnvironmentName,
+} from "./utils.ts";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+
+export { parseJsonc, validateEnvironmentName } from "./utils.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,14 +33,6 @@ export interface GenerationOptions {
   rootDir: string;
   env?: string;
   fsOps?: FileSystemOperations;
-}
-
-/**
- * Validate environment name
- */
-export function validateEnvironmentName(env: string): boolean {
-  // Allow alphanumeric characters, hyphens, and underscores
-  return /^[a-zA-Z0-9_-]+$/.test(env);
 }
 
 /**
@@ -106,30 +105,9 @@ Note: .dev.vars files contain sensitive authentication credentials for developme
 }
 
 /**
- * Remove JSON comments and parse JSON with comments (JSONC)
- */
-export function parseJsonc(content: string): Record<string, any> {
-  // Use a regex that matches both strings and comments.
-  // When a string is matched, we keep it as is.
-  // When a comment is matched, we remove it.
-  const regex = /"(?:[^"\\]|\\.)*"|(\/\/.*$|\/\*[\s\S]*?\*\/)/gm;
-
-  const withoutComments = content.replace(regex, (match, comment) => {
-    // If we matched a comment (capture group 1), return an empty string
-    // Otherwise, we matched a string, so return it as is
-    return comment ? "" : match;
-  });
-
-  // Remove trailing commas
-  const withoutTrailingCommas = withoutComments.replace(/,(\s*[}\]])/g, "$1");
-
-  return JSON.parse(withoutTrailingCommas);
-}
-
-/**
  * Convert a value to environment variable format
  */
-export function valueToEnvVar(value: any): string {
+export function valueToEnvVar(value: unknown): string {
   if (value === null || value === undefined) {
     return "";
   }
@@ -146,7 +124,7 @@ export function valueToEnvVar(value: any): string {
  * Convert JSON config to .dev.vars format
  */
 export function configToDevVars(
-  config: Record<string, any>,
+  config: Record<string, unknown>,
   env?: string,
 ): string {
   const lines: string[] = [];
@@ -199,7 +177,7 @@ export function generateSingleDevVarsFile(
       message: `✅ Generated ${devVarsFileName} from ${configFileName}`,
     };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = getErrorMessage(error);
     return {
       success: false,
       message: `❌ Error generating ${devVarsFileName}: ${errorMessage}`,
@@ -236,13 +214,13 @@ export function generateDevVars(
 /**
  * Main function to generate .dev.vars files
  */
-function main(): void {
+export function main(): void {
   let args: CliArgs;
 
   try {
     args = parseArgs();
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = getErrorMessage(error);
     console.error(`❌ Error: ${errorMessage}`);
     console.error("Use --help or -h for usage information.");
     process.exit(1);
@@ -272,6 +250,7 @@ function main(): void {
 }
 
 // Run the script if called directly
+/* istanbul ignore next -- exercised by the runtime, not module tests */
 if (import.meta.url === `file://${process.argv[1]}`) {
   main();
 }

@@ -3,33 +3,6 @@ import { Environments } from "./environments";
 import { shuffleArray } from "./helpers";
 import { randomInt } from "node:crypto";
 
-// Returns a cryptographically secure random integer in the range [0, max - 1].
-export function getSecureRandomIndex(max: number): number {
-  if (max <= 0) {
-    throw new Error("max must be greater than 0");
-  }
-
-  // Browser / Cloudflare Workers / environments with Web Crypto
-  if (typeof crypto !== "undefined" && "getRandomValues" in crypto) {
-    const array = new Uint32Array(1);
-    const maxUint32 = 0xffffffff;
-    const limit = Math.floor((maxUint32 + 1) / max) * max;
-
-    let value: number;
-    do {
-      (crypto as Crypto).getRandomValues(array);
-      value = array[0];
-    } while (value >= limit);
-
-    return value % max;
-  }
-
-  // Node.js fallback using built-in crypto.randomInt
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const nodeCrypto = require("crypto") as typeof import("crypto");
-  return nodeCrypto.randomInt(0, max);
-}
-
 /**
  * A utility class for managing and retrieving secrets from environment variables.
  * Provides functionality to access all values for a key or get a single value with optional rotation.
@@ -97,7 +70,7 @@ export class Secrets {
     if (env && env.KEY_ROTATION_MANAGER && Config.isGlobalRoundRobinEnabled()) {
       const id = env.KEY_ROTATION_MANAGER.idFromName(identifier);
       const obj = env.KEY_ROTATION_MANAGER.get(id);
-      return await obj.getNextIndex(identifier, length);
+      return obj.getNextIndex(identifier, length);
     }
 
     // Default to random if global round-robin is not enabled

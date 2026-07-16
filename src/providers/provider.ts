@@ -36,7 +36,7 @@ export class ProviderBase {
     }
 
     if (this.apiKeyName) {
-      return await Secrets.getNext(this.apiKeyName);
+      return Secrets.getNext(this.apiKeyName);
     }
 
     // Fallback for providers without apiKeyName (like CustomOpenAI will override this)
@@ -91,7 +91,7 @@ export class ProviderBase {
   // --- OpenAI Compatible API Methods ---
   async buildChatCompletionsRequest({
     body,
-    headers = {},
+    headers,
     apiKeyIndex,
   }: {
     body: string;
@@ -134,7 +134,7 @@ export class ProviderBase {
     ];
   }
 
-  modelsToOpenAIFormat(data: any): OpenAIModelsListResponseBody {
+  modelsToOpenAIFormat(data: unknown): OpenAIModelsListResponseBody {
     return data as OpenAIModelsListResponseBody;
   }
 

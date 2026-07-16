@@ -98,7 +98,7 @@ export type CloudflareAIGatewayUniversalEndpointStep = {
     retryDelay?: number; // in milliseconds
     backoff?: "constant" | "linear" | "exponential";
   };
-  query: Record<string, any>;
+  query: Record<string, unknown>;
 };
 export type CloudflareAIGatewayUniversalEndpointData =
   | CloudflareAIGatewayUniversalEndpointStep

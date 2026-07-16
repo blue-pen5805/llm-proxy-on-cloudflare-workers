@@ -1,8 +1,10 @@
 import {
   deploySecrets,
+  executeWranglerSecretBulk,
   filterSecretsForDeployment,
   generateSecretsJson,
   getConfigPath,
+  main,
   parseArgs,
   parseJsonc,
   showHelp,
@@ -10,7 +12,9 @@ import {
   valueToSecret,
   type FileSystemOperations,
 } from "../../scripts/deploy-secrets";
-import { describe, expect, it, vi } from "vitest";
+import { execSync } from "child_process";
+import fs from "fs";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock child_process module
 vi.mock("child_process", () => ({
@@ -21,6 +25,7 @@ vi.mock("child_process", () => ({
 vi.mock("fs", () => ({
   default: {
     writeFileSync: vi.fn(),
+    readFileSync: vi.fn(),
     unlinkSync: vi.fn(),
     existsSync: vi.fn(() => true),
   },
@@ -44,6 +49,14 @@ const createMockFsOps = (
 });
 
 describe("deploy-secrets", () => {
+  beforeEach(() => {
+    vi.mocked(execSync).mockReset();
+    vi.mocked(fs.writeFileSync).mockReset();
+    vi.mocked(fs.readFileSync).mockReset();
+    vi.mocked(fs.unlinkSync).mockReset();
+    vi.mocked(fs.existsSync).mockReset().mockReturnValue(true);
+  });
+
   describe("parseArgs", () => {
     it("should parse empty arguments", () => {
       const result = parseArgs([]);
@@ -76,6 +89,12 @@ describe("deploy-secrets", () => {
     it("should throw error for unknown option", () => {
       expect(() => parseArgs(["--unknown"])).toThrow(
         "Unknown option: --unknown",
+      );
+    });
+
+    it("should throw error for unexpected positional arguments", () => {
+      expect(() => parseArgs(["config.jsonc"])).toThrow(
+        "Unexpected argument: config.jsonc",
       );
     });
 
@@ -258,6 +277,17 @@ describe("deploy-secrets", () => {
       expect(result.messages[0]).toContain("config.jsonc not found");
     });
 
+    it("uses the default dry-run value", () => {
+      const mockFs = createMockFsOps({
+        "/root/config.jsonc": '{"KEY":"value"}',
+      });
+
+      expect(deploySecrets("/root", undefined, undefined, mockFs).success).toBe(
+        true,
+      );
+      expect(execSync).toHaveBeenCalled();
+    });
+
     it("should return warning when no secrets with values found", () => {
       const configContent = `{
         "$schema": "schema.json",
@@ -345,6 +375,90 @@ describe("deploy-secrets", () => {
       expect(secretLine).toContain("...");
       expect(secretLine?.length).toBeLessThan(longSecret.length + 20);
     });
+
+    it("should report malformed configuration", () => {
+      const mockFs = createMockFsOps({
+        "/root/config.jsonc": "{ malformed",
+      });
+      expect(deploySecrets("/root", undefined, true, mockFs)).toEqual({
+        success: false,
+        messages: [expect.stringContaining("Error processing config.jsonc")],
+      });
+    });
+
+    it("should report non-Error filesystem failures", () => {
+      const mockFs = createMockFsOps({
+        "/root/config.jsonc": "{}",
+      });
+      vi.mocked(mockFs.readFileSync).mockImplementation(() => {
+        throw "unreadable";
+      });
+      expect(deploySecrets("/root", undefined, true, mockFs).messages).toEqual([
+        "❌ Error processing config.jsonc: unreadable",
+      ]);
+    });
+  });
+
+  describe("executeWranglerSecretBulk", () => {
+    it("builds a dry-run command and removes its temporary file", () => {
+      const result = executeWranglerSecretBulk('{"KEY":"value"}', "prod", true);
+
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        expect.stringMatching(/\.secrets-temp\.json$/),
+        '{"KEY":"value"}',
+      );
+      expect(fs.unlinkSync).toHaveBeenCalled();
+      expect(execSync).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        success: true,
+        message: expect.stringContaining("--env prod"),
+      });
+    });
+
+    it("executes Wrangler and cleans up on success", () => {
+      const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+      const result = executeWranglerSecretBulk('{"KEY":"value"}');
+
+      expect(execSync).toHaveBeenCalledWith(
+        expect.stringContaining("wrangler secret bulk"),
+        { stdio: "inherit" },
+      );
+      expect(log).toHaveBeenCalledWith(
+        expect.stringContaining("🚀 Executing: wrangler secret bulk"),
+      );
+      expect(fs.unlinkSync).toHaveBeenCalled();
+      expect(result).toEqual({
+        success: true,
+        message: "✅ Secrets deployed successfully",
+      });
+    });
+
+    it("cleans up and reports execution failures", () => {
+      vi.mocked(execSync).mockImplementation(() => {
+        throw new Error("wrangler failed");
+      });
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+
+      expect(executeWranglerSecretBulk('{"KEY":"value"}')).toEqual({
+        success: false,
+        message: "❌ Error deploying secrets: wrangler failed",
+      });
+      expect(fs.unlinkSync).toHaveBeenCalled();
+    });
+
+    it("handles non-Error failures without a temporary file", () => {
+      vi.mocked(fs.writeFileSync).mockImplementation(() => {
+        throw "disk full";
+      });
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+
+      expect(executeWranglerSecretBulk("{}")).toEqual({
+        success: false,
+        message: "❌ Error deploying secrets: disk full",
+      });
+      expect(fs.unlinkSync).not.toHaveBeenCalled();
+    });
   });
 
   describe("showHelp", () => {
@@ -354,6 +468,94 @@ describe("deploy-secrets", () => {
       expect(help).toContain("--env");
       expect(help).toContain("--dry-run");
       expect(help).toContain("--help");
+    });
+  });
+
+  describe("main", () => {
+    const originalArgv = process.argv;
+
+    beforeEach(() => {
+      process.argv = originalArgv;
+      vi.restoreAllMocks();
+    });
+
+    it("prints help", () => {
+      process.argv = ["node", "deploy-secrets.ts", "--help"];
+      const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+      main();
+
+      expect(log).toHaveBeenCalledWith(expect.stringContaining("Usage:"));
+    });
+
+    it("reports invalid arguments", () => {
+      process.argv = ["node", "deploy-secrets.ts", "--bad"];
+      const error = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined);
+      vi.spyOn(process, "exit").mockImplementation((() => {
+        throw new Error("exited");
+      }) as never);
+
+      expect(() => main()).toThrow("exited");
+      expect(error).toHaveBeenCalledWith("❌ Error: Unknown option: --bad");
+    });
+
+    it("prints a successful dry run", () => {
+      process.argv = ["node", "deploy-secrets.ts", "--dry-run"];
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue('{"KEY":"value"}');
+      const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+      main();
+
+      expect(log).toHaveBeenCalledWith(
+        expect.stringContaining("Deploying secrets from config.jsonc"),
+      );
+      expect(log).not.toHaveBeenCalledWith("🎉 Secret deployment completed!");
+    });
+
+    it("prints completion after a real deployment", () => {
+      process.argv = ["node", "deploy-secrets.ts"];
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue('{"KEY":"value"}');
+      const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+      main();
+
+      expect(log).toHaveBeenCalledWith("🎉 Secret deployment completed!");
+    });
+
+    it("describes an environment-specific dry run", () => {
+      process.argv = [
+        "node",
+        "deploy-secrets.ts",
+        "--env",
+        "prod",
+        "--dry-run",
+      ];
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue('{"KEY":"value"}');
+      const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+      main();
+
+      expect(log).toHaveBeenCalledWith(
+        "🔐 Deploying secrets from config.prod.jsonc to prod environment (dry run)...",
+      );
+    });
+
+    it("exits when deployment fails", () => {
+      process.argv = ["node", "deploy-secrets.ts"];
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      vi.spyOn(console, "log").mockImplementation(() => undefined);
+      const exit = vi
+        .spyOn(process, "exit")
+        .mockImplementation((() => undefined) as never);
+
+      main();
+
+      expect(exit).toHaveBeenCalledWith(1);
     });
   });
 });

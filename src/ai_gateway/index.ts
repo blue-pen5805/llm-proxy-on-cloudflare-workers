@@ -55,7 +55,9 @@ export class CloudflareAIGateway {
   buildHeaders(additionalHeaders: HeadersInit = {}): HeadersInit {
     return {
       "Content-Type": "application/json",
-      "cf-aig-authorization": `Bearer ${this.apiKey}` || "",
+      ...(this.apiKey
+        ? { "cf-aig-authorization": `Bearer ${this.apiKey}` }
+        : {}),
       ...additionalHeaders,
     };
   }
@@ -169,7 +171,7 @@ export class CloudflareAIGateway {
   }): [RequestInfo, RequestInit] {
     const parsedBody = JSON.parse(body) as {
       model: string;
-      [key: string]: any;
+      [key: string]: unknown;
     };
 
     const apiKeys = Secrets.getAll(apiKeyName, true);

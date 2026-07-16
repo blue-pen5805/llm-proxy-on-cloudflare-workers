@@ -2,115 +2,81 @@ import { CloudflareAIGateway } from "../ai_gateway";
 import { MiddlewareContext } from "../middleware";
 import { getAllProviders } from "../providers";
 import { OpenAIModelsListResponseBody } from "../providers/openai/types";
-import { ProviderNotSupportedError } from "../providers/provider";
+import { ProviderBase, ProviderNotSupportedError } from "../providers/provider";
+import { selectApiKeyIndex } from "../utils/api_key_selection";
 import { Environments } from "../utils/environments";
 import { fetch2, withTimeout } from "../utils/helpers";
-import { Secrets } from "../utils/secrets";
 
 // Timeout for individual provider model fetch operations (milliseconds)
 const PROVIDER_FETCH_TIMEOUT_MS = 5000;
+
+const EMPTY_MODELS: OpenAIModelsListResponseBody = {
+  object: "list",
+  data: [],
+};
+
+async function fetchProviderModels(
+  providerName: string,
+  provider: ProviderBase,
+  selection: MiddlewareContext["apiKeyIndex"],
+  aiGateway?: CloudflareAIGateway,
+): Promise<OpenAIModelsListResponseBody> {
+  if (!provider.available()) {
+    return EMPTY_MODELS;
+  }
+
+  const staticModels = provider.staticModels();
+  if (staticModels) {
+    return staticModels;
+  }
+
+  const apiKeyIndex = await selectApiKeyIndex(provider, selection, "first");
+  const [path, init] = await provider.buildModelsRequest(apiKeyIndex);
+  const abortController = new AbortController();
+
+  let responsePromise: Promise<Response>;
+  if (aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)) {
+    const [gatewayUrl, gatewayInit] = aiGateway.buildProviderEndpointRequest({
+      provider: providerName,
+      method: init.method,
+      path,
+      headers: await provider.headers(apiKeyIndex),
+    });
+    responsePromise = fetch2(gatewayUrl, {
+      ...gatewayInit,
+      signal: abortController.signal,
+    });
+  } else {
+    responsePromise = provider.fetch(
+      path,
+      { ...init, signal: abortController.signal },
+      apiKeyIndex,
+    );
+  }
+
+  const modelsPromise = responsePromise.then(async (response) =>
+    provider.modelsToOpenAIFormat(await response.json()),
+  );
+  return withTimeout(
+    modelsPromise,
+    abortController,
+    PROVIDER_FETCH_TIMEOUT_MS,
+    providerName,
+  );
+}
 
 export async function models(
   context: MiddlewareContext,
   aiGateway: CloudflareAIGateway | undefined = undefined,
 ) {
-  const { apiKeyIndex: contextApiKeyIndex } = context;
-  const env = Environments.all();
-  const allProviders = getAllProviders(env);
-  const requests = Object.entries(allProviders).map(
-    async ([providerName, providerInstance]) => {
-      // Return empty list if the provider is not available
-      if (providerInstance.available() === false) {
-        return {
-          object: "list",
-          data: [],
-        } as OpenAIModelsListResponseBody;
-      }
-
-      // Generate models request
-
-      // Check for static models
-      const staticModels = providerInstance.staticModels();
-      if (staticModels) {
-        return staticModels;
-      }
-
-      // Use the provided API key index if available, otherwise default to 0
-      const apiKeyIndex =
-        contextApiKeyIndex !== undefined
-          ? Secrets.resolveApiKeyIndex(
-              contextApiKeyIndex,
-              providerInstance.getApiKeys().length,
-            )
-          : 0;
-      const [requestInfo, requestInit] =
-        await providerInstance.buildModelsRequest(apiKeyIndex);
-
-      let models: OpenAIModelsListResponseBody;
-      if (aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)) {
-        // Request through AI Gateway with timeout
-        const abortController = new AbortController();
-        const [gatewayUrl, gatewayInit] =
-          aiGateway.buildProviderEndpointRequest({
-            provider: providerName,
-            method: requestInit.method,
-            path: requestInfo,
-            headers: await providerInstance.headers(apiKeyIndex),
-          });
-
-        const fetchPromise = fetch2(gatewayUrl, {
-          ...gatewayInit,
-          signal: abortController.signal,
-        }).then(async (response) => {
-          const responseJson = await response.json();
-          return providerInstance.modelsToOpenAIFormat(responseJson);
-        });
-
-        try {
-          models = await withTimeout(
-            fetchPromise,
-            abortController,
-            PROVIDER_FETCH_TIMEOUT_MS,
-            providerName,
-          );
-        } catch (error) {
-          // Re-throw the error to be handled by Promise.allSettled
-          throw error;
-        }
-      } else {
-        // Direct request to provider endpoint with timeout
-        const abortController = new AbortController();
-        const fetchPromise = providerInstance
-          .fetch(
-            requestInfo,
-            { ...requestInit, signal: abortController.signal },
-            apiKeyIndex,
-          )
-          .then(async (response) => {
-            const responseJson = await response.json();
-            return providerInstance.modelsToOpenAIFormat(responseJson);
-          });
-
-        try {
-          models = await withTimeout(
-            fetchPromise,
-            abortController,
-            PROVIDER_FETCH_TIMEOUT_MS,
-            providerName,
-          );
-        } catch (error) {
-          // Re-throw the error to be handled by Promise.allSettled
-          throw error;
-        }
-      }
-
-      return models;
-    },
+  const providerEntries = Object.entries(getAllProviders(Environments.all()));
+  const requests = providerEntries.map(([providerName, provider]) =>
+    fetchProviderModels(providerName, provider, context.apiKeyIndex, aiGateway),
   );
 
   const responses = await Promise.allSettled(requests);
   const models = responses.map((response, index) => {
-    const provider = Object.keys(allProviders)[index];
+    const provider = providerEntries[index][0];
 
     if (response.status === "rejected") {
       if (response.reason instanceof ProviderNotSupportedError) {
@@ -123,10 +89,7 @@ export async function models(
       );
       return [];
     }
-    if (
-      response.status === "fulfilled" &&
-      (!response.value || !response.value?.data)
-    ) {
+    if (!response.value?.data) {
       console.error(
         `Invalid response for provider ${provider}:`,
         response.value,
@@ -134,9 +97,7 @@ export async function models(
       return [];
     }
 
-    const fulfilledResponse =
-      response as PromiseFulfilledResult<OpenAIModelsListResponseBody>;
-    return fulfilledResponse.value.data.map(({ id, ...model }) => ({
+    return response.value.data.map(({ id, ...model }) => ({
       id: `${provider}/${id}`,
       ...model,
     }));

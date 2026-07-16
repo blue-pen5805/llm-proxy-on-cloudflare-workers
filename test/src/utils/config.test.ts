@@ -102,6 +102,11 @@ describe("Config", () => {
       expect(result).toBeUndefined();
     });
 
+    it("should reject arrays containing non-string keys", () => {
+      vi.mocked(Environments.get).mockReturnValue(["valid", 42]);
+      expect(Config.apiKeys()).toBeUndefined();
+    });
+
     it("should return undefined when PROXY_API_KEY is null", () => {
       vi.mocked(Environments.get).mockReturnValue(undefined);
 
@@ -186,5 +191,45 @@ describe("Config", () => {
 
       expect(result).toBe("");
     });
+  });
+
+  describe("isGlobalRoundRobinEnabled", () => {
+    it.each([
+      ["true", true],
+      ["false", false],
+      [undefined, false],
+    ])("maps %s to %s", (value, expected) => {
+      vi.mocked(Environments.get).mockReturnValue(value);
+      expect(Config.isGlobalRoundRobinEnabled()).toBe(expected);
+      expect(Environments.get).toHaveBeenCalledWith(
+        "ENABLE_GLOBAL_ROUND_ROBIN",
+        false,
+      );
+    });
+  });
+
+  describe("customOpenAIEndpoints", () => {
+    it("parses JSON strings", () => {
+      vi.mocked(Environments.get).mockReturnValue(
+        '[{"name":"local","baseUrl":"http://localhost"}]',
+      );
+      expect(Config.customOpenAIEndpoints()).toEqual([
+        { name: "local", baseUrl: "http://localhost" },
+      ]);
+    });
+
+    it("returns arrays unchanged", () => {
+      const endpoints = [{ name: "local", baseUrl: "http://localhost" }];
+      vi.mocked(Environments.get).mockReturnValue(endpoints);
+      expect(Config.customOpenAIEndpoints()).toBe(endpoints);
+    });
+
+    it.each([undefined, null, 42, { name: "invalid" }, "not-json"])(
+      "rejects invalid endpoint configuration %s",
+      (value) => {
+        vi.mocked(Environments.get).mockReturnValue(value as never);
+        expect(Config.customOpenAIEndpoints()).toBeUndefined();
+      },
+    );
   });
 });

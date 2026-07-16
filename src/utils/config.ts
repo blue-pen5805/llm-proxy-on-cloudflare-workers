@@ -1,5 +1,11 @@
 import { Environments } from "./environments";
 
+function isStringArray(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
+}
+
 export class Config {
   static isDevelopment(): boolean {
     const dev = Environments.get("DEV", false);
@@ -13,7 +19,7 @@ export class Config {
       return undefined;
     }
 
-    if (Array.isArray(apiKeys)) {
+    if (isStringArray(apiKeys)) {
       return apiKeys;
     }
     if (typeof apiKeys === "string") {

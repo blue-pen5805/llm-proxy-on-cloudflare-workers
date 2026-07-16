@@ -140,6 +140,14 @@ describe("CloudflareAIGateway", () => {
         "cf-aig-authorization": "Bearer test-key",
       });
     });
+
+    it("omits authorization when no gateway token is configured", () => {
+      expect(
+        new CloudflareAIGateway("account", "gateway").buildHeaders(),
+      ).toEqual({
+        "Content-Type": "application/json",
+      });
+    });
   });
 
   describe("buildUniversalEndpointRequest", () => {
@@ -281,15 +289,15 @@ describe("CloudflareAIGateway", () => {
     });
 
     it("should normalize path with leading slash", () => {
-      const [url] = gateway.buildProviderEndpointRequest({
+      const [url, init] = gateway.buildProviderEndpointRequest({
         provider: "openai",
         path: "/chat/completions",
-        body: null,
       });
 
       expect(url).toBe(
         "https://gateway.ai.cloudflare.com/v1/test-account/test-gateway/openai/chat/completions",
       );
+      expect(init.body).toBeNull();
     });
 
     it("should include custom headers", () => {
@@ -351,6 +359,19 @@ describe("CloudflareAIGateway", () => {
       expect(headers.get("accept")).toBe("application/json");
       expect(init.method).toBe("GET");
       expect(init.body).toBeUndefined();
+    });
+
+    it("preserves an AbortSignal", () => {
+      const controller = new AbortController();
+      const [_url, init] = gateway.buildCompatRequest({
+        path: "/compat/models",
+        method: "HEAD",
+        body: "ignored",
+        signal: controller.signal,
+      });
+
+      expect(init.body).toBeUndefined();
+      expect(init.signal).toBe(controller.signal);
     });
   });
 

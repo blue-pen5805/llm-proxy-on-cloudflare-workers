@@ -71,10 +71,10 @@ export const fetch2: typeof fetch = async (input, init) => {
   const maskedUrl = maskUrl(url);
   console.info(`Sub-Request: ${init?.method} ${maskedUrl}`);
 
-  return await fetch(input, init);
+  return fetch(input, init);
 };
 
-export function safeJsonParse(text: string): string | { [key: string]: any } {
+export function safeJsonParse(text: string): unknown {
   try {
     return JSON.parse(text);
   } catch {

@@ -73,6 +73,11 @@ describe("maskUrl", () => {
     expect(result).toBe("https://api.example.com/v1/chat?key=***");
   });
 
+  it("should preserve empty sensitive parameter values", () => {
+    const url = "https://api.example.com/v1/chat?key=";
+    expect(maskUrl(url)).toBe(url);
+  });
+
   it("should not mask non-sensitive parameters", () => {
     const url = "https://api.example.com/v1/chat?model=gpt-4&temperature=0.7";
     const result = maskUrl(url);
@@ -100,6 +105,10 @@ describe("maskUrl", () => {
     const url = "not a valid url?param=value";
     const result = maskUrl(url);
     expect(result).toBe("not a valid url?***");
+  });
+
+  it("should handle invalid URLs without a query string", () => {
+    expect(maskUrl("not a valid url")).toBe("not a valid url");
   });
 
   it("should mask various sensitive parameter names", () => {

@@ -25,6 +25,15 @@ vi.mock("node:process", () => ({
 }));
 
 describe("Environments", () => {
+  test("should expose an explicitly set Workers environment", () => {
+    const env = { TEST_VAR: "worker-value" } as Env;
+    Environments.setEnv(env);
+
+    expect(Environments.getEnv()).toBe(env);
+    expect(Environments.all()).toBe(env);
+    Environments.setEnv(undefined as never);
+  });
+
   describe("all", () => {
     test("should return all environment variables", () => {
       const env = Environments.all();
@@ -54,7 +63,7 @@ describe("Environments", () => {
     });
 
     test("should parse JSON objects", () => {
-      const result = Environments.get("JSON_OBJECT", true);
+      const result = Environments.get("JSON_OBJECT");
       expect(result).toEqual({ key: "value" });
     });
 

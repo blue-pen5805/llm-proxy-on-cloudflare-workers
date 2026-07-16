@@ -7,6 +7,13 @@ import { Environments } from "../utils/environments";
 import { fetch2 } from "../utils/helpers";
 import { Secrets } from "../utils/secrets";
 
+type ConnectivityStatus = "valid" | "invalid" | "unknown";
+
+interface ProviderStatus {
+  available: boolean;
+  keys: { key: string; status: ConnectivityStatus }[];
+}
+
 /**
  * Masks an API key, showing only the last 3 characters.
  * @param key The API key to mask.
@@ -17,6 +24,19 @@ function maskApiKey(key: string): string {
     return "***";
   }
   return "*".repeat(Math.min(10, key.length - 3)) + key.slice(-3);
+}
+
+function classifyConnectivity(response: Response): ConnectivityStatus {
+  if (response.ok) return "valid";
+  if (response.status === 401 || response.status === 403) return "invalid";
+  return "unknown";
+}
+
+function getProviderKeys(instance: ProviderBase): string[] {
+  if (instance instanceof CustomOpenAI) {
+    return instance.getApiKeys();
+  }
+  return instance.apiKeyName ? Secrets.getAll(instance.apiKeyName) : [];
 }
 
 /**
@@ -32,7 +52,7 @@ async function checkConnectivity(
   providerName: string,
   apiKeyIndex: number,
   aiGateway?: CloudflareAIGateway,
-): Promise<"valid" | "invalid" | "unknown"> {
+): Promise<ConnectivityStatus> {
   if (!instance.modelsPath) {
     return "unknown";
   }
@@ -41,7 +61,7 @@ async function checkConnectivity(
     if (aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)) {
       const [requestInfo, requestInit] = aiGateway.buildProviderEndpointRequest(
         {
-          provider: providerName as any,
+          provider: providerName,
           method: "GET",
           path: instance.modelsPath,
           headers: await instance.headers(apiKeyIndex),
@@ -50,13 +70,7 @@ async function checkConnectivity(
 
       const response = await fetch2(requestInfo, requestInit);
 
-      if (response.ok) {
-        return "valid";
-      } else if (response.status === 401 || response.status === 403) {
-        return "invalid";
-      } else {
-        return "unknown";
-      }
+      return classifyConnectivity(response);
     }
 
     const [requestInfo, requestInit] =
@@ -68,13 +82,7 @@ async function checkConnectivity(
       apiKeyIndex,
     );
 
-    if (response.ok) {
-      return "valid";
-    } else if (response.status === 401 || response.status === 403) {
-      return "invalid";
-    } else {
-      return "unknown";
-    }
+    return classifyConnectivity(response);
   } catch (error) {
     if (error instanceof ProviderNotSupportedError) {
       return "unknown";
@@ -92,21 +100,12 @@ export async function status(aiGateway?: CloudflareAIGateway) {
     GLOBAL_ROUND_ROBIN: Config.isGlobalRoundRobinEnabled(),
   };
 
-  const providersStatus: Record<string, any> = {};
+  const providersStatus: Record<string, ProviderStatus> = {};
   const env = Environments.all();
   const allProviders = getAllProviders(env);
 
   for (const [providerName, instance] of Object.entries(allProviders)) {
-    let allKeys: string[] = [];
-
-    if (instance instanceof CustomOpenAI) {
-      allKeys = instance.getApiKeys();
-    } else {
-      const apiKeyName = instance.apiKeyName;
-      if (apiKeyName) {
-        allKeys = Secrets.getAll(apiKeyName);
-      }
-    }
+    const allKeys = getProviderKeys(instance);
 
     if (allKeys.length === 0) {
       providersStatus[providerName] = {

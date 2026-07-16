@@ -1,8 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { CloudflareAIGateway } from "~/src/ai_gateway";
 import { Providers } from "~/src/providers";
 import { getProvider } from "~/src/providers";
 import { proxy } from "~/src/requests/proxy";
 import { Environments } from "~/src/utils/environments";
+import { NotFoundError } from "~/src/utils/error";
+import { fetch2 } from "~/src/utils/helpers";
 import { Secrets } from "~/src/utils/secrets";
 
 vi.mock("~/src/providers", async () => {
@@ -26,6 +29,7 @@ describe("proxy", () => {
     fetch: vi.fn(),
     getApiKeys: vi.fn().mockReturnValue(["test-key"]),
     getNextApiKeyIndex: vi.fn().mockResolvedValue(0),
+    headers: vi.fn().mockResolvedValue({ Authorization: "Bearer test-key" }),
   };
 
   beforeEach(() => {
@@ -88,5 +92,81 @@ describe("proxy", () => {
       },
       0,
     );
+  });
+
+  it("throws NotFoundError for an unknown provider", async () => {
+    vi.mocked(getProvider).mockReturnValue(undefined);
+    const request = new Request("https://example.com/missing");
+
+    await expect(
+      proxy({ request } as any, "missing", "/missing"),
+    ).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it("resolves an explicit key selection from middleware context", async () => {
+    const providerName = "selectedProvider";
+    Providers[providerName] = vi.fn(function () {
+      return mockProviderClass;
+    });
+    vi.mocked(Secrets.resolveApiKeyIndex).mockReturnValue(2);
+    const request = new Request("https://example.com/models");
+
+    await proxy(
+      { request, apiKeyIndex: { start: 1, end: 2 } } as any,
+      providerName,
+      "/models",
+    );
+
+    expect(Secrets.resolveApiKeyIndex).toHaveBeenCalledWith(
+      { start: 1, end: 2 },
+      1,
+    );
+    expect(mockProviderClass.getNextApiKeyIndex).not.toHaveBeenCalled();
+    expect(mockProviderClass.fetch).toHaveBeenCalledWith(
+      "/models",
+      expect.any(Object),
+      2,
+    );
+  });
+
+  it("routes supported providers through AI Gateway", async () => {
+    const providerName = "openai";
+    Providers[providerName] = vi.fn(function () {
+      return mockProviderClass;
+    });
+    vi.spyOn(CloudflareAIGateway, "isSupportedProvider").mockReturnValue(true);
+    const buildProviderEndpointRequest = vi
+      .fn()
+      .mockReturnValue([
+        "https://gateway.example/openai/models",
+        { method: "GET" },
+      ]);
+    const gateway = { buildProviderEndpointRequest } as any;
+    vi.mocked(fetch2).mockResolvedValue(new Response("gateway"));
+    const request = new Request("https://example.com/models", {
+      headers: { "X-Request": "value" },
+    });
+
+    const response = await proxy(
+      { request } as any,
+      providerName,
+      "/models",
+      gateway,
+    );
+
+    expect(buildProviderEndpointRequest).toHaveBeenCalledWith({
+      provider: "openai",
+      method: "GET",
+      path: "/models",
+      body: request.body,
+      headers: expect.objectContaining({
+        Authorization: "Bearer test-key",
+      }),
+    });
+    expect(fetch2).toHaveBeenCalledWith(
+      "https://gateway.example/openai/models",
+      { method: "GET" },
+    );
+    expect(await response.text()).toBe("gateway");
   });
 });

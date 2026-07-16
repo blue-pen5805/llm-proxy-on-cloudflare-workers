@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { generateDevVars, getFilePaths } from "./generate-dev-vars.ts";
+import { getErrorMessage } from "./utils.ts";
 import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
@@ -14,7 +15,7 @@ interface ParsedArgs {
   command: string[];
 }
 
-function parseArgs(args: string[]): ParsedArgs {
+export function parseArgs(args: string[]): ParsedArgs {
   let env: string | undefined;
   const command: string[] = [];
   let isCommand = false;
@@ -52,7 +53,7 @@ function parseArgs(args: string[]): ParsedArgs {
   return { env, command };
 }
 
-function cleanup(devVarsPath: string) {
+export function cleanup(devVarsPath: string) {
   if (fs.existsSync(devVarsPath)) {
     try {
       fs.unlinkSync(devVarsPath);
@@ -63,14 +64,14 @@ function cleanup(devVarsPath: string) {
   }
 }
 
-async function main() {
+export async function main() {
   const args = process.argv.slice(2);
   let parsed: ParsedArgs;
 
   try {
     parsed = parseArgs(args);
   } catch (e) {
-    console.error(`❌ ${e instanceof Error ? e.message : String(e)}`);
+    console.error(`❌ ${getErrorMessage(e)}`);
     process.exit(1);
   }
 
@@ -87,11 +88,6 @@ async function main() {
   const { devVarsPath } = getFilePaths(rootDir, parsed.env);
 
   // Setup cleanup on exit
-  const handleExit = () => {
-    cleanup(devVarsPath);
-    process.exit();
-  };
-
   const handleSignal = (signal: string) => {
     console.log(`\nReceived ${signal}. Cleaning up...`);
     cleanup(devVarsPath);
@@ -117,6 +113,7 @@ async function main() {
   });
 }
 
+/* istanbul ignore next -- exercised by the runtime, not module tests */
 if (import.meta.url === `file://${process.argv[1]}`) {
   main();
 }

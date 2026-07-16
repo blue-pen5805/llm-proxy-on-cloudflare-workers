@@ -110,4 +110,27 @@ describe("KeyRotationManager", () => {
     expect(index).toBe(0);
     expect(data["TEST_KEY"]).toBe(1);
   });
+
+  it("should delegate instance calls to its SQL storage", async () => {
+    const manager = {
+      ctx: { storage: { sql } },
+    };
+
+    const index = await KeyRotationManager.prototype.getNextIndex.call(
+      manager,
+      "INSTANCE_KEY",
+      2,
+    );
+
+    expect(index).toBe(0);
+    expect(data.INSTANCE_KEY).toBe(1);
+  });
+
+  it("should return zero without touching storage for zero or one key", async () => {
+    expect(await KeyRotationManager.getNextIndexFromSql(sql, "EMPTY", 0)).toBe(
+      0,
+    );
+    expect(await KeyRotationManager.getNextIndexFromSql(sql, "ONE", 1)).toBe(0);
+    expect(sql.exec).not.toHaveBeenCalled();
+  });
 });

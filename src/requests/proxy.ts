@@ -1,10 +1,10 @@
 import { CloudflareAIGateway } from "../ai_gateway";
 import { MiddlewareContext } from "../middleware";
 import { getProvider } from "../providers";
+import { selectApiKeyIndex } from "../utils/api_key_selection";
 import { Environments } from "../utils/environments";
 import { NotFoundError } from "../utils/error";
 import { fetch2 } from "../utils/helpers";
-import { Secrets } from "../utils/secrets";
 
 export async function proxy(
   context: MiddlewareContext,
@@ -21,13 +21,11 @@ export async function proxy(
     throw new NotFoundError();
   }
 
-  const apiKeyIndex =
-    contextApiKeyIndex !== undefined
-      ? Secrets.resolveApiKeyIndex(
-          contextApiKeyIndex,
-          providerInstance.getApiKeys().length,
-        )
-      : await providerInstance.getNextApiKeyIndex();
+  const apiKeyIndex = await selectApiKeyIndex(
+    providerInstance,
+    contextApiKeyIndex,
+    "rotate",
+  );
 
   // Handle AI Gateway requests
   if (aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)) {

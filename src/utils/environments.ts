@@ -33,7 +33,9 @@ export class Environments {
    * @returns {Env} All environment variables
    */
   static all(): Env {
-    return (this.currentEnv || process.env) as unknown as Env;
+    // Node's ProcessEnv cannot describe generated Workers bindings, but this
+    // fallback is only used by local tooling before a Worker Env is installed.
+    return (this.currentEnv ?? process.env) as unknown as Env;
   }
 
   /**
@@ -63,18 +65,18 @@ export class Environments {
    *
    * @param {keyof Env} key - The environment variable key to retrieve
    * @param {boolean} [parse=true] - Whether to parse the value
-   * @returns {string | Array<any> | Object | number | undefined} The environment variable value,
+   * @returns {string | Array<unknown> | Object | number | undefined} The environment variable value,
    * parsed according to the parse parameter
    */
   static get(
     key: keyof Env,
     parse?: boolean,
-  ): string | Array<any> | object | number | undefined;
+  ): string | Array<unknown> | object | number | undefined;
 
   static get(
     key: keyof Env,
     parse: boolean = true,
-  ): string | Array<any> | object | number | undefined {
+  ): string | Array<unknown> | object | number | undefined {
     const env = this.all();
     const value = env[key] as string | undefined;
 
@@ -104,11 +106,11 @@ export class Environments {
    *
    * @private
    * @param {string} value - The string to parse
-   * @returns {Array<any> | Object | number | undefined} The parsed JSON value or undefined if parsing fails
+   * @returns {Array<unknown> | Object | number | undefined} The parsed JSON value or undefined if parsing fails
    */
   private static parseJson(
     value: string,
-  ): Array<any> | object | number | undefined {
+  ): Array<unknown> | object | number | undefined {
     try {
       return JSON.parse(value);
     } catch {

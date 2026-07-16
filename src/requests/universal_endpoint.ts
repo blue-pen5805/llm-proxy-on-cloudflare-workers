@@ -14,7 +14,7 @@ type UniversalEndpointRequest = {
   headers?: { [key: string]: string };
   query: {
     model?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
 };
 
@@ -57,7 +57,7 @@ export async function universalEndpoint(
       ),
     );
 
-  return await fetch2(
+  return fetch2(
     ...aiGateway.buildUniversalEndpointRequest({
       data: mappedItems,
     }),

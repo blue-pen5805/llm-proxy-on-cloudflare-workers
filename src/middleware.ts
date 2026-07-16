@@ -35,11 +35,7 @@ export function compose(
       if (i === middlewares.length) {
         throw new NotFoundError();
       }
-      try {
-        return fn(context, dispatch.bind(null, i + 1));
-      } catch (err) {
-        throw err;
-      }
+      return fn(context, () => dispatch(i + 1));
     }
 
     return dispatch(0);

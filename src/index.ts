@@ -30,6 +30,6 @@ export default {
       pathname: "",
     };
 
-    return await middlewareChain(context);
+    return middlewareChain(context);
   },
 } satisfies ExportedHandler<Env>;

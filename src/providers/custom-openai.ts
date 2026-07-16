@@ -12,7 +12,7 @@ export interface CustomOpenAIEndpointConfig {
 }
 
 export class CustomOpenAI extends OpenAICompatibleProvider {
-  name: string;
+  readonly name: string;
 
   constructor(private config: CustomOpenAIEndpointConfig) {
     super();
@@ -37,7 +37,7 @@ export class CustomOpenAI extends OpenAICompatibleProvider {
       return 0;
     }
 
-    return await Secrets.getNextIndex(this.name, keys.length);
+    return Secrets.getNextIndex(this.name, keys.length);
   }
 
   async headers(apiKeyIndex?: number): Promise<HeadersInit> {

@@ -88,6 +88,37 @@ describe("chatCompletions", () => {
     expect(mockProviderClass.fetch).toHaveBeenCalled();
   });
 
+  it("uses an explicit middleware key selection", async () => {
+    const requestBody = {
+      model: "openai/gpt-4",
+      messages: [],
+    };
+    const request = new Request("https://example.com/chat/completions", {
+      method: "POST",
+      body: JSON.stringify(requestBody),
+    });
+    vi.mocked(Secrets.resolveApiKeyIndex).mockReturnValue(2);
+    mockProviderClass.buildChatCompletionsRequest.mockReturnValue([
+      "/chat/completions",
+      { method: "POST", body: JSON.stringify(requestBody) },
+    ]);
+    mockProviderClass.fetch.mockResolvedValue(new Response());
+
+    await chatCompletions({
+      request,
+      apiKeyIndex: { start: 1, end: 2 },
+    } as any);
+
+    expect(Secrets.resolveApiKeyIndex).toHaveBeenCalledWith(
+      { start: 1, end: 2 },
+      1,
+    );
+    expect(mockProviderClass.getNextApiKeyIndex).not.toHaveBeenCalled();
+    expect(mockProviderClass.buildChatCompletionsRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ apiKeyIndex: 2 }),
+    );
+  });
+
   it("should handle default model", async () => {
     const requestBody = {
       model: "default",
@@ -131,6 +162,33 @@ describe("chatCompletions", () => {
     expect(response.status).toBe(400);
     const body = (await response.json()) as { error: string };
     expect(body.error).toBe("Invalid request.");
+  });
+
+  it.each([
+    [JSON.stringify({ messages: [] }), "a missing model"],
+    [JSON.stringify({ model: 42, messages: [] }), "a non-string model"],
+  ])("should return 400 for %s", async (body) => {
+    const response = await chatCompletions({
+      request: new Request("https://example.com/chat/completions", {
+        method: "POST",
+        body,
+      }),
+    } as any);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Invalid request." });
+  });
+
+  it("should return 400 when the default model is absent", async () => {
+    vi.mocked(Config.defaultModel).mockReturnValue(undefined);
+    const response = await chatCompletions({
+      request: new Request("https://example.com/chat/completions", {
+        method: "POST",
+        body: JSON.stringify({ model: "default", messages: [] }),
+      }),
+    } as any);
+
+    expect(response.status).toBe(400);
   });
 
   it("should return 400 for invalid provider", async () => {

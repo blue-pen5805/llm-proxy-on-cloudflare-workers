@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { CloudflareAIGateway } from "~/src/ai_gateway";
 import { Providers } from "~/src/providers";
 import { getAllProviders } from "~/src/providers";
 import { CustomOpenAI } from "~/src/providers/custom-openai";
+import { ProviderNotSupportedError } from "~/src/providers/provider";
 import { status } from "~/src/requests/status";
 import { Config } from "~/src/utils/config";
 import { Environments } from "~/src/utils/environments";
+import { fetch2 } from "~/src/utils/helpers";
 import { Secrets } from "~/src/utils/secrets";
 
 vi.mock("~/src/providers", async () => {
@@ -18,6 +21,7 @@ vi.mock("~/src/providers", async () => {
 vi.mock("~/src/utils/config");
 vi.mock("~/src/utils/environments");
 vi.mock("~/src/utils/secrets");
+vi.mock("~/src/utils/helpers");
 
 describe("status", () => {
   const mockProviderClass = {
@@ -26,6 +30,7 @@ describe("status", () => {
     available: vi.fn(),
     buildModelsRequest: vi.fn(),
     fetch: vi.fn(),
+    headers: vi.fn().mockResolvedValue({ Authorization: "Bearer key" }),
   };
 
   beforeEach(() => {
@@ -176,5 +181,87 @@ describe("status", () => {
     const body = await response.json();
 
     expect(body.providers.skip.keys[0].status).toBe("unknown");
+  });
+
+  it("handles custom endpoint keys and keys of at most three characters", async () => {
+    const custom = new CustomOpenAI({
+      name: "custom",
+      baseUrl: "https://custom.example",
+      apiKeys: ["abc", "x"],
+    });
+    vi.spyOn(custom, "buildModelsRequest").mockResolvedValue([
+      "/models",
+      { method: "GET" },
+    ]);
+    vi.spyOn(custom, "fetch").mockResolvedValue(
+      new Response(null, { status: 200 }),
+    );
+    vi.mocked(getAllProviders).mockReturnValue({ custom });
+    vi.mocked(Config.defaultModel).mockReturnValue(undefined);
+
+    const response = await status();
+    const body = await response.json();
+
+    expect(body.config.DEFAULT_MODEL).toBeNull();
+    expect(body.providers.custom.keys).toEqual([
+      { key: "***", status: "valid" },
+      { key: "***", status: "valid" },
+    ]);
+    expect(Secrets.getAll).not.toHaveBeenCalled();
+  });
+
+  it("treats unsupported model listing as unknown connectivity", async () => {
+    vi.mocked(Secrets.getAll).mockReturnValue(["key"]);
+    mockProviderClass.buildModelsRequest.mockRejectedValue(
+      new ProviderNotSupportedError("unsupported"),
+    );
+
+    const response = await status();
+    const body = await response.json();
+
+    expect(body.providers.openai.keys[0].status).toBe("unknown");
+  });
+
+  it("reports unexpected connectivity failures as invalid", async () => {
+    const error = new Error("network unavailable");
+    vi.mocked(Secrets.getAll).mockReturnValue(["key"]);
+    mockProviderClass.buildModelsRequest.mockRejectedValue(error);
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    const response = await status();
+    const body = await response.json();
+
+    expect(body.providers.openai.keys[0].status).toBe("invalid");
+    expect(consoleError).toHaveBeenCalledWith(
+      "Error checking connectivity for openai:",
+      error,
+    );
+  });
+
+  it("checks supported providers through AI Gateway", async () => {
+    vi.mocked(Secrets.getAll).mockReturnValue(["valid", "invalid", "unknown"]);
+    vi.spyOn(CloudflareAIGateway, "isSupportedProvider").mockReturnValue(true);
+    vi.mocked(fetch2)
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 403 }))
+      .mockResolvedValueOnce(new Response(null, { status: 500 }));
+    const gateway = {
+      buildProviderEndpointRequest: vi
+        .fn()
+        .mockReturnValue(["https://gateway.example/models", { method: "GET" }]),
+    } as any;
+
+    const response = await status(gateway);
+    const body = await response.json();
+
+    expect(body.providers.openai.keys.map((key: any) => key.status)).toEqual([
+      "valid",
+      "invalid",
+      "unknown",
+    ]);
+    expect(gateway.buildProviderEndpointRequest).toHaveBeenCalledTimes(3);
+    expect(mockProviderClass.fetch).not.toHaveBeenCalled();
   });
 });

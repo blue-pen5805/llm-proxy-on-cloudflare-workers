@@ -25,6 +25,14 @@ describe("errorMiddleware", () => {
     expect(body.error.status).toBe(400);
   });
 
+  it("uses the default AppError status", async () => {
+    const response = await errorMiddleware(
+      context,
+      vi.fn().mockRejectedValue(new AppError("Default status")),
+    );
+    expect(response.status).toBe(500);
+  });
+
   it("should catch generic Error and return 500", async () => {
     const genericError = new Error("Something went wrong");
     const next = vi.fn().mockRejectedValue(genericError);
@@ -50,5 +58,20 @@ describe("errorMiddleware", () => {
 
     expect(response).toBe(nextResponse);
     expect(await response.text()).toBe("success");
+  });
+
+  it("should hide unknown thrown values", async () => {
+    const next = vi.fn().mockRejectedValue({ reason: "not an Error" });
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const response = await errorMiddleware(context, next);
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: { message: "Internal Server Error", status: 500 },
+    });
+    expect(consoleSpy).toHaveBeenCalledWith("Unknown Error Object:", {
+      reason: "not an Error",
+    });
   });
 });

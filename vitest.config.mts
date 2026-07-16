@@ -12,5 +12,17 @@ export default defineConfig({
     alias: {
       "~/src": resolve(__dirname, "./src"),
     },
+    coverage: {
+      provider: "istanbul",
+      reporter: ["text", "json-summary"],
+      include: ["src/**/*.ts", "scripts/*.ts"],
+      exclude: ["src/**/*.d.ts"],
+      thresholds: {
+        statements: 100,
+        branches: 100,
+        functions: 100,
+        lines: 100,
+      },
+    },
   },
 });

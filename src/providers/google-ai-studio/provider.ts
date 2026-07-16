@@ -1,3 +1,4 @@
+import { fetch2 } from "../../utils/helpers";
 import { Secrets } from "../../utils/secrets";
 import {
   OpenAIChatCompletionsRequestBody,
@@ -51,19 +52,16 @@ export class GoogleAiStudio extends ProviderBase {
       const apiKey = Secrets.get(this.apiKeyName, apiKeyIndex);
 
       const newHeaders: Record<string, string> = {
+        "Content-Type": "application/json",
         ...(init?.headers as Record<string, string>),
         Authorization: `Bearer ${apiKey}`,
       };
       delete newHeaders["x-goog-api-key"];
 
-      return super.fetch(
-        pathname,
-        {
-          ...init,
-          headers: newHeaders,
-        },
-        apiKeyIndex,
-      );
+      return fetch2(this.baseUrl() + pathname, {
+        ...init,
+        headers: newHeaders,
+      });
     } else {
       return super.fetch(pathname, init, apiKeyIndex);
     }

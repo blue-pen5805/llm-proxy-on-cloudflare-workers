@@ -1,4 +1,5 @@
 #!/usr/bin/env ts-node
+import { getErrorMessage } from "./utils.ts";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { createInterface, Interface } from "readline";
 
@@ -41,7 +42,7 @@ const API_KEY_FIELDS_GROUP = [
 
 interface ConfigValue {
   key: string;
-  value: any;
+  value: unknown;
   comment?: string;
 }
 
@@ -60,8 +61,8 @@ function question(rl: Interface, prompt: string): Promise<string> {
   });
 }
 
-function parseJsoncFile(content: string): {
-  config: Record<string, any>;
+export function parseJsoncFile(content: string): {
+  config: Record<string, unknown>;
   structure: ConfigValue[];
 } {
   if (!content || typeof content !== "string") {
@@ -106,7 +107,7 @@ function parseJsoncFile(content: string): {
     }
   }
 
-  const config: Record<string, any> = {};
+  const config: Record<string, unknown> = {};
   for (const item of structure) {
     config[item.key] = item.value;
   }
@@ -114,7 +115,7 @@ function parseJsoncFile(content: string): {
   return { config, structure };
 }
 
-function getFieldDescription(key: string, comment?: string): string {
+export function getFieldDescription(key: string, comment?: string): string {
   if (comment && !comment.includes("---")) {
     return comment;
   }
@@ -131,9 +132,9 @@ async function promptForValue(
   rl: Interface,
   key: string,
   description: string,
-  isRequired: boolean = false,
-  currentValue?: any,
-): Promise<any> {
+  isRequired: boolean,
+  currentValue?: unknown,
+): Promise<unknown> {
   const requiredText = isRequired
     ? " (required)"
     : " (optional, press Enter to skip)";
@@ -163,9 +164,9 @@ async function promptForValue(
   }
 }
 
-function reconstructJsonc(
+export function reconstructJsonc(
   structure: ConfigValue[],
-  config: Record<string, any>,
+  config: Record<string, unknown>,
 ): string {
   let result = '{\n  "$schema": "schemas/config-schema.json",\n\n';
 
@@ -215,17 +216,17 @@ async function main(): Promise<void> {
     );
     rl.close();
 
-    if (overwrite.toLowerCase() !== "y" && overwrite.toLowerCase() !== "yes") {
+    if (!["y", "yes"].includes(overwrite.toLowerCase())) {
       console.log("Cancelled.");
       process.exit(0);
-      return; // Add return to prevent further execution in tests
+      return;
     }
   }
 
   if (!existsSync(CONFIG_EXAMPLE_PATH)) {
     console.error(`Error: ${CONFIG_EXAMPLE_PATH} not found.`);
     process.exit(1);
-    return; // Add return to prevent further execution in tests
+    return;
   }
 
   const exampleContent = readFileSync(CONFIG_EXAMPLE_PATH, "utf8");
@@ -278,12 +279,9 @@ async function main(): Promise<void> {
       "2. Run 'npm run secrets:deploy' to register API keys as secrets",
     );
   } catch (error) {
-    console.error(
-      "\nAn error occurred:",
-      error instanceof Error ? error.message : String(error),
-    );
+    console.error("\nAn error occurred:", getErrorMessage(error));
     process.exit(1);
-    return; // Add return to prevent further execution in tests
+    return;
   } finally {
     rl.close();
   }
@@ -292,6 +290,7 @@ async function main(): Promise<void> {
 export { main };
 
 // Run main function if this script is executed directly
+/* istanbul ignore next -- exercised by the runtime, not module tests */
 if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch(console.error);
 }

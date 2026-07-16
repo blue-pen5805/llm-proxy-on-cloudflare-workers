@@ -1,10 +1,10 @@
 import { CloudflareAIGateway } from "../ai_gateway";
 import { MiddlewareContext } from "../middleware";
 import { getProvider } from "../providers";
+import { selectApiKeyIndex } from "../utils/api_key_selection";
 import { Config } from "../utils/config";
 import { Environments } from "../utils/environments";
 import { fetch2, safeJsonParse } from "../utils/helpers";
-import { Secrets } from "../utils/secrets";
 
 export async function chatCompletions(
   context: MiddlewareContext,
@@ -17,7 +17,11 @@ export async function chatCompletions(
 
   // Validate Request Data Structure
   const data = safeJsonParse(await request.text());
-  if (typeof data === "string") {
+  if (
+    typeof data !== "object" ||
+    data === null ||
+    typeof (data as Record<string, unknown>).model !== "string"
+  ) {
     return new Response(
       JSON.stringify({
         error: "Invalid request.",
@@ -27,9 +31,16 @@ export async function chatCompletions(
   }
 
   // Split model into provider and model name
-  const [providerName, ...modelParts] = (
-    data["model"] === "default" ? Config.defaultModel() : data["model"]
-  ).split("/") as [string, string];
+  const requestData = data as Record<string, unknown> & { model: string };
+  const requestedModel =
+    requestData.model === "default" ? Config.defaultModel() : requestData.model;
+  if (!requestedModel) {
+    return new Response(JSON.stringify({ error: "Invalid request." }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  const [providerName, ...modelParts] = requestedModel.split("/");
   const model = modelParts.join("/");
 
   // Validate provider name
@@ -44,19 +55,17 @@ export async function chatCompletions(
   }
 
   // Get API key apiKeyIndex
-  const apiKeyIndex =
-    contextApiKeyIndex !== undefined
-      ? Secrets.resolveApiKeyIndex(
-          contextApiKeyIndex,
-          provider.getApiKeys().length,
-        )
-      : await provider.getNextApiKeyIndex();
+  const apiKeyIndex = await selectApiKeyIndex(
+    provider,
+    contextApiKeyIndex,
+    "rotate",
+  );
 
   // Generate chat completions request
   const [requestInfo, requestInit] = await provider.buildChatCompletionsRequest(
     {
       body: JSON.stringify({
-        ...data,
+        ...requestData,
         model,
       }),
       headers,

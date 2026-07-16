@@ -153,6 +153,54 @@ describe("models", () => {
     expect(Secrets.getNext).not.toHaveBeenCalled();
   });
 
+  it("should include response parsing in the provider timeout", async () => {
+    Object.keys(Providers).forEach((key) => {
+      delete Providers[key];
+    });
+
+    const formattedModels = {
+      object: "list",
+      data: [
+        {
+          id: "test-model",
+          object: "model",
+          created: 1234567890,
+          owned_by: "test",
+        },
+      ],
+    };
+    const responseJson = { data: [{ id: "test-model" }] };
+    const json = vi.fn().mockResolvedValue(responseJson);
+    const parsingProviderClass = {
+      ...mockProviderClass,
+      fetch: vi.fn().mockResolvedValue({ json } as Response),
+      modelsToOpenAIFormat: vi.fn().mockReturnValue(formattedModels),
+    };
+
+    Providers.test = mockProviderConstructor(parsingProviderClass);
+    vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(false);
+
+    const response = await models({} as any);
+    const timeoutPromise = vi.mocked(helpers.withTimeout).mock.calls[0][0];
+
+    await expect(timeoutPromise).resolves.toBe(formattedModels);
+    expect(json).toHaveBeenCalledOnce();
+    expect(parsingProviderClass.modelsToOpenAIFormat).toHaveBeenCalledWith(
+      responseJson,
+    );
+    await expect(response.json()).resolves.toEqual({
+      object: "list",
+      data: [
+        {
+          id: "test/test-model",
+          object: "model",
+          created: 1234567890,
+          owned_by: "test",
+        },
+      ],
+    });
+  });
+
   it("should skip unavailable providers", async () => {
     const unavailableProviderClass = {
       ...mockProviderClass,
@@ -192,6 +240,24 @@ describe("models", () => {
       headers: { "Content-Type": "application/json" },
     });
     expect(helpers.fetch2).toHaveBeenCalled();
+  });
+
+  it("should isolate AI Gateway request failures", async () => {
+    mockAIGateway.buildProviderEndpointRequest.mockReturnValue([
+      "https://gateway.ai.cloudflare.com/models",
+      { method: "GET" },
+    ]);
+    vi.mocked(helpers.fetch2).mockRejectedValue(new Error("gateway failed"));
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const response = await models({} as any, mockAIGateway as any);
+    const body = (await response.json()) as ModelsResponse;
+
+    expect(body.data).toEqual([]);
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Error fetching models for provider"),
+      expect.any(Error),
+    );
   });
 
   it("should handle provider errors gracefully", async () => {

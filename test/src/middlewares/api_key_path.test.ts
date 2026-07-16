@@ -59,7 +59,7 @@ describe("apiKeyPathMiddleware", () => {
   });
 
   it("should handle empty path after rewrite", async () => {
-    const request = new Request("https://example.com/key/0/");
+    const request = new Request("https://example.com/key/0");
     const context: any = { request };
     const next = vi.fn();
 

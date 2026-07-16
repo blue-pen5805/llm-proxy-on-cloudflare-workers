@@ -3,6 +3,7 @@ import {
   generateDevVars,
   generateSingleDevVarsFile,
   getFilePaths,
+  main,
   parseArgs,
   parseJsonc,
   showHelp,
@@ -442,5 +443,61 @@ describe("generateDevVars", () => {
     expect(result.messages[0]).toContain(
       "✅ Generated .dev.vars.staging from config.staging.jsonc",
     );
+  });
+});
+
+describe("main", () => {
+  const originalArgv = process.argv;
+
+  beforeEach(() => {
+    process.argv = originalArgv;
+    vi.restoreAllMocks();
+  });
+
+  it("prints help and returns", () => {
+    process.argv = ["node", "generate-dev-vars.ts", "--help"];
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    main();
+
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("Usage:"));
+  });
+
+  it("reports invalid arguments", () => {
+    process.argv = ["node", "generate-dev-vars.ts", "--bad"];
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    vi.spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("exited");
+    }) as never);
+
+    expect(() => main()).toThrow("exited");
+    expect(error).toHaveBeenCalledWith("❌ Error: Unknown option: --bad");
+    expect(error).toHaveBeenCalledWith(
+      "Use --help or -h for usage information.",
+    );
+  });
+
+  it("runs default generation", () => {
+    process.argv = ["node", "generate-dev-vars.ts"];
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    main();
+
+    expect(log).toHaveBeenCalledWith("🔄 Generating .dev.vars files...");
+    expect(log).toHaveBeenCalledWith("🎉 Dev vars generation completed!");
+  });
+
+  it("exits when generation fails", () => {
+    process.argv = ["node", "generate-dev-vars.ts", "--env", "invalid.env"];
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const exit = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => undefined) as never);
+
+    main();
+
+    expect(exit).toHaveBeenCalledWith(1);
   });
 });

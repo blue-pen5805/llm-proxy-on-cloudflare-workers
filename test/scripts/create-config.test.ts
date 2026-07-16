@@ -140,6 +140,29 @@ describe("create-config.ts", () => {
     expect(writeFileSync).not.toHaveBeenCalled();
   });
 
+  it("should overwrite config.jsonc after explicit confirmation", async () => {
+    (existsSync as MockedFunction<typeof existsSync>)
+      .mockReturnValueOnce(true)
+      .mockReturnValueOnce(true);
+    (readFileSync as MockedFunction<typeof readFileSync>).mockReturnValueOnce(`{
+      "PROXY_API_KEY": "default"
+    }`);
+    const responses = ["yes", "replacement"];
+    mockQuestion.mockImplementation(
+      (_prompt: string, callback: (answer: string) => void) => {
+        callback(responses.shift() ?? "");
+      },
+    );
+
+    const { main } = await import("../../scripts/create-config");
+    await main();
+
+    expect(writeFileSync).toHaveBeenCalledWith(
+      "config.jsonc",
+      expect.stringContaining('"PROXY_API_KEY": "replacement"'),
+    );
+  });
+
   it("should exit with error if config.example.jsonc is not found", async () => {
     (existsSync as MockedFunction<typeof existsSync>).mockReturnValueOnce(
       false,
@@ -257,5 +280,77 @@ describe("create-config.ts", () => {
       ),
     );
     expect(mockExit).not.toHaveBeenCalled();
+  });
+
+  it("should report prompt failures and close readline", async () => {
+    (existsSync as MockedFunction<typeof existsSync>)
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
+    (readFileSync as MockedFunction<typeof readFileSync>).mockReturnValueOnce(`{
+      "PROXY_API_KEY": "default"
+    }`);
+    mockQuestion.mockImplementation(() => {
+      throw new Error("input failed");
+    });
+
+    const { main } = await import("../../scripts/create-config");
+    await main();
+
+    expect(mockConsoleError).toHaveBeenCalledWith(
+      "\nAn error occurred:",
+      "input failed",
+    );
+    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(mockClose).toHaveBeenCalled();
+  });
+
+  it("should preserve section and field comments in reconstructed JSONC", async () => {
+    (existsSync as MockedFunction<typeof existsSync>)
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
+    (readFileSync as MockedFunction<typeof readFileSync>).mockReturnValueOnce(`{
+      // --- Primary ---
+      "PROXY_API_KEY": "default",
+      // Provider credential
+      "OPENAI_API_KEY": "default",
+      // --- Secondary ---
+      "GEMINI_API_KEY": "default",
+      "CUSTOM_SETTING": null
+    }`);
+    const responses = ["proxy", "openai", "gemini", "custom"];
+    mockQuestion.mockImplementation(
+      (_prompt: string, callback: (answer: string) => void) => {
+        callback(responses.shift() ?? "");
+      },
+    );
+
+    const { main } = await import("../../scripts/create-config");
+    await main();
+
+    expect(writeFileSync).toHaveBeenCalledWith(
+      "config.jsonc",
+      expect.stringContaining("// --- Primary ---"),
+    );
+    expect(writeFileSync).toHaveBeenCalledWith(
+      "config.jsonc",
+      expect.stringContaining("// Provider credential"),
+    );
+    expect(writeFileSync).toHaveBeenCalledWith(
+      "config.jsonc",
+      expect.stringContaining("// --- Secondary ---"),
+    );
+  });
+
+  it("should expose deterministic parsing and description helpers", async () => {
+    const { getFieldDescription, parseJsoncFile } =
+      await import("../../scripts/create-config");
+
+    expect(() => parseJsoncFile("")).toThrow(
+      "Invalid content provided to parseJsoncFile",
+    );
+    expect(parseJsoncFile('"PROXY_API_KEY": unquoted,').config).toEqual({
+      PROXY_API_KEY: "unquoted",
+    });
+    expect(getFieldDescription("CUSTOM_SETTING")).toBe("custom setting");
   });
 });

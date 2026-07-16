@@ -14,16 +14,10 @@ export const apiKeyPathMiddleware: Middleware = async (context, next) => {
       const startStr = keyMatch[1];
       const endStr = keyMatch[2];
 
-      // Ensure at least one part is specified (avoids matching just "/key-/")
-      if (startStr !== undefined || endStr !== undefined) {
-        context.apiKeyIndex = {
-          start: startStr !== undefined ? parseInt(startStr, 10) : undefined,
-          end:
-            endStr === "" || endStr === undefined
-              ? undefined
-              : parseInt(endStr, 10),
-        };
-      }
+      context.apiKeyIndex = {
+        start: startStr !== undefined ? parseInt(startStr, 10) : undefined,
+        end: endStr === undefined ? undefined : parseInt(endStr, 10),
+      };
     }
 
     pathname = pathname.replace(/^\/key\/[^/]+/, "");

@@ -2,81 +2,13 @@ import { randomInt } from "node:crypto";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Config } from "~/src/utils/config";
 import { Environments } from "~/src/utils/environments";
-import { Secrets, getSecureRandomIndex } from "~/src/utils/secrets";
+import { Secrets } from "~/src/utils/secrets";
 
 vi.mock("node:crypto", () => ({
   randomInt: vi.fn(),
 }));
 vi.mock("~/src/utils/environments");
 vi.mock("~/src/utils/config");
-
-describe("getSecureRandomIndex", () => {
-  it("should throw error when max is 0", () => {
-    expect(() => getSecureRandomIndex(0)).toThrow("max must be greater than 0");
-  });
-
-  it("should throw error when max is negative", () => {
-    expect(() => getSecureRandomIndex(-5)).toThrow(
-      "max must be greater than 0",
-    );
-  });
-
-  it("should return value in range [0, max) using crypto.getRandomValues", () => {
-    const max = 10;
-    const mockGetRandomValues = vi.fn((array: Uint32Array) => {
-      array[0] = 12345;
-      return array;
-    });
-
-    (globalThis as any).crypto = {
-      getRandomValues: mockGetRandomValues,
-    } as unknown as Crypto;
-
-    const result = getSecureRandomIndex(max);
-    expect(result).toBeGreaterThanOrEqual(0);
-    expect(result).toBeLessThan(max);
-    expect(mockGetRandomValues).toHaveBeenCalled();
-  });
-
-  it("should handle rejection sampling when value >= limit", () => {
-    const max = 3;
-    const maxUint32 = 0xffffffff;
-    const limit = Math.floor((maxUint32 + 1) / max) * max;
-
-    let callCount = 0;
-    const mockGetRandomValues = vi.fn((array: Uint32Array) => {
-      callCount++;
-      // First call returns a value >= limit, second call returns valid value
-      array[0] = callCount === 1 ? limit : 0;
-      return array;
-    });
-
-    (globalThis as any).crypto = {
-      getRandomValues: mockGetRandomValues,
-    } as unknown as Crypto;
-
-    const result = getSecureRandomIndex(max);
-    expect(result).toBe(0);
-    expect(mockGetRandomValues).toHaveBeenCalledTimes(2);
-  });
-
-  it("should use Node.js crypto.randomInt when Web Crypto is not available", () => {
-    // This test verifies that the fallback path to Node.js crypto exists.
-    // In the Cloudflare Workers test environment, we cannot properly test
-    // the Node.js crypto.randomInt path since require("crypto") doesn't work
-    // the same way as in a real Node.js environment.
-    //
-    // The fallback is designed for Node.js environments where Web Crypto
-    // is not available, and it will be used correctly in those environments.
-    // This test simply verifies the code path compiles and the function exists.
-
-    expect(getSecureRandomIndex).toBeDefined();
-
-    // The actual Node.js fallback behavior is validated by:
-    // 1. TypeScript compilation ensuring crypto.randomInt has the correct signature
-    // 2. The function working correctly in production Node.js environments
-  });
-});
 
 describe("Secrets", () => {
   let env: { [key: string]: string | string[] };
@@ -100,6 +32,22 @@ describe("Secrets", () => {
       const keys = Secrets.getAll("OPENAI_API_KEY");
       expect(keys).toEqual(["openai-key"]);
     });
+
+    it("returns an empty list for absent and unsupported values", () => {
+      expect(Secrets.getAll("ANTHROPIC_API_KEY")).toEqual([]);
+      env.ANTHROPIC_API_KEY = 42 as never;
+      expect(Secrets.getAll("ANTHROPIC_API_KEY")).toEqual([]);
+    });
+
+    it("shuffles only multi-key arrays when requested", () => {
+      vi.mocked(randomInt).mockReturnValue(0 as never);
+      const result = Secrets.getAll("GEMINI_API_KEY", true);
+      expect(result).toHaveLength(3);
+      expect(result).toEqual(
+        expect.arrayContaining(["gemini-key1", "gemini-key2", "gemini-key3"]),
+      );
+      expect(Secrets.getAll("OPENAI_API_KEY", true)).toEqual(["openai-key"]);
+    });
   });
 
   describe("get", () => {
@@ -116,9 +64,27 @@ describe("Secrets", () => {
       const key3 = Secrets.get("GEMINI_API_KEY", 3);
       expect(key3).toBe("gemini-key1");
     });
+
+    it("returns an empty string when no keys exist", () => {
+      expect(Secrets.get("ANTHROPIC_API_KEY")).toBe("");
+    });
   });
 
   describe("getNext", () => {
+    it("returns zero without consulting rotation for zero or one key", async () => {
+      expect(await Secrets.getNext("ANTHROPIC_API_KEY")).toBe(0);
+      expect(await Secrets.getNext("OPENAI_API_KEY")).toBe(0);
+      expect(randomInt).not.toHaveBeenCalled();
+    });
+
+    it("uses random selection when the Durable Object binding is absent", async () => {
+      vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(true);
+      vi.mocked(Environments.getEnv).mockReturnValue({} as Env);
+      vi.mocked(randomInt).mockReturnValue(2 as never);
+
+      expect(await Secrets.getNext("GEMINI_API_KEY")).toBe(2);
+      expect(randomInt).toHaveBeenCalledWith(3);
+    });
     it("should return a random apiKeyIndex if global round-robin is disabled", async () => {
       vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(false);
       vi.mocked(randomInt).mockReturnValue(1 as any);

@@ -13,7 +13,7 @@ export class HuggingFace extends ProviderBase {
 
   async buildChatCompletionsRequest({
     body, // eslint-disable-line @typescript-eslint/no-unused-vars
-    headers = {}, // eslint-disable-line @typescript-eslint/no-unused-vars
+    headers, // eslint-disable-line @typescript-eslint/no-unused-vars
   }: {
     body: string;
     headers: HeadersInit;
