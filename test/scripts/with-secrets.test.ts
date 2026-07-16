@@ -1,4 +1,6 @@
 import { cleanup, main, parseArgs } from "../../scripts/with-secrets";
+import path from "path";
+import { fileURLToPath } from "url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -102,6 +104,10 @@ describe("with-secrets", () => {
   });
 
   it("generates secrets, runs the command, and installs cleanup handlers", async () => {
+    const expectedRootDir = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "../..",
+    );
     process.argv = [
       "node",
       "with-secrets.ts",
@@ -138,10 +144,7 @@ describe("with-secrets", () => {
 
     await main();
 
-    expect(mocks.generateDevVars).toHaveBeenCalledWith(
-      expect.stringMatching(/cloudflare-workers-llm-proxy$/),
-      "dev",
-    );
+    expect(mocks.generateDevVars).toHaveBeenCalledWith(expectedRootDir, "dev");
     expect(mocks.spawn).toHaveBeenCalledWith("tool", ["arg"], {
       stdio: "inherit",
       shell: process.platform === "win32",
