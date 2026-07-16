@@ -29,6 +29,27 @@ describe("authenticate", () => {
     expect(authenticate(request)).toBe(true);
   });
 
+  it("should tolerate repeated whitespace in an Authorization header", () => {
+    const request = new Request("https://example.com", {
+      headers: {
+        Authorization: "Bearer    valid-key",
+      },
+    });
+
+    expect(authenticate(request)).toBe(true);
+  });
+
+  it("should authenticate any configured key", () => {
+    vi.mocked(Config.apiKeys).mockReturnValue(["first-key", "valid-key"]);
+    const request = new Request("https://example.com", {
+      headers: {
+        Authorization: "Bearer valid-key",
+      },
+    });
+
+    expect(authenticate(request)).toBe(true);
+  });
+
   // Test when API key is set and authentication succeeds with x-api-key header
   it("should return true when valid x-api-key header is provided", () => {
     const request = new Request("https://example.com", {

@@ -9,6 +9,7 @@ The proxy implements a **Shared Secret Authentication** model via API keys.
 - **Headers**: Supports `Authorization: Bearer ...`, `x-api-key`, and `x-goog-api-key`.
 - **Query Parameters**: Supports `?key=...`.
 - **Multi-Key Support**: `PROXY_API_KEY` can be an array of keys.
+- **Timing-Safe Comparison**: Candidate and configured keys are hashed to a fixed length and compared without an early return, reducing timing side channels without changing supported authentication formats.
 
 ## Configuration Principles: Environment as Single Source of Truth
 

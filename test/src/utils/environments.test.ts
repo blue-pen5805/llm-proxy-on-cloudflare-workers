@@ -1,4 +1,4 @@
-import { describe, test, expect, vi } from "vitest";
+import { afterEach, describe, test, expect, vi } from "vitest";
 import { Environments } from "~/src/utils/environments";
 
 // Mock the process.env
@@ -25,13 +25,40 @@ vi.mock("node:process", () => ({
 }));
 
 describe("Environments", () => {
+  afterEach(() => {
+    Environments.setEnv(undefined);
+  });
+
   test("should expose an explicitly set Workers environment", () => {
     const env = { TEST_VAR: "worker-value" } as Env;
     Environments.setEnv(env);
 
     expect(Environments.getEnv()).toBe(env);
     expect(Environments.all()).toBe(env);
-    Environments.setEnv(undefined as never);
+  });
+
+  test("should isolate environments between concurrent async contexts", async () => {
+    const envA = { TEST_VAR: "request-a" } as Env;
+    const envB = { TEST_VAR: "request-b" } as Env;
+    let releaseA: () => void = () => {};
+    const waitForB = new Promise<void>((resolve) => {
+      releaseA = resolve;
+    });
+
+    const requestA = Environments.run(envA, async () => {
+      await waitForB;
+      return Environments.get("TEST_VAR", false);
+    });
+    const requestB = Environments.run(envB, async () => {
+      releaseA();
+      await Promise.resolve();
+      return Environments.get("TEST_VAR", false);
+    });
+
+    await expect(Promise.all([requestA, requestB])).resolves.toEqual([
+      "request-a",
+      "request-b",
+    ]);
   });
 
   describe("all", () => {

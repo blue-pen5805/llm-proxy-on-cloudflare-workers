@@ -48,6 +48,7 @@ vi.mock("~/src/utils/environments", () => ({
     all: vi.fn(() => ({})),
     get: vi.fn(),
     setEnv: vi.fn(),
+    run: vi.fn((_env, callback) => callback()),
   },
 }));
 vi.mock("~/src/requests/options", () => ({

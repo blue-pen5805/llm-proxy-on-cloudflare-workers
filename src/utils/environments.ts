@@ -1,4 +1,7 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import * as process from "node:process";
+
+const requestEnvironment = new AsyncLocalStorage<Env>();
 
 /**
  * Utility class for accessing and manipulating environment variables
@@ -7,14 +10,25 @@ import * as process from "node:process";
  * @class Environments
  */
 export class Environments {
+  // Retained as a fallback for local tooling and callers that explicitly set an
+  // environment outside a request. Worker requests use requestEnvironment so
+  // concurrent requests cannot overwrite each other's bindings.
   private static currentEnv: Env | undefined;
+
+  /**
+   * Runs a callback with an environment isolated to its asynchronous request
+   * context.
+   */
+  static run<T>(env: Env, callback: () => T): T {
+    return requestEnvironment.run(env, callback);
+  }
 
   /**
    * Sets the current environment object.
    *
    * @param {Env} env - The environment object from Cloudflare Workers
    */
-  static setEnv(env: Env): void {
+  static setEnv(env: Env | undefined): void {
     this.currentEnv = env;
   }
 
@@ -24,7 +38,7 @@ export class Environments {
    * @returns {Env | undefined} The current environment object
    */
   static getEnv(): Env | undefined {
-    return this.currentEnv;
+    return requestEnvironment.getStore() ?? this.currentEnv;
   }
 
   /**
@@ -35,7 +49,7 @@ export class Environments {
   static all(): Env {
     // Node's ProcessEnv cannot describe generated Workers bindings, but this
     // fallback is only used by local tooling before a Worker Env is installed.
-    return (this.currentEnv ?? process.env) as unknown as Env;
+    return (this.getEnv() ?? process.env) as unknown as Env;
   }
 
   /**

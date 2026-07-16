@@ -16,6 +16,7 @@ The pipeline is a sequential chain where each component (middleware) can:
 
 - **Separation of Concerns**: Each middleware has a single responsibility (e.g., `authMiddleware` only handles security).
 - **Decoupled Context**: The `MiddlewareContext` object carries essential state (request, env, pathname) through the pipeline without polluting global scope.
+- **Request-Scoped Environment**: The Worker entry point runs the complete pipeline inside an `AsyncLocalStorage` context. Existing configuration and provider helpers can access the active `Env` without module-level request state leaking across concurrent requests.
 - **Predictable Flow**: The deterministic order of execution ensures that security and environment setup always occur before routing.
 
 ## Pipeline Components

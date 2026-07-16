@@ -1,4 +1,5 @@
 import { Config } from "./config";
+import { createHash } from "node:crypto";
 
 export const AUTHORIZATION_KEYS = [
   "Authorization",
@@ -7,6 +8,25 @@ export const AUTHORIZATION_KEYS = [
 ];
 
 export const AUTHORIZATION_QUERY_PARAMETERS = ["key"];
+
+function hashApiKey(apiKey: string): Uint8Array {
+  return createHash("sha256").update(apiKey).digest();
+}
+
+function matchesApiKey(candidate: string, configuredKeys: string[]): boolean {
+  const candidateHash = hashApiKey(candidate);
+  let matched = false;
+
+  // Compare every configured key so the matching key's position is not exposed
+  // through an early return. Hashing also gives timingSafeEqual fixed-size input.
+  for (const configuredKey of configuredKeys) {
+    matched =
+      crypto.subtle.timingSafeEqual(candidateHash, hashApiKey(configuredKey)) ||
+      matched;
+  }
+
+  return matched;
+}
 
 /**
  * Authenticates a request by checking for valid API keys in the request headers.
@@ -34,7 +54,11 @@ export function authenticate(request: Request): boolean {
   const authorizationValue = request.headers.get(authorizationKey);
 
   if (authorizationKey && authorizationValue) {
-    apiKey = authorizationValue.split(/\s/)[1] || authorizationValue;
+    const authorizationParts = authorizationValue.trim().split(/\s+/);
+    apiKey =
+      authorizationParts.length > 1
+        ? authorizationParts[1]
+        : authorizationParts[0];
   } else {
     const url = new URL(request.url);
     const queryKey = AUTHORIZATION_QUERY_PARAMETERS.find((param) => {
@@ -49,5 +73,5 @@ export function authenticate(request: Request): boolean {
     return false;
   }
 
-  return apiKeys.includes(apiKey);
+  return matchesApiKey(apiKey, apiKeys);
 }
