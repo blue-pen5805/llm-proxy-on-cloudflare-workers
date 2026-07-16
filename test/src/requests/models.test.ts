@@ -32,6 +32,12 @@ interface ModelsResponse {
   data: ModelData[];
 }
 
+function mockProviderConstructor(instance: unknown) {
+  return vi.fn(function () {
+    return instance;
+  });
+}
+
 describe("models", () => {
   const mockProviderClass = {
     available: vi.fn(),
@@ -93,8 +99,8 @@ describe("models", () => {
     });
 
     // Set up default mock providers in a specific order
-    Providers.openai = vi.fn().mockReturnValue(mockProviderClass);
-    Providers.anthropic = vi.fn().mockReturnValue(mockProviderClass);
+    Providers.openai = mockProviderConstructor(mockProviderClass);
+    Providers.anthropic = mockProviderConstructor(mockProviderClass);
 
     mockProviderClass.available.mockReturnValue(true);
     mockProviderClass.buildModelsRequest.mockReturnValue([
@@ -158,8 +164,8 @@ describe("models", () => {
       delete Providers[key];
     });
 
-    Providers.openai = vi.fn().mockReturnValue(mockProviderClass);
-    Providers.unavailable = vi.fn().mockReturnValue(unavailableProviderClass);
+    Providers.openai = mockProviderConstructor(mockProviderClass);
+    Providers.unavailable = mockProviderConstructor(unavailableProviderClass);
 
     const response = await models({} as any);
     const body = (await response.json()) as ModelsResponse;
@@ -199,8 +205,8 @@ describe("models", () => {
       delete Providers[key];
     });
 
-    Providers.openai = vi.fn().mockReturnValue(mockProviderClass);
-    Providers.error = vi.fn().mockReturnValue(errorProviderClass);
+    Providers.openai = mockProviderConstructor(mockProviderClass);
+    Providers.error = mockProviderConstructor(errorProviderClass);
 
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -230,8 +236,8 @@ describe("models", () => {
       delete Providers[key];
     });
 
-    Providers.openai = vi.fn().mockReturnValue(mockProviderClass);
-    Providers.notsupported = vi.fn().mockReturnValue(notSupportedProviderClass);
+    Providers.openai = mockProviderConstructor(mockProviderClass);
+    Providers.notsupported = mockProviderConstructor(notSupportedProviderClass);
 
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -261,8 +267,8 @@ describe("models", () => {
       delete Providers[key];
     });
 
-    Providers.openai = vi.fn().mockReturnValue(mockProviderClass);
-    Providers.invalid = vi.fn().mockReturnValue(invalidResponseProviderClass);
+    Providers.openai = mockProviderConstructor(mockProviderClass);
+    Providers.invalid = mockProviderConstructor(invalidResponseProviderClass);
 
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -295,8 +301,8 @@ describe("models", () => {
       delete Providers[key];
     });
 
-    Providers.openai = vi.fn().mockReturnValue(mockProviderClass);
-    Providers.nodata = vi.fn().mockReturnValue(noDataProviderClass);
+    Providers.openai = mockProviderConstructor(mockProviderClass);
+    Providers.nodata = mockProviderConstructor(noDataProviderClass);
 
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -340,7 +346,7 @@ describe("models", () => {
       delete Providers[key];
     });
 
-    Providers.openai = vi.fn().mockReturnValue(multiModelProviderClass);
+    Providers.openai = mockProviderConstructor(multiModelProviderClass);
 
     const response = await models({} as any);
     const body = (await response.json()) as ModelsResponse;
@@ -371,7 +377,7 @@ describe("models", () => {
       delete Providers[key];
     });
 
-    Providers.custom = vi.fn().mockReturnValue(staticModelsProviderClass);
+    Providers.custom = mockProviderConstructor(staticModelsProviderClass);
 
     const response = await models({} as any);
     const body = (await response.json()) as ModelsResponse;
@@ -412,7 +418,7 @@ describe("models", () => {
       delete Providers[key];
     });
 
-    Providers.test = vi.fn().mockReturnValue(testProviderClass);
+    Providers.test = mockProviderConstructor(testProviderClass);
     testProviderClass.getApiKeys.mockReturnValue(["key1", "key2", "key3"]);
 
     // Mock CloudflareAIGateway.isSupportedProvider to return false

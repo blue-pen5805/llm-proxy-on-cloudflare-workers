@@ -48,7 +48,7 @@ describe("status", () => {
     vi.mocked(Environments.getEnv).mockReturnValue({} as Env);
     vi.mocked(Environments.all).mockReturnValue({} as any);
 
-    Providers.openai = vi.fn().mockImplementation(() => {
+    Providers.openai = vi.fn(function () {
       const instance = Object.create(mockProviderClass);
       instance.apiKeyName = "OPENAI_API_KEY";
       return instance;
@@ -130,10 +130,12 @@ describe("status", () => {
   });
 
   it("should handle providers without API keys", async () => {
-    Providers.nokeys = vi.fn().mockImplementation(() => ({
-      apiKeyName: undefined,
-      available: vi.fn().mockReturnValue(true),
-    }));
+    Providers.nokeys = vi.fn(function () {
+      return {
+        apiKeyName: undefined,
+        available: vi.fn().mockReturnValue(true),
+      };
+    });
 
     const response = await status();
     const body = (await response.json()) as any;
@@ -161,11 +163,13 @@ describe("status", () => {
   });
 
   it("should skip connectivity check when modelsPath is missing", async () => {
-    Providers.skip = vi.fn().mockImplementation(() => ({
-      apiKeyName: "SKIP_API_KEY",
-      modelsPath: "",
-      available: vi.fn().mockReturnValue(true),
-    }));
+    Providers.skip = vi.fn(function () {
+      return {
+        apiKeyName: "SKIP_API_KEY",
+        modelsPath: "",
+        available: vi.fn().mockReturnValue(true),
+      };
+    });
     vi.mocked(Secrets.getAll).mockReturnValue(["any-key"]);
 
     const response = await status();

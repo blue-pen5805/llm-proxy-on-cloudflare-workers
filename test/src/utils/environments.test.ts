@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, vi } from "vitest";
+import { describe, test, expect, vi } from "vitest";
 import { Environments } from "~/src/utils/environments";
 
 // Mock the process.env
@@ -13,22 +13,18 @@ declare global {
   }
 }
 
-describe("Environments", () => {
-  beforeEach(() => {
-    vi.mock("node:process", () => {
-      return {
-        env: {
-          TEST_VAR: "test-value",
-          JSON_OBJECT: '{"key": "value"}',
-          JSON_ARRAY: "[1, 2, 3]",
-          JSON_NUMBER: "123",
-          COMMA_SEPARATED: "a, b, c",
-          PLAIN_STRING: "plain string",
-        },
-      };
-    });
-  });
+vi.mock("node:process", () => ({
+  env: {
+    TEST_VAR: "test-value",
+    JSON_OBJECT: '{"key": "value"}',
+    JSON_ARRAY: "[1, 2, 3]",
+    JSON_NUMBER: "123",
+    COMMA_SEPARATED: "a, b, c",
+    PLAIN_STRING: "plain string",
+  },
+}));
 
+describe("Environments", () => {
   describe("all", () => {
     test("should return all environment variables", () => {
       const env = Environments.all();

@@ -42,9 +42,9 @@ describe("proxy", () => {
 
   it("should call providerClass.fetch with correct arguments", async () => {
     const providerName = "testProvider";
-    Providers[providerName] = vi
-      .fn()
-      .mockImplementation(() => mockProviderClass);
+    Providers[providerName] = vi.fn(function () {
+      return mockProviderClass;
+    });
 
     const mockRequest = new Request("https://example.com/test/path", {
       method: "GET",
@@ -67,9 +67,9 @@ describe("proxy", () => {
 
   it("should handle duplicate path segments correctly", async () => {
     const providerName = "testProvider";
-    Providers[providerName] = vi
-      .fn()
-      .mockImplementation(() => mockProviderClass);
+    Providers[providerName] = vi.fn(function () {
+      return mockProviderClass;
+    });
 
     const mockRequest = new Request("https://example.com/test/test/path", {
       method: "GET",

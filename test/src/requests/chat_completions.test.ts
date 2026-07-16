@@ -44,7 +44,9 @@ describe("chatCompletions", () => {
     });
     vi.mocked(helpers.fetch2).mockResolvedValue(new Response());
     vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(true);
-    Providers.openai = vi.fn().mockImplementation(() => mockProviderClass);
+    Providers.openai = vi.fn(function () {
+      return mockProviderClass;
+    });
     vi.mocked(Config.defaultModel).mockReturnValue("openai/gpt-4");
     vi.mocked(Secrets.getAll).mockReturnValue(["test-key"]);
     vi.mocked(Secrets.getNext).mockResolvedValue(0);

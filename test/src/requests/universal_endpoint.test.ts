@@ -22,7 +22,9 @@ describe("universalEndpoint", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(helpers.fetch2).mockResolvedValue(new Response());
-    Providers.openai = vi.fn().mockReturnValue(mockProviderClass);
+    Providers.openai = vi.fn(function () {
+      return mockProviderClass;
+    });
     mockProviderClass.headers.mockReturnValue({
       "Content-Type": "application/json",
       Authorization: "Bearer sk-test",
@@ -83,7 +85,9 @@ describe("universalEndpoint", () => {
       }),
     };
 
-    Providers.anthropic = vi.fn().mockReturnValue(anthropicProviderClass);
+    Providers.anthropic = vi.fn(function () {
+      return anthropicProviderClass;
+    });
 
     const requestBody = [
       {
@@ -331,7 +335,9 @@ describe("universalEndpoint", () => {
     };
 
     // Use a supported provider instead of 'custom'
-    Providers.anthropic = vi.fn().mockReturnValue(customProviderClass);
+    Providers.anthropic = vi.fn(function () {
+      return customProviderClass;
+    });
 
     const requestBody = [
       {

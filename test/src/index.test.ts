@@ -12,14 +12,16 @@ import { Config } from "~/src/utils/config";
 import { Environments } from "~/src/utils/environments";
 
 vi.mock("~/src/ai_gateway", () => {
-  const MockCloudflareAIGateway = vi.fn().mockImplementation(() => ({
-    baseUrl: vi.fn(() => "https://gateway.ai.cloudflare.com"),
-    buildHeaders: vi.fn(() => ({})),
-    buildUniversalEndpointRequest: vi.fn(() => ["", {}]),
-    buildProviderEndpointRequest: vi.fn(() => ["", {}]),
-    buildChatCompletionsRequest: vi.fn(() => ["", {}]),
-    buildCompatRequest: vi.fn(() => ["", {}]),
-  }));
+  const MockCloudflareAIGateway = vi.fn(function () {
+    return {
+      baseUrl: vi.fn(() => "https://gateway.ai.cloudflare.com"),
+      buildHeaders: vi.fn(() => ({})),
+      buildUniversalEndpointRequest: vi.fn(() => ["", {}]),
+      buildProviderEndpointRequest: vi.fn(() => ["", {}]),
+      buildChatCompletionsRequest: vi.fn(() => ["", {}]),
+      buildCompatRequest: vi.fn(() => ["", {}]),
+    };
+  });
 
   // Add static methods as properties
   (MockCloudflareAIGateway as any).isSupportedProvider = vi.fn(() => true);
@@ -30,11 +32,13 @@ vi.mock("~/src/ai_gateway", () => {
 });
 vi.mock("~/src/providers", () => ({
   Providers: {
-    openai: vi.fn().mockImplementation(() => ({
-      name: "openai",
-      baseUrl: "https://api.openai.com",
-      headers: vi.fn().mockResolvedValue({}),
-    })),
+    openai: vi.fn(function () {
+      return {
+        name: "openai",
+        baseUrl: "https://api.openai.com",
+        headers: vi.fn().mockResolvedValue({}),
+      };
+    }),
   },
   getAllProviders: vi.fn(),
   getProvider: vi.fn(),
@@ -95,11 +99,13 @@ describe("fetch", () => {
     vi.mocked(Environments.all).mockReturnValue({} as any);
 
     // Ensure Providers.openai is set up correctly for routing
-    Providers.openai = vi.fn().mockImplementation(() => ({
-      name: "openai",
-      baseUrl: "https://api.openai.com",
-      headers: vi.fn().mockResolvedValue({}),
-    }));
+    Providers.openai = vi.fn(function () {
+      return {
+        name: "openai",
+        baseUrl: "https://api.openai.com",
+        headers: vi.fn().mockResolvedValue({}),
+      };
+    });
   });
 
   it("should handle OPTIONS request", async () => {
