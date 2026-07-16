@@ -4,8 +4,10 @@ import { CustomOpenAI } from "../providers/custom-openai";
 import { ProviderBase, ProviderNotSupportedError } from "../providers/provider";
 import { Config } from "../utils/config";
 import { Environments } from "../utils/environments";
-import { fetch2 } from "../utils/helpers";
+import { fetch2, withTimeout } from "../utils/helpers";
 import { Secrets } from "../utils/secrets";
+
+const CONNECTIVITY_CHECK_TIMEOUT_MS = 5000;
 
 type ConnectivityStatus = "valid" | "invalid" | "unknown";
 
@@ -57,7 +59,11 @@ async function checkConnectivity(
     return "unknown";
   }
 
+  const abortController = new AbortController();
+
   try {
+    let responsePromise: Promise<Response>;
+
     if (aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)) {
       const [requestInfo, requestInit] = aiGateway.buildProviderEndpointRequest(
         {
@@ -68,23 +74,35 @@ async function checkConnectivity(
         },
       );
 
-      const response = await fetch2(requestInfo, requestInit);
-
-      return classifyConnectivity(response);
+      responsePromise = fetch2(requestInfo, {
+        ...requestInit,
+        signal: abortController.signal,
+      });
+    } else {
+      responsePromise = (async () => {
+        const [requestInfo, requestInit] =
+          await instance.buildModelsRequest(apiKeyIndex);
+        return instance.fetch(
+          requestInfo,
+          { ...requestInit, signal: abortController.signal },
+          apiKeyIndex,
+        );
+      })();
     }
 
-    const [requestInfo, requestInit] =
-      await instance.buildModelsRequest(apiKeyIndex);
-
-    const response = await instance.fetch(
-      requestInfo,
-      requestInit,
-      apiKeyIndex,
+    const response = await withTimeout(
+      responsePromise,
+      abortController,
+      CONNECTIVITY_CHECK_TIMEOUT_MS,
+      providerName,
     );
 
     return classifyConnectivity(response);
   } catch (error) {
-    if (error instanceof ProviderNotSupportedError) {
+    if (
+      error instanceof ProviderNotSupportedError ||
+      (error instanceof Error && error.name === "TimeoutError")
+    ) {
       return "unknown";
     }
     console.error(`Error checking connectivity for ${providerName}:`, error);
@@ -100,37 +118,34 @@ export async function status(aiGateway?: CloudflareAIGateway) {
     GLOBAL_ROUND_ROBIN: Config.isGlobalRoundRobinEnabled(),
   };
 
-  const providersStatus: Record<string, ProviderStatus> = {};
   const env = Environments.all();
-  const allProviders = getAllProviders(env);
+  const providerEntries = Object.entries(getAllProviders(env));
+  const providersStatus = Object.fromEntries(
+    await Promise.all(
+      providerEntries.map(async ([providerName, instance]) => {
+        const allKeys = getProviderKeys(instance);
+        const keyStatuses = await Promise.all(
+          allKeys.map(async (key, apiKeyIndex) => ({
+            key: maskApiKey(key),
+            status: await checkConnectivity(
+              instance,
+              providerName,
+              apiKeyIndex,
+              aiGateway,
+            ),
+          })),
+        );
 
-  for (const [providerName, instance] of Object.entries(allProviders)) {
-    const allKeys = getProviderKeys(instance);
-
-    if (allKeys.length === 0) {
-      providersStatus[providerName] = {
-        available: instance.available(),
-        keys: [],
-      };
-      continue;
-    }
-    const keyStatuses = await Promise.all(
-      allKeys.map(async (_key, apiKeyIndex) => ({
-        key: maskApiKey(_key),
-        status: await checkConnectivity(
-          instance,
+        return [
           providerName,
-          apiKeyIndex,
-          aiGateway,
-        ),
-      })),
-    );
-
-    providersStatus[providerName] = {
-      available: instance.available(),
-      keys: keyStatuses,
-    };
-  }
+          {
+            available: instance.available(),
+            keys: keyStatuses,
+          } satisfies ProviderStatus,
+        ] as const;
+      }),
+    ),
+  );
 
   const responseBody = {
     config,

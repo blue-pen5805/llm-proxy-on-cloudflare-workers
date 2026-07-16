@@ -16,6 +16,8 @@ The status system performs **Active Key Validation**:
 2.  For each key, it performs a minimal request (e.g., `List Models`) to the upstream provider.
 3.  The result determines the key's state: `valid`, `invalid`, or `unknown`.
 
+Provider and key checks run concurrently. Each upstream check has an individual five-second timeout and propagates an abort signal to the fetch request. A timeout is reported as `unknown`, because it does not prove that a credential is invalid.
+
 ## Design Rationale: Security vs. Utility
 
 - **Obfuscation**: API keys are masked to show only the identifying tail (e.g., `...abc`).

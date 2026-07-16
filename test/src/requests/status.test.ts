@@ -7,7 +7,7 @@ import { ProviderNotSupportedError } from "~/src/providers/provider";
 import { status } from "~/src/requests/status";
 import { Config } from "~/src/utils/config";
 import { Environments } from "~/src/utils/environments";
-import { fetch2 } from "~/src/utils/helpers";
+import { fetch2, withTimeout } from "~/src/utils/helpers";
 import { Secrets } from "~/src/utils/secrets";
 
 vi.mock("~/src/providers", async () => {
@@ -73,6 +73,7 @@ describe("status", () => {
       "/models",
       { method: "GET" },
     ]);
+    vi.mocked(withTimeout).mockImplementation(async (promise) => promise);
   });
 
   it("should return structured JSON with config and provider status", async () => {
@@ -222,6 +223,24 @@ describe("status", () => {
     expect(body.providers.openai.keys[0].status).toBe("unknown");
   });
 
+  it("treats timed out connectivity checks as unknown", async () => {
+    const timeoutError = new Error("timed out");
+    timeoutError.name = "TimeoutError";
+    vi.mocked(Secrets.getAll).mockReturnValue(["key"]);
+    vi.mocked(withTimeout).mockRejectedValue(timeoutError);
+
+    const response = await status();
+    const body = await response.json();
+
+    expect(body.providers.openai.keys[0].status).toBe("unknown");
+    expect(withTimeout).toHaveBeenCalledWith(
+      expect.any(Promise),
+      expect.any(AbortController),
+      5000,
+      "openai",
+    );
+  });
+
   it("reports unexpected connectivity failures as invalid", async () => {
     const error = new Error("network unavailable");
     vi.mocked(Secrets.getAll).mockReturnValue(["key"]);
@@ -263,5 +282,39 @@ describe("status", () => {
     ]);
     expect(gateway.buildProviderEndpointRequest).toHaveBeenCalledTimes(3);
     expect(mockProviderClass.fetch).not.toHaveBeenCalled();
+    expect(fetch2).toHaveBeenCalledWith(
+      "https://gateway.example/models",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it("checks different providers concurrently while preserving output order", async () => {
+    let releaseFirst: (response: Response) => void = () => {};
+    const firstResponse = new Promise<Response>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const first = {
+      ...mockProviderClass,
+      apiKeyName: "FIRST_API_KEY",
+      available: vi.fn().mockReturnValue(true),
+      buildModelsRequest: vi.fn().mockResolvedValue(["/models", {}]),
+      fetch: vi.fn().mockReturnValue(firstResponse),
+    };
+    const second = {
+      ...mockProviderClass,
+      apiKeyName: "SECOND_API_KEY",
+      available: vi.fn().mockReturnValue(true),
+      buildModelsRequest: vi.fn().mockResolvedValue(["/models", {}]),
+      fetch: vi.fn().mockResolvedValue(new Response(null, { status: 200 })),
+    };
+    vi.mocked(getAllProviders).mockReturnValue({ first, second } as any);
+    vi.mocked(Secrets.getAll).mockReturnValue(["key"]);
+
+    const statusPromise = status();
+    await vi.waitFor(() => expect(second.fetch).toHaveBeenCalledOnce());
+    releaseFirst(new Response(null, { status: 200 }));
+
+    const body = await (await statusPromise).json();
+    expect(Object.keys(body.providers)).toEqual(["first", "second"]);
   });
 });
