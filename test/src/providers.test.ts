@@ -97,4 +97,14 @@ describe("provider registry", () => {
       1,
     );
   });
+
+  it("preserves first-lookup and last-listing precedence for duplicate custom names", () => {
+    const registry = new ProviderRegistry(Providers, [
+      { name: "duplicate", baseUrl: "https://first.example" },
+      { name: "duplicate", baseUrl: "https://last.example" },
+    ]);
+
+    expect(registry.get("duplicate")?.baseUrl()).toBe("https://first.example");
+    expect(registry.all().duplicate.baseUrl()).toBe("https://last.example");
+  });
 });

@@ -67,6 +67,7 @@ forwarded.
 
 - [AI Gateway integration](features/ai_gateway.md)
 - [Monitoring and diagnostics](features/monitoring_diagnostics.md)
+- [Request-path performance](features/performance.md)
 
 ## Authoritative implementation points
 

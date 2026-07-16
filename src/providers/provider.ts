@@ -6,6 +6,9 @@ import {
 } from "./openai/types";
 
 export class ProviderBase {
+  private supportedChatParameters?: ReadonlySet<
+    keyof OpenAIChatCompletionsRequestBody
+  >;
   // --- Configuration Properties ---
   readonly apiKeyName: keyof Env | undefined = undefined;
   readonly baseUrlProp: string = "https://example.com";
@@ -91,23 +94,20 @@ export class ProviderBase {
   // --- OpenAI Compatible API Methods ---
   async buildChatCompletionsRequest({
     body,
+    preparedData,
     headers,
     apiKeyIndex,
   }: {
     body: string;
+    preparedData?: Readonly<Record<string, unknown>>;
     headers: HeadersInit;
     apiKeyIndex?: number;
   }): Promise<[string, RequestInit]> {
-    const data = JSON.parse(body) as OpenAIChatCompletionsRequestBody;
-    const trimmedData = Object.fromEntries(
-      (Object.keys(data) as (keyof OpenAIChatCompletionsRequestBody)[])
-        .map((key) =>
-          this.CHAT_COMPLETIONS_SUPPORTED_PARAMETERS.includes(key)
-            ? [key, data[key]]
-            : null,
-        )
-        .filter((x) => x !== null),
-    );
+    const trimmedData =
+      preparedData ??
+      this.filterChatCompletionsRequest(
+        JSON.parse(body) as Record<string, unknown>,
+      );
 
     return [
       this.chatCompletionPath,
@@ -120,6 +120,26 @@ export class ProviderBase {
         },
       },
     ];
+  }
+
+  filterChatCompletionsRequest(
+    data: Readonly<Record<string, unknown>>,
+  ): Record<string, unknown> {
+    this.supportedChatParameters ??= new Set(
+      this.CHAT_COMPLETIONS_SUPPORTED_PARAMETERS,
+    );
+
+    const filtered: Record<string, unknown> = {};
+    for (const key of Object.keys(data)) {
+      if (
+        this.supportedChatParameters.has(
+          key as keyof OpenAIChatCompletionsRequestBody,
+        )
+      ) {
+        filtered[key] = data[key];
+      }
+    }
+    return filtered;
   }
 
   async buildModelsRequest(

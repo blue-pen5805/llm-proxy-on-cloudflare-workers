@@ -470,5 +470,22 @@ describe("CloudflareAIGateway", () => {
         },
       });
     });
+
+    it("uses a pre-parsed body without parsing the serialized fallback", () => {
+      vi.mocked(Secrets.getAll).mockReturnValue(["sk-test"]);
+
+      const [, init] = gateway.buildChatCompletionsRequest({
+        provider: "openai",
+        body: "not valid JSON",
+        parsedBody: { model: "gpt-4o", messages: [] },
+        headers: {},
+        apiKeyName: "OPENAI_API_KEY",
+      });
+
+      expect(JSON.parse(init.body as string)[0].query).toEqual({
+        model: "openai/gpt-4o",
+        messages: [],
+      });
+    });
   });
 });

@@ -29,6 +29,11 @@ describe("getPathname", () => {
     const result = getPathname(request);
     expect(result).toBe("/pathname");
   });
+
+  it("should preserve query parameters", () => {
+    const request = new Request("https://example.com/pathname?model=gpt-4");
+    expect(getPathname(request)).toBe("/pathname?model=gpt-4");
+  });
 });
 
 describe("shuffleArray", () => {

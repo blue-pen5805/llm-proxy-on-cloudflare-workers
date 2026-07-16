@@ -22,21 +22,37 @@ export class ProviderRegistry {
     CustomOpenAI
   >();
   private readonly customEndpoints: readonly CustomOpenAIEndpointConfig[];
+  private readonly firstCustomEndpointByName: ReadonlyMap<
+    string,
+    CustomOpenAIEndpointConfig
+  >;
+  private readonly providerNames: readonly string[];
 
   constructor(
     private readonly builtIns: Readonly<Record<string, ProviderConstructor>>,
     customEndpoints: readonly CustomOpenAIEndpointConfig[] = [],
   ) {
     this.customEndpoints = [...customEndpoints];
-  }
-
-  names(): string[] {
-    return [
+    const firstCustomEndpointByName = new Map<
+      string,
+      CustomOpenAIEndpointConfig
+    >();
+    for (const endpoint of this.customEndpoints) {
+      if (!firstCustomEndpointByName.has(endpoint.name)) {
+        firstCustomEndpointByName.set(endpoint.name, endpoint);
+      }
+    }
+    this.firstCustomEndpointByName = firstCustomEndpointByName;
+    this.providerNames = [
       ...new Set([
         ...Object.keys(this.builtIns),
         ...this.customEndpoints.map(({ name }) => name),
       ]),
     ];
+  }
+
+  names(): string[] {
+    return [...this.providerNames];
   }
 
   get(providerName: string): ProviderBase | undefined {
@@ -46,9 +62,7 @@ export class ProviderRegistry {
     }
 
     const BuiltInProvider = this.builtIns[providerName];
-    const customEndpoint = this.customEndpoints.find(
-      ({ name }) => name === providerName,
-    );
+    const customEndpoint = this.firstCustomEndpointByName.get(providerName);
     const provider = BuiltInProvider
       ? new BuiltInProvider()
       : customEndpoint
@@ -63,7 +77,7 @@ export class ProviderRegistry {
 
   all(): Record<string, ProviderBase> {
     const providers = Object.fromEntries(
-      this.names().map((providerName) => [
+      this.providerNames.map((providerName) => [
         providerName,
         this.get(providerName)!,
       ]),
@@ -75,7 +89,7 @@ export class ProviderRegistry {
   }
 
   match(pathname: string): ProviderRoute | undefined {
-    const providerName = this.names().find((name) =>
+    const providerName = this.providerNames.find((name) =>
       pathname.startsWith(`/${name}/`),
     );
     if (!providerName) {

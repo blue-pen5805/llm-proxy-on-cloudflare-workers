@@ -134,6 +134,20 @@ describe("provider contracts", () => {
         },
       });
 
+      const preparedData = {
+        model: "prepared-model",
+        messages: [],
+        unsupported: "removed",
+      };
+      const [, preparedInit] = await provider.buildChatCompletionsRequest({
+        body: "not parsed when prepared data is supplied",
+        preparedData: { model: preparedData.model, messages: [] },
+        headers: {},
+      });
+      expect(preparedInit.body).toBe(
+        JSON.stringify({ model: "prepared-model", messages: [] }),
+      );
+
       await expect(provider.buildModelsRequest(1)).resolves.toEqual([
         "/models",
         {

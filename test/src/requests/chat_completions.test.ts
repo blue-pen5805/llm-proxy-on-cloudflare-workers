@@ -23,6 +23,9 @@ vi.mock("~/src/utils/secrets");
 describe("chatCompletions", () => {
   const mockProviderClass = {
     buildChatCompletionsRequest: vi.fn(),
+    filterChatCompletionsRequest: vi.fn(
+      (data: Record<string, unknown>) => data,
+    ),
     fetch: vi.fn(),
     apiKeyName: "OPENAI_API_KEY",
     getApiKeys: vi.fn().mockReturnValue(["test-key"]),
@@ -83,7 +86,8 @@ describe("chatCompletions", () => {
 
     expect(providers.get).toHaveBeenCalledWith("openai");
     expect(mockProviderClass.buildChatCompletionsRequest).toHaveBeenCalledWith({
-      body: JSON.stringify({ ...requestBody, model: "gpt-4" }),
+      body: "",
+      preparedData: { ...requestBody, model: "gpt-4" },
       headers: expect.any(Headers),
       apiKeyIndex: 0,
     });
@@ -146,7 +150,8 @@ describe("chatCompletions", () => {
 
     expect(Config.defaultModel).toHaveBeenCalled();
     expect(mockProviderClass.buildChatCompletionsRequest).toHaveBeenCalledWith({
-      body: JSON.stringify({ ...requestBody, model: "gpt-4" }),
+      body: "",
+      preparedData: { ...requestBody, model: "gpt-4" },
       headers: expect.any(Headers),
       apiKeyIndex: 0,
     });
@@ -245,6 +250,7 @@ describe("chatCompletions", () => {
     expect(mockAIGateway.buildChatCompletionsRequest).toHaveBeenCalledWith({
       provider: "openai",
       body: JSON.stringify({ ...requestBody, model: "gpt-4" }),
+      parsedBody: { ...requestBody, model: "gpt-4" },
       headers: expect.any(Object),
       apiKeyName: "OPENAI_API_KEY",
     });
@@ -319,7 +325,8 @@ describe("chatCompletions", () => {
     await chatCompletions({ request } as any);
 
     expect(mockProviderClass.buildChatCompletionsRequest).toHaveBeenCalledWith({
-      body: JSON.stringify({ ...requestBody, model: "gpt-4/turbo" }),
+      body: "",
+      preparedData: { ...requestBody, model: "gpt-4/turbo" },
       headers: expect.any(Headers),
       apiKeyIndex: 0,
     });

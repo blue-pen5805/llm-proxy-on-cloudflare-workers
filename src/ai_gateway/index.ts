@@ -161,18 +161,22 @@ export class CloudflareAIGateway {
   buildChatCompletionsRequest({
     provider,
     body,
+    parsedBody,
     headers,
     apiKeyName,
   }: {
     provider: CloudflareAIGatewayOpenAICompatibleProvider;
     body: string;
+    parsedBody?: { model: string; [key: string]: unknown };
     headers: CloudflareAIGatewayHeaders | HeadersInit;
     apiKeyName: keyof Env;
   }): [RequestInfo, RequestInit] {
-    const parsedBody = JSON.parse(body) as {
-      model: string;
-      [key: string]: unknown;
-    };
+    const requestData =
+      parsedBody ??
+      (JSON.parse(body) as {
+        model: string;
+        [key: string]: unknown;
+      });
 
     const apiKeys = Secrets.getAll(apiKeyName, true);
 
@@ -193,8 +197,8 @@ export class CloudflareAIGateway {
           endpoint: "chat/completions",
           headers: headersObject,
           query: {
-            ...parsedBody,
-            model: `${provider}/${parsedBody.model}`,
+            ...requestData,
+            model: `${provider}/${requestData.model}`,
           },
         };
       },

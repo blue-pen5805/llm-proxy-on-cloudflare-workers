@@ -83,7 +83,8 @@ export function safeJsonParse(text: string): unknown {
 }
 
 export function getPathname(request: Request): string {
-  return request.url.replace(new URL(request.url).origin, "");
+  const url = new URL(request.url);
+  return `${url.pathname}${url.search}${url.hash}`;
 }
 
 export function shuffleArray<T>(array: T[]): T[] {

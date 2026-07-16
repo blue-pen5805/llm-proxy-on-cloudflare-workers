@@ -64,12 +64,14 @@ export async function chatCompletions(
   );
 
   // Generate chat completions request
+  const filteredData = provider.filterChatCompletionsRequest({
+    ...requestData,
+    model,
+  });
   const [requestInfo, requestInit] = await provider.buildChatCompletionsRequest(
     {
-      body: JSON.stringify({
-        ...requestData,
-        model,
-      }),
+      body: "",
+      preparedData: filteredData,
       headers,
       apiKeyIndex,
     },
@@ -84,6 +86,7 @@ export async function chatCompletions(
       await aiGateway.buildChatCompletionsRequest({
         provider: providerName,
         body: requestInit.body as string,
+        parsedBody: filteredData as { model: string; [key: string]: unknown },
         headers: requestInit.headers ?? {},
         apiKeyName: provider.apiKeyName as keyof Env,
       });

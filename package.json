@@ -14,6 +14,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test-watch": "vitest watch",
+    "bench": "vitest bench --run",
     "tsc": "tsc --noEmit",
     "prettier": "prettier --write .",
     "prettier-ci": "prettier --check .",

@@ -71,12 +71,14 @@ npm run tsc
 npm run prettier
 npm run lint
 npm run test
+npm run bench
 ```
 
 `npm run prettier` modifies files. Review the resulting diff and make sure no
 local configuration or generated secret file was added. For documentation-only
 changes, also verify all relative Markdown links and inspect rendered tables and
-code fences.
+code fences. Benchmarks are diagnostic; compare results under the same runtime
+and machine rather than treating absolute throughput as a correctness gate.
 
 ## Documentation maintenance
 
