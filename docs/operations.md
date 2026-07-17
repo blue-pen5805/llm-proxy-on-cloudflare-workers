@@ -21,6 +21,8 @@ environment.
 
 The repository's secret deployment script prints setting names only. The
 temporary JSON is owner-readable only and is removed after Wrangler finishes.
+Generated `config.jsonc` and `.dev.vars*` files are also forced to mode `0600`;
+dotenv values are quoted and escaped to prevent line injection.
 
 ## Safe configuration changes
 
@@ -63,8 +65,9 @@ therefore change if keys are reordered.
 Use health endpoints deliberately:
 
 - `/ping` checks Worker routing without contacting providers.
-- `/status` makes one model-list request per configured key. It can be slow,
-  consume provider quota, and expose limited configuration metadata.
+- `/status` runs at most 32 model-list checks per invocation, five at a time,
+  and marks additional slots `unknown`. It can still consume provider quota and
+  expose limited configuration metadata.
 - `/v1/models` is best-effort. Check Worker logs when a provider is absent.
 
 ## Common failures

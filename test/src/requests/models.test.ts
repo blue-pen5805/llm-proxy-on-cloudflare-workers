@@ -3,7 +3,11 @@ import { CloudflareAIGateway } from "~/src/ai_gateway";
 import { BUILT_IN_PROVIDER_CONSTRUCTORS } from "~/src/providers";
 import { getAllProviderInstances, getProviderByName } from "~/src/providers";
 import { ProviderNotSupportedError } from "~/src/providers/provider";
-import { handleModelsRequest } from "~/src/requests/models";
+import {
+  handleModelsRequest,
+  MAX_AGGREGATED_MODELS_BYTES,
+  MAX_MODELS_PER_PROVIDER,
+} from "~/src/requests/models";
 import * as helpers from "~/src/utils/helpers";
 import { Secrets } from "~/src/utils/secrets";
 
@@ -174,10 +178,11 @@ describe("models", () => {
       ],
     };
     const responseJson = { data: [{ id: "test-model" }] };
-    const json = vi.fn().mockResolvedValue(responseJson);
+    const upstreamResponse = new Response(JSON.stringify(responseJson));
+    const json = vi.spyOn(upstreamResponse, "json");
     const parsingProviderClass = {
       ...mockProviderClass,
-      fetch: vi.fn().mockResolvedValue({ json } as Response),
+      fetch: vi.fn().mockResolvedValue(upstreamResponse),
       convertModelsToOpenAIFormat: vi.fn().mockReturnValue(formattedModels),
     };
 
@@ -260,7 +265,13 @@ describe("models", () => {
       { method: "GET", headers: {} },
     ]);
 
-    await handleModelsRequest({} as any, mockAIGateway as any);
+    const request = new Request("https://example.com/g/gateway/models", {
+      headers: {
+        "cf-aig-collect-log": "false",
+        "cf-connecting-ip": "203.0.113.1",
+      },
+    });
+    await handleModelsRequest({ request } as any, mockAIGateway as any);
 
     expect(CloudflareAIGateway.isSupportedProvider).toHaveBeenCalledWith(
       "openai",
@@ -269,8 +280,14 @@ describe("models", () => {
       provider: "openai",
       method: "GET",
       path: "/models",
-      headers: { "Content-Type": "application/json" },
+      headers: expect.any(Headers),
     });
+    const headers = new Headers(
+      mockAIGateway.buildProviderEndpointRequest.mock.calls[0][0].headers,
+    );
+    expect(headers.get("Content-Type")).toBe("application/json");
+    expect(headers.get("cf-aig-collect-log")).toBe("false");
+    expect(headers.has("cf-connecting-ip")).toBe(false);
     expect(helpers.fetchWithLogging).toHaveBeenCalled();
   });
 
@@ -294,6 +311,41 @@ describe("models", () => {
       provider: "openai",
       error_name: "Error",
       error_message: "gateway failed",
+    });
+  });
+
+  it("does not parse or convert a non-successful upstream response", async () => {
+    Object.keys(BUILT_IN_PROVIDER_CONSTRUCTORS).forEach((key) => {
+      delete BUILT_IN_PROVIDER_CONSTRUCTORS[key];
+    });
+    BUILT_IN_PROVIDER_CONSTRUCTORS.openai =
+      mockProviderConstructor(mockProviderClass);
+    mockAIGateway.buildProviderEndpointRequest.mockReturnValue([
+      "https://gateway.ai.cloudflare.com/models",
+      { method: "GET" },
+    ]);
+    const upstreamResponse = new Response("Authentication failed", {
+      status: 401,
+    });
+    const cancel = vi.spyOn(upstreamResponse.body!, "cancel");
+    vi.mocked(helpers.fetchWithLogging).mockResolvedValue(upstreamResponse);
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const response = await handleModelsRequest({} as any, mockAIGateway as any);
+    const body = (await response.json()) as ModelsResponse;
+
+    expect(body.data).toEqual([]);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(helpers.readResponseJson).not.toHaveBeenCalled();
+    expect(
+      mockProviderClass.convertModelsToOpenAIFormat,
+    ).not.toHaveBeenCalled();
+    expect(consoleSpy).toHaveBeenCalledWith({
+      event: "provider.models.failed",
+      request_id: null,
+      provider: "openai",
+      error_name: "Error",
+      error_message: "Provider models request failed with HTTP 401.",
     });
   });
 
@@ -557,5 +609,53 @@ describe("models", () => {
       expect.any(Object),
       2,
     );
+  });
+
+  it("bounds both per-provider model count and aggregate output size", async () => {
+    Object.keys(BUILT_IN_PROVIDER_CONSTRUCTORS).forEach((key) => {
+      delete BUILT_IN_PROVIDER_CONSTRUCTORS[key];
+    });
+    const boundedProvider = {
+      ...mockProviderClass,
+      convertModelsToOpenAIFormat: vi.fn().mockReturnValue({
+        object: "list",
+        data: Array.from(
+          { length: MAX_MODELS_PER_PROVIDER + 1 },
+          (_, index) => ({
+            id: `model-${index}`,
+            object: "model",
+            created: 0,
+            owned_by: "test",
+          }),
+        ),
+      }),
+    };
+    BUILT_IN_PROVIDER_CONSTRUCTORS.test =
+      mockProviderConstructor(boundedProvider);
+
+    const response = await handleModelsRequest({} as any);
+    const body = (await response.json()) as ModelsResponse;
+    expect(body.data).toHaveLength(MAX_MODELS_PER_PROVIDER);
+
+    boundedProvider.convertModelsToOpenAIFormat.mockReturnValue({
+      object: "list",
+      data: [
+        {
+          id: "oversized",
+          object: "model",
+          created: 0,
+          owned_by: "test",
+          _: "x".repeat(MAX_AGGREGATED_MODELS_BYTES + 1),
+        },
+      ],
+    });
+    const truncatedResponse = await handleModelsRequest({} as any);
+    expect(truncatedResponse.headers.get("X-Proxy-Models-Truncated")).toBe(
+      "true",
+    );
+    await expect(truncatedResponse.json()).resolves.toEqual({
+      object: "list",
+      data: [],
+    });
   });
 });

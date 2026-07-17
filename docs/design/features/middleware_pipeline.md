@@ -20,8 +20,8 @@ The order in `src/index.ts` is behaviorally significant:
 2. `requestMiddleware` initializes the path, including its query string.
 3. `corsMiddleware` answers preflight requests immediately.
 4. `apiKeyPathMiddleware` extracts a `/key/...` prefix.
-5. `authMiddleware` removes the `key` query parameter and authenticates the
-   original request unless development mode is enabled.
+5. `authMiddleware` removes credential-like query parameters and authenticates
+   header credentials unless development mode is enabled.
 6. `aiGatewayMiddleware` selects the default or path-specific Gateway and
    removes a `/g/<name>` prefix.
 7. `routerMiddleware` dispatches health, compatibility, OpenAI-compatible,

@@ -1,5 +1,11 @@
 import { fetchWithLogging } from "../utils/helpers";
 
+export const MAX_COMPATIBILITY_FALLBACK_ATTEMPTS = 4;
+
+function shouldTryAnotherCredential(status: number): boolean {
+  return status === 401 || status === 403 || status === 429;
+}
+
 export async function fetchCompatibilityFallback(
   requests: [RequestInfo, RequestInit][],
   signal?: AbortSignal,
@@ -11,7 +17,10 @@ export async function fetchCompatibilityFallback(
   let lastResponse: Response | undefined;
   let lastError: unknown;
 
-  for (const [requestInfo, requestInit] of requests) {
+  for (const [requestInfo, requestInit] of requests.slice(
+    0,
+    MAX_COMPATIBILITY_FALLBACK_ATTEMPTS,
+  )) {
     if (signal?.aborted) {
       throw signal.reason;
     }
@@ -22,6 +31,13 @@ export async function fetchCompatibilityFallback(
         signal,
       });
       if (upstreamResponse.ok) {
+        if (lastResponse?.body) {
+          await lastResponse.body.cancel();
+        }
+        return upstreamResponse;
+      }
+
+      if (!shouldTryAnotherCredential(upstreamResponse.status)) {
         if (lastResponse?.body) {
           await lastResponse.body.cancel();
         }

@@ -53,7 +53,10 @@ describe("handleUniversalEndpointRequest", () => {
     const request = new Request("https://example.com", {
       method: "POST",
       body: JSON.stringify(requestBody),
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "cf-aig-metadata": '{"tenant":"example"}',
+      },
     });
 
     mockAIGateway.buildUniversalEndpointRequest.mockReturnValue([
@@ -78,6 +81,7 @@ describe("handleUniversalEndpointRequest", () => {
           },
         },
       ],
+      headers: { "cf-aig-metadata": '{"tenant":"example"}' },
     });
     expect(helpers.fetchWithLogging).toHaveBeenCalled();
     expect(helpers.fetchWithLogging).toHaveBeenCalledWith(
@@ -321,7 +325,7 @@ describe("handleUniversalEndpointRequest", () => {
       data: [
         {
           provider: "openai",
-          endpoint: "/custom/endpoint",
+          endpoint: "custom/endpoint",
           headers: {
             "content-type": "application/json",
             authorization: "Bearer sk-test",
@@ -333,6 +337,27 @@ describe("handleUniversalEndpointRequest", () => {
         },
       ],
     });
+  });
+
+  it.each([
+    "",
+    "https://attacker.example/v1",
+    "../chat/completions",
+    "v1/../chat/completions",
+    "v1\\chat\\completions",
+    "v1/chat\ncompletions",
+  ])("rejects unsafe Universal Endpoint path %j", async (endpoint) => {
+    vi.mocked(helpers.readJsonRequest).mockResolvedValueOnce([
+      { provider: "openai", endpoint, query: {} },
+    ]);
+
+    await expect(
+      handleUniversalEndpointRequest(
+        new Request("https://example.com", { method: "POST" }),
+        mockAIGateway as any,
+      ),
+    ).rejects.toThrow("safe relative path");
+    expect(mockAIGateway.buildUniversalEndpointRequest).not.toHaveBeenCalled();
   });
 
   it("should handle provider without explicit chatCompletionPath", async () => {
@@ -411,6 +436,8 @@ describe("handleUniversalEndpointRequest", () => {
     [null, "non-empty array"],
     [["invalid"], "step must be an object"],
     [[{ provider: "openai", query: [] }], "query object"],
+    [[{ provider: "openai", endpoint: 42, query: {} }], "must be a string"],
+    [[{ provider: "openai", query: {}, headers: [] }], "must be an object"],
     [
       [{ provider: "openai", query: {}, headers: { invalid: 1 } }],
       "header values must be strings",

@@ -29,7 +29,9 @@ the key prefix comes first: `/key/1/g/team-gateway/v1/models`.
 The legacy Universal Endpoint body must be a non-empty JSON array with at most
 16 steps. Each step needs a supported `provider` and an object-valued `query`.
 Client-provided authentication headers cannot override the configured provider
-credential.
+credential. A custom step `endpoint` is normalized to a relative path, limited
+to 2,048 characters, and cannot contain a URL scheme, backslash, control
+character, or `.`/`..` path segment.
 
 ## Chat completions
 
@@ -66,9 +68,14 @@ omitted from `/v1/models`.
 
 ## Models
 
-`GET /v1/models` queries every configured provider concurrently and prefixes
-each returned ID with its route name. Each provider has a five-second timeout.
-Failures are logged and omitted, so a successful response may be partial.
+`GET /v1/models` queries configured providers and prefixes each returned ID
+with its route name. Providers are queried five at a time and
+each has a five-second timeout and 1 MiB response limit. At most 1,000 models
+per provider and 4 MiB of serialized model entries are retained. A bounded
+aggregate includes `X-Proxy-Models-Truncated: true` when it is truncated.
+Non-successful upstream responses are discarded before provider-specific model
+conversion. Failures are logged and omitted, so a successful response may be
+partial.
 
 Custom endpoints should define a static `models` list when reliable discovery
 matters. The endpoint uses the first provider key by default to avoid advancing
@@ -87,7 +94,11 @@ curl https://your-worker.example/openai/v1/responses \
 ```
 
 The proxy replaces client authentication headers with the selected upstream
-credential. Provider-specific request and response formats remain the caller's
+credential. It also removes cookies, hop-by-hop headers, client/network metadata,
+and credential-like query parameters. Request-level `cf-aig-*` headers are
+forwarded when the selected route uses AI Gateway and removed on direct provider
+requests.
+Provider-specific request and response formats remain the caller's
 responsibility. Routes are the keys registered in `src/providers.ts`; configured
 custom endpoint names are added dynamically.
 
@@ -126,11 +137,17 @@ curl https://your-worker.example/g/production/ai/v1/responses \
 Other methods and paths under `/ai` are rejected rather than forwarded.
 Third-party models use `<provider>/<model>`; Workers AI models use
 `@cf/<author>/<model>`. The Messages route does not support Workers AI.
+Client `cf-aig-*` headers are forwarded, allowing retry, cache, cost, log, and
+metadata settings to override Gateway defaults for that request. A configured
+`CF_AIG_TOKEN`, REST API authorization, and the route-selected Gateway ID are
+applied by the Worker after client header processing and therefore take
+precedence where applicable.
 
 ## Explicit key selection
 
 The prefix is zero-based and wraps a single index modulo the configured key
-count:
+count. Indices must be non-negative safe integers; reversed or malformed ranges
+return HTTP 400:
 
 | Prefix         | Selection                                     |
 | -------------- | --------------------------------------------- |
@@ -144,11 +161,12 @@ Do not use a key-selection prefix for a provider with no configured keys.
 ## Status and health
 
 `/ping` proves only that the Worker can route a request. `/status` additionally
-checks each configured credential against the provider's model-list endpoint and
-returns `valid`, `invalid`, or `unknown`. Keys are masked, but the response
-reveals configured providers, the last three characters of longer keys, default
-model configuration, and AI Gateway identifiers. Keep it authenticated and do
-not publish its output in support tickets without review.
+checks up to 32 configured credentials against provider model-list endpoints,
+five at a time, and returns `valid`, `invalid`, or `unknown`. Additional slots
+remain `unknown`. No key value or suffix is returned, but the response reveals
+configured providers, credential slot counts, default model configuration, and
+AI Gateway identifiers. Keep it authenticated and do not publish its output in
+support tickets without review.
 
 Timeouts, unsupported model listing, and non-authentication HTTP failures are
 reported as `unknown`. Authentication failures are `invalid`; unexpected fetch

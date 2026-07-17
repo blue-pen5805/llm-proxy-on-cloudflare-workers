@@ -86,25 +86,29 @@ describe("provider registry", () => {
     expect(registry.match("/openai")).toBeUndefined();
   });
 
-  it("preserves existing built-in and listing precedence for name collisions", () => {
-    const registry = new ProviderRegistry(BUILT_IN_PROVIDER_CONSTRUCTORS, [
-      { name: "openai", baseUrl: "https://custom.example" },
-    ]);
-
-    expect(registry.get("openai")).toBeInstanceOf(OpenAI);
-    expect(registry.all().openai).toBeInstanceOf(CustomOpenAI);
-    expect(registry.names().filter((name) => name === "openai")).toHaveLength(
-      1,
-    );
+  it("rejects custom endpoint names that collide with built-ins", () => {
+    expect(
+      () =>
+        new ProviderRegistry(BUILT_IN_PROVIDER_CONSTRUCTORS, [
+          { name: "openai", baseUrl: "https://custom.example" },
+        ]),
+    ).toThrow("duplicated or reserved");
   });
 
-  it("preserves first-lookup and last-listing precedence for duplicate custom names", () => {
-    const registry = new ProviderRegistry(BUILT_IN_PROVIDER_CONSTRUCTORS, [
-      { name: "duplicate", baseUrl: "https://first.example" },
-      { name: "duplicate", baseUrl: "https://last.example" },
-    ]);
+  it("rejects duplicate custom endpoint names", () => {
+    expect(
+      () =>
+        new ProviderRegistry(BUILT_IN_PROVIDER_CONSTRUCTORS, [
+          { name: "duplicate", baseUrl: "https://first.example" },
+          { name: "duplicate", baseUrl: "https://last.example" },
+        ]),
+    ).toThrow("duplicated or reserved");
+  });
 
-    expect(registry.get("duplicate")?.baseUrl()).toBe("https://first.example");
-    expect(registry.all().duplicate.baseUrl()).toBe("https://last.example");
+  it("keeps the explicit built-in name catalog synchronized", async () => {
+    const { BUILT_IN_PROVIDER_NAMES } = await import("~/src/providers/names");
+    expect([...BUILT_IN_PROVIDER_NAMES].sort()).toEqual(
+      Object.keys(BUILT_IN_PROVIDER_CONSTRUCTORS).sort(),
+    );
   });
 });

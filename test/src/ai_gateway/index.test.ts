@@ -58,14 +58,19 @@ describe("CloudflareAIGateway", () => {
 
     it("should throw error when accountId is missing", () => {
       expect(() => new CloudflareAIGateway("", "gateway")).toThrow(
-        "Cloudflare AI Gateway configuration is incomplete. accountId and gatewayId are required.",
+        "Cloudflare AI Gateway accountId or gatewayId is invalid.",
       );
     });
 
     it("should throw error when gatewayId is missing", () => {
       expect(() => new CloudflareAIGateway("account", "")).toThrow(
-        "Cloudflare AI Gateway configuration is incomplete. accountId and gatewayId are required.",
+        "Cloudflare AI Gateway accountId or gatewayId is invalid.",
       );
+    });
+
+    it("rejects path separators in account and gateway identifiers", () => {
+      expect(() => new CloudflareAIGateway("../account", "gateway")).toThrow();
+      expect(() => new CloudflareAIGateway("account", "../gateway")).toThrow();
     });
   });
 
@@ -107,37 +112,35 @@ describe("CloudflareAIGateway", () => {
     });
 
     it("should build headers with default content type and authorization", () => {
-      const headers = gateway.buildHeaders();
+      const headers = new Headers(gateway.buildHeaders());
 
-      expect(headers).toEqual({
-        "Content-Type": "application/json",
-        "cf-aig-authorization": "Bearer test-key",
-      });
+      expect(headers.get("content-type")).toBe("application/json");
+      expect(headers.get("cf-aig-authorization")).toBe("Bearer test-key");
     });
 
     it("should merge additional headers", () => {
-      const headers = gateway.buildHeaders({
-        "Custom-Header": "custom-value",
-        "Another-Header": "another-value",
-      });
+      const headers = new Headers(
+        gateway.buildHeaders({
+          "Custom-Header": "custom-value",
+          "Another-Header": "another-value",
+        }),
+      );
 
-      expect(headers).toEqual({
-        "Content-Type": "application/json",
-        "cf-aig-authorization": "Bearer test-key",
-        "Custom-Header": "custom-value",
-        "Another-Header": "another-value",
-      });
+      expect(headers.get("content-type")).toBe("application/json");
+      expect(headers.get("cf-aig-authorization")).toBe("Bearer test-key");
+      expect(headers.get("custom-header")).toBe("custom-value");
+      expect(headers.get("another-header")).toBe("another-value");
     });
 
     it("should override default headers with additional headers", () => {
-      const headers = gateway.buildHeaders({
-        "Content-Type": "text/plain",
-      });
+      const headers = new Headers(
+        gateway.buildHeaders({
+          "Content-Type": "text/plain",
+        }),
+      );
 
-      expect(headers).toEqual({
-        "Content-Type": "text/plain",
-        "cf-aig-authorization": "Bearer test-key",
-      });
+      expect(headers.get("content-type")).toBe("text/plain");
+      expect(headers.get("cf-aig-authorization")).toBe("Bearer test-key");
     });
 
     it("does not allow additional headers to replace the Gateway token", () => {
@@ -151,11 +154,26 @@ describe("CloudflareAIGateway", () => {
     });
 
     it("omits authorization when no gateway token is configured", () => {
-      expect(
+      const headers = new Headers(
         new CloudflareAIGateway("account", "gateway").buildHeaders(),
-      ).toEqual({
-        "Content-Type": "application/json",
-      });
+      );
+      expect(headers.get("content-type")).toBe("application/json");
+      expect(headers.has("cf-aig-authorization")).toBe(false);
+    });
+
+    it("preserves Headers instances without dropping their entries", () => {
+      const headers = new Headers(
+        gateway.buildHeaders(
+          new Headers({
+            Authorization: "Bearer provider-key",
+            "cf-aig-metadata": '{"tenant":"example"}',
+          }),
+        ),
+      );
+
+      expect(headers.get("authorization")).toBe("Bearer provider-key");
+      expect(headers.get("cf-aig-metadata")).toBe('{"tenant":"example"}');
+      expect(headers.get("cf-aig-authorization")).toBe("Bearer test-key");
     });
   });
 
@@ -183,14 +201,14 @@ describe("CloudflareAIGateway", () => {
       expect(url).toBe(
         "https://gateway.ai.cloudflare.com/v1/test-account/test-gateway",
       );
-      expect(init).toEqual({
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "cf-aig-authorization": "Bearer test-key",
-        },
-        body: JSON.stringify(data),
-      });
+      expect(init.method).toBe("POST");
+      expect(init.body).toBe(JSON.stringify(data));
+      expect(new Headers(init.headers).get("content-type")).toBe(
+        "application/json",
+      );
+      expect(new Headers(init.headers).get("cf-aig-authorization")).toBe(
+        "Bearer test-key",
+      );
     });
 
     it("should build universal endpoint request with multiple steps", () => {
@@ -214,14 +232,14 @@ describe("CloudflareAIGateway", () => {
       expect(url).toBe(
         "https://gateway.ai.cloudflare.com/v1/test-account/test-gateway",
       );
-      expect(init).toEqual({
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "cf-aig-authorization": "Bearer test-key",
-        },
-        body: JSON.stringify(data),
-      });
+      expect(init.method).toBe("POST");
+      expect(init.body).toBe(JSON.stringify(data));
+      expect(new Headers(init.headers).get("content-type")).toBe(
+        "application/json",
+      );
+      expect(new Headers(init.headers).get("cf-aig-authorization")).toBe(
+        "Bearer test-key",
+      );
     });
 
     it("should include custom headers", () => {
@@ -237,11 +255,10 @@ describe("CloudflareAIGateway", () => {
         headers: { "cf-aig-metadata": "test-metadata" },
       });
 
-      expect(init.headers).toEqual({
-        "Content-Type": "application/json",
-        "cf-aig-authorization": "Bearer test-key",
-        "cf-aig-metadata": "test-metadata",
-      });
+      const headers = new Headers(init.headers);
+      expect(headers.get("content-type")).toBe("application/json");
+      expect(headers.get("cf-aig-authorization")).toBe("Bearer test-key");
+      expect(headers.get("cf-aig-metadata")).toBe("test-metadata");
     });
   });
 
@@ -266,14 +283,14 @@ describe("CloudflareAIGateway", () => {
       expect(url).toBe(
         "https://gateway.ai.cloudflare.com/v1/test-account/test-gateway/openai/chat/completions",
       );
-      expect(init).toEqual({
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "cf-aig-authorization": "Bearer test-key",
-        },
-        body: JSON.stringify({ model: "gpt-4", messages: [] }),
-      });
+      expect(init.method).toBe("POST");
+      expect(init.body).toBe(JSON.stringify({ model: "gpt-4", messages: [] }));
+      expect(new Headers(init.headers).get("content-type")).toBe(
+        "application/json",
+      );
+      expect(new Headers(init.headers).get("cf-aig-authorization")).toBe(
+        "Bearer test-key",
+      );
     });
 
     it("should build provider endpoint request with custom method", () => {
@@ -287,14 +304,14 @@ describe("CloudflareAIGateway", () => {
       expect(url).toBe(
         "https://gateway.ai.cloudflare.com/v1/test-account/test-gateway/openai/models",
       );
-      expect(init).toEqual({
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "cf-aig-authorization": "Bearer test-key",
-        },
-        body: null,
-      });
+      expect(init.method).toBe("GET");
+      expect(init.body).toBeNull();
+      expect(new Headers(init.headers).get("content-type")).toBe(
+        "application/json",
+      );
+      expect(new Headers(init.headers).get("cf-aig-authorization")).toBe(
+        "Bearer test-key",
+      );
     });
 
     it("should normalize path with leading slash", () => {
@@ -317,11 +334,10 @@ describe("CloudflareAIGateway", () => {
         headers: { "cf-aig-metadata": "test-metadata" },
       });
 
-      expect(init.headers).toEqual({
-        "Content-Type": "application/json",
-        "cf-aig-authorization": "Bearer test-key",
-        "cf-aig-metadata": "test-metadata",
-      });
+      const headers = new Headers(init.headers);
+      expect(headers.get("content-type")).toBe("application/json");
+      expect(headers.get("cf-aig-authorization")).toBe("Bearer test-key");
+      expect(headers.get("cf-aig-metadata")).toBe("test-metadata");
     });
   });
 

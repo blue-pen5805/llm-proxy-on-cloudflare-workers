@@ -57,7 +57,9 @@ export async function handleProviderProxyRequest(
     ),
     viaAiGateway: aiGatewayProvider !== undefined,
   });
-  const sanitizedHeaders = stripProxyAuthorizationHeaders(request.headers);
+  const sanitizedHeaders = stripProxyAuthorizationHeaders(request.headers, {
+    preserveAiGatewayHeaders: aiGatewayProvider !== undefined,
+  });
 
   // Handle AI Gateway requests
   if (aiGateway && aiGatewayProvider) {

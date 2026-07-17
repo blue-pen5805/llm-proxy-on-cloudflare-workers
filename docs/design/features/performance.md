@@ -20,6 +20,15 @@ This reduces JSON parsing from two passes to one for direct provider requests
 and from three passes to one for AI Gateway requests. Upstream responses remain
 streamed through unchanged.
 
+## Bounded model aggregation
+
+Model discovery reads at most 1 MiB from one provider, queries at most five
+providers concurrently, retains at most 1,000 models per provider, and caps the
+serialized aggregate model entries at 4 MiB. A truncated response includes
+`X-Proxy-Models-Truncated: true`. These limits prevent individually bounded
+provider responses from accumulating beyond the Worker's 128 MB isolate limit.
+Non-successful upstream responses are not parsed as provider model payloads.
+
 ## Provider route index
 
 `ProviderRegistry` snapshots built-in and custom provider names when the

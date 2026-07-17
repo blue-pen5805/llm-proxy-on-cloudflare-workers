@@ -100,7 +100,7 @@ curl https://your-worker.example/google-ai-studio/v1beta/models/gemini-3.5-flash
 `default` 以外の Gateway を選ぶ場合は `/g/<gateway>` を先頭に付けます。
 
 `GET /v1/models` は、設定済みプロバイダーのモデル一覧をベストエフォートで集約します。
-`GET /status` は認証情報を検査しますが、設定メタデータとマスク済みキー末尾を含むため、
+`GET /status` は認証情報を検査しますが、設定メタデータと認証情報スロット数を含むため、
 出力を公開しないでください。
 
 ## ドキュメント
@@ -111,3 +111,4 @@ curl https://your-worker.example/google-ai-studio/v1beta/models/gemini-3.5-flash
 - [Operations and troubleshooting](docs/operations.md)
 - [Development and verification](docs/development.md)
 - [Architecture and design](docs/design/overview.md)
+- [第2巡 敵対的評価](docs/adversarial-review-round-2.md)

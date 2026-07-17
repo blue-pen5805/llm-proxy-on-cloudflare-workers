@@ -22,6 +22,23 @@ type UniversalEndpointRequest = {
 };
 
 export const MAX_UNIVERSAL_ENDPOINT_STEPS = 16;
+const MAX_UNIVERSAL_ENDPOINT_PATH_LENGTH = 2048;
+
+function normalizeUniversalEndpointPath(endpoint: string): string {
+  const normalized = endpoint.replace(/^\/+/, "");
+  if (
+    normalized.length === 0 ||
+    normalized.length > MAX_UNIVERSAL_ENDPOINT_PATH_LENGTH ||
+    /[\\\u0000-\u001f\u007f]/.test(normalized) ||
+    /^[a-z][a-z\d+.-]*:/i.test(normalized) ||
+    normalized.split("/").some((segment) => segment === "." || segment === "..")
+  ) {
+    throw new BadRequestError(
+      "Universal Endpoint step endpoint must be a safe relative path.",
+    );
+  }
+  return normalized;
+}
 
 function parseUniversalEndpointRequests(
   value: unknown,
@@ -94,6 +111,12 @@ export async function handleUniversalEndpointRequest(
   const endpointRequests = parseUniversalEndpointRequests(
     await readJsonRequest(request),
   );
+  const gatewayHeaders = stripProxyAuthorizationHeaders(request.headers, {
+    preserveAiGatewayHeaders: true,
+  });
+  const clientGatewayHeaders = Object.fromEntries(
+    [...gatewayHeaders.entries()].filter(([key]) => key.startsWith("cf-aig-")),
+  );
 
   const gatewaySteps: CloudflareAIGatewayUniversalEndpointData =
     await Promise.all(
@@ -114,9 +137,9 @@ export async function handleUniversalEndpointRequest(
           const ProviderConstructor =
             BUILT_IN_PROVIDER_CONSTRUCTORS[providerName];
           const providerInstance = new ProviderConstructor();
-          const endpointPath =
-            endpointRequest.endpoint ||
-            providerInstance.chatCompletionPath.replace("/", "");
+          const endpointPath = normalizeUniversalEndpointPath(
+            endpointRequest.endpoint ?? providerInstance.chatCompletionPath,
+          );
           const apiKeyName = providerInstance.apiKeyName as keyof Env;
           const apiKeyIndex = await Secrets.getNext(apiKeyName);
           recordApiKeySelection({
@@ -150,6 +173,9 @@ export async function handleUniversalEndpointRequest(
 
   const [requestInfo, requestInit] = aiGateway.buildUniversalEndpointRequest({
     data: gatewaySteps,
+    ...(Object.keys(clientGatewayHeaders).length > 0
+      ? { headers: clientGatewayHeaders }
+      : {}),
   });
   return fetchWithLogging(requestInfo, {
     ...requestInit,

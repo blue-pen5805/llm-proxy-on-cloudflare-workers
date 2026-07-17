@@ -82,11 +82,10 @@ describe("isRequestAuthorized", () => {
     expect(isRequestAuthorized(request)).toBe(true);
   });
 
-  // Test when API key is set and authentication succeeds with query parameter 'key'
-  it("should return true when valid 'key' query parameter is provided", () => {
+  it("rejects query-string credentials", () => {
     const request = new Request("https://example.com?key=valid-key");
 
-    expect(isRequestAuthorized(request)).toBe(true);
+    expect(isRequestAuthorized(request)).toBe(false);
   });
 
   // Test when authentication fails due to missing headers
@@ -115,6 +114,10 @@ describe("stripProxyAuthorizationHeaders", () => {
       "x-api-key": "proxy-secret",
       "x-goog-api-key": "proxy-secret",
       "cf-aig-authorization": "Bearer attacker-token",
+      "cf-aig-max-attempts": "5",
+      "api-key": "attacker-azure-key",
+      cookie: "session=private",
+      "x-forwarded-for": "203.0.113.1",
       "x-client-header": "preserved",
     });
 
@@ -124,7 +127,32 @@ describe("stripProxyAuthorizationHeaders", () => {
     expect(sanitized.has("x-api-key")).toBe(false);
     expect(sanitized.has("x-goog-api-key")).toBe(false);
     expect(sanitized.has("cf-aig-authorization")).toBe(false);
+    expect(sanitized.has("cf-aig-max-attempts")).toBe(false);
+    expect(sanitized.has("api-key")).toBe(false);
+    expect(sanitized.has("cookie")).toBe(false);
+    expect(sanitized.has("x-forwarded-for")).toBe(false);
     expect(sanitized.get("x-client-header")).toBe("preserved");
     expect(original.get("Authorization")).toBe("Bearer proxy-secret");
+  });
+
+  it("preserves request-level AI Gateway headers only when requested", () => {
+    const sanitized = stripProxyAuthorizationHeaders(
+      {
+        "cf-aig-authorization": "Bearer client-gateway-token",
+        "cf-aig-max-attempts": "3",
+        "cf-aig-metadata": '{"tenant":"example"}',
+        "cf-connecting-ip": "203.0.113.1",
+        "x-forwarded-for": "203.0.113.1",
+      },
+      { preserveAiGatewayHeaders: true },
+    );
+
+    expect(sanitized.get("cf-aig-authorization")).toBe(
+      "Bearer client-gateway-token",
+    );
+    expect(sanitized.get("cf-aig-max-attempts")).toBe("3");
+    expect(sanitized.get("cf-aig-metadata")).toBe('{"tenant":"example"}');
+    expect(sanitized.has("cf-connecting-ip")).toBe(false);
+    expect(sanitized.has("x-forwarded-for")).toBe(false);
   });
 });

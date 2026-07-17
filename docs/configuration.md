@@ -23,14 +23,22 @@ The `$schema` path for a file in the repository root is
 
 ## Authentication
 
-| Setting         | Type               | Required | Meaning                                                                                     |
-| --------------- | ------------------ | -------- | ------------------------------------------------------------------------------------------- |
-| `PROXY_API_KEY` | string or string[] | Required | Credentials accepted from proxy clients. Missing or empty values fail closed with HTTP 503. |
-| `DEV`           | boolean            | No       | Disables proxy authentication only when explicitly `true`. Use only for local development.  |
+| Setting         | Type               | Required | Meaning                                                                                                          |
+| --------------- | ------------------ | -------- | ---------------------------------------------------------------------------------------------------------------- |
+| `PROXY_API_KEY` | string or string[] | Required | Up to 64 credentials accepted from proxy clients. Missing, empty, or excessive values fail closed with HTTP 503. |
+| `DEV`           | boolean            | No       | Disables proxy authentication only when explicitly `true`. Use only for local development.                       |
 
-Clients can send a proxy credential as a Bearer token, `x-api-key`,
-`x-goog-api-key`, or the `key` query parameter. Headers accepted for proxy
-authentication are removed before the upstream request is built.
+Clients can send a proxy credential as a Bearer token, `x-api-key`, or
+`x-goog-api-key`. Query-string credentials are rejected because URLs are
+commonly retained by intermediaries and access logs. Proxy credentials,
+hop-by-hop fields, Cloudflare/client network metadata, and cookies are removed
+before the upstream request is built. On AI Gateway routes, client `cf-aig-*`
+headers are retained so each request can override Gateway defaults. They are
+removed from requests sent directly to a provider.
+
+Possession of a proxy credential therefore includes permission to change AI
+Gateway cache, retry, logging, cost, and metadata behavior per request. Restrict
+proxy credentials accordingly.
 
 > `DEV=true` exposes the proxy without client authentication. A missing
 > `PROXY_API_KEY` no longer enables anonymous access; it returns HTTP 503.
@@ -141,12 +149,13 @@ listing intentionally uses the first key unless an explicit selection is given.
 ```
 
 `name` and `baseUrl` are required. `baseUrl` must use HTTPS and cannot contain
-userinfo, a query string, or a fragment. The name must be unique and must not collide
-with a built-in provider route. `apiKeys` is optional for endpoints that do not
-require authentication. `models` avoids an upstream request during model
-listing. The two path overrides default to `/chat/completions` and `/models`.
-Paths are appended directly to `baseUrl`, so avoid a trailing slash in
-`baseUrl` and include the upstream API version in one place only.
+userinfo, a query string, or a fragment. At most 16 endpoints are accepted. The
+name must be unique and must not collide with a built-in provider route. One
+endpoint accepts at most 32 non-empty `apiKeys` and 1,000 non-empty static
+`models`. `apiKeys` is optional for endpoints that do not require
+authentication. The two path overrides default to `/chat/completions` and
+`/models`. Paths are appended directly to `baseUrl`, so avoid a trailing slash
+in `baseUrl` and include the upstream API version in one place only.
 
 Because the full custom endpoint array is deployed as one Worker secret, treat
 the entire configuration file as sensitive.

@@ -114,6 +114,13 @@ describe("Config", () => {
 
       expect(result).toBeUndefined();
     });
+
+    it("rejects an excessive number of proxy authentication keys", () => {
+      vi.mocked(Environments.get).mockReturnValue(
+        Array.from({ length: 65 }, (_, index) => `key-${index}`),
+      );
+      expect(Config.apiKeys()).toBeUndefined();
+    });
   });
 
   describe("aiGateway", () => {
@@ -228,7 +235,16 @@ describe("Config", () => {
     });
 
     it("returns arrays unchanged", () => {
-      const endpoints = [{ name: "local", baseUrl: "https://localhost" }];
+      const endpoints = [
+        {
+          name: "local",
+          baseUrl: "https://localhost",
+          apiKeys: ["key-1", "key-2"],
+          models: ["model-1", "model-2"],
+          chatCompletionPath: "/chat/completions",
+          modelsPath: "/models",
+        },
+      ];
       vi.mocked(Environments.get).mockReturnValue(endpoints);
       expect(Config.customOpenAIEndpoints()).toBe(endpoints);
     });
@@ -238,8 +254,35 @@ describe("Config", () => {
       [{ name: "local", baseUrl: "http://example.com" }],
       [{ name: "local", baseUrl: "https://user:pass@example.com" }],
       [{ name: "local", baseUrl: "https://example.com?token=secret" }],
+      [{ name: "local", baseUrl: "https://example.com#fragment" }],
+      [{ name: "local", baseUrl: "not a URL" }],
       [{ name: "local", baseUrl: "https://example.com", models: [1] }],
+      [{ name: "local", baseUrl: "https://example.com", models: [""] }],
+      [
+        {
+          name: "local",
+          baseUrl: "https://example.com",
+          models: Array.from({ length: 1001 }, () => "model"),
+        },
+      ],
+      [{ name: "local", baseUrl: "https://example.com", apiKeys: [""] }],
+      [
+        {
+          name: "local",
+          baseUrl: "https://example.com",
+          apiKeys: Array.from({ length: 33 }, () => "key"),
+        },
+      ],
       [{ name: "local", baseUrl: "https://example.com", modelsPath: "models" }],
+      [
+        {
+          name: "local",
+          baseUrl: "https://example.com",
+          modelsPath: `/${"x".repeat(2048)}`,
+        },
+      ],
+      [{ name: "local", baseUrl: "https://example.com", apiKey: "typo" }],
+      ["not-an-object"],
     ])("rejects unsafe custom endpoint configuration %s", (value) => {
       vi.mocked(Environments.get).mockReturnValue(value as never);
       expect(Config.customOpenAIEndpoints()).toBeUndefined();
@@ -252,5 +295,28 @@ describe("Config", () => {
         expect(Config.customOpenAIEndpoints()).toBeUndefined();
       },
     );
+
+    it("rejects duplicate and built-in custom endpoint names", () => {
+      vi.mocked(Environments.get).mockReturnValue([
+        { name: "duplicate", baseUrl: "https://first.example" },
+        { name: "duplicate", baseUrl: "https://second.example" },
+      ]);
+      expect(Config.customOpenAIEndpoints()).toBeUndefined();
+
+      vi.mocked(Environments.get).mockReturnValue([
+        { name: "openai", baseUrl: "https://custom.example" },
+      ]);
+      expect(Config.customOpenAIEndpoints()).toBeUndefined();
+    });
+
+    it("rejects more than sixteen custom endpoints", () => {
+      vi.mocked(Environments.get).mockReturnValue(
+        Array.from({ length: 17 }, (_, index) => ({
+          name: `custom-${index}`,
+          baseUrl: `https://custom-${index}.example`,
+        })),
+      );
+      expect(Config.customOpenAIEndpoints()).toBeUndefined();
+    });
   });
 });

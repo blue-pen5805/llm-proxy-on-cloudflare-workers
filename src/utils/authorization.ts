@@ -7,22 +7,60 @@ export const AUTHORIZATION_KEYS = [
   "x-goog-api-key",
 ];
 
-export const AUTHORIZATION_QUERY_PARAMETERS = ["key"];
-
-const UPSTREAM_CONTROLLED_AUTHORIZATION_HEADERS = [
-  ...AUTHORIZATION_KEYS,
-  "cf-aig-authorization",
+export const AUTHORIZATION_QUERY_PARAMETERS = [
+  "key",
+  "api-key",
+  "api_key",
+  "apikey",
+  "access_token",
+  "token",
 ];
 
+const UPSTREAM_CONTROLLED_AUTHORIZATION_HEADERS = new Set([
+  ...AUTHORIZATION_KEYS.map((key) => key.toLowerCase()),
+  "api-key",
+  "proxy-authorization",
+  "cookie",
+  "host",
+  "content-length",
+  "connection",
+  "keep-alive",
+  "proxy-authenticate",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+  "forwarded",
+  "x-real-ip",
+  "origin",
+  "referer",
+  "cf-aig-authorization",
+]);
+
 /**
- * Returns a copy of request headers without credentials accepted by this
- * proxy. Provider credentials are added separately after this sanitization.
+ * Returns a copy of request headers without credentials, hop-by-hop fields,
+ * or request metadata. AI Gateway request controls can be retained explicitly
+ * for requests that are actually routed through AI Gateway.
  */
-export function stripProxyAuthorizationHeaders(headers: HeadersInit): Headers {
+export function stripProxyAuthorizationHeaders(
+  headers: HeadersInit,
+  { preserveAiGatewayHeaders = false } = {},
+): Headers {
   const sanitizedHeaders = new Headers(headers);
-  UPSTREAM_CONTROLLED_AUTHORIZATION_HEADERS.forEach((key) =>
-    sanitizedHeaders.delete(key),
-  );
+  for (const key of [...sanitizedHeaders.keys()]) {
+    const normalizedKey = key.toLowerCase();
+    if (preserveAiGatewayHeaders && normalizedKey.startsWith("cf-aig-")) {
+      continue;
+    }
+    if (
+      UPSTREAM_CONTROLLED_AUTHORIZATION_HEADERS.has(normalizedKey) ||
+      normalizedKey.startsWith("cf-") ||
+      normalizedKey.startsWith("x-forwarded-") ||
+      normalizedKey.startsWith("sec-")
+    ) {
+      sanitizedHeaders.delete(key);
+    }
+  }
   return sanitizedHeaders;
 }
 
@@ -49,12 +87,11 @@ function matchesApiKey(candidate: string, configuredKeys: string[]): boolean {
  * Authenticates a request by checking for valid API keys in the request headers.
  *
  * This function verifies if the request contains a valid API key in one of the
- * supported authorization headers. If no API keys are configured in the system,
- * authentication is bypassed (returns true).
+ * supported authorization headers. Query-string credentials are intentionally
+ * rejected because URLs are commonly retained by access logs and intermediaries.
  *
  * @param request - The incoming request to isRequestAuthorized
- * @returns `true` if the request is authenticated (either because it contains a valid
- * API key or because authentication is disabled), `false` otherwise
+ * @returns `true` if the request contains a valid API key, `false` otherwise
  */
 export function isRequestAuthorized(request: Request): boolean {
   const apiKeys = Config.apiKeys();
@@ -76,16 +113,6 @@ export function isRequestAuthorized(request: Request): boolean {
       apiKey = bearerMatch?.[1] ?? null;
     } else {
       apiKey = authorizationValue.trim();
-    }
-  } else {
-    const requestUrl = new URL(request.url);
-    const queryParameterName = AUTHORIZATION_QUERY_PARAMETERS.find(
-      (parameterName) => {
-        return Boolean(requestUrl.searchParams.get(parameterName));
-      },
-    );
-    if (queryParameterName) {
-      apiKey = requestUrl.searchParams.get(queryParameterName);
     }
   }
 

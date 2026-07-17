@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { chmodSync, readFileSync, writeFileSync, existsSync } from "fs";
 import {
   describe,
   it,
@@ -16,6 +16,7 @@ vi.mock("fs", async (importOriginal) => {
     ...actual,
     readFileSync: vi.fn(),
     writeFileSync: vi.fn(),
+    chmodSync: vi.fn(),
     existsSync: vi.fn(),
   };
 });
@@ -93,21 +94,26 @@ describe("create-config.ts", () => {
     expect(mockCreateInterface).toHaveBeenCalledTimes(1);
     expect(mockQuestion).toHaveBeenCalledTimes(4); // PROXY_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY
     expect(writeFileSync).toHaveBeenCalledTimes(1);
+    expect(chmodSync).toHaveBeenCalledWith("config.jsonc", 0o600);
     expect(writeFileSync).toHaveBeenCalledWith(
       "config.jsonc",
       expect.stringContaining('"PROXY_API_KEY": "my-proxy-key"'),
+      { mode: 0o600 },
     );
     expect(writeFileSync).toHaveBeenCalledWith(
       "config.jsonc",
       expect.stringContaining('"OPENAI_API_KEY": "sk-openai-test"'),
+      { mode: 0o600 },
     );
     expect(writeFileSync).toHaveBeenCalledWith(
       "config.jsonc",
       expect.not.stringContaining('"GEMINI_API_KEY":'),
+      { mode: 0o600 },
     );
     expect(writeFileSync).toHaveBeenCalledWith(
       "config.jsonc",
       expect.not.stringContaining('"ANTHROPIC_API_KEY":'),
+      { mode: 0o600 },
     );
     expect(mockConsoleLog).toHaveBeenCalledWith(
       expect.stringContaining("✅ config.jsonc created successfully!"),
@@ -160,6 +166,7 @@ describe("create-config.ts", () => {
     expect(writeFileSync).toHaveBeenCalledWith(
       "config.jsonc",
       expect.stringContaining('"PROXY_API_KEY": "replacement"'),
+      { mode: 0o600 },
     );
   });
 
@@ -212,6 +219,7 @@ describe("create-config.ts", () => {
     expect(writeFileSync).toHaveBeenCalledWith(
       "config.jsonc",
       expect.stringContaining('"PROXY_API_KEY": "valid-proxy-key"'),
+      { mode: 0o600 },
     );
     expect(mockExit).not.toHaveBeenCalled();
   });
@@ -244,6 +252,7 @@ describe("create-config.ts", () => {
     expect(writeFileSync).toHaveBeenCalledWith(
       "config.jsonc",
       expect.stringContaining('"GEMINI_API_KEY": ["key1","key2"]'),
+      { mode: 0o600 },
     );
     expect(mockExit).not.toHaveBeenCalled();
   });
@@ -330,14 +339,17 @@ describe("create-config.ts", () => {
     expect(writeFileSync).toHaveBeenCalledWith(
       "config.jsonc",
       expect.stringContaining("// --- Primary ---"),
+      { mode: 0o600 },
     );
     expect(writeFileSync).toHaveBeenCalledWith(
       "config.jsonc",
       expect.stringContaining("// Provider credential"),
+      { mode: 0o600 },
     );
     expect(writeFileSync).toHaveBeenCalledWith(
       "config.jsonc",
       expect.stringContaining("// --- Secondary ---"),
+      { mode: 0o600 },
     );
   });
 

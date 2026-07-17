@@ -20,25 +20,32 @@ jobs:
 
       - name: Get version from package.json
         id: package-version
+        shell: bash
         run: |
           VERSION=$(node -p "require('./package.json').version")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "package.json contains an invalid semantic version" >&2
+            exit 1
+          fi
+          printf 'version=%s\n' "$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Check if tag exists
         id: check-tag
+        env:
+          VERSION: ${{ steps.package-version.outputs.version }}
         run: |
-          VERSION=${{ steps.package-version.outputs.version }}
-          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
-            echo "exists=true" >> $GITHUB_OUTPUT
+          if git rev-parse --verify --quiet "refs/tags/v${VERSION}" >/dev/null; then
+            printf 'exists=true\n' >> "$GITHUB_OUTPUT"
           else
-            echo "exists=false" >> $GITHUB_OUTPUT
+            printf 'exists=false\n' >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create and push tag
         if: steps.check-tag.outputs.exists == 'false'
+        env:
+          VERSION: ${{ steps.package-version.outputs.version }}
         run: |
-          VERSION=${{ steps.package-version.outputs.version }}
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "v$VERSION" -m "Release v$VERSION"
-          git push origin "v$VERSION"
+          git tag -a "v${VERSION}" -m "Release v${VERSION}"
+          git push origin "refs/tags/v${VERSION}"

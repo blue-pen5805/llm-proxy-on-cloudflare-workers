@@ -1,3 +1,4 @@
+import { MAX_COMPATIBILITY_FALLBACK_ATTEMPTS } from "../requests/compatibility_fallback";
 import { BadRequestError } from "../utils/error";
 import {
   CloudflareAIGatewayHeaders,
@@ -8,6 +9,8 @@ import {
   CloudflareAIGatewayUniversalEndpointHeaders,
 } from "./const";
 import {
+  isSafeCloudflareAccountId,
+  isSafeCloudflareAIGatewayId,
   isCloudflareAIGatewayOpenAICompatibleProvider,
   isCloudflareAIGatewayProvider,
 } from "./utils";
@@ -36,9 +39,12 @@ export class CloudflareAIGateway {
     public apiKey: string | undefined = undefined,
     public restApiToken: string | undefined = undefined,
   ) {
-    if (!this.accountId || !this.gatewayId) {
+    if (
+      !isSafeCloudflareAccountId(this.accountId) ||
+      !isSafeCloudflareAIGatewayId(this.gatewayId)
+    ) {
       throw new Error(
-        "Cloudflare AI Gateway configuration is incomplete. accountId and gatewayId are required.",
+        "Cloudflare AI Gateway accountId or gatewayId is invalid.",
       );
     }
   }
@@ -48,7 +54,7 @@ export class CloudflareAIGateway {
    * If a provider is specified, it appends the provider to the URL.
    */
   baseUrl(provider: string | undefined = undefined): string {
-    const gatewayBaseUrl = `${CloudflareAIGateway.origin}/${this.accountId}/${this.gatewayId}`;
+    const gatewayBaseUrl = `${CloudflareAIGateway.origin}/${encodeURIComponent(this.accountId)}/${encodeURIComponent(this.gatewayId)}`;
     return provider ? `${gatewayBaseUrl}/${provider}` : gatewayBaseUrl;
   }
 
@@ -57,13 +63,14 @@ export class CloudflareAIGateway {
    * Includes the API key and any additional headers provided.
    */
   buildHeaders(additionalHeaders: HeadersInit = {}): HeadersInit {
-    return {
-      "Content-Type": "application/json",
-      ...additionalHeaders,
-      ...(this.apiKey
-        ? { "cf-aig-authorization": `Bearer ${this.apiKey}` }
-        : {}),
-    };
+    const headers = new Headers(additionalHeaders);
+    if (!headers.has("content-type")) {
+      headers.set("content-type", "application/json");
+    }
+    if (this.apiKey) {
+      headers.set("cf-aig-authorization", `Bearer ${this.apiKey}`);
+    }
+    return headers;
   }
 
   /**
@@ -178,7 +185,7 @@ export class CloudflareAIGateway {
     }
 
     return [
-      `${CloudflareAIGateway.restApiOrigin}/${this.accountId}${path}`,
+      `${CloudflareAIGateway.restApiOrigin}/${encodeURIComponent(this.accountId)}${path}`,
       requestInit,
     ];
   }
@@ -210,7 +217,9 @@ export class CloudflareAIGateway {
     // A missing provider key is valid when AI Gateway BYOK is configured. In
     // that case Gateway injects its stored credential for the upstream call.
     const credentials: readonly (string | undefined)[] =
-      apiKeys.length > 0 ? apiKeys : [undefined];
+      apiKeys.length > 0
+        ? apiKeys.slice(0, MAX_COMPATIBILITY_FALLBACK_ATTEMPTS)
+        : [undefined];
 
     return credentials.map((apiKey) => {
       // Overwrite authorization header with the provider's API key

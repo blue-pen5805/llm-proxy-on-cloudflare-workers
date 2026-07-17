@@ -178,7 +178,10 @@ describe("proxy", () => {
     const gateway = { buildProviderEndpointRequest } as any;
     vi.mocked(fetchWithLogging).mockResolvedValue(new Response("gateway"));
     const request = new Request("https://example.com/models", {
-      headers: { "X-Request": "value" },
+      headers: {
+        "X-Request": "value",
+        "cf-aig-max-attempts": "3",
+      },
     });
 
     const response = await handleProviderProxyRequest(
@@ -200,6 +203,7 @@ describe("proxy", () => {
     );
     expect(gatewayHeaders.get("Authorization")).toBe("Bearer test-key");
     expect(gatewayHeaders.get("X-Request")).toBe("value");
+    expect(gatewayHeaders.get("cf-aig-max-attempts")).toBe("3");
     expect(fetchWithLogging).toHaveBeenCalledWith(
       "https://gateway.example/openai/models",
       { method: "GET", signal: request.signal },
@@ -217,6 +221,7 @@ describe("proxy", () => {
         Authorization: "Bearer proxy-secret",
         "x-api-key": "proxy-secret",
         "x-goog-api-key": "proxy-secret",
+        "cf-aig-metadata": '{"tenant":"must-not-leak"}',
         "x-client-header": "preserved",
       },
     });

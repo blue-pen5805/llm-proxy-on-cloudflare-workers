@@ -20,9 +20,6 @@ export async function handleChatCompletionsRequest(
   aiGateway: CloudflareAIGateway | undefined = undefined,
 ) {
   const { request, apiKeyIndex: contextApiKeyIndex } = context;
-  // Remove proxy credentials before adding provider-specific authentication.
-  const sanitizedHeaders = stripProxyAuthorizationHeaders(request.headers);
-
   // Validate Request Data Structure
   const parsedRequestBody = parseJsonOrReturnText(
     await readRequestText(request),
@@ -87,6 +84,13 @@ export async function handleChatCompletionsRequest(
     aiGateway && CloudflareAIGateway.isSupportedProvider(providerName, true)
       ? providerName
       : undefined;
+  // Retain request-level Gateway controls only when this provider will use
+  // AI Gateway. Direct provider requests must not receive Cloudflare metadata.
+  const sanitizedHeaders = stripProxyAuthorizationHeaders(request.headers, {
+    preserveAiGatewayHeaders: Boolean(
+      aiGateway && CloudflareAIGateway.isSupportedProvider(providerName),
+    ),
+  });
   const keyLogFields = recordApiKeySelection({
     provider: providerName,
     operation: "chat_completions",

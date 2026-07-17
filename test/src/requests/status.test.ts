@@ -4,7 +4,10 @@ import { BUILT_IN_PROVIDER_CONSTRUCTORS } from "~/src/providers";
 import { getAllProviderInstances } from "~/src/providers";
 import { CustomOpenAI } from "~/src/providers/custom-openai";
 import { ProviderNotSupportedError } from "~/src/providers/provider";
-import { handleStatusRequest } from "~/src/requests/status";
+import {
+  handleStatusRequest,
+  MAX_STATUS_CONNECTIVITY_CHECKS,
+} from "~/src/requests/status";
 import { Config } from "~/src/utils/config";
 import { Environments } from "~/src/utils/environments";
 import { fetchWithLogging, withTimeout } from "~/src/utils/helpers";
@@ -105,11 +108,11 @@ describe("status", () => {
     expect(body.providers.openai.available).toBe(true);
     expect(body.providers.openai.keys).toHaveLength(2);
     expect(body.providers.openai.keys[0]).toEqual({
-      key: "*********789",
+      slot: 0,
       status: "valid",
     });
     expect(body.providers.openai.keys[1]).toEqual({
-      key: "*********ghi",
+      slot: 1,
       status: "valid",
     });
   });
@@ -173,7 +176,7 @@ describe("status", () => {
     });
   });
 
-  it("should mask long and short keys correctly", async () => {
+  it("never returns key material or key suffixes", async () => {
     vi.mocked(Secrets.getAll).mockReturnValue([
       "short",
       "longest-key-ever-123",
@@ -185,8 +188,12 @@ describe("status", () => {
     const response = await handleStatusRequest();
     const body = (await response.json()) as any;
 
-    expect(body.providers.openai.keys[0].key).toBe("**ort"); // Math.min(10, 5-3) = 2 stars
-    expect(body.providers.openai.keys[1].key).toBe("**********123"); // max 10 stars
+    expect(body.providers.openai.keys).toEqual([
+      { slot: 0, status: "valid" },
+      { slot: 1, status: "valid" },
+    ]);
+    expect(JSON.stringify(body.providers)).not.toContain("ort");
+    expect(JSON.stringify(body.providers)).not.toContain("123");
   });
 
   it("should skip connectivity check when modelsPath is missing", async () => {
@@ -227,8 +234,8 @@ describe("status", () => {
 
     expect(body.config.DEFAULT_MODEL).toBeNull();
     expect(body.providers.custom.keys).toEqual([
-      { key: "***", status: "valid" },
-      { key: "***", status: "valid" },
+      { slot: 0, status: "valid" },
+      { slot: 1, status: "valid" },
     ]);
     expect(Secrets.getAll).not.toHaveBeenCalled();
   });
@@ -344,5 +351,48 @@ describe("status", () => {
 
     const body = await (await statusPromise).json();
     expect(Object.keys(body.providers)).toEqual(["first", "second"]);
+  });
+
+  it("caps live connectivity fan-out and leaves excess slots unknown", async () => {
+    vi.mocked(Secrets.getAll).mockReturnValue(
+      Array.from(
+        { length: MAX_STATUS_CONNECTIVITY_CHECKS + 2 },
+        (_, index) => `key-${index}`,
+      ),
+    );
+    mockProviderClass.fetch.mockImplementation(
+      async () => new Response(null, { status: 200 }),
+    );
+
+    const body = await (await handleStatusRequest()).json();
+    expect(mockProviderClass.fetch).toHaveBeenCalledTimes(
+      MAX_STATUS_CONNECTIVITY_CHECKS,
+    );
+    expect(body.providers.openai.keys.at(-1)).toEqual({
+      slot: MAX_STATUS_CONNECTIVITY_CHECKS + 1,
+      status: "unknown",
+    });
+  });
+
+  it("cancels diagnostic response bodies after classifying headers", async () => {
+    vi.mocked(Secrets.getAll).mockReturnValue(["key"]);
+    const upstreamResponse = new Response("unused", { status: 200 });
+    const cancel = vi.spyOn(upstreamResponse.body!, "cancel");
+    mockProviderClass.fetch.mockResolvedValue(upstreamResponse);
+
+    await handleStatusRequest();
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the classified status when response-body cancellation fails", async () => {
+    vi.mocked(Secrets.getAll).mockReturnValue(["key"]);
+    const upstreamResponse = new Response("unused", { status: 200 });
+    vi.spyOn(upstreamResponse.body!, "cancel").mockRejectedValue(
+      new Error("already locked"),
+    );
+    mockProviderClass.fetch.mockResolvedValue(upstreamResponse);
+
+    const body = await (await handleStatusRequest()).json();
+    expect(body.providers.openai.keys[0].status).toBe("valid");
   });
 });

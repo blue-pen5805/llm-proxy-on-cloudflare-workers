@@ -72,7 +72,10 @@ describe("handleChatCompletionsRequest", () => {
     const request = new Request("https://example.com/chat/completions", {
       method: "POST",
       body: JSON.stringify(requestBody),
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "cf-aig-skip-cache": "true",
+      },
     });
 
     mockProviderClass.buildChatCompletionsRequest.mockReturnValue([
@@ -94,6 +97,11 @@ describe("handleChatCompletionsRequest", () => {
       headers: expect.any(Headers),
       apiKeyIndex: 0,
     });
+    expect(
+      mockProviderClass.buildChatCompletionsRequest.mock.calls[0][0].headers.has(
+        "cf-aig-skip-cache",
+      ),
+    ).toBe(false);
     expect(mockProviderClass.fetch).toHaveBeenCalled();
   });
 
@@ -292,7 +300,10 @@ describe("handleChatCompletionsRequest", () => {
     const request = new Request("https://example.com/chat/completions", {
       method: "POST",
       body: JSON.stringify(requestBody),
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "cf-aig-skip-cache": "true",
+      },
     });
 
     mockProviderClass.buildChatCompletionsRequest.mockReturnValue([
@@ -318,6 +329,11 @@ describe("handleChatCompletionsRequest", () => {
       "openai",
       true,
     );
+    expect(
+      mockProviderClass.buildChatCompletionsRequest.mock.calls[0][0].headers.get(
+        "cf-aig-skip-cache",
+      ),
+    ).toBe("true");
     expect(mockAIGateway.buildChatCompletionsRequests).toHaveBeenCalledWith({
       provider: "openai",
       body: JSON.stringify({ ...requestBody, model: "gpt-4" }),

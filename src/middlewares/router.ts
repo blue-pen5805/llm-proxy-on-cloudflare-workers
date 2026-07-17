@@ -20,11 +20,11 @@ export async function handleRouting(
   // Example: /ping
   //          /status
   //          /g/{AI_GATEWAY_NAME}/status
-  if (pathname === "/ping") {
+  if (request.method === "GET" && pathname === "/ping") {
     return new Response("Pong", { status: 200 });
   }
 
-  if (pathname === "/status") {
+  if (request.method === "GET" && pathname === "/status") {
     return await handleStatusRequest(aiGateway, context.providers);
   }
 

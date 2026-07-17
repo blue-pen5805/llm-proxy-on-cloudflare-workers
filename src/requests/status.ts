@@ -9,24 +9,14 @@ import { fetchWithLogging, withTimeout } from "../utils/helpers";
 import { RequestLogger } from "../utils/logger";
 
 const CONNECTIVITY_CHECK_TIMEOUT_MS = 5000;
+export const STATUS_CONNECTIVITY_CONCURRENCY = 5;
+export const MAX_STATUS_CONNECTIVITY_CHECKS = 32;
 
 type ConnectivityStatus = "valid" | "invalid" | "unknown";
 
 interface ProviderStatus {
   available: boolean;
-  keys: { key: string; status: ConnectivityStatus }[];
-}
-
-/**
- * Masks an API key, showing only the last 3 characters.
- * @param key The API key to mask.
- * @returns The masked API key.
- */
-function maskApiKey(key: string): string {
-  if (key.length <= 3) {
-    return "***";
-  }
-  return "*".repeat(Math.min(10, key.length - 3)) + key.slice(-3);
+  keys: { slot: number; status: ConnectivityStatus }[];
 }
 
 function classifyConnectivity(response: Response): ConnectivityStatus {
@@ -108,7 +98,11 @@ async function checkProviderConnectivity(
       providerName,
     );
 
-    return classifyConnectivity(connectivityResponse);
+    const connectivityStatus = classifyConnectivity(connectivityResponse);
+    if (connectivityResponse.body) {
+      await connectivityResponse.body.cancel().catch(() => undefined);
+    }
+    return connectivityStatus;
   } catch (error) {
     if (
       error instanceof ProviderNotSupportedError ||
@@ -143,33 +137,51 @@ export async function handleStatusRequest(
   const providerEntries = Object.entries(
     providerRegistry?.all() ?? getAllProviderInstances(env),
   );
-  const providersStatus = Object.fromEntries(
-    await Promise.all(
-      providerEntries.map(async ([providerName, providerInstance]) => {
-        const allApiKeys = providerInstance.getApiKeys();
-        const keyStatuses = await Promise.all(
-          allApiKeys.map(async (apiKey, apiKeyIndex) => ({
-            key: maskApiKey(apiKey),
-            status: await checkProviderConnectivity(
-              providerInstance,
-              providerName,
-              apiKeyIndex,
-              allApiKeys.length,
-              aiGateway,
-            ),
-          })),
-        );
+  const providersStatus: Record<string, ProviderStatus> = {};
+  const connectivityTasks: (() => Promise<void>)[] = [];
 
-        return [
-          providerName,
-          {
-            available: providerInstance.available(),
-            keys: keyStatuses,
-          } satisfies ProviderStatus,
-        ] as const;
-      }),
-    ),
-  );
+  for (const [providerName, providerInstance] of providerEntries) {
+    const allApiKeys = providerInstance.getApiKeys();
+    const providerStatus: ProviderStatus = {
+      available: providerInstance.available(),
+      keys: allApiKeys.map((_apiKey, apiKeyIndex) => ({
+        slot: apiKeyIndex,
+        status: "unknown",
+      })),
+    };
+    providersStatus[providerName] = providerStatus;
+
+    for (let apiKeyIndex = 0; apiKeyIndex < allApiKeys.length; apiKeyIndex++) {
+      if (
+        !providerInstance.modelsPath ||
+        connectivityTasks.length >= MAX_STATUS_CONNECTIVITY_CHECKS
+      ) {
+        continue;
+      }
+      connectivityTasks.push(async () => {
+        providerStatus.keys[apiKeyIndex].status =
+          await checkProviderConnectivity(
+            providerInstance,
+            providerName,
+            apiKeyIndex,
+            allApiKeys.length,
+            aiGateway,
+          );
+      });
+    }
+  }
+
+  for (
+    let taskIndex = 0;
+    taskIndex < connectivityTasks.length;
+    taskIndex += STATUS_CONNECTIVITY_CONCURRENCY
+  ) {
+    await Promise.all(
+      connectivityTasks
+        .slice(taskIndex, taskIndex + STATUS_CONNECTIVITY_CONCURRENCY)
+        .map((task) => task()),
+    );
+  }
 
   const responseBody = {
     config: configurationStatus,

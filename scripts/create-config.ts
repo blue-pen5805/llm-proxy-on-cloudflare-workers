@@ -1,6 +1,6 @@
 #!/usr/bin/env ts-node
 import { getErrorMessage } from "./utils.ts";
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { chmodSync, readFileSync, writeFileSync, existsSync } from "fs";
 import { createInterface, Interface } from "readline";
 
 const CONFIG_EXAMPLE_PATH = "config.example.jsonc";
@@ -285,7 +285,8 @@ async function runCreateConfigCli(): Promise<void> {
     }
 
     const generatedConfigText = serializeConfigJsonc(configFields, config);
-    writeFileSync(CONFIG_OUTPUT_PATH, generatedConfigText);
+    writeFileSync(CONFIG_OUTPUT_PATH, generatedConfigText, { mode: 0o600 });
+    chmodSync(CONFIG_OUTPUT_PATH, 0o600);
 
     console.log(`\n✅ ${CONFIG_OUTPUT_PATH} created successfully!`);
     console.log("\nNext steps:");

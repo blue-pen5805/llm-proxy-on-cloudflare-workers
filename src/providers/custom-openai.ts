@@ -14,6 +14,9 @@ export interface CustomOpenAIEndpointConfig {
 export type CustomOpenAI = Provider & { readonly name: string };
 
 function assertSafeEndpointConfig(config: CustomOpenAIEndpointConfig): void {
+  if (!/^[A-Za-z0-9._~-]{1,128}$/.test(config.name)) {
+    throw new Error("Custom OpenAI endpoint name is invalid.");
+  }
   let baseUrl: URL;
   try {
     baseUrl = new URL(config.baseUrl);

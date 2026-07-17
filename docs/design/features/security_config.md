@@ -8,10 +8,11 @@ providers and AI Gateway receive only credentials needed for the selected route.
 
 ## Client authentication
 
-`PROXY_API_KEY` accepts one or more shared secrets. A client may provide a Bearer
-token, `x-api-key`, `x-goog-api-key`, or the `key` query parameter. Candidate and
-configured values are SHA-256 hashed and compared at fixed length without an
-early return across configured keys.
+`PROXY_API_KEY` accepts up to 64 shared secrets. A client may provide a Bearer
+token, `x-api-key`, or `x-goog-api-key`. Query-string authentication is rejected
+so proxy credentials do not enter URL logs. Candidate and configured values are
+SHA-256 hashed and compared at fixed length without an early return across
+configured keys.
 
 Authentication is bypassed only if `DEV` is explicitly `true`. If
 `PROXY_API_KEY` is absent, empty, or invalid in other modes, the Worker fails
@@ -23,8 +24,11 @@ to negotiate CORS but does not grant access to protected request methods.
 ## Credential isolation
 
 Before chat or pass-through forwarding, the proxy removes every header format it
-accepts for its own authentication. The provider adapter then adds the selected
-upstream key. The `key` query parameter is removed during middleware processing;
+accepts for its own authentication, provider credential aliases such as
+`api-key`, hop-by-hop headers, cookies, and client network metadata. On AI
+Gateway routes it retains request-level `cf-aig-*` controls; direct provider
+requests remove them. The provider adapter then adds the selected upstream key.
+Credential-like query parameters are removed during middleware processing;
 other query parameters are retained.
 
 AI Gateway tokens are added as `cf-aig-authorization`. Provider credentials are
@@ -50,10 +54,10 @@ Known application errors return stable public messages. Unexpected exceptions
 are logged and returned as a generic HTTP 500 error. Subrequest logging masks a
 defined list of sensitive query parameter names.
 
-`/status` masks keys but intentionally reveals provider availability, key
-suffixes, the default model, AI Gateway identifiers, and feature flags. It must
-remain behind proxy authentication and should not be treated as public health
-metadata.
+`/status` never returns key values or suffixes, but intentionally reveals
+provider availability, credential slot numbers, the default model, AI Gateway
+identifiers, and feature flags. It must remain behind proxy authentication and
+should not be treated as public health metadata.
 
 ## Non-goals
 

@@ -11,8 +11,8 @@ proxy preserves non-authentication query parameters for pass-through requests.
 1. `requestMiddleware` extracts the origin-relative URL.
 2. `apiKeyPathMiddleware` parses an optional leading key selection and removes
    that prefix.
-3. `authMiddleware` removes the `key` authentication query parameter while
-   preserving other parameters.
+3. `authMiddleware` removes credential-like query parameters while preserving
+   other parameters. Query parameters are not accepted for proxy authentication.
 4. `aiGatewayMiddleware` removes an optional `/g/<gateway>` prefix.
 5. `routerMiddleware` matches exact OpenAI-compatible routes or a registered
    provider prefix available through its provider scan.
@@ -20,7 +20,7 @@ proxy preserves non-authentication query parameters for pass-through requests.
 For example:
 
 ```text
-/key/1-3/g/production/openai/v1/models?key=proxy-secret&region=us
+/key/1-3/g/production/openai/v1/models?api_key=untrusted&region=us
     -> key selection: {start: 1, end: 3}
     -> Gateway: production
     -> provider: openai
@@ -30,8 +30,10 @@ For example:
 ## Key prefix grammar
 
 The leading forms `/key/N`, `/key/N-M`, `/key/N-`, and `/key/-M` are supported.
-Indices are zero-based. Parsing only occurs at the beginning of the path, so an
-upstream path containing `/key/...` elsewhere is not changed.
+Indices are zero-based non-negative safe integers, and a range start cannot
+exceed its end. Malformed values in the reserved `/key/` namespace return 400.
+Parsing only occurs at the beginning of the path, so an upstream path containing
+`/key/...` elsewhere is not changed.
 
 The middleware records the selection; the provider handler resolves it after it
 knows the number of configured keys. A single index wraps modulo the key count,

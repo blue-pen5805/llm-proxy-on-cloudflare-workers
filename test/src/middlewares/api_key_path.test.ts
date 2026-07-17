@@ -80,4 +80,32 @@ describe("apiKeyPathMiddleware", () => {
     expect(context.apiKeyIndex).toBeUndefined();
     expect(context.pathname).toBe("/v1/chat/completions");
   });
+
+  it.each([
+    "/key/999999999999999999999999/openai/v1/models",
+    "/key/5-2/openai/v1/models",
+    "/key/-/openai/v1/models",
+    "/key/1evil/openai/v1/models",
+  ])("rejects an invalid key selection path: %s", async (urlPath) => {
+    const context: any = {
+      request: new Request(`https://example.com${urlPath}`),
+    };
+    const next = vi.fn();
+    await requestMiddleware(context, next);
+    next.mockClear();
+
+    await expect(apiKeyPathMiddleware(context, next)).rejects.toThrow();
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("preserves query parameters when the key prefix targets root", async () => {
+    const context: any = {
+      request: new Request("https://example.com/key/1?region=us"),
+    };
+    const next = vi.fn();
+    await requestMiddleware(context, next);
+    await apiKeyPathMiddleware(context, next);
+
+    expect(context.pathname).toBe("/?region=us");
+  });
 });

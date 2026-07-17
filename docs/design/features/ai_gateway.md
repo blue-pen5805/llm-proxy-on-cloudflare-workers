@@ -40,7 +40,13 @@ replaces proxy authentication with `Authorization: Bearer
 <CLOUDFLARE_API_TOKEN>` and overwrites `cf-aig-gateway-id` with the selected
 Gateway. `/g/<gateway>/ai/...` selects an explicit Gateway; otherwise
 `AI_GATEWAY_NAME` or the fallback ID `default` is used. No other `/ai` path is
-forwarded.
+forwarded. Gateway/account path segments are validated and URL-encoded.
+
+Client-supplied `cf-aig-*` headers are retained on AI Gateway routes because
+request-level Gateway settings intentionally take precedence over Gateway
+defaults. This allows callers to control logging, cache keys, retries, cost, and
+metadata per request. The Worker still applies configured Gateway/REST
+credentials and the route-selected Gateway ID after sanitization.
 
 ### Provider endpoint
 
@@ -71,16 +77,17 @@ are rejected when either required credential is absent.
 ### OpenAI-compatible chat
 
 For providers in the OpenAI-compatible Gateway subset, the chat handler shuffles
-configured keys and creates one Compatibility Endpoint request per key. It sends
-those requests in order until one succeeds, preserving credential fallback
-without calling the deprecated Universal Endpoint. The model is rewritten to
-`<provider>/<model>` for Gateway's compatibility endpoint.
+configured keys and creates at most four Compatibility Endpoint requests. It
+tries another credential only after a network error, HTTP 401/403, or HTTP 429;
+deterministic client and provider errors return immediately. The model is
+rewritten to `<provider>/<model>` for Gateway's compatibility endpoint.
 
 ### Legacy Universal Endpoint and compatibility pass-through
 
 `POST /g/<gateway>/` accepts the repository's Universal Endpoint request shape,
 validates provider names against the supported set, injects selected provider
 headers, and forwards the mapped steps to Gateway's Universal Endpoint. This
+also normalizes each optional endpoint to a bounded, safe relative path. This
 explicit route remains available even though normal OpenAI-compatible chat uses
 the Compatibility Endpoint. `POST /g/<gateway>/compat/chat/completions` forwards
 directly to that fixed Gateway endpoint after stripping proxy credentials. No

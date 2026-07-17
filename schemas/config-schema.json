@@ -9,12 +9,15 @@
     "PROXY_API_KEY": {
       "oneOf": [
         {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
         {
           "type": "array",
+          "maxItems": 64,
           "items": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1
           }
         }
       ]
@@ -22,7 +25,10 @@
     "CLOUDFLARE_ACCOUNT_ID": {
       "oneOf": [
         {
-          "type": "string"
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
         },
         {
           "type": "null"
@@ -32,7 +38,10 @@
     "AI_GATEWAY_NAME": {
       "oneOf": [
         {
-          "type": "string"
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^(?!\\.{1,2}$)[^/?#\\u0000-\\u001F\\u007F]+$"
         },
         {
           "type": "null"
@@ -365,8 +374,10 @@
     },
     "CUSTOM_OPENAI_ENDPOINTS": {
       "type": "array",
+      "maxItems": 16,
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
           "name": {
             "type": "string",
@@ -376,33 +387,41 @@
           },
           "baseUrl": {
             "type": "string",
+            "maxLength": 2048,
             "pattern": "^https://"
           },
           "apiKeys": {
             "oneOf": [
               {
-                "type": "string"
+                "type": "string",
+                "minLength": 1
               },
               {
                 "type": "array",
+                "maxItems": 32,
                 "items": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1
                 }
               }
             ]
           },
           "models": {
             "type": "array",
+            "maxItems": 1000,
             "items": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             }
           },
           "chatCompletionPath": {
             "type": "string",
+            "maxLength": 2048,
             "pattern": "^/(?:[^/].*)?$"
           },
           "modelsPath": {
             "type": "string",
+            "maxLength": 2048,
             "pattern": "^/(?:[^/].*)?$"
           }
         },

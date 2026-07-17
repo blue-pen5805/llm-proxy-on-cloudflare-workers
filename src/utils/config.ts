@@ -1,4 +1,10 @@
+import { BUILT_IN_PROVIDER_NAME_SET } from "../providers/names";
 import { Environments } from "./environments";
+
+export const MAX_CUSTOM_OPENAI_ENDPOINTS = 16;
+export const MAX_PROXY_API_KEYS = 64;
+const MAX_CUSTOM_ENDPOINT_KEYS = 32;
+const MAX_CUSTOM_ENDPOINT_MODELS = 1000;
 
 function isStringArray(value: unknown): value is string[] {
   return (
@@ -24,10 +30,21 @@ function isSafeCustomEndpoint(value: unknown): value is CustomOpenAIEndpoint {
     return false;
   }
   const endpoint = value as Record<string, unknown>;
+  const allowedProperties = new Set([
+    "name",
+    "baseUrl",
+    "apiKeys",
+    "models",
+    "chatCompletionPath",
+    "modelsPath",
+  ]);
   if (
+    Object.keys(endpoint).some((key) => !allowedProperties.has(key)) ||
     typeof endpoint.name !== "string" ||
     !/^[A-Za-z0-9._~-]{1,128}$/.test(endpoint.name) ||
-    typeof endpoint.baseUrl !== "string"
+    BUILT_IN_PROVIDER_NAME_SET.has(endpoint.name) ||
+    typeof endpoint.baseUrl !== "string" ||
+    endpoint.baseUrl.length > 2048
   ) {
     return false;
   }
@@ -50,13 +67,23 @@ function isSafeCustomEndpoint(value: unknown): value is CustomOpenAIEndpoint {
   const validOptionalPath = (path: unknown): boolean =>
     path === undefined ||
     (typeof path === "string" &&
+      path.length <= 2048 &&
       path.startsWith("/") &&
       !path.startsWith("//"));
-  return (
-    (endpoint.apiKeys === undefined ||
-      typeof endpoint.apiKeys === "string" ||
-      isStringArray(endpoint.apiKeys)) &&
+  const validApiKeys =
+    endpoint.apiKeys === undefined ||
+    (typeof endpoint.apiKeys === "string" && endpoint.apiKeys.trim() !== "") ||
+    (isStringArray(endpoint.apiKeys) &&
+      endpoint.apiKeys.length <= MAX_CUSTOM_ENDPOINT_KEYS &&
+      endpoint.apiKeys.every((key) => key.trim() !== ""));
+  const validModels =
     isOptionalStringArray(endpoint.models) &&
+    (endpoint.models === undefined ||
+      (endpoint.models.length <= MAX_CUSTOM_ENDPOINT_MODELS &&
+        endpoint.models.every((model) => model.trim() !== "")));
+  return (
+    validApiKeys &&
+    validModels &&
     validOptionalPath(endpoint.chatCompletionPath) &&
     validOptionalPath(endpoint.modelsPath)
   );
@@ -76,6 +103,7 @@ export class Config {
     }
 
     if (isStringArray(apiKeys)) {
+      if (apiKeys.length > MAX_PROXY_API_KEYS) return undefined;
       return apiKeys.map((key) => key.trim()).filter(Boolean);
     }
     if (typeof apiKeys === "string") {
@@ -135,12 +163,16 @@ export class Config {
     }
 
     if (
-      Array.isArray(parsedEndpoints) &&
-      parsedEndpoints.every(isSafeCustomEndpoint)
+      !Array.isArray(parsedEndpoints) ||
+      parsedEndpoints.length > MAX_CUSTOM_OPENAI_ENDPOINTS ||
+      !parsedEndpoints.every(isSafeCustomEndpoint)
     ) {
-      return parsedEndpoints;
+      return undefined;
     }
 
-    return undefined;
+    const validatedEndpoints = parsedEndpoints as CustomOpenAIEndpoint[];
+    const endpointNames = validatedEndpoints.map((endpoint) => endpoint.name);
+    if (new Set(endpointNames).size !== endpointNames.length) return undefined;
+    return validatedEndpoints;
   }
 }

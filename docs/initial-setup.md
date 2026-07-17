@@ -88,7 +88,7 @@ curl https://your-worker.example/v1/models \
 ```
 
 `/ping` should return `Pong`. Review `/status` privately because it contains
-masked key suffixes and configuration metadata. `/v1/models` is best-effort and
+credential slot counts and configuration metadata. `/v1/models` is best-effort and
 may omit a provider that times out or does not support model listing.
 
 Next, read [HTTP API and routing](api.md). For named environments, key rotation,

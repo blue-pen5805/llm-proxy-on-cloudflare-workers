@@ -198,39 +198,17 @@ export function interpolateTemplate(
 }
 
 export function removeAuthorizationQueryParameters(pathname: string): string {
-  let cleanedPathname = pathname;
-
-  // Remove authorization query parameters using regex
-  AUTHORIZATION_QUERY_PARAMETERS.forEach((parameterName) => {
-    // Pattern to match: &key=value or ?key=value
-    const authorizationParameterPattern = new RegExp(
-      `[?&]${parameterName}=([^&]*)`,
-      "g",
-    );
-    cleanedPathname = cleanedPathname.replace(
-      authorizationParameterPattern,
-      (matchedParameter, _parameterValue, matchOffset, fullPath) => {
-        // If it's the first parameter (?key=value), replace with ? if there are other params
-        if (matchedParameter.startsWith("?")) {
-          // Find the next parameter after this one
-          const nextAmpersand = fullPath.indexOf(
-            "&",
-            matchOffset + matchedParameter.length,
-          );
-          if (nextAmpersand !== -1) {
-            return "?";
-          } else {
-            return "";
-          }
-        }
-        // If it's not the first parameter (&key=value), just remove it
-        return "";
-      },
-    );
-  });
-
-  // Clean up any invalid query string formats like ?&param=value
-  return cleanedPathname.replace(/\?\&/, "?");
+  const parsedPath = new URL(pathname, "https://proxy.invalid");
+  const sensitiveNames = new Set(
+    AUTHORIZATION_QUERY_PARAMETERS.map((name) => name.toLowerCase()),
+  );
+  for (const parameterName of [...parsedPath.searchParams.keys()]) {
+    if (sensitiveNames.has(parameterName.toLowerCase())) {
+      parsedPath.searchParams.delete(parameterName);
+    }
+  }
+  parsedPath.search = parsedPath.searchParams.toString();
+  return `${parsedPath.pathname}${parsedPath.search}${parsedPath.hash}`;
 }
 
 /**

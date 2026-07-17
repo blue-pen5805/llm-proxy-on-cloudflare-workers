@@ -8,7 +8,9 @@ export async function handleAiGatewayRestRequest(
   path: CloudflareAIGatewayRestApiPath,
   aiGateway: CloudflareAIGateway,
 ): Promise<Response> {
-  const sanitizedHeaders = stripProxyAuthorizationHeaders(request.headers);
+  const sanitizedHeaders = stripProxyAuthorizationHeaders(request.headers, {
+    preserveAiGatewayHeaders: true,
+  });
   const [requestInfo, requestInit] = aiGateway.buildRestApiRequest({
     path,
     headers: sanitizedHeaders,

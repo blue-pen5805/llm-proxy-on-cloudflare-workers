@@ -96,4 +96,22 @@ describe("aiGatewayMiddleware", () => {
     expect(context.aiGateway).toBeUndefined();
     expect(next).toHaveBeenCalled();
   });
+
+  it.each(["../escape", "%2Fescape", "bad%ZZname"])(
+    "rejects an unsafe Gateway path segment: %s",
+    async (gatewayName) => {
+      vi.spyOn(Config, "aiGateway").mockReturnValue({
+        accountId: "test-account",
+        name: "default-gateway",
+        token: "test-token",
+        restApiToken: "rest-token",
+      });
+      context.pathname = `/g/${gatewayName}/v1/models`;
+
+      await expect(aiGatewayMiddleware(context, next)).rejects.toThrow(
+        "Invalid AI Gateway name",
+      );
+      expect(next).not.toHaveBeenCalled();
+    },
+  );
 });

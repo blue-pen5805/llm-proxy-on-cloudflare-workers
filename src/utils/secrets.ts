@@ -45,7 +45,11 @@ export class Secrets {
    */
   static get(keyName: keyof Env, apiKeyIndex: number = 0): string {
     const allKeys = this.getAll(keyName);
-    if (allKeys.length === 0) {
+    if (
+      allKeys.length === 0 ||
+      !Number.isSafeInteger(apiKeyIndex) ||
+      apiKeyIndex < 0
+    ) {
       return "";
     }
     return allKeys[apiKeyIndex % allKeys.length];
@@ -99,17 +103,29 @@ export class Secrets {
     selection: number | { start?: number; end?: number },
     length: number,
   ): number {
-    if (length <= 1) return 0;
+    if (!Number.isSafeInteger(length) || length <= 1) return 0;
 
     if (typeof selection === "number") {
-      return selection % length;
+      return Number.isSafeInteger(selection) && selection >= 0
+        ? selection % length
+        : 0;
     }
 
-    const start = (selection.start ?? 0) % length;
+    const safeStart =
+      selection.start !== undefined &&
+      Number.isSafeInteger(selection.start) &&
+      selection.start >= 0
+        ? selection.start
+        : 0;
+    const safeEnd =
+      selection.end !== undefined &&
+      Number.isSafeInteger(selection.end) &&
+      selection.end >= 0
+        ? selection.end
+        : undefined;
+    const start = safeStart % length;
     const end =
-      selection.end === undefined
-        ? length - 1
-        : Math.min(selection.end, length - 1);
+      safeEnd === undefined ? length - 1 : Math.min(safeEnd, length - 1);
 
     if (start >= end) {
       return start;

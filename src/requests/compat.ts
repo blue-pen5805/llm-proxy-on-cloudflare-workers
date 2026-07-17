@@ -6,7 +6,9 @@ export async function handleCompatibilityRequest(
   request: Request,
   aiGateway: CloudflareAIGateway,
 ) {
-  const strippedHeaders = stripProxyAuthorizationHeaders(request.headers);
+  const strippedHeaders = stripProxyAuthorizationHeaders(request.headers, {
+    preserveAiGatewayHeaders: true,
+  });
 
   const sanitizedHeaders = Object.fromEntries(strippedHeaders.entries());
 

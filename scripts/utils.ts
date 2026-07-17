@@ -6,7 +6,12 @@ export function getErrorMessage(error: unknown): string {
 export interface FileSystemOperations {
   existsSync: (filePath: string) => boolean;
   readFileSync: (filePath: string, encoding: BufferEncoding) => string;
-  writeFileSync: (filePath: string, fileContent: string) => void;
+  writeFileSync: (
+    filePath: string,
+    fileContent: string,
+    options?: { mode?: number },
+  ) => void;
+  chmodSync?: (filePath: string, mode: number) => void;
 }
 
 export interface OperationResult {

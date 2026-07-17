@@ -30,6 +30,16 @@ describe("WorkersAi Provider", () => {
         `https://api.cloudflare.com/client/v4/accounts/${testAccountId}/ai`,
       );
     });
+
+    it("rejects an unsafe Cloudflare account identifier", () => {
+      vi.mocked(Secrets.Secrets.get).mockImplementation((key: any) =>
+        key === "CLOUDFLARE_ACCOUNT_ID" ? "../other-account" : testApiKey,
+      );
+      const provider = new WorkersAi();
+
+      expect(provider.configurationError()).toContain("invalid");
+      expect(() => provider.baseUrl()).toThrow("missing or invalid");
+    });
   });
 
   describe("available", () => {

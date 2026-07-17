@@ -30,6 +30,17 @@ describe("parseJsonOrReturnText", () => {
 });
 
 describe("bounded body parsing", () => {
+  it("rejects an invalid declared Content-Length", async () => {
+    const request = new Request("https://example.com", {
+      method: "POST",
+      body: "{}",
+      headers: { "content-length": "invalid" },
+    });
+    await expect(readRequestText(request)).rejects.toBeInstanceOf(
+      BadRequestError,
+    );
+  });
+
   it("rejects an oversized declared request body before reading it", async () => {
     const request = new Request("https://example.com", {
       method: "POST",
@@ -255,10 +266,17 @@ describe("removeAuthorizationQueryParameters", () => {
   });
 
   it("should remove authorization query parameters (multiple auth params)", () => {
-    // Current only "key" is in AUTHORIZATION_QUERY_PARAMETERS, but test the logic
     const pathname = "/v1/chat/completions?key=val&other=123&key=val2";
     const result = removeAuthorizationQueryParameters(pathname);
     expect(result).toBe("/v1/chat/completions?other=123");
+  });
+
+  it("removes case-variant, encoded, and alternate credential parameters", () => {
+    const pathname =
+      "/v1/chat/completions?%6bey=one&API_KEY=two&access_token=three&model=gpt-4";
+    expect(removeAuthorizationQueryParameters(pathname)).toBe(
+      "/v1/chat/completions?model=gpt-4",
+    );
   });
 
   it("should clean up invalid query string formats like ?&", () => {

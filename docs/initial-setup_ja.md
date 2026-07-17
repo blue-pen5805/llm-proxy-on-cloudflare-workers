@@ -83,7 +83,7 @@ curl https://your-worker.example/v1/models \
   --header "Authorization: Bearer $PROXY_API_KEY"
 ```
 
-`/ping` は `Pong` を返します。`/status` にはマスクされたキー末尾と設定メタデータが
+`/ping` は `Pong` を返します。`/status` には認証情報スロット数と設定メタデータが
 含まれるため、出力は非公開で確認してください。`/v1/models` はベストエフォートであり、
 タイムアウトや一覧取得非対応のプロバイダーは省略されます。
 

@@ -1,3 +1,4 @@
+import { isSafeCloudflareAccountId } from "../../ai_gateway/utils";
 import { Secrets } from "../../utils/secrets";
 import { OpenAIModelsListResponseBody } from "../openai/types";
 import { defineProvider, Provider, ProviderConstructor } from "../provider";
@@ -20,7 +21,16 @@ export const WorkersAi = defineProvider({
 
   baseUrl() {
     const accountId = Secrets.get((this as WorkersAi).accountIdName);
-    return `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai`;
+    if (!isSafeCloudflareAccountId(accountId)) {
+      throw new Error("CLOUDFLARE_ACCOUNT_ID is missing or invalid.");
+    }
+    return `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai`;
+  },
+  configurationError() {
+    const accountId = Secrets.get((this as WorkersAi).accountIdName);
+    return accountId && !isSafeCloudflareAccountId(accountId)
+      ? "CLOUDFLARE_ACCOUNT_ID is invalid."
+      : undefined;
   },
 
   async headers(apiKeyIndex): Promise<HeadersInit> {

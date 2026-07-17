@@ -104,7 +104,7 @@ select a Gateway other than the configured or implicit `default` Gateway.
 
 `GET /v1/models` returns a best-effort aggregate of configured providers.
 `GET /status` checks configured credentials but exposes configuration metadata
-and masked key suffixes, so keep its output private.
+and credential slot counts, so keep its output private.
 
 ## Documentation
 
@@ -114,3 +114,4 @@ and masked key suffixes, so keep its output private.
 - [Operations and troubleshooting](docs/operations.md)
 - [Development and verification](docs/development.md)
 - [Architecture and design](docs/design/overview.md)
+- [Second-pass adversarial review](docs/adversarial-review-round-2.md)

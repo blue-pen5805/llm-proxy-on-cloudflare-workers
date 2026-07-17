@@ -12,18 +12,15 @@ Each `CUSTOM_OPENAI_ENDPOINTS` entry requires a unique `name` and `baseUrl` and
 may define `apiKeys`, a static `models` array, `chatCompletionPath`, and
 `modelsPath`. The default paths are `/chat/completions` and `/models`.
 
-Configuration is trusted operator input. The implementation does not currently
-reject duplicate names, built-in name collisions, non-HTTPS origins, or malformed
-path combinations. Documentation and deployment review therefore carry those
-validation responsibilities.
+Configuration remains trusted operator input, but schema and runtime validation
+reject non-HTTPS origins, malformed paths, duplicate names, and built-in route
+collisions. At most 16 endpoints are accepted, with per-endpoint limits of 32
+keys and 1,000 static model IDs.
 
 ## Resolution and routing
 
-`getProviderByName` resolves built-in providers before custom endpoints, so a
-custom name cannot override a built-in route. `getAllProviderInstances` then
-adds custom entries to the provider map; a colliding custom name can replace the
-built-in instance in aggregate operations. Names must therefore be unique across
-both sets.
+The validated name index gives routing, aggregation, and status one consistent
+provider instance. Invalid duplicate or reserved names are not loaded.
 
 Once resolved, the endpoint supports:
 

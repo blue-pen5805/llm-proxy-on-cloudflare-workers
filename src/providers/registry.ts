@@ -33,14 +33,19 @@ export class ProviderRegistry {
     customEndpoints: readonly CustomOpenAIEndpointConfig[] = [],
   ) {
     this.customEndpoints = [...customEndpoints];
+    const configuredNames = new Set(Object.keys(this.builtIns));
     const firstCustomEndpointByName = new Map<
       string,
       CustomOpenAIEndpointConfig
     >();
     for (const endpoint of this.customEndpoints) {
-      if (!firstCustomEndpointByName.has(endpoint.name)) {
-        firstCustomEndpointByName.set(endpoint.name, endpoint);
+      if (configuredNames.has(endpoint.name)) {
+        throw new Error(
+          `Custom endpoint name is duplicated or reserved: ${endpoint.name}`,
+        );
       }
+      configuredNames.add(endpoint.name);
+      firstCustomEndpointByName.set(endpoint.name, endpoint);
     }
     this.firstCustomEndpointByName = firstCustomEndpointByName;
     this.providerNames = [

@@ -6,6 +6,7 @@ import {
   runGenerateDevVarsCli,
   parseGenerateDevVarsArguments,
   parseJsonc,
+  quoteEnvironmentValueForDotenv,
   showHelp,
   validateEnvironmentName,
   serializeEnvironmentValue,
@@ -24,6 +25,7 @@ const createMockFileSystem = (files: Record<string, string> = {}) => {
       throw new Error(`File not found: ${path}`);
     }),
     writeFileSync: vi.fn(),
+    chmodSync: vi.fn(),
   };
   return mockFs;
 };
@@ -219,9 +221,9 @@ describe("convertConfigToDevVars", () => {
 
     expect(result).toContain("# Environment Variables");
     expect(result).toContain("# Generated from config.jsonc");
-    expect(result).toContain("API_KEY=test-key");
-    expect(result).toContain("DEBUG=true");
-    expect(result).toContain("PORT=3000");
+    expect(result).toContain("API_KEY='test-key'");
+    expect(result).toContain("DEBUG='true'");
+    expect(result).toContain("PORT='3000'");
   });
 
   it("should skip $schema field", () => {
@@ -232,7 +234,7 @@ describe("convertConfigToDevVars", () => {
     const result = convertConfigToDevVars(config);
 
     expect(result).not.toContain("$schema");
-    expect(result).toContain("API_KEY=test-key");
+    expect(result).toContain("API_KEY='test-key'");
   });
 
   it("should handle arrays", () => {
@@ -241,7 +243,7 @@ describe("convertConfigToDevVars", () => {
     };
     const result = convertConfigToDevVars(config);
 
-    expect(result).toContain('FEATURES=["feature1","feature2"]');
+    expect(result).toContain(`FEATURES='["feature1","feature2"]'`);
   });
 
   it("should handle null values", () => {
@@ -250,7 +252,7 @@ describe("convertConfigToDevVars", () => {
     };
     const result = convertConfigToDevVars(config);
 
-    expect(result).toContain("OPTIONAL_KEY=");
+    expect(result).toContain("OPTIONAL_KEY=''");
   });
 
   it("should add environment-specific header", () => {
@@ -268,6 +270,61 @@ describe("convertConfigToDevVars", () => {
     expect(result).toContain("# Environment Variables");
     expect(result).not.toContain("# Environment Variables (");
     expect(result).toContain("# Generated from config.jsonc");
+  });
+
+  it("escapes newlines so values cannot inject additional variables", () => {
+    const result = convertConfigToDevVars({
+      API_KEY: "safe\nDEV=true",
+    });
+
+    expect(result).toContain('API_KEY="safe\\nDEV=true"');
+    expect(result).not.toContain("\nDEV=true\n");
+  });
+});
+
+describe("quoteEnvironmentValueForDotenv", () => {
+  // This mirrors the relevant behavior of the dotenv parser bundled with
+  // Wrangler: surrounding quotes are removed, but escaped double quotes are
+  // not JSON-decoded.
+  function parseWranglerDotenvValue(serializedValue: string): string {
+    const quote = serializedValue[0];
+    let parsed =
+      quote && quote === serializedValue.at(-1)
+        ? serializedValue.slice(1, -1)
+        : serializedValue;
+    if (quote === '"') {
+      parsed = parsed.replace(/\\n/g, "\n").replace(/\\r/g, "\r");
+    }
+    return parsed;
+  }
+
+  it("round-trips JSON arrays without leaving escaped quotes in API keys", () => {
+    const value = '["first-key","second-key"]';
+    const serialized = quoteEnvironmentValueForDotenv(value);
+
+    expect(serialized).toBe(`'["first-key","second-key"]'`);
+    expect(parseWranglerDotenvValue(serialized)).toBe(value);
+    expect(JSON.parse(parseWranglerDotenvValue(serialized))).toEqual([
+      "first-key",
+      "second-key",
+    ]);
+  });
+
+  it("uses backticks when a value contains a single quote", () => {
+    const value = "key-with-'quote";
+    const serialized = quoteEnvironmentValueForDotenv(value);
+
+    expect(serialized).toBe("`key-with-'quote`");
+    expect(parseWranglerDotenvValue(serialized)).toBe(value);
+  });
+
+  it("round-trips embedded newlines without creating a new variable line", () => {
+    const value = "safe\nDEV=true";
+    const serialized = quoteEnvironmentValueForDotenv(value);
+
+    expect(serialized).toBe('"safe\\nDEV=true"');
+    expect(serialized).not.toContain("\nDEV=true");
+    expect(parseWranglerDotenvValue(serialized)).toBe(value);
   });
 });
 
@@ -353,8 +410,10 @@ describe("generateSingleDevVarsFile", () => {
     );
     expect(mockFs.writeFileSync).toHaveBeenCalledWith(
       "/test/.dev.vars",
-      expect.stringContaining("API_KEY=test-key"),
+      expect.stringContaining("API_KEY='test-key'"),
+      { mode: 0o600 },
     );
+    expect(mockFs.chmodSync).toHaveBeenCalledWith("/test/.dev.vars", 0o600);
   });
 
   it("should generate example file with env=example", () => {
@@ -375,7 +434,8 @@ describe("generateSingleDevVarsFile", () => {
     );
     expect(mockFs.writeFileSync).toHaveBeenCalledWith(
       "/test/.dev.vars.example",
-      expect.stringContaining("API_KEY=YOUR-API-KEY"),
+      expect.stringContaining("API_KEY='YOUR-API-KEY'"),
+      { mode: 0o600 },
     );
   });
 

@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchCompatibilityFallback } from "~/src/requests/compatibility_fallback";
+import {
+  fetchCompatibilityFallback,
+  MAX_COMPATIBILITY_FALLBACK_ATTEMPTS,
+} from "~/src/requests/compatibility_fallback";
 import * as helpers from "~/src/utils/helpers";
 
 vi.mock("~/src/utils/helpers");
@@ -74,6 +77,45 @@ describe("fetchCompatibilityFallback", () => {
 
     await expect(fetchCompatibilityFallback(requests)).resolves.toBe(
       finalResponse,
+    );
+  });
+
+  it("does not retry deterministic client errors with another credential", async () => {
+    const invalidRequest = new Response("invalid", { status: 400 });
+    vi.mocked(helpers.fetchWithLogging).mockResolvedValue(invalidRequest);
+
+    await expect(fetchCompatibilityFallback(requests)).resolves.toBe(
+      invalidRequest,
+    );
+    expect(helpers.fetchWithLogging).toHaveBeenCalledOnce();
+  });
+
+  it("cancels a retryable response before returning a deterministic error", async () => {
+    const retryable = new Response("unauthorized", { status: 401 });
+    const cancel = vi.spyOn(retryable.body!, "cancel");
+    const deterministic = new Response("invalid", { status: 400 });
+    vi.mocked(helpers.fetchWithLogging)
+      .mockResolvedValueOnce(retryable)
+      .mockResolvedValueOnce(deterministic);
+
+    await expect(fetchCompatibilityFallback(requests)).resolves.toBe(
+      deterministic,
+    );
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it("caps credential fallback attempts", async () => {
+    const manyRequests = Array.from(
+      { length: MAX_COMPATIBILITY_FALLBACK_ATTEMPTS + 3 },
+      () => requests[0],
+    );
+    vi.mocked(helpers.fetchWithLogging).mockImplementation(
+      async () => new Response("rate limited", { status: 429 }),
+    );
+
+    await fetchCompatibilityFallback(manyRequests);
+    expect(helpers.fetchWithLogging).toHaveBeenCalledTimes(
+      MAX_COMPATIBILITY_FALLBACK_ATTEMPTS,
     );
   });
 

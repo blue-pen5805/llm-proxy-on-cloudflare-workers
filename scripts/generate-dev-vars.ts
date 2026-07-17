@@ -106,6 +106,46 @@ export function serializeEnvironmentValue(value: unknown): string {
 }
 
 /**
+ * Quote a value so Wrangler's dotenv parser returns it byte-for-byte.
+ *
+ * In particular, double-quoted dotenv values do not JSON-unescape `\"`.
+ * Using JSON.stringify() around JSON arrays therefore leaves backslashes in
+ * API keys at runtime. Single quotes (or backticks when needed) preserve JSON
+ * strings without adding those escapes.
+ */
+export function quoteEnvironmentValueForDotenv(value: string): string {
+  // Keep physical newlines out of the generated file when double quotes can
+  // represent them without changing an existing literal "\\n"/"\\r".
+  if (/[\r\n]/.test(value) && !value.includes('"') && !/\\[nr]/.test(value)) {
+    return `"${value.replace(/\r/g, "\\r").replace(/\n/g, "\\n")}"`;
+  }
+
+  if (!value.includes("'")) {
+    return `'${value}'`;
+  }
+  if (!value.includes("`")) {
+    return `\`${value}\``;
+  }
+
+  // An unquoted dotenv value is exact only when comment parsing and trimming
+  // cannot alter it.
+  if (value === value.trim() && !/[#\r\n]/.test(value)) {
+    return value;
+  }
+
+  // Double quotes are the final quoted form. Wrangler translates literal
+  // "\\n" and "\\r" sequences in this form, so reject values that would be
+  // silently changed.
+  if (!value.includes('"') && !/\\[nr]/.test(value)) {
+    return `"${value}"`;
+  }
+
+  throw new Error(
+    "Environment value cannot be represented losslessly in dotenv format.",
+  );
+}
+
+/**
  * Convert JSON config to .dev.vars format
  */
 export function convertConfigToDevVars(
@@ -128,7 +168,9 @@ export function convertConfigToDevVars(
     if (key === "$schema") continue;
 
     const environmentValue = serializeEnvironmentValue(value);
-    outputLines.push(`${key}=${environmentValue}`);
+    outputLines.push(
+      `${key}=${quoteEnvironmentValueForDotenv(environmentValue)}`,
+    );
   }
 
   return outputLines.join("\n") + "\n";
@@ -162,7 +204,8 @@ export function generateSingleDevVarsFile(
       environmentName,
     );
 
-    fileSystem.writeFileSync(devVarsPath, generatedDevVars);
+    fileSystem.writeFileSync(devVarsPath, generatedDevVars, { mode: 0o600 });
+    fileSystem.chmodSync?.(devVarsPath, 0o600);
 
     return {
       success: true,
