@@ -7,9 +7,11 @@ import { Grok } from "~/src/providers/grok/provider";
 import { Groq } from "~/src/providers/groq/provider";
 import { HuggingFace } from "~/src/providers/huggingface/provider";
 import { Mistral } from "~/src/providers/mistral/provider";
+import { OpenAI } from "~/src/providers/openai/provider";
 import { OpenRouter } from "~/src/providers/openrouter/provider";
 import { PerplexityAi } from "~/src/providers/perplexity-ai/provider";
 import {
+  createProvider,
   OpenAICompatibleProvider,
   ProviderBase,
   ProviderNotSupportedError,
@@ -58,17 +60,15 @@ describe("provider contracts", () => {
     });
 
     it("rotates configured credentials and merges request headers", async () => {
-      class TestProvider extends ProviderBase {
-        readonly apiKeyName: keyof Env = "OPENAI_API_KEY";
-        readonly baseUrlProp = "https://api.example.test";
-        readonly pathnamePrefixProp = "/v1";
-
-        async headers(index?: number): Promise<HeadersInit> {
+      const provider = createProvider({
+        apiKeyName: "OPENAI_API_KEY",
+        baseUrl: "https://api.example.test",
+        pathnamePrefix: "/v1",
+        async headers(index): Promise<HeadersInit> {
           return { Authorization: `Bearer key-${index ?? 0}` };
-        }
-      }
+        },
+      });
 
-      const provider = new TestProvider();
       expect(provider.available()).toBe(true);
       expect(provider.getApiKeys()).toEqual(["key-0", "key-1"]);
       expect(provider.getAiGatewayApiKeys()).toEqual(["key-0", "key-1"]);
@@ -95,23 +95,21 @@ describe("provider contracts", () => {
     });
 
     it("does not rotate a single configured credential", async () => {
-      class TestProvider extends ProviderBase {
-        readonly apiKeyName: keyof Env = "OPENAI_API_KEY";
-      }
       vi.mocked(Secrets.getAll).mockReturnValue(["only-key"]);
 
-      expect(await new TestProvider().getNextApiKeyIndex()).toBe(0);
+      const provider = createProvider({ apiKeyName: "OPENAI_API_KEY" });
+      expect(await provider.getNextApiKeyIndex()).toBe(0);
       expect(Secrets.getNext).not.toHaveBeenCalled();
     });
 
     it("falls back safely when a key source has no binding name", async () => {
-      class ExternalKeyProvider extends ProviderBase {
+      const provider = createProvider({
         getApiKeys(): string[] {
           return ["first", "second"];
-        }
-      }
+        },
+      });
 
-      expect(await new ExternalKeyProvider().getNextApiKeyIndex()).toBe(0);
+      expect(await provider.getNextApiKeyIndex()).toBe(0);
     });
 
     it("builds filtered OpenAI-compatible requests", async () => {
@@ -189,6 +187,14 @@ describe("provider contracts", () => {
   });
 
   describe("OpenAI-compatible credentials", () => {
+    it("preserves the existing base and OpenAI-compatible instance contracts", () => {
+      const provider = new OpenAI();
+
+      expect(provider).toBeInstanceOf(ProviderBase);
+      expect(provider).toBeInstanceOf(OpenAICompatibleProvider);
+      expect(provider).toBeInstanceOf(OpenAI);
+    });
+
     it("omits authorization when no API key exists", async () => {
       vi.mocked(Secrets.getAll).mockReturnValue([]);
       expect(await new OpenAICompatibleProvider().headers()).toEqual({});

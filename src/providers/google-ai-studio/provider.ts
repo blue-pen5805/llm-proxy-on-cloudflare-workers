@@ -4,44 +4,39 @@ import {
   OpenAIChatCompletionsRequestBody,
   OpenAIModelsListResponseBody,
 } from "../openai/types";
-import { ProviderBase } from "../provider";
+import { defineProvider, type Provider } from "../provider";
 import { GoogleAiStudioModelsListResponseBody } from "./types";
 
-export class GoogleAiStudio extends ProviderBase {
-  get chatCompletionPath(): string {
-    return "/v1beta/openai/chat/completions";
-  }
-  get modelsPath(): string {
-    return "/v1beta/models";
-  }
+export type GoogleAiStudio = Provider;
 
-  readonly apiKeyName: keyof Env = "GEMINI_API_KEY";
-  readonly baseUrlProp: string = "https://generativelanguage.googleapis.com";
+export const GoogleAiStudio = defineProvider({
+  apiKeyName: "GEMINI_API_KEY",
+  baseUrl: "https://generativelanguage.googleapis.com",
+  chatCompletionPath: "/v1beta/openai/chat/completions",
+  modelsPath: "/v1beta/models",
+  chatCompletionSupportedParameters: [
+    "messages",
+    "model",
+    "max_tokens",
+    "max_completion_tokens",
+    "n",
+    "response_format",
+    "stop",
+    "stream",
+    "stream_options",
+    "temperature",
+    "top_p",
+    "tools",
+    "tool_choice",
+  ] satisfies (keyof OpenAIChatCompletionsRequestBody)[],
 
-  readonly CHAT_COMPLETIONS_SUPPORTED_PARAMETERS: (keyof OpenAIChatCompletionsRequestBody)[] =
-    [
-      "messages",
-      "model",
-      "max_tokens",
-      "max_completion_tokens",
-      "n",
-      "response_format",
-      "stop",
-      "stream",
-      "stream_options",
-      "temperature",
-      "top_p",
-      "tools",
-      "tool_choice",
-    ];
-
-  async headers(apiKeyIndex?: number): Promise<HeadersInit> {
-    const apiKey = Secrets.get(this.apiKeyName, apiKeyIndex);
+  async headers(apiKeyIndex): Promise<HeadersInit> {
+    const apiKey = Secrets.get("GEMINI_API_KEY", apiKeyIndex);
     return {
       "Content-Type": "application/json",
       "x-goog-api-key": apiKey,
     };
-  }
+  },
 
   async fetch(
     pathname: string,
@@ -49,7 +44,7 @@ export class GoogleAiStudio extends ProviderBase {
     apiKeyIndex?: number,
   ): ReturnType<typeof fetch> {
     if (pathname.startsWith("/v1beta/openai")) {
-      const apiKey = Secrets.get(this.apiKeyName, apiKeyIndex);
+      const apiKey = Secrets.get("GEMINI_API_KEY", apiKeyIndex);
 
       const newHeaders: Record<string, string> = {
         "Content-Type": "application/json",
@@ -63,17 +58,16 @@ export class GoogleAiStudio extends ProviderBase {
         headers: newHeaders,
       });
     } else {
-      return super.fetch(pathname, init, apiKeyIndex);
+      return fetch2(...(await this.buildRequest(pathname, init, apiKeyIndex)));
     }
-  }
+  },
 
   // Convert model list to OpenAI format
-  modelsToOpenAIFormat(
-    data: GoogleAiStudioModelsListResponseBody,
-  ): OpenAIModelsListResponseBody {
+  modelsToOpenAIFormat(data): OpenAIModelsListResponseBody {
+    const response = data as GoogleAiStudioModelsListResponseBody;
     return {
       object: "list",
-      data: data.models.map(({ name, ...model }) => ({
+      data: response.models.map(({ name, ...model }) => ({
         id: `${name.replace("models/", "")}`,
         object: "model",
         created: 0,
@@ -81,5 +75,5 @@ export class GoogleAiStudio extends ProviderBase {
         _: model,
       })),
     };
-  }
-}
+  },
+});

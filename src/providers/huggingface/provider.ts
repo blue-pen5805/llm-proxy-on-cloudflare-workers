@@ -1,16 +1,16 @@
-import { ProviderBase, ProviderNotSupportedError } from "../provider";
+import {
+  defineProvider,
+  ProviderNotSupportedError,
+  type Provider,
+} from "../provider";
 
-export class HuggingFace extends ProviderBase {
-  get chatCompletionPath(): string {
-    return "";
-  }
-  get modelsPath(): string {
-    return "";
-  }
+export type HuggingFace = Provider;
 
-  readonly apiKeyName: keyof Env = "HUGGINGFACE_API_KEY";
-  readonly baseUrlProp: string = "https://api-inference.huggingface.co/models";
-
+export const HuggingFace = defineProvider({
+  apiKeyName: "HUGGINGFACE_API_KEY",
+  baseUrl: "https://api-inference.huggingface.co/models",
+  chatCompletionPath: "",
+  modelsPath: "",
   async buildChatCompletionsRequest({
     body, // eslint-disable-line @typescript-eslint/no-unused-vars
     headers, // eslint-disable-line @typescript-eslint/no-unused-vars
@@ -21,11 +21,11 @@ export class HuggingFace extends ProviderBase {
     throw new ProviderNotSupportedError(
       "HuggingFace does not support chat completions",
     );
-  }
+  },
 
   async buildModelsRequest(): Promise<[string, RequestInit]> {
     throw new ProviderNotSupportedError(
       "HuggingFace does not support models list via this proxy.",
     );
-  }
-}
+  },
+});

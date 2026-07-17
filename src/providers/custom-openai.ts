@@ -1,6 +1,6 @@
 import { Secrets } from "../utils/secrets";
 import { OpenAIModelsListResponseBody } from "./openai/types";
-import { OpenAICompatibleProvider } from "./provider";
+import { defineProvider, Provider, ProviderConstructor } from "./provider";
 
 export interface CustomOpenAIEndpointConfig {
   name: string;
@@ -11,68 +11,51 @@ export interface CustomOpenAIEndpointConfig {
   modelsPath?: string;
 }
 
-export class CustomOpenAI extends OpenAICompatibleProvider {
-  readonly name: string;
+export type CustomOpenAI = Provider & { readonly name: string };
 
-  constructor(private config: CustomOpenAIEndpointConfig) {
-    super();
-    this.name = config.name;
-  }
+export const CustomOpenAI = defineProvider<[CustomOpenAIEndpointConfig]>(
+  (config) => ({
+    properties: { name: config.name },
+    baseUrl: config.baseUrl,
+    chatCompletionPath: config.chatCompletionPath ?? "/chat/completions",
+    modelsPath: config.modelsPath ?? "/models",
 
-  get chatCompletionPath(): string {
-    return this.config.chatCompletionPath ?? super.chatCompletionPath;
-  }
+    async getNextApiKeyIndex(): Promise<number> {
+      const keys = this.getApiKeys();
+      return keys.length <= 1
+        ? 0
+        : Secrets.getNextIndex(config.name, keys.length);
+    },
 
-  get modelsPath(): string {
-    return this.config.modelsPath ?? super.modelsPath;
-  }
+    async headers(apiKeyIndex): Promise<HeadersInit> {
+      const keys = this.getApiKeys();
+      if (keys.length === 0) return { "Content-Type": "application/json" };
+      const index = apiKeyIndex !== undefined ? apiKeyIndex % keys.length : 0;
+      return {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${keys[index]}`,
+      };
+    },
 
-  baseUrl(): string {
-    return this.config.baseUrl;
-  }
+    // Custom endpoints are available by definition.
+    available: () => true,
 
-  async getNextApiKeyIndex(): Promise<number> {
-    const keys = this.getApiKeys();
-    if (keys.length <= 1) {
-      return 0;
-    }
+    staticModels(): OpenAIModelsListResponseBody | undefined {
+      if (!config.models || config.models.length === 0) return undefined;
+      return {
+        object: "list",
+        data: config.models.map((modelId) => ({
+          id: modelId,
+          object: "model",
+          created: Math.floor(Date.now() / 1000),
+          owned_by: config.name,
+        })),
+      };
+    },
 
-    return Secrets.getNextIndex(this.name, keys.length);
-  }
-
-  async headers(apiKeyIndex?: number): Promise<HeadersInit> {
-    return {
-      "Content-Type": "application/json",
-      ...(await super.headers(apiKeyIndex)),
-    };
-  }
-
-  available(): boolean {
-    // Custom endpoints are considered available if they are defined in config
-    return true;
-  }
-
-  staticModels(): OpenAIModelsListResponseBody | undefined {
-    if (!this.config.models || this.config.models.length === 0) {
-      return undefined;
-    }
-
-    return {
-      object: "list",
-      data: this.config.models.map((modelId) => ({
-        id: modelId,
-        object: "model",
-        created: Math.floor(Date.now() / 1000),
-        owned_by: this.name,
-      })),
-    };
-  }
-
-  getApiKeys(): string[] {
-    const apiKeys = this.config.apiKeys;
-    if (!apiKeys) {
-      return [];
-    }
-    return Array.isArray(apiKeys) ? apiKeys : [apiKeys];
-  }
-}
+    getApiKeys(): string[] {
+      if (!config.apiKeys) return [];
+      return Array.isArray(config.apiKeys) ? config.apiKeys : [config.apiKeys];
+    },
+  }),
+) as ProviderConstructor<[CustomOpenAIEndpointConfig], CustomOpenAI>;

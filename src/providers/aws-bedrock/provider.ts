@@ -1,26 +1,27 @@
 import { Secrets } from "../../utils/secrets";
-import { OpenAICompatibleProvider } from "../provider";
+import { defineProvider, Provider, ProviderConstructor } from "../provider";
 
 const REGION_PATTERN = /^[a-z]{2}(?:-gov)?-[a-z]+-\d$/;
 
-export class AwsBedrock extends OpenAICompatibleProvider {
-  readonly apiKeyName: keyof Env = "AWS_BEARER_TOKEN_BEDROCK";
-  readonly regionName: keyof Env = "AWS_BEDROCK_REGION";
-  readonly pathnamePrefixProp = "/v1";
+export type AwsBedrock = Provider & { readonly regionName: keyof Env };
 
-  baseUrl(): string {
-    return `https://bedrock-runtime.${this.region()}.amazonaws.com`;
+function region(provider: AwsBedrock): string {
+  const value = Secrets.get(provider.regionName);
+  if (!REGION_PATTERN.test(value)) {
+    throw new Error("AWS_BEDROCK_REGION is missing or invalid.");
   }
-
-  aiGatewayPath(pathname: string): string {
-    return `/bedrock-runtime/${encodeURIComponent(this.region())}/${pathname.replace(/^\/+/, "")}`;
-  }
-
-  private region(): string {
-    const region = Secrets.get(this.regionName);
-    if (!REGION_PATTERN.test(region)) {
-      throw new Error("AWS_BEDROCK_REGION is missing or invalid.");
-    }
-    return region;
-  }
+  return value;
 }
+
+export const AwsBedrock = defineProvider({
+  properties: { regionName: "AWS_BEDROCK_REGION" as keyof Env },
+  openAICompatible: true,
+  apiKeyName: "AWS_BEARER_TOKEN_BEDROCK",
+  pathnamePrefix: "/v1",
+  baseUrl() {
+    return `https://bedrock-runtime.${region(this as AwsBedrock)}.amazonaws.com`;
+  },
+  aiGatewayPath(pathname: string): string {
+    return `/bedrock-runtime/${encodeURIComponent(region(this as AwsBedrock))}/${pathname.replace(/^\/+/, "")}`;
+  },
+}) as ProviderConstructor<[], AwsBedrock>;

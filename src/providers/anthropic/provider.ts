@@ -1,35 +1,30 @@
 import { Secrets } from "../../utils/secrets";
 import { OpenAIModelsListResponseBody } from "../openai/types";
-import { ProviderBase } from "../provider";
+import { defineProvider, type Provider } from "../provider";
 import { AnthropicModelsListResponseBody } from "./types";
 
-export class Anthropic extends ProviderBase {
-  get chatCompletionPath(): string {
-    return "/v1/chat/completions";
-  }
-  get modelsPath(): string {
-    return "/v1/models";
-  }
+export type Anthropic = Provider;
 
-  readonly apiKeyName: keyof Env = "ANTHROPIC_API_KEY";
-  readonly baseUrlProp: string = "https://api.anthropic.com";
-
-  async headers(apiKeyIndex?: number): Promise<HeadersInit> {
-    const apiKey = Secrets.get(this.apiKeyName, apiKeyIndex);
+export const Anthropic = defineProvider({
+  apiKeyName: "ANTHROPIC_API_KEY",
+  baseUrl: "https://api.anthropic.com",
+  chatCompletionPath: "/v1/chat/completions",
+  modelsPath: "/v1/models",
+  async headers(apiKeyIndex): Promise<HeadersInit> {
+    const apiKey = Secrets.get("ANTHROPIC_API_KEY", apiKeyIndex);
     return {
       "Content-Type": "application/json",
       "x-api-key": `${apiKey}`,
       "anthropic-version": "2023-06-01",
     };
-  }
+  },
 
   // Convert model list to OpenAI format
-  modelsToOpenAIFormat(
-    data: AnthropicModelsListResponseBody,
-  ): OpenAIModelsListResponseBody {
+  modelsToOpenAIFormat(data): OpenAIModelsListResponseBody {
+    const response = data as AnthropicModelsListResponseBody;
     return {
       object: "list",
-      data: data.data.map(({ id, type, created_at, ...model }) => ({
+      data: response.data.map(({ id, type, created_at, ...model }) => ({
         id,
         object: type,
         created: Math.floor(Date.parse(created_at) / 1000),
@@ -37,5 +32,5 @@ export class Anthropic extends ProviderBase {
         _: model,
       })),
     };
-  }
-}
+  },
+});

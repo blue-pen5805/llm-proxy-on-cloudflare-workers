@@ -1,25 +1,21 @@
 import { OpenAIModelsListResponseBody } from "../openai/types";
-import { OpenAICompatibleProvider } from "../provider";
+import { defineProvider, type Provider } from "../provider";
 import { OpenRouterModelsListResponseBody } from "./types";
 
-export class OpenRouter extends OpenAICompatibleProvider {
-  get chatCompletionPath(): string {
-    return "/v1/chat/completions";
-  }
-  get modelsPath(): string {
-    return "/v1/models";
-  }
+export type OpenRouter = Provider;
 
-  readonly apiKeyName: keyof Env = "OPENROUTER_API_KEY";
-  readonly baseUrlProp: string = "https://openrouter.ai/api";
-
+export const OpenRouter = defineProvider({
+  openAICompatible: true,
+  apiKeyName: "OPENROUTER_API_KEY",
+  baseUrl: "https://openrouter.ai/api",
+  chatCompletionPath: "/v1/chat/completions",
+  modelsPath: "/v1/models",
   // Convert model list to OpenAI format
-  modelsToOpenAIFormat(
-    data: OpenRouterModelsListResponseBody,
-  ): OpenAIModelsListResponseBody {
+  modelsToOpenAIFormat(data): OpenAIModelsListResponseBody {
+    const response = data as OpenRouterModelsListResponseBody;
     return {
       object: "list",
-      data: data.data.map(({ id, created, ...model }) => ({
+      data: response.data.map(({ id, created, ...model }) => ({
         id,
         object: "model",
         created,
@@ -27,5 +23,5 @@ export class OpenRouter extends OpenAICompatibleProvider {
         _: model,
       })),
     };
-  }
-}
+  },
+});

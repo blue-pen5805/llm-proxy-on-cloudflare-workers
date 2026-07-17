@@ -2,43 +2,38 @@ import {
   OpenAIChatCompletionsRequestBody,
   OpenAIModelsListResponseBody,
 } from "../openai/types";
-import { OpenAICompatibleProvider } from "../provider";
+import { defineProvider, type Provider } from "../provider";
 import { CohereModelsListResponseBody } from "./types";
 
-export class Cohere extends OpenAICompatibleProvider {
-  get chatCompletionPath(): string {
-    return "/compatibility/v1/chat/completions";
-  }
-  get modelsPath(): string {
-    return "/v1/models?page_size=100&endpoint=chat";
-  }
+export type Cohere = Provider;
 
-  readonly apiKeyName: keyof Env = "COHERE_API_KEY";
-  readonly baseUrlProp: string = "https://api.cohere.com";
-
-  readonly CHAT_COMPLETIONS_SUPPORTED_PARAMETERS: (keyof OpenAIChatCompletionsRequestBody)[] =
-    [
-      "messages",
-      "model",
-      "frequency_penalty",
-      "max_tokens",
-      "presence_penalty",
-      "response_format",
-      "seed",
-      "stop",
-      "stream",
-      "temperature",
-      "top_p",
-      "tools",
-    ];
+export const Cohere = defineProvider({
+  openAICompatible: true,
+  apiKeyName: "COHERE_API_KEY",
+  baseUrl: "https://api.cohere.com",
+  chatCompletionPath: "/compatibility/v1/chat/completions",
+  modelsPath: "/v1/models?page_size=100&endpoint=chat",
+  chatCompletionSupportedParameters: [
+    "messages",
+    "model",
+    "frequency_penalty",
+    "max_tokens",
+    "presence_penalty",
+    "response_format",
+    "seed",
+    "stop",
+    "stream",
+    "temperature",
+    "top_p",
+    "tools",
+  ] satisfies (keyof OpenAIChatCompletionsRequestBody)[],
 
   // Convert model list to OpenAI format
-  modelsToOpenAIFormat(
-    data: CohereModelsListResponseBody,
-  ): OpenAIModelsListResponseBody {
+  modelsToOpenAIFormat(data): OpenAIModelsListResponseBody {
+    const response = data as CohereModelsListResponseBody;
     return {
       object: "list",
-      data: data.models.map(({ name, ...model }) => ({
+      data: response.models.map(({ name, ...model }) => ({
         id: name,
         object: "model",
         created: 0,
@@ -46,5 +41,5 @@ export class Cohere extends OpenAICompatibleProvider {
         _: model,
       })),
     };
-  }
-}
+  },
+});

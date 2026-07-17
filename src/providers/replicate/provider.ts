@@ -1,16 +1,16 @@
-import { ProviderBase, ProviderNotSupportedError } from "../provider";
+import {
+  defineProvider,
+  ProviderNotSupportedError,
+  type Provider,
+} from "../provider";
 
-export class Replicate extends ProviderBase {
-  get chatCompletionPath(): string {
-    return "";
-  }
-  get modelsPath(): string {
-    return "";
-  }
+export type Replicate = Provider;
 
-  readonly apiKeyName: keyof Env = "REPLICATE_API_KEY";
-  readonly baseUrlProp: string = "https://api.replicate.com/v1";
-
+export const Replicate = defineProvider({
+  apiKeyName: "REPLICATE_API_KEY",
+  baseUrl: "https://api.replicate.com/v1",
+  chatCompletionPath: "",
+  modelsPath: "",
   async buildChatCompletionsRequest({
     body, // eslint-disable-line @typescript-eslint/no-unused-vars
     headers, // eslint-disable-line @typescript-eslint/no-unused-vars
@@ -21,10 +21,10 @@ export class Replicate extends ProviderBase {
     throw new ProviderNotSupportedError(
       "Replicate does not support chat completions",
     );
-  }
+  },
   async buildModelsRequest(): Promise<[string, RequestInit]> {
     throw new ProviderNotSupportedError(
       "Replicate does not support models list via this proxy.",
     );
-  }
-}
+  },
+});

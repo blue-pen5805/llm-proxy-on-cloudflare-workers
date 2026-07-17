@@ -1,6 +1,9 @@
-import { OpenAICompatibleProvider } from "../provider";
+import { defineProvider, type Provider } from "../provider";
 
-export class Ollama extends OpenAICompatibleProvider {
-  readonly apiKeyName: keyof Env = "OLLAMA_API_KEY";
-  readonly baseUrlProp: string = "https://ollama.com/v1";
-}
+export type Ollama = Provider;
+
+export const Ollama = defineProvider({
+  openAICompatible: true,
+  apiKeyName: "OLLAMA_API_KEY",
+  baseUrl: "https://ollama.com/v1",
+});

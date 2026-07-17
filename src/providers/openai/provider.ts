@@ -1,6 +1,9 @@
-import { OpenAICompatibleProvider } from "../provider";
+import { defineProvider, type Provider } from "../provider";
 
-export class OpenAI extends OpenAICompatibleProvider {
-  readonly apiKeyName: keyof Env = "OPENAI_API_KEY";
-  readonly baseUrlProp: string = "https://api.openai.com/v1";
-}
+export type OpenAI = Provider;
+
+export const OpenAI = defineProvider({
+  openAICompatible: true,
+  apiKeyName: "OPENAI_API_KEY",
+  baseUrl: "https://api.openai.com/v1",
+});

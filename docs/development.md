@@ -49,8 +49,9 @@ After changing the schema, run `npm run cf-typegen`; do not edit
 
 ## Adding a provider
 
-1. Implement a `ProviderBase` or `OpenAICompatibleProvider` adapter under
-   `src/providers/<name>/`.
+1. Add a `defineProvider` definition under `src/providers/<name>/`. Set
+   `openAICompatible: true` when the provider uses JSON and Bearer authentication,
+   and declare only the values or hooks that differ from the shared behavior.
 2. Register its route in `src/providers.ts`.
 3. Add its key to the schema, example configuration, creation script, and docs.
 4. Add contract tests for availability, headers, URL construction, model

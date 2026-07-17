@@ -1,6 +1,9 @@
-import { OpenAICompatibleProvider } from "../provider";
+import { defineProvider, type Provider } from "../provider";
 
-export class DeepSeek extends OpenAICompatibleProvider {
-  readonly apiKeyName: keyof Env = "DEEPSEEK_API_KEY";
-  readonly baseUrlProp: string = "https://api.deepseek.com";
-}
+export type DeepSeek = Provider;
+
+export const DeepSeek = defineProvider({
+  openAICompatible: true,
+  apiKeyName: "DEEPSEEK_API_KEY",
+  baseUrl: "https://api.deepseek.com",
+});

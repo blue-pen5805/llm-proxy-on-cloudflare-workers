@@ -2,10 +2,17 @@
 
 ## Responsibilities
 
-`ProviderBase` defines upstream URL construction, key access, request headers,
-chat request filtering, model request construction, and model response
-normalization. `OpenAICompatibleProvider` adds JSON and Bearer-authentication
-headers. Concrete adapters override only the parts their upstream requires.
+The `Provider` interface defines upstream URL construction, key access, request
+headers, chat request filtering, model request construction, and model response
+normalization. `createProvider` composes the shared behavior with a small
+`ProviderDefinition` containing only provider-specific values and hooks.
+`defineProvider` preserves the existing `new ProviderName()` constructor
+interface without coupling adapters through a base-class hierarchy.
+
+`ProviderBase` and `OpenAICompatibleProvider` remain constructable compatibility
+exports. New adapters should use definitions directly; OpenAI-compatible
+definitions opt into the shared JSON and Bearer-authentication behavior with
+`openAICompatible: true`.
 
 This is an adapter boundary rather than a promise of complete semantic parity.
 Provider adapters can filter chat fields, translate payloads, or declare model
@@ -76,8 +83,8 @@ malformed responses are logged and omitted.
 
 ## Extension requirements
 
-A new provider requires registration, configuration/schema support, contract
-tests, and documentation. Tests should cover URL and header construction,
+A new provider requires a definition, registration, configuration/schema
+support, contract tests, and documentation. Tests should cover URL and header construction,
 availability, supported chat fields, model conversion, direct routing, and AI
 Gateway behavior independently. See [Development and verification](../../development.md).
 

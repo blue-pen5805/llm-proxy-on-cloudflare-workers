@@ -1,46 +1,42 @@
 import { Secrets } from "../../utils/secrets";
 import { OpenAIModelsListResponseBody } from "../openai/types";
-import { ProviderBase } from "../provider";
+import { defineProvider, Provider, ProviderConstructor } from "../provider";
 import { WorkersAiModelsListResponseBody } from "./types";
 
-export class WorkersAi extends ProviderBase {
-  get chatCompletionPath(): string {
-    return "/v1/chat/completions";
-  }
-  get modelsPath(): string {
-    return "/models/search?task=Text Generation";
-  }
+export type WorkersAi = Provider & { readonly accountIdName: keyof Env };
 
-  readonly apiKeyName: keyof Env = "CLOUDFLARE_API_KEY";
-  readonly accountIdName: keyof Env = "CLOUDFLARE_ACCOUNT_ID";
-
+export const WorkersAi = defineProvider({
+  properties: { accountIdName: "CLOUDFLARE_ACCOUNT_ID" as keyof Env },
+  apiKeyName: "CLOUDFLARE_API_KEY",
+  chatCompletionPath: "/v1/chat/completions",
+  modelsPath: "/models/search?task=Text Generation",
   available() {
+    const { accountIdName } = this as WorkersAi;
     return (
-      Secrets.getAll(this.apiKeyName).length > 0 &&
-      Secrets.getAll(this.accountIdName).length > 0
+      Secrets.getAll("CLOUDFLARE_API_KEY").length > 0 &&
+      Secrets.getAll(accountIdName).length > 0
     );
-  }
+  },
 
   baseUrl() {
-    const accountId = Secrets.get(this.accountIdName);
+    const accountId = Secrets.get((this as WorkersAi).accountIdName);
     return `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai`;
-  }
+  },
 
-  async headers(apiKeyIndex?: number): Promise<HeadersInit> {
-    const apiKey = Secrets.get(this.apiKeyName, apiKeyIndex);
+  async headers(apiKeyIndex): Promise<HeadersInit> {
+    const apiKey = Secrets.get("CLOUDFLARE_API_KEY", apiKeyIndex);
     return {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
     };
-  }
+  },
 
   // Convert model list to OpenAI format
-  modelsToOpenAIFormat(
-    data: WorkersAiModelsListResponseBody,
-  ): OpenAIModelsListResponseBody {
+  modelsToOpenAIFormat(data): OpenAIModelsListResponseBody {
+    const response = data as WorkersAiModelsListResponseBody;
     return {
       object: "list",
-      data: data.result.map(({ name, ...model }) => ({
+      data: response.result.map(({ name, ...model }) => ({
         id: name,
         object: "model",
         created: 0,
@@ -48,5 +44,5 @@ export class WorkersAi extends ProviderBase {
         _: model,
       })),
     };
-  }
-}
+  },
+}) as ProviderConstructor<[], WorkersAi>;
