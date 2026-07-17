@@ -144,6 +144,7 @@ export async function status(
     AI_GATEWAY: {
       ...aiGatewayConfig,
       token: aiGatewayConfig.token ? "***" : undefined,
+      restApiToken: aiGatewayConfig.restApiToken ? "***" : undefined,
     },
     GLOBAL_ROUND_ROBIN: Config.isGlobalRoundRobinEnabled(),
   };

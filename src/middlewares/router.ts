@@ -1,6 +1,8 @@
 import { CloudflareAIGateway } from "../ai_gateway";
+import { isCloudflareAIGatewayRestApiPath } from "../ai_gateway/utils";
 import { Middleware, MiddlewareContext } from "../middleware";
 import { createProviderRegistry } from "../providers";
+import { aiGatewayRest } from "../requests/ai_gateway_rest";
 import { chatCompletions } from "../requests/chat_completions";
 import { compat } from "../requests/compat";
 import { models } from "../requests/models";
@@ -8,7 +10,7 @@ import { proxy } from "../requests/proxy";
 import { status } from "../requests/status";
 import { universalEndpoint } from "../requests/universal_endpoint";
 import { Environments } from "../utils/environments";
-import { NotFoundError } from "../utils/error";
+import { BadRequestError, NotFoundError } from "../utils/error";
 
 export async function handleRouting(
   context: MiddlewareContext,
@@ -30,6 +32,22 @@ export async function handleRouting(
     // Example: /g/{AI_GATEWAY_NAME}/compat/chat/completions
     if (request.method === "POST" && pathname === "/compat/chat/completions") {
       return await compat(request, aiGateway);
+    }
+
+    throw new NotFoundError();
+  }
+
+  if (/^\/ai(?:$|\/|\?)/.test(pathname)) {
+    if (
+      request.method === "POST" &&
+      isCloudflareAIGatewayRestApiPath(pathname)
+    ) {
+      if (!aiGateway) {
+        throw new BadRequestError(
+          "AI Gateway REST API requires CLOUDFLARE_ACCOUNT_ID.",
+        );
+      }
+      return await aiGatewayRest(request, pathname, aiGateway);
     }
 
     throw new NotFoundError();

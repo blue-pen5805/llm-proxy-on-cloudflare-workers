@@ -21,6 +21,7 @@ describe("aiGatewayMiddleware", () => {
       accountId: "test-account",
       name: "default-gateway",
       token: "test-token",
+      restApiToken: "rest-token",
     });
 
     context.pathname = "/g/my-gateway/v1/chat/completions";
@@ -30,6 +31,7 @@ describe("aiGatewayMiddleware", () => {
     expect(context.aiGateway).toBeDefined();
     expect(context.aiGateway instanceof CloudflareAIGateway).toBe(true);
     expect(context.aiGateway?.gatewayId).toBe("my-gateway");
+    expect(context.aiGateway?.restApiToken).toBe("rest-token");
     expect(context.pathname).toBe("/v1/chat/completions");
     expect(next).toHaveBeenCalled();
   });
@@ -39,6 +41,7 @@ describe("aiGatewayMiddleware", () => {
       accountId: "test-account",
       name: "default-gateway",
       token: "test-token",
+      restApiToken: "rest-token",
     });
 
     await aiGatewayMiddleware(context, next);
@@ -48,11 +51,44 @@ describe("aiGatewayMiddleware", () => {
     expect(next).toHaveBeenCalled();
   });
 
+  it("should use the default REST gateway without AI_GATEWAY_NAME", async () => {
+    vi.spyOn(Config, "aiGateway").mockReturnValue({
+      accountId: "test-account",
+      name: undefined,
+      token: undefined,
+      restApiToken: "rest-token",
+    });
+    context.pathname = "/ai/v1/responses";
+
+    await aiGatewayMiddleware(context, next);
+
+    expect(context.aiGateway).toBeDefined();
+    expect(context.aiGateway?.gatewayId).toBe("default");
+    expect(context.aiGateway?.restApiToken).toBe("rest-token");
+    expect(next).toHaveBeenCalled();
+  });
+
+  it("should create a REST context that reports a missing token", async () => {
+    vi.spyOn(Config, "aiGateway").mockReturnValue({
+      accountId: "test-account",
+      name: undefined,
+      token: undefined,
+      restApiToken: undefined,
+    });
+    context.pathname = "/ai/run";
+
+    await aiGatewayMiddleware(context, next);
+
+    expect(context.aiGateway?.gatewayId).toBe("default");
+    expect(context.aiGateway?.restApiToken).toBeUndefined();
+  });
+
   it("should not set AI Gateway if not configured", async () => {
     vi.spyOn(Config, "aiGateway").mockReturnValue({
       accountId: undefined,
       name: undefined,
       token: undefined,
+      restApiToken: undefined,
     });
 
     await aiGatewayMiddleware(context, next);

@@ -43,11 +43,17 @@ describe("CloudflareAIGateway", () => {
 
   describe("constructor", () => {
     it("should create instance with provided values", () => {
-      const gateway = new CloudflareAIGateway("account", "gateway", "key");
+      const gateway = new CloudflareAIGateway(
+        "account",
+        "gateway",
+        "key",
+        "rest-key",
+      );
 
       expect(gateway.accountId).toBe("account");
       expect(gateway.gatewayId).toBe("gateway");
       expect(gateway.apiKey).toBe("key");
+      expect(gateway.restApiToken).toBe("rest-key");
     });
 
     it("should throw error when accountId is missing", () => {
@@ -337,6 +343,71 @@ describe("CloudflareAIGateway", () => {
       expect(init.method).toBe("POST");
       expect(init.body).toBe(body);
       expect(init.signal).toBe(controller.signal);
+    });
+  });
+
+  describe("buildRestApiRequest", () => {
+    it.each([
+      "/ai/run",
+      "/ai/v1/chat/completions",
+      "/ai/v1/responses",
+      "/ai/v1/messages",
+    ] as const)("builds POST %s with REST authentication", (path) => {
+      const gateway = new CloudflareAIGateway(
+        "test-account",
+        "test-gateway",
+        "legacy-token",
+        "rest-token",
+      );
+      const controller = new AbortController();
+      const [url, init] = gateway.buildRestApiRequest({
+        path,
+        headers: {
+          Authorization: "Bearer client-token",
+          "cf-aig-gateway-id": "client-gateway",
+          "cf-aig-metadata": '{"user":"123"}',
+        },
+        body: "payload",
+        signal: controller.signal,
+      });
+
+      expect(url).toBe(
+        `https://api.cloudflare.com/client/v4/accounts/test-account${path}`,
+      );
+      const headers = new Headers(init.headers);
+      expect(headers.get("authorization")).toBe("Bearer rest-token");
+      expect(headers.get("cf-aig-gateway-id")).toBe("test-gateway");
+      expect(headers.get("cf-aig-metadata")).toBe('{"user":"123"}');
+      expect(headers.get("content-type")).toBe("application/json");
+      expect(init.method).toBe("POST");
+      expect(init.body).toBe("payload");
+      expect(init.signal).toBe(controller.signal);
+    });
+
+    it("preserves an explicit content type", () => {
+      const gateway = new CloudflareAIGateway(
+        "account",
+        "gateway",
+        undefined,
+        "rest-token",
+      );
+      const [, init] = gateway.buildRestApiRequest({
+        path: "/ai/run",
+        headers: { "Content-Type": "application/custom+json" },
+      });
+
+      expect(new Headers(init.headers).get("content-type")).toBe(
+        "application/custom+json",
+      );
+      expect(init.body).toBeUndefined();
+    });
+
+    it("rejects requests without a REST API token", () => {
+      const gateway = new CloudflareAIGateway("account", "gateway");
+
+      expect(() => gateway.buildRestApiRequest({ path: "/ai/run" })).toThrow(
+        "AI Gateway REST API requires CLOUDFLARE_API_TOKEN.",
+      );
     });
   });
 

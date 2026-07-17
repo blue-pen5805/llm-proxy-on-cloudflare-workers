@@ -47,6 +47,7 @@ describe("status", () => {
       accountId: "acc-123",
       name: "gw-123",
       token: "tok-123",
+      restApiToken: "rest-tok-123",
     });
     vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(true);
 
@@ -94,6 +95,7 @@ describe("status", () => {
         accountId: "acc-123",
         name: "gw-123",
         token: "***",
+        restApiToken: "***",
       },
       GLOBAL_ROUND_ROBIN: true,
     });
@@ -157,6 +159,7 @@ describe("status", () => {
       accountId: "acc-123",
       name: "gw-123",
       token: undefined,
+      restApiToken: undefined,
     });
     vi.mocked(Secrets.getAll).mockReturnValue([]);
 

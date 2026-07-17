@@ -11,7 +11,7 @@
 
 - OpenAI 互換の `POST /v1/chat/completions` と `GET /v1/models`
 - `/openai/v1/responses` などのプロバイダー別パススルールート
-- 既定の Gateway または `/g/<gateway>` を使った Cloudflare AI Gateway 統合
+- Cloudflare AI Gateway のプロバイダールートとアカウントレベル REST API
 - 複数のプロバイダーキーからランダム選択、または Durable Objects によるラウンドロビン
 - `/key/<index-or-range>` によるリクエスト単位のキー指定
 - 設定ファイルで追加できるカスタム OpenAI 互換エンドポイント
@@ -94,6 +94,10 @@ curl https://your-worker.example/google-ai-studio/v1beta/models/gemini-3.5-flash
     "contents": [{"role": "user", "parts": [{"text": "Hello"}]}]
   }'
 ```
+
+`CLOUDFLARE_ACCOUNT_ID` と `CLOUDFLARE_API_TOKEN` を設定すると、AI Gateway の
+4つのアカウントレベル REST ルートを `/ai` 以下で利用できます。設定済みまたは暗黙の
+`default` 以外の Gateway を選ぶ場合は `/g/<gateway>` を先頭に付けます。
 
 `GET /v1/models` は、設定済みプロバイダーのモデル一覧をベストエフォートで集約します。
 `GET /status` は認証情報を検査しますが、設定メタデータとマスク済みキー末尾を含むため、

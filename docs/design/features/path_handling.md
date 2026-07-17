@@ -45,6 +45,11 @@ provider name. The Gateway compatibility route matches only
 `POST /compat/chat/completions` when a Gateway context exists. The Universal
 Endpoint matches `POST /` only when a Gateway context exists.
 
+The account-level AI Gateway REST API matches only these exact paths when a
+Gateway context exists: `POST /ai/run`, `POST /ai/v1/chat/completions`,
+`POST /ai/v1/responses`, and `POST /ai/v1/messages`. Other methods, suffixes,
+and query-bearing variants within the reserved `/ai` namespace return 404.
+
 This normalization is routing logic, not a general defense against malicious
 upstream paths. Provider base URLs remain fixed by code or trusted deployment
 configuration.

@@ -34,7 +34,8 @@ deployment output as sensitive too; do not retain it in public CI logs.
 - When changing an array's order with global round-robin enabled, expect the
   stored index to continue against the new array. It is bounded to the new
   length, but does not track key identity.
-- Treat `CF_AIG_TOKEN` and the entire `CUSTOM_OPENAI_ENDPOINTS` value as secrets.
+- Treat `CF_AIG_TOKEN`, `CLOUDFLARE_API_TOKEN`, and the entire
+  `CUSTOM_OPENAI_ENDPOINTS` value as secrets.
 
 ## Observability
 
@@ -97,6 +98,17 @@ The dynamic Gateway prefix requires `CLOUDFLARE_ACCOUNT_ID`. The default Gateway
 also requires `AI_GATEWAY_NAME`. Confirm that the provider is in the supported
 AI Gateway set and that the path follows the patterns in [HTTP API and
 routing](api.md).
+
+### An `/ai/...` request returns 400, 401, or 403
+
+- HTTP 400 from the proxy means `CLOUDFLARE_ACCOUNT_ID` or
+  `CLOUDFLARE_API_TOKEN` is missing.
+- For HTTP 401 or 403 from Cloudflare, confirm that `CLOUDFLARE_API_TOKEN` is a
+  Cloudflare API token with AI Gateway permission for the account.
+- Confirm the selected Gateway exists and has credits when calling a third-party
+  provider.
+- Workers AI model IDs must begin with `@cf/`; third-party model IDs use
+  `<provider>/<model>`.
 
 ### Local development does not start
 

@@ -9,6 +9,8 @@
   "CLOUDFLARE_ACCOUNT_ID": null,
   "AI_GATEWAY_NAME": null,
   "CF_AIG_TOKEN": null,
+  // Cloudflare API token with AI Gateway permission for /ai/* REST API routes.
+  "CLOUDFLARE_API_TOKEN": null,
 
   // --- API keys for providers ---
   // OpenAI: https://platform.openai.com/

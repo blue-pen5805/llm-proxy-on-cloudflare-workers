@@ -6,8 +6,8 @@ The Worker can route supported provider traffic through Cloudflare AI Gateway
 without changing its public authentication contract. Gateway performs its own
 logging, analytics, caching, retry, or fallback behavior according to the
 operator's Gateway configuration; the Worker is responsible for constructing
-Gateway URLs, headers, Compatibility Endpoint requests, and explicit Universal
-Endpoint payloads.
+Gateway URLs, headers, account-level REST API requests, Compatibility Endpoint
+requests, and explicit Universal Endpoint payloads.
 
 ## Gateway selection
 
@@ -20,7 +20,27 @@ If `CF_AIG_TOKEN` exists, requests add
 `cf-aig-authorization: Bearer <token>`. The token is never returned verbatim by
 the status handler.
 
+The account-level REST API uses the separate `CLOUDFLARE_API_TOKEN` as its
+upstream Bearer credential. Both tokens are masked by the status handler.
+
 ## Request modes
+
+### Account-level REST API
+
+The Worker reserves four exact POST routes: `/ai/run`,
+`/ai/v1/chat/completions`, `/ai/v1/responses`, and `/ai/v1/messages`. They map
+to the same suffix under:
+
+```text
+https://api.cloudflare.com/client/v4/accounts/<account>/ai/...
+```
+
+Request and response bodies are streamed without format conversion. The Worker
+replaces proxy authentication with `Authorization: Bearer
+<CLOUDFLARE_API_TOKEN>` and overwrites `cf-aig-gateway-id` with the selected
+Gateway. `/g/<gateway>/ai/...` selects an explicit Gateway; otherwise
+`AI_GATEWAY_NAME` or the fallback ID `default` is used. No other `/ai` path is
+forwarded.
 
 ### Provider endpoint
 
@@ -56,7 +76,7 @@ those requests in order until one succeeds, preserving credential fallback
 without calling the deprecated Universal Endpoint. The model is rewritten to
 `<provider>/<model>` for Gateway's compatibility endpoint.
 
-### Universal Endpoint and compatibility pass-through
+### Legacy Universal Endpoint and compatibility pass-through
 
 `POST /g/<gateway>/` accepts the repository's Universal Endpoint request shape,
 validates provider names against the supported set, injects selected provider
@@ -76,6 +96,7 @@ not automatically Gateway-supported.
 ## References
 
 - [Cloudflare AI Gateway](https://developers.cloudflare.com/ai-gateway/)
+- [AI Gateway REST API](https://developers.cloudflare.com/ai-gateway/usage/rest-api/)
 - [AI Gateway OpenAI-compatible endpoint](https://developers.cloudflare.com/ai-gateway/usage/chat-completion/)
 - [AI Gateway Universal Endpoint](https://developers.cloudflare.com/ai-gateway/usage/universal/)
 - [AI Gateway provider endpoints](https://developers.cloudflare.com/ai-gateway/providers/)

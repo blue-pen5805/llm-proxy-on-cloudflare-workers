@@ -121,7 +121,8 @@ describe("Config", () => {
       vi.mocked(Environments.get)
         .mockReturnValueOnce("test-account-id")
         .mockReturnValueOnce("test-gateway-name")
-        .mockReturnValueOnce("test-token");
+        .mockReturnValueOnce("test-token")
+        .mockReturnValueOnce("rest-token");
 
       const result = Config.aiGateway();
 
@@ -129,6 +130,7 @@ describe("Config", () => {
         accountId: "test-account-id",
         name: "test-gateway-name",
         token: "test-token",
+        restApiToken: "rest-token",
       });
       expect(Environments.get).toHaveBeenCalledWith(
         "CLOUDFLARE_ACCOUNT_ID",
@@ -136,6 +138,10 @@ describe("Config", () => {
       );
       expect(Environments.get).toHaveBeenCalledWith("AI_GATEWAY_NAME", false);
       expect(Environments.get).toHaveBeenCalledWith("CF_AIG_TOKEN", false);
+      expect(Environments.get).toHaveBeenCalledWith(
+        "CLOUDFLARE_API_TOKEN",
+        false,
+      );
     });
 
     it("should return configuration with undefined values when not set", () => {
@@ -147,6 +153,7 @@ describe("Config", () => {
         accountId: undefined,
         name: undefined,
         token: undefined,
+        restApiToken: undefined,
       });
     });
 
@@ -154,7 +161,8 @@ describe("Config", () => {
       vi.mocked(Environments.get)
         .mockReturnValueOnce("test-account-id")
         .mockReturnValueOnce(undefined)
-        .mockReturnValueOnce("test-token");
+        .mockReturnValueOnce("test-token")
+        .mockReturnValueOnce("rest-token");
 
       const result = Config.aiGateway();
 
@@ -162,6 +170,7 @@ describe("Config", () => {
         accountId: "test-account-id",
         name: undefined,
         token: "test-token",
+        restApiToken: "rest-token",
       });
     });
   });

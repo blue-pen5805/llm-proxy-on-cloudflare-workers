@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
-  isCloudflareAIGatewayProvider,
   isCloudflareAIGatewayOpenAICompatibleProvider,
+  isCloudflareAIGatewayProvider,
+  isCloudflareAIGatewayRestApiPath,
 } from "~/src/ai_gateway/utils";
 
 describe("AI Gateway Utils", () => {
@@ -103,6 +104,26 @@ describe("AI Gateway Utils", () => {
       expect(
         isCloudflareAIGatewayOpenAICompatibleProvider("custom-provider"),
       ).toBe(false);
+    });
+  });
+
+  describe("isCloudflareAIGatewayRestApiPath", () => {
+    it.each([
+      "/ai/run",
+      "/ai/v1/chat/completions",
+      "/ai/v1/responses",
+      "/ai/v1/messages",
+    ])("accepts %s", (path) => {
+      expect(isCloudflareAIGatewayRestApiPath(path)).toBe(true);
+    });
+
+    it.each([
+      "/ai",
+      "/ai/run/model",
+      "/ai/v1/models",
+      "/ai/v1/chat/completions?debug=true",
+    ])("rejects %s", (path) => {
+      expect(isCloudflareAIGatewayRestApiPath(path)).toBe(false);
     });
   });
 });

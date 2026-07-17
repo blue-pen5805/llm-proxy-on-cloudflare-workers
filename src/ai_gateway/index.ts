@@ -1,7 +1,9 @@
+import { BadRequestError } from "../utils/error";
 import {
   CloudflareAIGatewayHeaders,
   CloudflareAIGatewayOpenAICompatibleProvider,
   CloudflareAIGatewayProvider,
+  CloudflareAIGatewayRestApiPath,
   CloudflareAIGatewayUniversalEndpointData,
   CloudflareAIGatewayUniversalEndpointHeaders,
 } from "./const";
@@ -12,6 +14,8 @@ import {
 
 export class CloudflareAIGateway {
   static readonly origin = "https://gateway.ai.cloudflare.com/v1";
+  static readonly restApiOrigin =
+    "https://api.cloudflare.com/client/v4/accounts";
 
   static isSupportedProvider<T extends boolean = false>(
     providerName: string,
@@ -30,6 +34,7 @@ export class CloudflareAIGateway {
     public accountId: string,
     public gatewayId: string,
     public apiKey: string | undefined = undefined,
+    public restApiToken: string | undefined = undefined,
   ) {
     if (!this.accountId || !this.gatewayId) {
       throw new Error(
@@ -140,6 +145,46 @@ export class CloudflareAIGateway {
     }
 
     return [`${this.baseUrl()}/compat/chat/completions`, requestInit];
+  }
+
+  /** Build a request to one of AI Gateway's account-level REST API routes. */
+  buildRestApiRequest({
+    path,
+    headers = {},
+    body,
+    signal,
+  }: {
+    path: CloudflareAIGatewayRestApiPath;
+    headers?: HeadersInit;
+    body?: BodyInit | null;
+    signal?: AbortSignal | null;
+  }): [RequestInfo, RequestInit] {
+    if (!this.restApiToken) {
+      throw new BadRequestError(
+        "AI Gateway REST API requires CLOUDFLARE_API_TOKEN.",
+      );
+    }
+
+    const restHeaders = new Headers(headers);
+    if (!restHeaders.has("content-type")) {
+      restHeaders.set("content-type", "application/json");
+    }
+    restHeaders.set("authorization", `Bearer ${this.restApiToken}`);
+    restHeaders.set("cf-aig-gateway-id", this.gatewayId);
+
+    const requestInit: RequestInit = {
+      method: "POST",
+      headers: restHeaders,
+      ...(body !== undefined && body !== null ? { body } : {}),
+    };
+    if (signal) {
+      requestInit.signal = signal;
+    }
+
+    return [
+      `${CloudflareAIGateway.restApiOrigin}/${this.accountId}${path}`,
+      requestInit,
+    ];
   }
 
   /**

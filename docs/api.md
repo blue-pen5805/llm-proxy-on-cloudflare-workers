@@ -14,8 +14,12 @@ upstream providers are streamed or forwarded without a proxy-specific envelope.
 | `POST`    | `/v1/chat/completions`                 | OpenAI-compatible chat translation                |
 | `GET`     | `/v1/models`                           | Best-effort aggregate model list                  |
 | any       | `/<provider>/<path>`                   | Provider pass-through                             |
-| `POST`    | `/g/<gateway>/`                        | AI Gateway Universal Endpoint                     |
-| `POST`    | `/g/<gateway>/compat/chat/completions` | AI Gateway compatibility pass-through             |
+| `POST`    | `/g/<gateway>/ai/run`                  | AI Gateway REST API: Workers AI native format     |
+| `POST`    | `/g/<gateway>/ai/v1/chat/completions`  | AI Gateway REST API: Chat Completions             |
+| `POST`    | `/g/<gateway>/ai/v1/responses`         | AI Gateway REST API: Responses                    |
+| `POST`    | `/g/<gateway>/ai/v1/messages`          | AI Gateway REST API: Messages                     |
+| `POST`    | `/g/<gateway>/`                        | Legacy AI Gateway Universal Endpoint              |
+| `POST`    | `/g/<gateway>/compat/chat/completions` | Legacy AI Gateway compatibility pass-through      |
 
 `/chat/completions` and `/models` are aliases of their `/v1` forms. Any normal
 route may be prefixed with `/g/<gateway>` to choose a Gateway for that request,
@@ -87,6 +91,35 @@ Bedrock paths beginning with `/v1` are automatically prefixed with
 `/openai/deployments/<deployment>/...` path is similarly converted to Gateway's
 `<resource>/<deployment>/...` form. Vertex pass-through is available only with
 AI Gateway, and its provider-native path already matches the Gateway suffix.
+
+## AI Gateway REST API
+
+The proxy exposes Cloudflare's account-level AI Gateway REST API through exactly
+four fixed routes. Use the `/g/<gateway>` prefix when selecting the Gateway in
+the request:
+
+- `POST /g/<gateway>/ai/run`
+- `POST /g/<gateway>/ai/v1/chat/completions`
+- `POST /g/<gateway>/ai/v1/responses`
+- `POST /g/<gateway>/ai/v1/messages`
+
+Configure both `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`. The Worker
+forwards the request and response streams without translating their bodies,
+replaces the client authentication header with the Cloudflare API token, and
+sets `cf-aig-gateway-id` to the selected Gateway. The unprefixed `/ai/...`
+forms are shortcuts for the configured `AI_GATEWAY_NAME`. When no default
+Gateway is configured, use the explicit `/g/<gateway>/ai/...` form.
+
+```bash
+curl https://your-worker.example/g/production/ai/v1/responses \
+  --header "Authorization: Bearer $PROXY_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{"model":"openai/gpt-5.4","input":"Hello"}'
+```
+
+Other methods and paths under `/ai` are rejected rather than forwarded.
+Third-party models use `<provider>/<model>`; Workers AI models use
+`@cf/<author>/<model>`. The Messages route does not support Workers AI.
 
 ## Explicit key selection
 

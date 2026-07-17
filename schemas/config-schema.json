@@ -49,6 +49,16 @@
         }
       ]
     },
+    "CLOUDFLARE_API_TOKEN": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "OPENAI_API_KEY": {
       "oneOf": [
         {

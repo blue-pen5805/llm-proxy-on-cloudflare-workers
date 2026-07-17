@@ -11,7 +11,7 @@ APIs on [Cloudflare Workers](https://developers.cloudflare.com/workers/).
 
 - OpenAI-compatible `POST /v1/chat/completions` and `GET /v1/models`
 - Provider pass-through routes such as `/openai/v1/responses`
-- Cloudflare AI Gateway routing through the default Gateway or `/g/<gateway>`
+- Cloudflare AI Gateway provider routes and account-level REST API
 - Multiple provider keys with random or Durable Object-backed round-robin selection
 - Per-request key selection with `/key/<index-or-range>`
 - Custom OpenAI-compatible endpoints defined in configuration
@@ -97,6 +97,10 @@ curl https://your-worker.example/google-ai-studio/v1beta/models/gemini-3.5-flash
     "contents": [{"role": "user", "parts": [{"text": "Hello"}]}]
   }'
 ```
+
+Set `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` to expose AI Gateway's
+four account-level REST routes under `/ai`. Prefix one with `/g/<gateway>` to
+select a Gateway other than the configured or implicit `default` Gateway.
 
 `GET /v1/models` returns a best-effort aggregate of configured providers.
 `GET /status` checks configured credentials but exposes configuration metadata

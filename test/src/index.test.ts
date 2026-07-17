@@ -1,6 +1,7 @@
 import { SELF } from "cloudflare:test";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Providers, getAllProviders, getProvider } from "~/src/providers";
+import { aiGatewayRest } from "~/src/requests/ai_gateway_rest";
 import { chatCompletions } from "~/src/requests/chat_completions";
 import { compat } from "~/src/requests/compat";
 import { models } from "~/src/requests/models";
@@ -20,6 +21,7 @@ vi.mock("~/src/ai_gateway", () => {
       buildCompatibilityEndpointRequest: vi.fn(() => ["", {}]),
       buildProviderEndpointRequest: vi.fn(() => ["", {}]),
       buildChatCompletionsRequests: vi.fn(() => [["", {}]]),
+      buildRestApiRequest: vi.fn(() => ["", {}]),
     };
   });
 
@@ -81,6 +83,9 @@ vi.mock("~/src/requests/proxy", () => ({
 vi.mock("~/src/requests/chat_completions", () => ({
   chatCompletions: vi.fn(async () => new Response()),
 }));
+vi.mock("~/src/requests/ai_gateway_rest", () => ({
+  aiGatewayRest: vi.fn(async () => new Response()),
+}));
 vi.mock("~/src/requests/models", () => ({
   models: vi.fn(async () => new Response()),
 }));
@@ -108,6 +113,7 @@ describe("fetch", () => {
       accountId: "test-account-id",
       name: "test-gateway",
       token: "test-token",
+      restApiToken: "rest-token",
     });
     vi.mocked(getAllProviders).mockImplementation(() => ({
       openai: new (Providers.openai as any)(),
@@ -264,6 +270,40 @@ describe("fetch", () => {
 
       expect(response.status).toBe(404);
       expect(compat).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    "/ai/run",
+    "/ai/v1/chat/completions",
+    "/ai/v1/responses",
+    "/ai/v1/messages",
+  ] as const)("should handle AI Gateway REST route %s", async (path) => {
+    const request = new Request(`https://example.com/g/team-gateway${path}`, {
+      method: "POST",
+    });
+
+    await SELF.fetch(request);
+
+    expect(aiGatewayRest).toHaveBeenLastCalledWith(
+      request,
+      path,
+      expect.anything(),
+    );
+  });
+
+  it.each([
+    ["GET", "/g/team-gateway/ai/run"],
+    ["POST", "/g/team-gateway/ai/v1/models"],
+  ])(
+    "should reject unsupported AI Gateway REST route %s %s",
+    async (method, path) => {
+      const response = await SELF.fetch(`https://example.com${path}`, {
+        method,
+      });
+
+      expect(response.status).toBe(404);
+      expect(aiGatewayRest).not.toHaveBeenCalled();
     },
   );
 

@@ -92,15 +92,23 @@ models; consult [HTTP API and routing](api.md) for endpoint behavior.
 
 ## AI Gateway
 
-| Setting                 | Type           | Meaning                                                                |
-| ----------------------- | -------------- | ---------------------------------------------------------------------- |
-| `CLOUDFLARE_ACCOUNT_ID` | string or null | Cloudflare account used to construct Gateway URLs and Workers AI URLs. |
-| `AI_GATEWAY_NAME`       | string or null | Default Gateway for all supported requests.                            |
-| `CF_AIG_TOKEN`          | string or null | Optional authenticated Gateway token sent as `cf-aig-authorization`.   |
+| Setting                 | Type           | Meaning                                                                    |
+| ----------------------- | -------------- | -------------------------------------------------------------------------- |
+| `CLOUDFLARE_ACCOUNT_ID` | string or null | Cloudflare account used to construct Gateway URLs and Workers AI URLs.     |
+| `AI_GATEWAY_NAME`       | string or null | Default Gateway for supported provider and REST API requests.              |
+| `CF_AIG_TOKEN`          | string or null | Optional Gateway token sent as `cf-aig-authorization` on provider routes.  |
+| `CLOUDFLARE_API_TOKEN`  | string or null | Cloudflare API token with AI Gateway permission for the `/ai` REST routes. |
 
 When the account ID and default Gateway name are both set, supported traffic is
 routed through that Gateway. A request under `/g/<gateway>/...` overrides the
 default Gateway name. Without an account ID, the `/g/...` prefix is not active.
+
+The four fixed `/ai` REST routes require `CLOUDFLARE_ACCOUNT_ID` and
+`CLOUDFLARE_API_TOKEN`. They use `AI_GATEWAY_NAME` when configured and otherwise
+select the `default` Gateway; `/g/<gateway>/ai/...` overrides either choice.
+`CLOUDFLARE_API_TOKEN` becomes the upstream `Authorization` credential and is
+distinct from `CF_AIG_TOKEN`, which authenticates provider, compatibility, and
+Universal Endpoint requests.
 
 ## Routing and key selection
 
