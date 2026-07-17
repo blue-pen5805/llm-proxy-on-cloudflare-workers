@@ -113,63 +113,33 @@ export class CloudflareAIGateway {
     ];
   }
 
-  buildCompatRequest({
-    path,
-    method,
+  /** Build a request to AI Gateway's OpenAI-compatible chat endpoint. */
+  buildCompatibilityEndpointRequest({
     headers = {},
     body,
     signal,
   }: {
-    path: string;
-    method: string;
     headers?: HeadersInit;
     body?: BodyInit | null;
     signal?: AbortSignal | null;
   }): [RequestInfo, RequestInit] {
-    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-
     const gatewayHeaders = new Headers(this.buildHeaders());
     const additionalHeaders = new Headers(headers);
     additionalHeaders.forEach((value, key) => {
       gatewayHeaders.set(key, value);
     });
 
-    const upperMethod = method.toUpperCase();
     const requestInit: RequestInit = {
-      method,
+      method: "POST",
       headers: gatewayHeaders,
-      ...(body !== undefined &&
-      body !== null &&
-      upperMethod !== "GET" &&
-      upperMethod !== "HEAD"
-        ? { body }
-        : {}),
+      ...(body !== undefined && body !== null ? { body } : {}),
     };
 
     if (signal) {
       requestInit.signal = signal;
     }
 
-    return [`${this.baseUrl()}${normalizedPath}`, requestInit];
-  }
-
-  /** Build an OpenAI-compatible request through AI Gateway. */
-  buildCompatibilityEndpointRequest({
-    endpoint = "chat/completions",
-    query,
-    headers = {},
-  }: {
-    endpoint?: string;
-    query: Record<string, unknown>;
-    headers?: CloudflareAIGatewayHeaders | HeadersInit;
-  }): [RequestInfo, RequestInit] {
-    const normalizedEndpoint = endpoint.replace(/^\/+/, "");
-    return this.buildCompatRequest({
-      path: `/compat/${normalizedEndpoint}`,
-      method: "POST",
-      headers,
-      body: JSON.stringify(query),
-    });
+    return [`${this.baseUrl()}/compat/chat/completions`, requestInit];
   }
 
   /**
@@ -218,10 +188,10 @@ export class CloudflareAIGateway {
 
       return this.buildCompatibilityEndpointRequest({
         headers: headersObject,
-        query: {
+        body: JSON.stringify({
           ...requestData,
           model: `${provider}/${requestData.model}`,
-        },
+        }),
       });
     });
   }

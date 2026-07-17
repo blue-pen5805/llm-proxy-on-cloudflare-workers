@@ -6,16 +6,16 @@ upstream providers are streamed or forwarded without a proxy-specific envelope.
 
 ## Route summary
 
-| Method    | Path                         | Purpose                                           |
-| --------- | ---------------------------- | ------------------------------------------------- |
-| `OPTIONS` | any                          | CORS preflight                                    |
-| `GET`     | `/ping`                      | Lightweight liveness response (`Pong`)            |
-| `GET`     | `/status`                    | Configuration and provider credential diagnostics |
-| `POST`    | `/v1/chat/completions`       | OpenAI-compatible chat translation                |
-| `GET`     | `/v1/models`                 | Best-effort aggregate model list                  |
-| any       | `/<provider>/<path>`         | Provider pass-through                             |
-| `POST`    | `/g/<gateway>/`              | AI Gateway Universal Endpoint                     |
-| any       | `/g/<gateway>/compat/<path>` | AI Gateway compatibility pass-through             |
+| Method    | Path                                   | Purpose                                           |
+| --------- | -------------------------------------- | ------------------------------------------------- |
+| `OPTIONS` | any                                    | CORS preflight                                    |
+| `GET`     | `/ping`                                | Lightweight liveness response (`Pong`)            |
+| `GET`     | `/status`                              | Configuration and provider credential diagnostics |
+| `POST`    | `/v1/chat/completions`                 | OpenAI-compatible chat translation                |
+| `GET`     | `/v1/models`                           | Best-effort aggregate model list                  |
+| any       | `/<provider>/<path>`                   | Provider pass-through                             |
+| `POST`    | `/g/<gateway>/`                        | AI Gateway Universal Endpoint                     |
+| `POST`    | `/g/<gateway>/compat/chat/completions` | AI Gateway compatibility pass-through             |
 
 `/chat/completions` and `/models` are aliases of their `/v1` forms. Any normal
 route may be prefixed with `/g/<gateway>` to choose a Gateway for that request,

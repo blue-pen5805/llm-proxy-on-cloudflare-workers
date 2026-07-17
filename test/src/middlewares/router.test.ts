@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
 import { handleRouting } from "~/src/middlewares/router";
+import { compat } from "~/src/requests/compat";
 import { proxy } from "~/src/requests/proxy";
 import { NotFoundError } from "~/src/utils/error";
 
@@ -82,6 +83,67 @@ describe("handleRouting", () => {
       aiGateway,
     );
     expect(await response.text()).toBe("universal");
+  });
+
+  it("should route POST /compat/chat/completions with an AI Gateway", async () => {
+    const aiGateway = new CloudflareAIGateway("acc", "gate", "key");
+    const postRequest = new Request(
+      "http://localhost/compat/chat/completions",
+      { method: "POST" },
+    );
+    const response = await handleRouting(
+      {
+        request: postRequest,
+        pathname: "/compat/chat/completions",
+      } as any,
+      aiGateway,
+    );
+
+    expect(await response.text()).toBe("compat");
+    expect(compat).toHaveBeenCalledWith(postRequest, aiGateway);
+  });
+
+  it.each([
+    ["GET", "/compat/chat/completions"],
+    ["POST", "/compat/models"],
+    ["POST", "/compat/chat/completions/extra"],
+  ])(
+    "should reject unsupported compat route %s %s",
+    async (method, pathname) => {
+      const aiGateway = new CloudflareAIGateway("acc", "gate", "key");
+      const compatRequest = new Request(`http://localhost${pathname}`, {
+        method,
+      });
+
+      await expect(
+        handleRouting({ request: compatRequest, pathname } as any, aiGateway),
+      ).rejects.toThrow(NotFoundError);
+    },
+  );
+
+  it("should not fall through unsupported compat paths to provider routing", async () => {
+    const aiGateway = new CloudflareAIGateway("acc", "gate", "key");
+    const providers = {
+      match: vi.fn(() => ({
+        providerName: "compat",
+        pathname: "/models",
+      })),
+    };
+    const postRequest = new Request("http://localhost/compat/models", {
+      method: "POST",
+    });
+
+    await expect(
+      handleRouting(
+        {
+          request: postRequest,
+          pathname: "/compat/models",
+          providers,
+        } as any,
+        aiGateway,
+      ),
+    ).rejects.toThrow(NotFoundError);
+    expect(providers.match).not.toHaveBeenCalled();
   });
 
   it("should throw NotFoundError for unknown routes", async () => {

@@ -26,9 +26,13 @@ export async function handleRouting(
     return await status(aiGateway, context.providers);
   }
 
-  // Example: /g/{AI_GATEWAY_NAME}/compat
   if (aiGateway && /^\/compat(?:$|\/|\?)/.test(pathname)) {
-    return await compat(request, pathname, aiGateway);
+    // Example: /g/{AI_GATEWAY_NAME}/compat/chat/completions
+    if (request.method === "POST" && pathname === "/compat/chat/completions") {
+      return await compat(request, aiGateway);
+    }
+
+    throw new NotFoundError();
   }
 
   // OpenAI compatible endpoints

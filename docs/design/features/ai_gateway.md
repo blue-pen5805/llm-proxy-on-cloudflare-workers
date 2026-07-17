@@ -62,8 +62,9 @@ without calling the deprecated Universal Endpoint. The model is rewritten to
 validates provider names against the supported set, injects selected provider
 headers, and forwards the mapped steps to Gateway's Universal Endpoint. This
 explicit route remains available even though normal OpenAI-compatible chat uses
-the Compatibility Endpoint. `/g/<gateway>/compat/...` forwards directly to the
-Gateway compatibility path after stripping proxy credentials.
+the Compatibility Endpoint. `POST /g/<gateway>/compat/chat/completions` forwards
+directly to that fixed Gateway endpoint after stripping proxy credentials. No
+other path under `/compat` is exposed.
 
 ## Maintenance risk
 

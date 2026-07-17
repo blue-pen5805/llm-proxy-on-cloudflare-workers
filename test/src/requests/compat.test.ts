@@ -31,7 +31,7 @@ describe("compat", () => {
     );
 
     const aiGateway = {
-      buildCompatRequest: vi.fn().mockReturnValue([
+      buildCompatibilityEndpointRequest: vi.fn().mockReturnValue([
         "https://gateway.ai.cloudflare.com/v1/account/gateway/compat/chat/completions",
         {
           method: "POST",
@@ -41,11 +41,10 @@ describe("compat", () => {
       ]),
     } as unknown as CloudflareAIGateway;
 
-    await compat(request, "/compat/chat/completions", aiGateway);
+    await compat(request, aiGateway);
 
-    const callArgs = vi.mocked(aiGateway.buildCompatRequest).mock.calls[0][0];
-    expect(callArgs.method).toBe("POST");
-    expect(callArgs.path).toBe("/compat/chat/completions");
+    const callArgs = vi.mocked(aiGateway.buildCompatibilityEndpointRequest).mock
+      .calls[0][0];
     expect(callArgs.body).toBe(request.body);
     expect(callArgs.headers.authorization).toBeUndefined();
     expect(callArgs.headers["x-api-key"]).toBeUndefined();
@@ -59,33 +58,6 @@ describe("compat", () => {
         method: "POST",
         body,
         headers: { "cf-aig-authorization": "Bearer test" },
-      }),
-    );
-  });
-
-  it("preserves nested paths and query strings when forwarding", async () => {
-    const request = new Request(
-      "https://example.com/compat/chat/completions?foo=bar",
-      {
-        method: "GET",
-      },
-    );
-
-    const aiGateway = {
-      buildCompatRequest: vi
-        .fn()
-        .mockReturnValue([
-          "https://gateway.ai.cloudflare.com/v1/account/gateway/compat/chat/completions?foo=bar",
-          {},
-        ]),
-    } as unknown as CloudflareAIGateway;
-
-    await compat(request, "/compat/chat/completions?foo=bar", aiGateway);
-
-    expect(aiGateway.buildCompatRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        path: "/compat/chat/completions?foo=bar",
-        method: "GET",
       }),
     );
   });

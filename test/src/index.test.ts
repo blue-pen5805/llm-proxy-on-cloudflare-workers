@@ -20,7 +20,6 @@ vi.mock("~/src/ai_gateway", () => {
       buildCompatibilityEndpointRequest: vi.fn(() => ["", {}]),
       buildProviderEndpointRequest: vi.fn(() => ["", {}]),
       buildChatCompletionsRequests: vi.fn(() => [["", {}]]),
-      buildCompatRequest: vi.fn(() => ["", {}]),
     };
   });
 
@@ -251,6 +250,22 @@ describe("fetch", () => {
 
     expect(compat).toHaveBeenCalledOnce();
   });
+
+  it.each([
+    ["GET", "/g/test-gateway/compat/chat/completions"],
+    ["POST", "/g/test-gateway/compat/models"],
+    ["POST", "/g/test-gateway/compat/chat/completions/extra"],
+  ])(
+    "should reject unsupported AI Gateway compat route %s %s",
+    async (method, path) => {
+      const response = await SELF.fetch(`https://example.com${path}`, {
+        method,
+      });
+
+      expect(response.status).toBe(404);
+      expect(compat).not.toHaveBeenCalled();
+    },
+  );
 
   it("should handle requests starting with {PROVIDER_NAME}", async () => {
     await SELF.fetch("https://example.com/openai/notfound");

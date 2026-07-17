@@ -41,9 +41,9 @@ while ranges select randomly from an inclusive bounded interval.
 
 Exact OpenAI-compatible routes include both versioned and unversioned aliases.
 Provider pass-through requires `/<provider>/` with a trailing slash after the
-provider name. Gateway compatibility routes match `/compat`, `/compat/...`, and
-their query variants only when a Gateway context exists. The Universal Endpoint
-matches `POST /` only when a Gateway context exists.
+provider name. The Gateway compatibility route matches only
+`POST /compat/chat/completions` when a Gateway context exists. The Universal
+Endpoint matches `POST /` only when a Gateway context exists.
 
 This normalization is routing logic, not a general defense against malicious
 upstream paths. Provider base URLs remain fixed by code or trusted deployment

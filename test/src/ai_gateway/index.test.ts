@@ -309,77 +309,20 @@ describe("CloudflareAIGateway", () => {
     });
   });
 
-  describe("buildCompatRequest", () => {
-    let gateway: CloudflareAIGateway;
-
-    beforeEach(() => {
-      gateway = new CloudflareAIGateway(
-        "test-account",
-        "test-gateway",
-        "test-key",
-      );
-    });
-
-    it("should build compat request with nested path and merged headers", () => {
-      const [url, init] = gateway.buildCompatRequest({
-        path: "compat/chat/completions",
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: "payload",
-      });
-
-      expect(url).toBe(
-        "https://gateway.ai.cloudflare.com/v1/test-account/test-gateway/compat/chat/completions",
-      );
-
-      const headers = new Headers(init.headers);
-      expect(headers.get("cf-aig-authorization")).toBe("Bearer test-key");
-      expect(headers.get("content-type")).toBe("application/json");
-      expect(init.method).toBe("POST");
-      expect(init.body).toBe("payload");
-    });
-
-    it("should omit body for GET requests while preserving query strings", () => {
-      const [_url, init] = gateway.buildCompatRequest({
-        path: "/compat/chat/completions?foo=bar",
-        method: "GET",
-        headers: { Accept: "application/json" },
-        body: "ignored",
-      });
-
-      const headers = new Headers(init.headers);
-      expect(headers.get("cf-aig-authorization")).toBe("Bearer test-key");
-      expect(headers.get("accept")).toBe("application/json");
-      expect(init.method).toBe("GET");
-      expect(init.body).toBeUndefined();
-    });
-
-    it("preserves an AbortSignal", () => {
-      const controller = new AbortController();
-      const [_url, init] = gateway.buildCompatRequest({
-        path: "/compat/models",
-        method: "HEAD",
-        body: "ignored",
-        signal: controller.signal,
-      });
-
-      expect(init.body).toBeUndefined();
-      expect(init.signal).toBe(controller.signal);
-    });
-  });
-
   describe("buildCompatibilityEndpointRequest", () => {
-    it("builds a JSON request to the compatibility endpoint", () => {
+    it("builds a request to the fixed chat completions endpoint", () => {
       const gateway = new CloudflareAIGateway(
         "test-account",
         "test-gateway",
         "test-key",
       );
-      const query = { model: "openai/gpt-4", messages: [] };
+      const body = JSON.stringify({ model: "openai/gpt-4", messages: [] });
+      const controller = new AbortController();
 
       const [url, init] = gateway.buildCompatibilityEndpointRequest({
-        query,
+        body,
         headers: { authorization: "Bearer sk-test" },
+        signal: controller.signal,
       });
 
       expect(url).toBe(
@@ -391,19 +334,9 @@ describe("CloudflareAIGateway", () => {
       expect(new Headers(init.headers).get("cf-aig-authorization")).toBe(
         "Bearer test-key",
       );
-      expect(init.body).toBe(JSON.stringify(query));
-    });
-
-    it("normalizes a custom endpoint", () => {
-      const gateway = new CloudflareAIGateway("account", "gateway");
-      const [url] = gateway.buildCompatibilityEndpointRequest({
-        endpoint: "/embeddings",
-        query: { model: "openai/text-embedding-3-small", input: "hello" },
-      });
-
-      expect(url).toBe(
-        "https://gateway.ai.cloudflare.com/v1/account/gateway/compat/embeddings",
-      );
+      expect(init.method).toBe("POST");
+      expect(init.body).toBe(body);
+      expect(init.signal).toBe(controller.signal);
     });
   });
 
