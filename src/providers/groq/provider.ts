@@ -1,5 +1,7 @@
-import { OpenAIModelsListResponseBody } from "../openai/types";
-import { OpenAICompatibleProvider } from "../provider";
+import {
+  modelsToOpenAIFormatWithMetadata,
+  OpenAICompatibleProvider,
+} from "../provider";
 import { GroqModelsListResponseBody } from "./types";
 
 export class Groq extends OpenAICompatibleProvider {
@@ -9,16 +11,7 @@ export class Groq extends OpenAICompatibleProvider {
   // Convert model list to OpenAI format
   modelsToOpenAIFormat(
     data: GroqModelsListResponseBody,
-  ): OpenAIModelsListResponseBody {
-    return {
-      object: "list",
-      data: data.data.map(({ id, object, created, owned_by, ...model }) => ({
-        id,
-        object,
-        created,
-        owned_by,
-        _: model,
-      })),
-    };
+  ): ReturnType<typeof modelsToOpenAIFormatWithMetadata> {
+    return modelsToOpenAIFormatWithMetadata(data);
   }
 }

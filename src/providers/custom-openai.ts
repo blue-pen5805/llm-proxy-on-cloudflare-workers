@@ -41,19 +41,9 @@ export class CustomOpenAI extends OpenAICompatibleProvider {
   }
 
   async headers(apiKeyIndex?: number): Promise<HeadersInit> {
-    const keys = this.getApiKeys();
-    if (keys.length === 0) {
-      return {
-        "Content-Type": "application/json",
-      };
-    }
-
-    const index = apiKeyIndex !== undefined ? apiKeyIndex % keys.length : 0;
-    const apiKey = keys[index];
-
     return {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
+      ...(await super.headers(apiKeyIndex)),
     };
   }
 

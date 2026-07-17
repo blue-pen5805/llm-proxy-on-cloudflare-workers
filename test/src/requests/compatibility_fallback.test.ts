@@ -44,6 +44,28 @@ describe("fetchCompatibilityFallback", () => {
     await expect(fetchCompatibilityFallback(requests)).resolves.toBe(second);
   });
 
+  it("rethrows a fetch error when cancellation occurs during the request", async () => {
+    const controller = new AbortController();
+    const error = new Error("cancelled during fetch");
+    vi.mocked(helpers.fetch2).mockImplementation(async () => {
+      controller.abort(error);
+      throw error;
+    });
+
+    await expect(
+      fetchCompatibilityFallback(requests, controller.signal),
+    ).rejects.toBe(error);
+    expect(helpers.fetch2).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws the final network error when no response is received", async () => {
+    const error = new Error("all requests failed");
+    vi.mocked(helpers.fetch2).mockRejectedValue(error);
+
+    await expect(fetchCompatibilityFallback(requests)).rejects.toBe(error);
+    expect(helpers.fetch2).toHaveBeenCalledTimes(2);
+  });
+
   it("returns the final HTTP error when every response is unsuccessful", async () => {
     const finalResponse = new Response("rate limited", { status: 429 });
     vi.mocked(helpers.fetch2)

@@ -2,13 +2,18 @@
 import {
   getErrorMessage,
   parseJsonc,
+  parseCliArgsOrExit,
+  parseEnvCliArgs,
+  reportCliResult,
   validateEnvironmentName,
 } from "./utils.ts";
+import type { FileSystemOperations, OperationResult } from "./utils.ts";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
 export { parseJsonc, validateEnvironmentName } from "./utils.ts";
+export type { FileSystemOperations } from "./utils.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,16 +23,7 @@ export interface CliArgs {
   help?: boolean;
 }
 
-export interface FileSystemOperations {
-  existsSync: (path: string) => boolean;
-  readFileSync: (path: string, encoding: BufferEncoding) => string;
-  writeFileSync: (path: string, data: string) => void;
-}
-
-export interface GenerationResult {
-  success: boolean;
-  messages: string[];
-}
+export type GenerationResult = OperationResult;
 
 export interface GenerationOptions {
   rootDir: string;
@@ -59,25 +55,10 @@ export function getFilePaths(
  * Parse command line arguments
  */
 export function parseArgs(argv: string[] = process.argv.slice(2)): CliArgs {
+  const parsed = parseEnvCliArgs(argv);
   const args: CliArgs = {};
-
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === "--env") {
-      if (i + 1 >= argv.length || argv[i + 1].startsWith("-")) {
-        throw new Error("--env option requires a value");
-      }
-      args.env = argv[i + 1];
-      i++; // Skip next argument as it's the value
-    } else if (arg === "--help" || arg === "-h") {
-      args.help = true;
-    } else if (arg.startsWith("-")) {
-      throw new Error(`Unknown option: ${arg}`);
-    } else {
-      throw new Error(`Unexpected argument: ${arg}`);
-    }
-  }
-
+  if (parsed.env !== undefined) args.env = parsed.env;
+  if (parsed.help) args.help = true;
   return args;
 }
 
@@ -215,16 +196,7 @@ export function generateDevVars(
  * Main function to generate .dev.vars files
  */
 export function main(): void {
-  let args: CliArgs;
-
-  try {
-    args = parseArgs();
-  } catch (error) {
-    const errorMessage = getErrorMessage(error);
-    console.error(`❌ Error: ${errorMessage}`);
-    console.error("Use --help or -h for usage information.");
-    process.exit(1);
-  }
+  const args = parseCliArgsOrExit(() => parseArgs());
 
   if (args.help) {
     console.log(showHelp());
@@ -240,13 +212,7 @@ export function main(): void {
 
   const result = generateDevVars(rootDir, env);
 
-  result.messages.forEach((message) => console.log(message));
-
-  if (result.success) {
-    console.log("🎉 Dev vars generation completed!");
-  } else {
-    process.exit(1);
-  }
+  reportCliResult(result, "🎉 Dev vars generation completed!");
 }
 
 // Run the script if called directly

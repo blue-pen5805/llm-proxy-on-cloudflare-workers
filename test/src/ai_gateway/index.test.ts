@@ -344,6 +344,17 @@ describe("CloudflareAIGateway", () => {
       expect(init.body).toBe(body);
       expect(init.signal).toBe(controller.signal);
     });
+
+    it("omits optional body and signal when they are not supplied", () => {
+      const gateway = new CloudflareAIGateway("account", "gateway");
+      const [, init] = gateway.buildCompatibilityEndpointRequest({});
+
+      expect(init.body).toBeUndefined();
+      expect(init.signal).toBeUndefined();
+      expect(new Headers(init.headers).get("content-type")).toBe(
+        "application/json",
+      );
+    });
   });
 
   describe("buildRestApiRequest", () => {

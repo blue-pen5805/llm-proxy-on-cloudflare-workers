@@ -38,11 +38,20 @@ describe("provider contracts", () => {
 
       expect(provider.available()).toBe(false);
       expect(provider.getApiKeys()).toEqual([]);
+      expect(provider.getAiGatewayApiKeys()).toEqual([]);
+      expect(provider.configurationError()).toBeUndefined();
       expect(await provider.getNextApiKeyIndex()).toBe(0);
       expect(provider.baseUrl()).toBe("https://example.com");
       expect(provider.pathnamePrefix()).toBe("");
       expect(await provider.headers()).toEqual({});
       expect(provider.staticModels()).toBeUndefined();
+      expect(provider.aiGatewayPath("/models")).toBe("/models");
+      await expect(
+        provider.buildAiGatewayChatCompletionsRequest({
+          data: { model: "model-id" },
+          headers: {},
+        }),
+      ).resolves.toBeUndefined();
 
       const models = { object: "list", data: [] } as const;
       expect(provider.modelsToOpenAIFormat(models)).toBe(models);
@@ -62,6 +71,8 @@ describe("provider contracts", () => {
       const provider = new TestProvider();
       expect(provider.available()).toBe(true);
       expect(provider.getApiKeys()).toEqual(["key-0", "key-1"]);
+      expect(provider.getAiGatewayApiKeys()).toEqual(["key-0", "key-1"]);
+      expect(Secrets.getAll).toHaveBeenCalledWith("OPENAI_API_KEY", true);
       expect(await provider.getNextApiKeyIndex()).toBe(1);
       expect(Secrets.getNext).toHaveBeenCalledWith("OPENAI_API_KEY");
 

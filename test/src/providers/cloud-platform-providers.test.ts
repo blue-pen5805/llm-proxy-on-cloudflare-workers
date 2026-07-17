@@ -90,6 +90,24 @@ describe("cloud platform providers", () => {
     ).toBe("/example-resource/gpt-4o/chat/completions?api-version=2024-10-21");
   });
 
+  it("uses Azure defaults when optional credentials and paths are absent", async () => {
+    delete values.AZURE_OPENAI_API_KEY;
+    delete values.AZURE_OPENAI_API_VERSION;
+    const provider = new AzureOpenAI();
+
+    await expect(provider.headers()).resolves.toEqual({
+      "Content-Type": "application/json",
+    });
+    expect(provider.aiGatewayPath("/openai/v1/models")).toBe(
+      "/openai/v1/models",
+    );
+    const [path] = await provider.buildAiGatewayChatCompletionsRequest({
+      data: { model: "gpt-4o", messages: [] },
+      headers: {},
+    });
+    expect(path).toContain("api-version=2024-10-21");
+  });
+
   it("encodes Vertex service-account JSON for authenticated Gateway use", async () => {
     const provider = new GoogleVertexAi();
 
@@ -126,6 +144,36 @@ describe("cloud platform providers", () => {
     const provider = new GoogleVertexAi();
     expect(provider.getApiKeys()).toEqual([]);
     expect(provider.configurationError()).toContain("region");
+  });
+
+  it("handles absent, malformed, empty, and array Vertex credentials", async () => {
+    const provider = new GoogleVertexAi();
+
+    delete values.GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON;
+    expect(provider.getApiKeys()).toEqual([]);
+
+    values.GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON = "not-json";
+    expect(provider.configurationError()).toContain("valid JSON");
+
+    values.GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON = "[]";
+    expect(provider.getApiKeys()).toEqual([]);
+
+    values.GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON = JSON.stringify([
+      {
+        type: "service_account",
+        project_id: "example-project",
+        private_key: "private-key",
+        client_email: "vertex@example-project.iam.gserviceaccount.com",
+        region: "us-central1",
+      },
+    ]);
+    expect(provider.getAiGatewayApiKeys()).toHaveLength(1);
+    vi.spyOn(Secrets, "getNextIndex").mockResolvedValue(0);
+    await expect(provider.getNextApiKeyIndex()).resolves.toBe(0);
+    expect(Secrets.getNextIndex).toHaveBeenCalledWith(
+      "GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON",
+      1,
+    );
   });
 
   it("builds Bedrock Runtime OpenAI-compatible and Gateway paths", async () => {

@@ -2,27 +2,31 @@ import { AUTHORIZATION_QUERY_PARAMETERS } from "./authorization";
 import { RequestLogger } from "./logger";
 import { randomInt } from "node:crypto";
 
+const MASK_THRESHOLD = 10;
+const MASK_PREFIX_LENGTH = 3;
+const MASK_PLACEHOLDER = "***";
+const SENSITIVE_QUERY_PARAMETERS = new Set([
+  "apikey",
+  "api_key",
+  "token",
+  "access_token",
+  "accesstoken",
+  "auth",
+  "authorization",
+  "password",
+  "secret",
+  "key",
+  "api-key",
+]);
+
+function maskSensitiveValue(value: string): string {
+  if (value.length > MASK_THRESHOLD) {
+    return `${value.slice(0, MASK_PREFIX_LENGTH)}${MASK_PLACEHOLDER}`;
+  }
+  return value.length > 0 ? MASK_PLACEHOLDER : value;
+}
+
 export function maskUrl(url: string): string {
-  // Constants for masking behavior
-  const MASK_THRESHOLD = 10; // Minimum length to show prefix
-  const MASK_PREFIX_LENGTH = 3; // Number of characters to show before masking
-  const MASK_PLACEHOLDER = "***";
-
-  // List of sensitive parameter names that should be masked
-  const sensitiveParams = [
-    "apikey",
-    "api_key",
-    "token",
-    "access_token",
-    "accesstoken",
-    "auth",
-    "authorization",
-    "password",
-    "secret",
-    "key",
-    "api-key",
-  ];
-
   try {
     const urlObj = new URL(url);
 
@@ -32,21 +36,8 @@ export function maskUrl(url: string): string {
       const maskedParams = new URLSearchParams();
 
       for (const [key, value] of params.entries()) {
-        const keyLower = key.toLowerCase();
-        const isSensitive = sensitiveParams.some((param) => keyLower === param);
-
-        if (isSensitive) {
-          // Mask the value, keeping prefix for longer values
-          if (value.length > MASK_THRESHOLD) {
-            maskedParams.set(
-              key,
-              `${value.slice(0, MASK_PREFIX_LENGTH)}${MASK_PLACEHOLDER}`,
-            );
-          } else if (value.length > 0) {
-            maskedParams.set(key, MASK_PLACEHOLDER);
-          } else {
-            maskedParams.set(key, value);
-          }
+        if (SENSITIVE_QUERY_PARAMETERS.has(key.toLowerCase())) {
+          maskedParams.set(key, maskSensitiveValue(value));
         } else {
           // Keep non-sensitive parameters as-is
           maskedParams.set(key, value);
@@ -59,7 +50,6 @@ export function maskUrl(url: string): string {
     return urlObj.toString();
   } catch {
     // If URL parsing fails, return masked version
-    const MASK_PLACEHOLDER = "***";
     return (
       url.split("?")[0] + (url.includes("?") ? `?${MASK_PLACEHOLDER}` : "")
     );
@@ -124,8 +114,7 @@ export function formatString(
   args: { [key: string]: string },
 ): string {
   return Object.keys(args).reduce((formattedString: string, key) => {
-    const regExp = new RegExp(`\\{${key}\\}`, "g");
-    return formattedString.replace(regExp, args[key]);
+    return formattedString.replaceAll(`{${key}}`, args[key]);
   }, template);
 }
 

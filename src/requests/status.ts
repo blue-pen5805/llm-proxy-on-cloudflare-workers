@@ -1,15 +1,12 @@
 import { CloudflareAIGateway } from "../ai_gateway";
 import { getAllProviders } from "../providers";
 import type { ProviderRegistry } from "../providers";
-import { CustomOpenAI } from "../providers/custom-openai";
-import { GoogleVertexAi } from "../providers/google-vertex-ai";
 import { ProviderBase, ProviderNotSupportedError } from "../providers/provider";
 import { recordApiKeySelection } from "../utils/api_key_selection";
 import { Config } from "../utils/config";
 import { Environments } from "../utils/environments";
 import { fetch2, withTimeout } from "../utils/helpers";
 import { RequestLogger } from "../utils/logger";
-import { Secrets } from "../utils/secrets";
 
 const CONNECTIVITY_CHECK_TIMEOUT_MS = 5000;
 
@@ -36,13 +33,6 @@ function classifyConnectivity(response: Response): ConnectivityStatus {
   if (response.ok) return "valid";
   if (response.status === 401 || response.status === 403) return "invalid";
   return "unknown";
-}
-
-function getProviderKeys(instance: ProviderBase): string[] {
-  if (instance instanceof CustomOpenAI || instance instanceof GoogleVertexAi) {
-    return instance.getApiKeys();
-  }
-  return instance.apiKeyName ? Secrets.getAll(instance.apiKeyName) : [];
 }
 
 /**
@@ -156,7 +146,7 @@ export async function status(
   const providersStatus = Object.fromEntries(
     await Promise.all(
       providerEntries.map(async ([providerName, instance]) => {
-        const allKeys = getProviderKeys(instance);
+        const allKeys = instance.getApiKeys();
         const keyStatuses = await Promise.all(
           allKeys.map(async (key, apiKeyIndex) => ({
             key: maskApiKey(key),

@@ -1,16 +1,18 @@
 import { CloudflareAIGateway } from "../ai_gateway";
 import { MiddlewareContext } from "../middleware";
-import { getProvider } from "../providers";
 import {
   apiKeySelectionPolicy,
   recordApiKeySelection,
   selectApiKeyIndex,
 } from "../utils/api_key_selection";
 import { stripProxyAuthorizationHeaders } from "../utils/authorization";
-import { Environments } from "../utils/environments";
 import { NotFoundError } from "../utils/error";
 import { fetch2 } from "../utils/helpers";
 import { RequestLogger } from "../utils/logger";
+import {
+  providerConfigurationErrorResponse,
+  resolveProvider,
+} from "./provider_request";
 
 export async function proxy(
   context: MiddlewareContext,
@@ -20,45 +22,19 @@ export async function proxy(
 ) {
   const { apiKeyIndex: contextApiKeyIndex } = context;
   const { request } = context;
-  const providerInstance = context.providers
-    ? context.providers.get(providerName)
-    : getProvider(providerName, Environments.all());
+  const providerInstance = resolveProvider(context, providerName);
 
   if (!providerInstance) {
     throw new NotFoundError();
   }
 
-  if (providerInstance.requiresAiGateway && !aiGateway) {
-    return new Response(
-      JSON.stringify({
-        error: `${providerName} requires Cloudflare AI Gateway.`,
-      }),
-      { status: 400, headers: { "Content-Type": "application/json" } },
-    );
-  }
-  if (providerInstance.requiresAuthenticatedAiGateway && !aiGateway?.apiKey) {
-    return new Response(
-      JSON.stringify({ error: `${providerName} requires CF_AIG_TOKEN.` }),
-      { status: 400, headers: { "Content-Type": "application/json" } },
-    );
-  }
-  const configurationError = providerInstance.configurationError?.();
-  if (configurationError) {
-    return new Response(JSON.stringify({ error: configurationError }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-  if (
-    providerInstance.requiresProviderCredentials &&
-    !providerInstance.available()
-  ) {
-    return new Response(
-      JSON.stringify({
-        error: `${providerName} requires ${String(providerInstance.apiKeyName)}.`,
-      }),
-      { status: 400, headers: { "Content-Type": "application/json" } },
-    );
+  const providerError = providerConfigurationErrorResponse(
+    providerName,
+    providerInstance,
+    aiGateway,
+  );
+  if (providerError) {
+    return providerError;
   }
 
   const apiKeyIndex = await selectApiKeyIndex(

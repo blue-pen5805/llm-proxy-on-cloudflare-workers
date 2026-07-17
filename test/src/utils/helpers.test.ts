@@ -65,6 +65,12 @@ describe("formatString", () => {
     const result = formatString(template, args);
     expect(result).toBe("Hello, World! Hello again!");
   });
+
+  it("should replace placeholder keys containing regular expression characters", () => {
+    expect(formatString("Value: {a.b}", { "a.b": "matched" })).toBe(
+      "Value: matched",
+    );
+  });
 });
 
 describe("maskUrl", () => {

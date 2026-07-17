@@ -236,7 +236,6 @@ describe("chatCompletions", () => {
         messages: [],
       }),
     });
-
     const response = await chatCompletions({
       request,
       providers: { get: vi.fn(() => gatewayOnlyProvider) },
@@ -334,6 +333,7 @@ describe("chatCompletions", () => {
         messages: [{ role: "user", content: "Hello" }],
       }),
     });
+    const requestWithoutNativeHeaders = request.clone();
     const providerRequest: [string, RequestInit] = [
       "/resource/gpt-4o/chat/completions?api-version=2024-10-21",
       {
@@ -396,6 +396,47 @@ describe("chatCompletions", () => {
     });
     expect(await response.text()).toBe("ok");
     expect(azureProvider.fetch).not.toHaveBeenCalled();
+
+    providerRequest[1].headers = undefined;
+    await chatCompletions(
+      {
+        request: requestWithoutNativeHeaders,
+        providers: { get: vi.fn(() => azureProvider) },
+      } as any,
+      { buildProviderEndpointRequest } as any,
+    );
+    expect(buildProviderEndpointRequest).toHaveBeenLastCalledWith(
+      expect.objectContaining({ headers: {} }),
+    );
+  });
+
+  it("uses the direct endpoint when no native Gateway request is available", async () => {
+    const request = new Request("https://example.com/v1/chat/completions", {
+      method: "POST",
+      body: JSON.stringify({ model: "openai/gpt-4", messages: [] }),
+    });
+    const provider = {
+      ...mockProviderClass,
+      buildAiGatewayChatCompletionsRequest: vi
+        .fn()
+        .mockResolvedValue(undefined),
+    };
+    provider.buildChatCompletionsRequest.mockReturnValue([
+      "/chat/completions",
+      { method: "POST", body: JSON.stringify({ model: "gpt-4" }) },
+    ]);
+    provider.fetch.mockResolvedValue(new Response());
+    vi.mocked(CloudflareAIGateway.isSupportedProvider)
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
+
+    await chatCompletions(
+      { request, providers: { get: vi.fn(() => provider) } } as any,
+      mockAIGateway as any,
+    );
+
+    expect(provider.buildAiGatewayChatCompletionsRequest).toHaveBeenCalled();
+    expect(provider.fetch).toHaveBeenCalled();
   });
 
   it("should remove all proxy authorization headers", async () => {

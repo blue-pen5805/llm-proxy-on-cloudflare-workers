@@ -28,6 +28,7 @@ describe("status", () => {
     apiKeyName: "OPENAI_API_KEY",
     modelsPath: "/models",
     available: vi.fn(),
+    getApiKeys: vi.fn(() => Secrets.getAll("OPENAI_API_KEY")),
     buildModelsRequest: vi.fn(),
     fetch: vi.fn(),
     headers: vi.fn().mockResolvedValue({ Authorization: "Bearer key" }),
@@ -142,6 +143,7 @@ describe("status", () => {
       return {
         apiKeyName: undefined,
         available: vi.fn().mockReturnValue(true),
+        getApiKeys: vi.fn().mockReturnValue([]),
       };
     });
 
@@ -193,6 +195,7 @@ describe("status", () => {
         apiKeyName: "SKIP_API_KEY",
         modelsPath: "",
         available: vi.fn().mockReturnValue(true),
+        getApiKeys: vi.fn(() => Secrets.getAll("SKIP_API_KEY")),
       };
     });
     vi.mocked(Secrets.getAll).mockReturnValue(["any-key"]);

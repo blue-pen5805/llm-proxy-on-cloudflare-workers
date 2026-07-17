@@ -5,6 +5,28 @@ import {
   OpenAIModelsListResponseBody,
 } from "./openai/types";
 
+interface ModelWithMetadata {
+  id: string;
+  object: string;
+  created: number;
+  owned_by: string;
+}
+
+export function modelsToOpenAIFormatWithMetadata<
+  T extends ModelWithMetadata,
+>(data: { data: T[] }): OpenAIModelsListResponseBody {
+  return {
+    object: "list",
+    data: data.data.map(({ id, object, created, owned_by, ...model }) => ({
+      id,
+      object,
+      created,
+      owned_by,
+      _: model,
+    })),
+  };
+}
+
 export class ProviderBase {
   private supportedChatParameters?: ReadonlySet<
     keyof OpenAIChatCompletionsRequestBody

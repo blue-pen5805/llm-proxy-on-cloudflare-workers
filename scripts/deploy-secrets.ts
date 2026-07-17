@@ -1,15 +1,20 @@
 #!/usr/bin/env node
 import {
   getErrorMessage,
+  parseCliArgsOrExit,
+  parseEnvCliArgs,
   parseJsonc,
+  reportCliResult,
   validateEnvironmentName,
 } from "./utils.ts";
+import type { FileSystemOperations, OperationResult } from "./utils.ts";
 import { execSync } from "child_process";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
 export { parseJsonc, validateEnvironmentName } from "./utils.ts";
+export type { FileSystemOperations } from "./utils.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,16 +25,7 @@ export interface CliArgs {
   help?: boolean;
 }
 
-export interface FileSystemOperations {
-  existsSync: (path: string) => boolean;
-  readFileSync: (path: string, encoding: BufferEncoding) => string;
-  writeFileSync: (path: string, data: string) => void;
-}
-
-export interface DeployResult {
-  success: boolean;
-  messages: string[];
-}
+export type DeployResult = OperationResult;
 
 /**
  * Get config file path for given environment
@@ -46,27 +42,11 @@ export function getConfigPath(rootDir: string, env?: string): string {
  * Parse command line arguments
  */
 export function parseArgs(argv: string[] = process.argv.slice(2)): CliArgs {
+  const parsed = parseEnvCliArgs(argv, ["--dry-run"]);
   const args: CliArgs = {};
-
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === "--env") {
-      if (i + 1 >= argv.length || argv[i + 1].startsWith("-")) {
-        throw new Error("--env option requires a value");
-      }
-      args.env = argv[i + 1];
-      i++; // Skip next argument as it's the value
-    } else if (arg === "--dry-run") {
-      args.dryRun = true;
-    } else if (arg === "--help" || arg === "-h") {
-      args.help = true;
-    } else if (arg.startsWith("-")) {
-      throw new Error(`Unknown option: ${arg}`);
-    } else {
-      throw new Error(`Unexpected argument: ${arg}`);
-    }
-  }
-
+  if (parsed.env !== undefined) args.env = parsed.env;
+  if (parsed.flags.has("--dry-run")) args.dryRun = true;
+  if (parsed.help) args.help = true;
   return args;
 }
 
@@ -289,16 +269,7 @@ export function deploySecrets(
  * Main function to deploy secrets
  */
 export function main(): void {
-  let args: CliArgs;
-
-  try {
-    args = parseArgs();
-  } catch (error) {
-    const errorMessage = getErrorMessage(error);
-    console.error(`❌ Error: ${errorMessage}`);
-    console.error("Use --help or -h for usage information.");
-    process.exit(1);
-  }
+  const args = parseCliArgsOrExit(() => parseArgs());
 
   if (args.help) {
     console.log(showHelp());
@@ -314,15 +285,10 @@ export function main(): void {
 
   const result = deploySecrets(rootDir, env, dryRun);
 
-  result.messages.forEach((message) => console.log(message));
-
-  if (result.success) {
-    if (!dryRun) {
-      console.log("🎉 Secret deployment completed!");
-    }
-  } else {
-    process.exit(1);
-  }
+  reportCliResult(
+    result,
+    dryRun ? undefined : "🎉 Secret deployment completed!",
+  );
 }
 
 // Run the script if called directly
