@@ -1,34 +1,34 @@
 import { CloudflareAIGateway } from "../ai_gateway";
 import { MiddlewareContext } from "../middleware";
 import {
-  apiKeySelectionPolicy,
+  determineApiKeySelectionPolicy,
   recordApiKeySelection,
   selectApiKeyIndex,
 } from "../utils/api_key_selection";
 import { stripProxyAuthorizationHeaders } from "../utils/authorization";
 import { Config } from "../utils/config";
-import { safeJsonParse } from "../utils/helpers";
+import { parseJsonOrReturnText } from "../utils/helpers";
 import { RequestLogger } from "../utils/logger";
 import { fetchCompatibilityFallback } from "./compatibility_fallback";
 import {
-  providerConfigurationErrorResponse,
+  createProviderConfigurationErrorResponse,
   resolveProvider,
 } from "./provider_request";
 
-export async function chatCompletions(
+export async function handleChatCompletionsRequest(
   context: MiddlewareContext,
   aiGateway: CloudflareAIGateway | undefined = undefined,
 ) {
   const { request, apiKeyIndex: contextApiKeyIndex } = context;
   // Remove proxy credentials before adding provider-specific authentication.
-  const headers = stripProxyAuthorizationHeaders(request.headers);
+  const sanitizedHeaders = stripProxyAuthorizationHeaders(request.headers);
 
   // Validate Request Data Structure
-  const data = safeJsonParse(await request.text());
+  const parsedRequestBody = parseJsonOrReturnText(await request.text());
   if (
-    typeof data !== "object" ||
-    data === null ||
-    typeof (data as Record<string, unknown>).model !== "string"
+    typeof parsedRequestBody !== "object" ||
+    parsedRequestBody === null ||
+    typeof (parsedRequestBody as Record<string, unknown>).model !== "string"
   ) {
     return new Response(
       JSON.stringify({
@@ -39,9 +39,13 @@ export async function chatCompletions(
   }
 
   // Split model into provider and model name
-  const requestData = data as Record<string, unknown> & { model: string };
+  const chatRequestBody = parsedRequestBody as Record<string, unknown> & {
+    model: string;
+  };
   const requestedModel =
-    requestData.model === "default" ? Config.defaultModel() : requestData.model;
+    chatRequestBody.model === "default"
+      ? Config.defaultModel()
+      : chatRequestBody.model;
   if (!requestedModel) {
     return new Response(JSON.stringify({ error: "Invalid request." }), {
       status: 400,
@@ -52,8 +56,8 @@ export async function chatCompletions(
   const model = modelParts.join("/");
 
   // Validate provider name
-  const provider = resolveProvider(context, providerName);
-  if (!provider) {
+  const providerInstance = resolveProvider(context, providerName);
+  if (!providerInstance) {
     return new Response(
       JSON.stringify({
         error: "Invalid provider.",
@@ -62,9 +66,9 @@ export async function chatCompletions(
     );
   }
 
-  const providerError = providerConfigurationErrorResponse(
+  const providerError = createProviderConfigurationErrorResponse(
     providerName,
-    provider,
+    providerInstance,
     aiGateway,
   );
   if (providerError) {
@@ -73,7 +77,7 @@ export async function chatCompletions(
 
   // Get API key apiKeyIndex
   const apiKeyIndex = await selectApiKeyIndex(
-    provider,
+    providerInstance,
     contextApiKeyIndex,
     "rotate",
   );
@@ -85,35 +89,42 @@ export async function chatCompletions(
     provider: providerName,
     operation: "chat_completions",
     keyIndex: apiKeyIndex,
-    keyCount: provider.getApiKeys().length,
-    selectionPolicy: apiKeySelectionPolicy(contextApiKeyIndex, "rotate"),
+    keyCount: providerInstance.getApiKeys().length,
+    selectionPolicy: determineApiKeySelectionPolicy(
+      contextApiKeyIndex,
+      "rotate",
+    ),
     viaAiGateway:
       aiGatewayProvider !== undefined ||
-      Boolean(aiGateway && provider.supportsAiGatewayNativeChat),
+      Boolean(aiGateway && providerInstance.supportsAiGatewayNativeChat),
   });
 
   // Generate chat completions request
-  const filteredData = provider.filterChatCompletionsRequest({
-    ...requestData,
+  const supportedRequestBody = providerInstance.filterSupportedChatParameters({
+    ...chatRequestBody,
     model,
   });
-  const [requestInfo, requestInit] = await provider.buildChatCompletionsRequest(
-    {
+  const [requestInfo, requestInit] =
+    await providerInstance.buildChatCompletionsRequest({
       body: "",
-      preparedData: filteredData,
-      headers,
+      preparedData: supportedRequestBody,
+      headers: sanitizedHeaders,
       apiKeyIndex,
-    },
-  );
+    });
 
   // If AI Gateway is enabled and the provider supports it, use AI Gateway
   if (aiGateway && aiGatewayProvider) {
     const gatewayRequests = await aiGateway.buildChatCompletionsRequests({
       provider: aiGatewayProvider,
       body: requestInit.body as string,
-      parsedBody: filteredData as { model: string; [key: string]: unknown },
+      parsedBody: supportedRequestBody as {
+        model: string;
+        [key: string]: unknown;
+      },
       headers: requestInit.headers ?? {},
-      apiKeys: provider.getAiGatewayApiKeys?.() ?? provider.getApiKeys(),
+      apiKeys:
+        providerInstance.getAiGatewayApiKeys?.() ??
+        providerInstance.getApiKeys(),
     });
     return RequestLogger.withFields(keyLogFields, () =>
       fetchCompatibilityFallback(gatewayRequests, request.signal),
@@ -123,13 +134,14 @@ export async function chatCompletions(
   // Some Gateway providers (notably Azure OpenAI) require account-specific
   // path segments and are not represented by the Compatibility Endpoint.
   if (aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)) {
-    const providerRequest = await provider.buildAiGatewayChatCompletionsRequest(
-      {
-        data: filteredData as Record<string, unknown> & { model: string },
-        headers,
+    const providerRequest =
+      await providerInstance.buildAiGatewayChatCompletionsRequest({
+        data: supportedRequestBody as Record<string, unknown> & {
+          model: string;
+        },
+        headers: sanitizedHeaders,
         apiKeyIndex,
-      },
-    );
+      });
     if (providerRequest) {
       const [path, init] = providerRequest;
       const [url, gatewayInit] = aiGateway.buildProviderEndpointRequest({
@@ -148,7 +160,7 @@ export async function chatCompletions(
 
   // Request to the provider endpoint
   return RequestLogger.withFields(keyLogFields, () =>
-    provider.fetch(
+    providerInstance.fetch(
       requestInfo,
       {
         ...requestInit,

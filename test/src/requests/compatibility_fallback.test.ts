@@ -16,28 +16,28 @@ describe("fetchCompatibilityFallback", () => {
 
   it("returns the first successful response", async () => {
     const first = new Response("first");
-    vi.mocked(helpers.fetch2).mockResolvedValue(first);
+    vi.mocked(helpers.fetchWithLogging).mockResolvedValue(first);
 
     await expect(fetchCompatibilityFallback(requests)).resolves.toBe(first);
-    expect(helpers.fetch2).toHaveBeenCalledTimes(1);
+    expect(helpers.fetchWithLogging).toHaveBeenCalledTimes(1);
   });
 
   it("tries the next request after an unsuccessful response", async () => {
     const first = new Response("unauthorized", { status: 401 });
     const cancel = vi.spyOn(first.body!, "cancel");
     const second = new Response("second");
-    vi.mocked(helpers.fetch2)
+    vi.mocked(helpers.fetchWithLogging)
       .mockResolvedValueOnce(first)
       .mockResolvedValueOnce(second);
 
     await expect(fetchCompatibilityFallback(requests)).resolves.toBe(second);
-    expect(helpers.fetch2).toHaveBeenCalledTimes(2);
+    expect(helpers.fetchWithLogging).toHaveBeenCalledTimes(2);
     expect(cancel).toHaveBeenCalledOnce();
   });
 
   it("tries the next request after a network error", async () => {
     const second = new Response("second");
-    vi.mocked(helpers.fetch2)
+    vi.mocked(helpers.fetchWithLogging)
       .mockRejectedValueOnce(new Error("network failure"))
       .mockResolvedValueOnce(second);
 
@@ -47,7 +47,7 @@ describe("fetchCompatibilityFallback", () => {
   it("rethrows a fetch error when cancellation occurs during the request", async () => {
     const controller = new AbortController();
     const error = new Error("cancelled during fetch");
-    vi.mocked(helpers.fetch2).mockImplementation(async () => {
+    vi.mocked(helpers.fetchWithLogging).mockImplementation(async () => {
       controller.abort(error);
       throw error;
     });
@@ -55,20 +55,20 @@ describe("fetchCompatibilityFallback", () => {
     await expect(
       fetchCompatibilityFallback(requests, controller.signal),
     ).rejects.toBe(error);
-    expect(helpers.fetch2).toHaveBeenCalledTimes(1);
+    expect(helpers.fetchWithLogging).toHaveBeenCalledTimes(1);
   });
 
   it("throws the final network error when no response is received", async () => {
     const error = new Error("all requests failed");
-    vi.mocked(helpers.fetch2).mockRejectedValue(error);
+    vi.mocked(helpers.fetchWithLogging).mockRejectedValue(error);
 
     await expect(fetchCompatibilityFallback(requests)).rejects.toBe(error);
-    expect(helpers.fetch2).toHaveBeenCalledTimes(2);
+    expect(helpers.fetchWithLogging).toHaveBeenCalledTimes(2);
   });
 
   it("returns the final HTTP error when every response is unsuccessful", async () => {
     const finalResponse = new Response("rate limited", { status: 429 });
-    vi.mocked(helpers.fetch2)
+    vi.mocked(helpers.fetchWithLogging)
       .mockResolvedValueOnce(new Response("unauthorized", { status: 401 }))
       .mockResolvedValueOnce(finalResponse);
 
@@ -84,7 +84,7 @@ describe("fetchCompatibilityFallback", () => {
     await expect(
       fetchCompatibilityFallback(requests, controller.signal),
     ).rejects.toThrow("cancelled");
-    expect(helpers.fetch2).not.toHaveBeenCalled();
+    expect(helpers.fetchWithLogging).not.toHaveBeenCalled();
   });
 
   it("rejects an empty fallback sequence", async () => {

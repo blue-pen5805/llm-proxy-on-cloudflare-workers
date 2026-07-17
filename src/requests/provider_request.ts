@@ -1,6 +1,6 @@
 import type { CloudflareAIGateway } from "../ai_gateway";
 import type { MiddlewareContext } from "../middleware";
-import { getProvider } from "../providers";
+import { getProviderByName } from "../providers";
 import type { ProviderBase } from "../providers/provider";
 import { Environments } from "../utils/environments";
 
@@ -11,14 +11,14 @@ export function resolveProvider(
 ): ProviderBase | undefined {
   return context.providers
     ? context.providers.get(providerName)
-    : getProvider(providerName, Environments.all());
+    : getProviderByName(providerName, Environments.all());
 }
 
 /**
  * Return the existing endpoint-compatible error response when a provider is
  * known but cannot serve the current request configuration.
  */
-export function providerConfigurationErrorResponse(
+export function createProviderConfigurationErrorResponse(
   providerName: string,
   provider: ProviderBase,
   aiGateway?: CloudflareAIGateway,

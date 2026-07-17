@@ -1,14 +1,18 @@
 import { SELF } from "cloudflare:test";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { Providers, getAllProviders, getProvider } from "~/src/providers";
-import { aiGatewayRest } from "~/src/requests/ai_gateway_rest";
-import { chatCompletions } from "~/src/requests/chat_completions";
-import { compat } from "~/src/requests/compat";
-import { models } from "~/src/requests/models";
+import {
+  BUILT_IN_PROVIDER_CONSTRUCTORS,
+  getAllProviderInstances,
+  getProviderByName,
+} from "~/src/providers";
+import { handleAiGatewayRestRequest } from "~/src/requests/ai_gateway_rest";
+import { handleChatCompletionsRequest } from "~/src/requests/chat_completions";
+import { handleCompatibilityRequest } from "~/src/requests/compat";
+import { handleModelsRequest } from "~/src/requests/models";
 import { handleOptions } from "~/src/requests/options";
-import { proxy } from "~/src/requests/proxy";
-import { universalEndpoint } from "~/src/requests/universal_endpoint";
-import { authenticate } from "~/src/utils/authorization";
+import { handleProviderProxyRequest } from "~/src/requests/proxy";
+import { handleUniversalEndpointRequest } from "~/src/requests/universal_endpoint";
+import { isRequestAuthorized } from "~/src/utils/authorization";
 import { Config } from "~/src/utils/config";
 import { Environments } from "~/src/utils/environments";
 
@@ -33,7 +37,7 @@ vi.mock("~/src/ai_gateway", () => {
   };
 });
 vi.mock("~/src/providers", () => {
-  const Providers = {
+  const BUILT_IN_PROVIDER_CONSTRUCTORS = {
     openai: vi.fn(function () {
       return {
         name: "openai",
@@ -42,19 +46,19 @@ vi.mock("~/src/providers", () => {
       };
     }),
   };
-  const getAllProviders = vi.fn();
-  const getProvider = vi.fn();
+  const getAllProviderInstances = vi.fn();
+  const getProviderByName = vi.fn();
 
   return {
-    Providers,
-    getAllProviders,
-    getProvider,
+    BUILT_IN_PROVIDER_CONSTRUCTORS,
+    getAllProviderInstances,
+    getProviderByName,
     createProviderRegistry: vi.fn(() => ({
-      all: () => getAllProviders(),
-      get: (name: string) => getProvider(name),
+      all: () => getAllProviderInstances(),
+      get: (name: string) => getProviderByName(name),
       match: (pathname: string) => {
-        const providerName = Object.keys(getAllProviders()).find((name) =>
-          pathname.startsWith(`/${name}/`),
+        const providerName = Object.keys(getAllProviderInstances()).find(
+          (name) => pathname.startsWith(`/${name}/`),
         );
         return providerName
           ? {
@@ -78,25 +82,25 @@ vi.mock("~/src/requests/options", () => ({
   handleOptions: vi.fn(async () => new Response()),
 }));
 vi.mock("~/src/requests/proxy", () => ({
-  proxy: vi.fn(async () => new Response()),
+  handleProviderProxyRequest: vi.fn(async () => new Response()),
 }));
 vi.mock("~/src/requests/chat_completions", () => ({
-  chatCompletions: vi.fn(async () => new Response()),
+  handleChatCompletionsRequest: vi.fn(async () => new Response()),
 }));
 vi.mock("~/src/requests/ai_gateway_rest", () => ({
-  aiGatewayRest: vi.fn(async () => new Response()),
+  handleAiGatewayRestRequest: vi.fn(async () => new Response()),
 }));
 vi.mock("~/src/requests/models", () => ({
-  models: vi.fn(async () => new Response()),
+  handleModelsRequest: vi.fn(async () => new Response()),
 }));
 vi.mock("~/src/requests/universal_endpoint", () => ({
-  universalEndpoint: vi.fn(async () => new Response()),
+  handleUniversalEndpointRequest: vi.fn(async () => new Response()),
 }));
 vi.mock("~/src/requests/compat", () => ({
-  compat: vi.fn(async () => new Response()),
+  handleCompatibilityRequest: vi.fn(async () => new Response()),
 }));
 vi.mock("~/src/utils/authorization", () => ({
-  authenticate: vi.fn(),
+  isRequestAuthorized: vi.fn(),
   AUTHORIZATION_QUERY_PARAMETERS: ["key"],
 }));
 vi.mock("~/src/utils/config", () => ({
@@ -107,7 +111,7 @@ describe("fetch", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    vi.mocked(authenticate).mockReturnValue(true);
+    vi.mocked(isRequestAuthorized).mockReturnValue(true);
     vi.mocked(Config.isDevelopment).mockReturnValue(false);
     vi.mocked(Config.aiGateway).mockReturnValue({
       accountId: "test-account-id",
@@ -115,19 +119,20 @@ describe("fetch", () => {
       token: "test-token",
       restApiToken: "rest-token",
     });
-    vi.mocked(getAllProviders).mockImplementation(() => ({
-      openai: new (Providers.openai as any)(),
+    vi.mocked(getAllProviderInstances).mockImplementation(() => ({
+      openai: new (BUILT_IN_PROVIDER_CONSTRUCTORS.openai as any)(),
     }));
 
-    vi.mocked(getProvider).mockImplementation((name) => {
-      if (name === "openai") return new (Providers.openai as any)();
+    vi.mocked(getProviderByName).mockImplementation((name) => {
+      if (name === "openai")
+        return new (BUILT_IN_PROVIDER_CONSTRUCTORS.openai as any)();
       return undefined;
     });
 
     vi.mocked(Environments.all).mockReturnValue({} as any);
 
-    // Ensure Providers.openai is set up correctly for routing
-    Providers.openai = vi.fn(function () {
+    // Ensure the built-in OpenAI constructor is available for routing.
+    BUILT_IN_PROVIDER_CONSTRUCTORS.openai = vi.fn(function () {
       return {
         name: "openai",
         baseUrl: "https://api.openai.com",
@@ -142,23 +147,23 @@ describe("fetch", () => {
     });
 
     expect(handleOptions).toHaveBeenCalledOnce();
-    expect(authenticate).not.toHaveBeenCalled();
+    expect(isRequestAuthorized).not.toHaveBeenCalled();
     expect(response.status).toBe(200);
   });
 
   it("should succeed with authentication", async () => {
     const response = await SELF.fetch("https://example.com/ping");
 
-    expect(authenticate).toHaveBeenCalled();
+    expect(isRequestAuthorized).toHaveBeenCalled();
     expect(response.status).toBe(200);
   });
 
   it("should fail with invalid authentication", async () => {
-    vi.mocked(authenticate).mockReturnValue(false);
+    vi.mocked(isRequestAuthorized).mockReturnValue(false);
 
     const response = await SELF.fetch("https://example.com/ping");
 
-    expect(authenticate).toHaveBeenCalled();
+    expect(isRequestAuthorized).toHaveBeenCalled();
     expect(response.status).toBe(401);
   });
 
@@ -167,7 +172,7 @@ describe("fetch", () => {
 
     const response = await SELF.fetch("https://example.com/ping");
 
-    expect(authenticate).not.toHaveBeenCalled();
+    expect(isRequestAuthorized).not.toHaveBeenCalled();
     expect(response.status).toBe(200);
   });
 
@@ -178,7 +183,7 @@ describe("fetch", () => {
 
     await SELF.fetch(request);
 
-    expect(chatCompletions).toHaveBeenCalledOnce();
+    expect(handleChatCompletionsRequest).toHaveBeenCalledOnce();
   });
 
   it("should handle v1 chat completions request", async () => {
@@ -188,7 +193,7 @@ describe("fetch", () => {
 
     await SELF.fetch(request);
 
-    expect(chatCompletions).toHaveBeenCalledOnce();
+    expect(handleChatCompletionsRequest).toHaveBeenCalledOnce();
   });
 
   it("should handle models request", async () => {
@@ -198,7 +203,7 @@ describe("fetch", () => {
 
     await SELF.fetch(request);
 
-    expect(models).toHaveBeenCalledOnce();
+    expect(handleModelsRequest).toHaveBeenCalledOnce();
   });
 
   it("should handle v1 models request", async () => {
@@ -208,7 +213,7 @@ describe("fetch", () => {
 
     await SELF.fetch(request);
 
-    expect(models).toHaveBeenCalledOnce();
+    expect(handleModelsRequest).toHaveBeenCalledOnce();
   });
 
   it("should handle AI Gateway chat completions request", async () => {
@@ -221,7 +226,7 @@ describe("fetch", () => {
 
     await SELF.fetch(request);
 
-    expect(chatCompletions).toHaveBeenCalledOnce();
+    expect(handleChatCompletionsRequest).toHaveBeenCalledOnce();
   });
 
   it("should handle AI Gateway models request", async () => {
@@ -231,7 +236,7 @@ describe("fetch", () => {
 
     await SELF.fetch(request);
 
-    expect(models).toHaveBeenCalledOnce();
+    expect(handleModelsRequest).toHaveBeenCalledOnce();
   });
 
   it("should handle AI Gateway universal endpoint request", async () => {
@@ -241,7 +246,7 @@ describe("fetch", () => {
 
     await SELF.fetch(request);
 
-    expect(universalEndpoint).toHaveBeenCalledOnce();
+    expect(handleUniversalEndpointRequest).toHaveBeenCalledOnce();
   });
 
   it("should handle AI Gateway compat request", async () => {
@@ -254,7 +259,7 @@ describe("fetch", () => {
 
     await SELF.fetch(request);
 
-    expect(compat).toHaveBeenCalledOnce();
+    expect(handleCompatibilityRequest).toHaveBeenCalledOnce();
   });
 
   it.each([
@@ -269,7 +274,7 @@ describe("fetch", () => {
       });
 
       expect(response.status).toBe(404);
-      expect(compat).not.toHaveBeenCalled();
+      expect(handleCompatibilityRequest).not.toHaveBeenCalled();
     },
   );
 
@@ -285,7 +290,7 @@ describe("fetch", () => {
 
     await SELF.fetch(request);
 
-    expect(aiGatewayRest).toHaveBeenLastCalledWith(
+    expect(handleAiGatewayRestRequest).toHaveBeenLastCalledWith(
       request,
       path,
       expect.anything(),
@@ -303,14 +308,14 @@ describe("fetch", () => {
       });
 
       expect(response.status).toBe(404);
-      expect(aiGatewayRest).not.toHaveBeenCalled();
+      expect(handleAiGatewayRestRequest).not.toHaveBeenCalled();
     },
   );
 
   it("should handle requests starting with {PROVIDER_NAME}", async () => {
     await SELF.fetch("https://example.com/openai/notfound");
 
-    expect(proxy).toHaveBeenCalledOnce();
+    expect(handleProviderProxyRequest).toHaveBeenCalledOnce();
   });
 
   it("should handle universal endpoint request", async () => {
@@ -320,7 +325,7 @@ describe("fetch", () => {
 
     await SELF.fetch(request);
 
-    expect(universalEndpoint).toHaveBeenCalledOnce();
+    expect(handleUniversalEndpointRequest).toHaveBeenCalledOnce();
   });
 
   it("should return 404 for unknown routes", async () => {
@@ -331,7 +336,7 @@ describe("fetch", () => {
 
   it("should remove authorization query parameters from pathname", async () => {
     // Mock the proxy function to capture the arguments
-    const mockProxy = vi.mocked(proxy);
+    const mockProxy = vi.mocked(handleProviderProxyRequest);
 
     // Request with key parameter
     await SELF.fetch(

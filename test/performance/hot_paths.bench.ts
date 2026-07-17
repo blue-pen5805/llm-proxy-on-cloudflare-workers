@@ -1,8 +1,8 @@
 import { bench, describe } from "vitest";
-import { Providers } from "~/src/providers";
+import { BUILT_IN_PROVIDER_CONSTRUCTORS } from "~/src/providers";
 import { ProviderBase } from "~/src/providers/provider";
 import { ProviderRegistry } from "~/src/providers/registry";
-import { maskUrl } from "~/src/utils/helpers";
+import { maskSensitiveUrl } from "~/src/utils/helpers";
 
 const chatBody = JSON.stringify({
   model: "openai/gpt-4o",
@@ -16,7 +16,7 @@ const chatBody = JSON.stringify({
 
 const provider = new ProviderBase();
 const parsedChatBody = JSON.parse(chatBody) as Record<string, unknown>;
-const registry = new ProviderRegistry(Providers, [
+const registry = new ProviderRegistry(BUILT_IN_PROVIDER_CONSTRUCTORS, [
   { name: "internal.v2", baseUrl: "https://internal.example" },
 ]);
 const loggedUrl =
@@ -24,7 +24,7 @@ const loggedUrl =
 
 describe("request hot paths", () => {
   bench("build a chat-completions request", async () => {
-    const preparedData = provider.filterChatCompletionsRequest(parsedChatBody);
+    const preparedData = provider.filterSupportedChatParameters(parsedChatBody);
     await provider.buildChatCompletionsRequest({
       body: "",
       preparedData,
@@ -37,6 +37,6 @@ describe("request hot paths", () => {
   });
 
   bench("mask a logged subrequest URL", () => {
-    maskUrl(loggedUrl);
+    maskSensitiveUrl(loggedUrl);
   });
 });

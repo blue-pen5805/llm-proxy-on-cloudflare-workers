@@ -22,10 +22,10 @@ import { Config } from "./utils/config";
 
 export { ProviderRegistry } from "./providers/registry";
 
-export const Providers: {
+export const BUILT_IN_PROVIDER_CONSTRUCTORS: {
   [providerName: string]: typeof ProviderBase;
 } = {
-  // --- Cloudflare AI Gateway Supported Providers
+  // --- Cloudflare AI Gateway supported providers
   "workers-ai": WorkersAi,
   "aws-bedrock": AwsBedrock,
   anthropic: Anthropic,
@@ -44,20 +44,25 @@ export const Providers: {
   "perplexity-ai": PerplexityAi,
   replicate: Replicate,
   ollama: Ollama,
-  // --- Other Providers
+  // --- Other providers
 };
 
-export function getProvider(
+export function getProviderByName(
   providerName: string,
   env: Env,
 ): ProviderBase | undefined {
   return createProviderRegistry(env).get(providerName);
 }
 
-export function getAllProviders(env: Env): Record<string, ProviderBase> {
+export function getAllProviderInstances(
+  env: Env,
+): Record<string, ProviderBase> {
   return createProviderRegistry(env).all();
 }
 
-export function createProviderRegistry(_env: Env): ProviderRegistry {
-  return new ProviderRegistry(Providers, Config.customOpenAIEndpoints() ?? []);
+export function createProviderRegistry(_environment: Env): ProviderRegistry {
+  return new ProviderRegistry(
+    BUILT_IN_PROVIDER_CONSTRUCTORS,
+    Config.customOpenAIEndpoints() ?? [],
+  );
 }

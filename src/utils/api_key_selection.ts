@@ -23,7 +23,7 @@ interface ApiKeySelectionLogOptions {
   step?: number;
 }
 
-export function apiKeySelectionPolicy(
+export function determineApiKeySelectionPolicy(
   selection: MiddlewareContext["apiKeyIndex"],
   fallback: ApiKeyFallback,
 ): ApiKeySelectionPolicy {

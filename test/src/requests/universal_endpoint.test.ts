@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { Providers } from "~/src/providers";
-import { universalEndpoint } from "~/src/requests/universal_endpoint";
+import { BUILT_IN_PROVIDER_CONSTRUCTORS } from "~/src/providers";
+import { handleUniversalEndpointRequest } from "~/src/requests/universal_endpoint";
 import * as helpers from "~/src/utils/helpers";
 import { Secrets } from "~/src/utils/secrets";
 
@@ -9,7 +9,7 @@ vi.mock("~/src/providers");
 vi.mock("~/src/utils/helpers");
 vi.mock("~/src/utils/secrets");
 
-describe("universalEndpoint", () => {
+describe("handleUniversalEndpointRequest", () => {
   const mockProviderClass = {
     chatCompletionPath: "/chat/completions",
     headers: vi.fn(),
@@ -21,8 +21,8 @@ describe("universalEndpoint", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(helpers.fetch2).mockResolvedValue(new Response());
-    Providers.openai = vi.fn(function () {
+    vi.mocked(helpers.fetchWithLogging).mockResolvedValue(new Response());
+    BUILT_IN_PROVIDER_CONSTRUCTORS.openai = vi.fn(function () {
       return mockProviderClass;
     });
     mockProviderClass.headers.mockReturnValue({
@@ -55,7 +55,7 @@ describe("universalEndpoint", () => {
       { method: "POST", body: JSON.stringify([]) },
     ]);
 
-    await universalEndpoint(request, mockAIGateway as any);
+    await handleUniversalEndpointRequest(request, mockAIGateway as any);
 
     expect(mockAIGateway.buildUniversalEndpointRequest).toHaveBeenCalledWith({
       data: [
@@ -73,8 +73,8 @@ describe("universalEndpoint", () => {
         },
       ],
     });
-    expect(helpers.fetch2).toHaveBeenCalled();
-    expect(helpers.fetch2).toHaveBeenCalledWith(
+    expect(helpers.fetchWithLogging).toHaveBeenCalled();
+    expect(helpers.fetchWithLogging).toHaveBeenCalledWith(
       "https://gateway.ai.cloudflare.com/v1/account/gateway",
       expect.objectContaining({ signal: request.signal }),
     );
@@ -89,7 +89,7 @@ describe("universalEndpoint", () => {
       }),
     };
 
-    Providers.anthropic = vi.fn(function () {
+    BUILT_IN_PROVIDER_CONSTRUCTORS.anthropic = vi.fn(function () {
       return anthropicProviderClass;
     });
 
@@ -121,7 +121,7 @@ describe("universalEndpoint", () => {
       { method: "POST", body: JSON.stringify([]) },
     ]);
 
-    await universalEndpoint(request, mockAIGateway as any);
+    await handleUniversalEndpointRequest(request, mockAIGateway as any);
 
     expect(mockAIGateway.buildUniversalEndpointRequest).toHaveBeenCalledWith({
       data: [
@@ -176,7 +176,7 @@ describe("universalEndpoint", () => {
       { method: "POST", body: JSON.stringify([]) },
     ]);
 
-    await universalEndpoint(request, mockAIGateway as any);
+    await handleUniversalEndpointRequest(request, mockAIGateway as any);
 
     expect(mockAIGateway.buildUniversalEndpointRequest).toHaveBeenCalledWith({
       data: [
@@ -222,7 +222,7 @@ describe("universalEndpoint", () => {
       { method: "POST", body: JSON.stringify([]) },
     ]);
 
-    await universalEndpoint(request, mockAIGateway as any);
+    await handleUniversalEndpointRequest(request, mockAIGateway as any);
 
     expect(mockAIGateway.buildUniversalEndpointRequest).toHaveBeenCalledWith({
       data: [
@@ -260,7 +260,7 @@ describe("universalEndpoint", () => {
     });
 
     await expect(
-      universalEndpoint(request, mockAIGateway as any),
+      handleUniversalEndpointRequest(request, mockAIGateway as any),
     ).rejects.toThrow("Provider not specified.");
   });
 
@@ -282,7 +282,7 @@ describe("universalEndpoint", () => {
     });
 
     await expect(
-      universalEndpoint(request, mockAIGateway as any),
+      handleUniversalEndpointRequest(request, mockAIGateway as any),
     ).rejects.toThrow("Provider unsupported-provider is not supported.");
   });
 
@@ -309,7 +309,7 @@ describe("universalEndpoint", () => {
       { method: "POST", body: JSON.stringify([]) },
     ]);
 
-    await universalEndpoint(request, mockAIGateway as any);
+    await handleUniversalEndpointRequest(request, mockAIGateway as any);
 
     expect(mockAIGateway.buildUniversalEndpointRequest).toHaveBeenCalledWith({
       data: [
@@ -339,7 +339,7 @@ describe("universalEndpoint", () => {
     };
 
     // Use a supported provider instead of 'custom'
-    Providers.anthropic = vi.fn(function () {
+    BUILT_IN_PROVIDER_CONSTRUCTORS.anthropic = vi.fn(function () {
       return customProviderClass;
     });
 
@@ -364,7 +364,7 @@ describe("universalEndpoint", () => {
       { method: "POST", body: JSON.stringify([]) },
     ]);
 
-    await universalEndpoint(request, mockAIGateway as any);
+    await handleUniversalEndpointRequest(request, mockAIGateway as any);
 
     expect(mockAIGateway.buildUniversalEndpointRequest).toHaveBeenCalledWith({
       data: [

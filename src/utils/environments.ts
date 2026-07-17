@@ -92,27 +92,27 @@ export class Environments {
     parse: boolean = true,
   ): string | Array<unknown> | object | number | undefined {
     const env = this.all();
-    const value = env[key] as string | undefined;
+    const configuredValue = env[key] as string | undefined;
 
-    if (value === undefined) {
+    if (configuredValue === undefined) {
       return undefined;
     }
 
     if (!parse) {
-      return value;
+      return configuredValue;
     }
 
     // Try to parse as JSON first
-    const jsonValue = this.parseJson(value);
+    const jsonValue = this.parseJson(configuredValue);
     if (jsonValue !== undefined) {
       return jsonValue;
     }
 
     // If JSON parsing fails, try to parse as comma-separated values
-    const separatedTexts = this.parseCommaSeparatedText(value);
+    const separatedTexts = this.parseCommaSeparatedText(configuredValue);
 
     // If parsing fails, return the original value
-    return separatedTexts ?? value;
+    return separatedTexts ?? configuredValue;
   }
 
   /**

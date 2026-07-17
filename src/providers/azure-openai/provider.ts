@@ -9,15 +9,15 @@ export type AzureOpenAI = Provider & {
   readonly apiVersionName: keyof Env;
 };
 
-function resource(provider: AzureOpenAI): string {
-  const value = Secrets.get(provider.resourceName);
-  if (!AZURE_RESOURCE_PATTERN.test(value)) {
+function getAzureResourceName(provider: AzureOpenAI): string {
+  const resourceName = Secrets.get(provider.resourceName);
+  if (!AZURE_RESOURCE_PATTERN.test(resourceName)) {
     throw new Error("AZURE_OPENAI_RESOURCE_NAME is missing or invalid.");
   }
-  return value;
+  return resourceName;
 }
 
-function apiVersion(provider: AzureOpenAI): string {
+function getAzureApiVersion(provider: AzureOpenAI): string {
   return Secrets.get(provider.apiVersionName) || DEFAULT_API_VERSION;
 }
 
@@ -32,7 +32,7 @@ export const AzureOpenAI = defineProvider({
   supportsAiGatewayModels: false,
   supportsAiGatewayNativeChat: true,
   baseUrl() {
-    return `https://${resource(this as AzureOpenAI)}.openai.azure.com`;
+    return `https://${getAzureResourceName(this as AzureOpenAI)}.openai.azure.com`;
   },
   async headers(apiKeyIndex?: number): Promise<HeadersInit> {
     const apiKey = Secrets.get("AZURE_OPENAI_API_KEY", apiKeyIndex);
@@ -42,10 +42,12 @@ export const AzureOpenAI = defineProvider({
   },
 
   aiGatewayPath(pathname: string): string {
-    const match = pathname.match(/^\/openai\/deployments\/([^/]+)\/(.*)$/);
-    if (!match) return pathname;
+    const deploymentPathMatch = pathname.match(
+      /^\/openai\/deployments\/([^/]+)\/(.*)$/,
+    );
+    if (!deploymentPathMatch) return pathname;
 
-    return `/${encodeURIComponent(resource(this as AzureOpenAI))}/${match[1]}/${match[2]}`;
+    return `/${encodeURIComponent(getAzureResourceName(this as AzureOpenAI))}/${deploymentPathMatch[1]}/${deploymentPathMatch[2]}`;
   },
 
   async buildAiGatewayChatCompletionsRequest({
@@ -63,7 +65,7 @@ export const AzureOpenAI = defineProvider({
     providerHeaders.forEach((value, key) => gatewayHeaders.set(key, value));
 
     return [
-      `/${encodeURIComponent(resource(this as AzureOpenAI))}/${encodeURIComponent(model)}/chat/completions?api-version=${encodeURIComponent(apiVersion(this as AzureOpenAI))}`,
+      `/${encodeURIComponent(getAzureResourceName(this as AzureOpenAI))}/${encodeURIComponent(model)}/chat/completions?api-version=${encodeURIComponent(getAzureApiVersion(this as AzureOpenAI))}`,
       {
         method: "POST",
         body: JSON.stringify(body),

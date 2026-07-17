@@ -1,15 +1,15 @@
 import { CloudflareAIGateway } from "../ai_gateway";
 import { MiddlewareContext } from "../middleware";
-import { getAllProviders } from "../providers";
+import { getAllProviderInstances } from "../providers";
 import { OpenAIModelsListResponseBody } from "../providers/openai/types";
 import { ProviderBase, ProviderNotSupportedError } from "../providers/provider";
 import {
-  apiKeySelectionPolicy,
+  determineApiKeySelectionPolicy,
   recordApiKeySelection,
   selectApiKeyIndex,
 } from "../utils/api_key_selection";
 import { Environments } from "../utils/environments";
-import { fetch2, withTimeout } from "../utils/helpers";
+import { fetchWithLogging, withTimeout } from "../utils/helpers";
 import { RequestLogger } from "../utils/logger";
 
 // Timeout for individual provider model fetch operations (milliseconds)
@@ -30,9 +30,9 @@ async function fetchProviderModels(
     return EMPTY_MODELS;
   }
 
-  const staticModels = provider.staticModels();
-  if (staticModels) {
-    return staticModels;
+  const getStaticModels = provider.getStaticModels();
+  if (getStaticModels) {
+    return getStaticModels;
   }
 
   const apiKeyIndex = await selectApiKeyIndex(provider, selection, "first");
@@ -45,7 +45,7 @@ async function fetchProviderModels(
     operation: "models",
     keyIndex: apiKeyIndex,
     keyCount: provider.getApiKeys().length,
-    selectionPolicy: apiKeySelectionPolicy(selection, "first"),
+    selectionPolicy: determineApiKeySelectionPolicy(selection, "first"),
     viaAiGateway: aiGatewayProvider !== undefined,
   });
   const [path, init] = await provider.buildModelsRequest(apiKeyIndex);
@@ -64,7 +64,7 @@ async function fetchProviderModels(
       headers: await provider.headers(apiKeyIndex),
     });
     responsePromise = RequestLogger.withFields(keyLogFields, () =>
-      fetch2(gatewayUrl, {
+      fetchWithLogging(gatewayUrl, {
         ...gatewayInit,
         signal: abortController.signal,
       }),
@@ -79,8 +79,8 @@ async function fetchProviderModels(
     );
   }
 
-  const modelsPromise = responsePromise.then(async (response) =>
-    provider.modelsToOpenAIFormat(await response.json()),
+  const modelsPromise = responsePromise.then(async (upstreamResponse) =>
+    provider.convertModelsToOpenAIFormat(await upstreamResponse.json()),
   );
   return withTimeout(
     modelsPromise,
@@ -90,45 +90,47 @@ async function fetchProviderModels(
   );
 }
 
-export async function models(
+export async function handleModelsRequest(
   context: MiddlewareContext,
   aiGateway: CloudflareAIGateway | undefined = undefined,
 ) {
   const providerEntries = Object.entries(
-    context.providers?.all() ?? getAllProviders(Environments.all()),
+    context.providers?.all() ?? getAllProviderInstances(Environments.all()),
   );
-  const requests = providerEntries.map(([providerName, provider]) =>
+  const modelRequests = providerEntries.map(([providerName, provider]) =>
     fetchProviderModels(providerName, provider, context.apiKeyIndex, aiGateway),
   );
 
-  const responses = await Promise.allSettled(requests);
-  const models = responses.map((response, index) => {
-    const provider = providerEntries[index][0];
+  const settledModelRequests = await Promise.allSettled(modelRequests);
+  const providerModels = settledModelRequests.map((settledRequest, index) => {
+    const providerName = providerEntries[index][0];
 
-    if (response.status === "rejected") {
-      if (response.reason instanceof ProviderNotSupportedError) {
+    if (settledRequest.status === "rejected") {
+      if (settledRequest.reason instanceof ProviderNotSupportedError) {
         return [];
       }
 
-      RequestLogger.error("provider.models.failed", response.reason, {
-        provider,
+      RequestLogger.error("provider.models.failed", settledRequest.reason, {
+        provider: providerName,
       });
       return [];
     }
-    if (!response.value?.data) {
-      RequestLogger.warn("provider.models.invalid_response", { provider });
+    if (!settledRequest.value?.data) {
+      RequestLogger.warn("provider.models.invalid_response", {
+        provider: providerName,
+      });
       return [];
     }
 
-    return response.value.data.map(({ id, ...model }) => ({
-      id: `${provider}/${id}`,
+    return settledRequest.value.data.map(({ id, ...model }) => ({
+      id: `${providerName}/${id}`,
       ...model,
     }));
   });
 
   return new Response(
     JSON.stringify({
-      data: models.flat(),
+      data: providerModels.flat(),
       object: "list",
     }),
     {

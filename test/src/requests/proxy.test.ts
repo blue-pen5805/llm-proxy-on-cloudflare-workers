@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
-import { Providers } from "~/src/providers";
-import { getProvider } from "~/src/providers";
-import { proxy } from "~/src/requests/proxy";
+import { BUILT_IN_PROVIDER_CONSTRUCTORS } from "~/src/providers";
+import { getProviderByName } from "~/src/providers";
+import { handleProviderProxyRequest } from "~/src/requests/proxy";
 import { Environments } from "~/src/utils/environments";
 import { NotFoundError } from "~/src/utils/error";
-import { fetch2 } from "~/src/utils/helpers";
+import { fetchWithLogging } from "~/src/utils/helpers";
 import { Secrets } from "~/src/utils/secrets";
 
 vi.mock("~/src/providers", async () => {
@@ -13,7 +13,7 @@ vi.mock("~/src/providers", async () => {
     await vi.importActual<typeof import("~/src/providers")>("~/src/providers");
   return {
     ...actual,
-    getProvider: vi.fn(),
+    getProviderByName: vi.fn(),
   };
 });
 vi.mock("~/src/providers/ai_gateway");
@@ -38,15 +38,15 @@ describe("proxy", () => {
     vi.mocked(Secrets.getNext).mockResolvedValue(0);
     vi.mocked(Environments.all).mockReturnValue({} as any);
 
-    vi.mocked(getProvider).mockImplementation((name) => {
-      const ProviderClass = Providers[name];
+    vi.mocked(getProviderByName).mockImplementation((name) => {
+      const ProviderClass = BUILT_IN_PROVIDER_CONSTRUCTORS[name];
       return ProviderClass ? new (ProviderClass as any)() : undefined;
     });
   });
 
   it("should call providerClass.fetch with correct arguments", async () => {
     const providerName = "testProvider";
-    Providers[providerName] = vi.fn(function () {
+    BUILT_IN_PROVIDER_CONSTRUCTORS[providerName] = vi.fn(function () {
       return mockProviderClass;
     });
 
@@ -57,7 +57,7 @@ describe("proxy", () => {
     });
 
     const providers = { get: vi.fn(() => mockProviderClass) };
-    await proxy(
+    await handleProviderProxyRequest(
       { request: mockRequest, providers } as any,
       providerName,
       "/test/path",
@@ -78,7 +78,7 @@ describe("proxy", () => {
 
   it("should handle duplicate path segments correctly", async () => {
     const providerName = "testProvider";
-    Providers[providerName] = vi.fn(function () {
+    BUILT_IN_PROVIDER_CONSTRUCTORS[providerName] = vi.fn(function () {
       return mockProviderClass;
     });
 
@@ -88,7 +88,11 @@ describe("proxy", () => {
       headers: new Headers(),
     });
 
-    await proxy({ request: mockRequest } as any, providerName, "/test/path");
+    await handleProviderProxyRequest(
+      { request: mockRequest } as any,
+      providerName,
+      "/test/path",
+    );
 
     expect(mockProviderClass.fetch).toHaveBeenCalledWith(
       "/test/path",
@@ -103,11 +107,11 @@ describe("proxy", () => {
   });
 
   it("throws NotFoundError for an unknown provider", async () => {
-    vi.mocked(getProvider).mockReturnValue(undefined);
+    vi.mocked(getProviderByName).mockReturnValue(undefined);
     const request = new Request("https://example.com/missing");
 
     await expect(
-      proxy({ request } as any, "missing", "/missing"),
+      handleProviderProxyRequest({ request } as any, "missing", "/missing"),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
@@ -117,7 +121,7 @@ describe("proxy", () => {
       requiresAiGateway: true,
       requiresAuthenticatedAiGateway: true,
     };
-    const response = await proxy(
+    const response = await handleProviderProxyRequest(
       {
         request: new Request("https://example.com/google-vertex-ai/path"),
         providers: { get: vi.fn(() => gatewayOnlyProvider) },
@@ -135,13 +139,13 @@ describe("proxy", () => {
 
   it("resolves an explicit key selection from middleware context", async () => {
     const providerName = "selectedProvider";
-    Providers[providerName] = vi.fn(function () {
+    BUILT_IN_PROVIDER_CONSTRUCTORS[providerName] = vi.fn(function () {
       return mockProviderClass;
     });
     vi.mocked(Secrets.resolveApiKeyIndex).mockReturnValue(2);
     const request = new Request("https://example.com/models");
 
-    await proxy(
+    await handleProviderProxyRequest(
       { request, apiKeyIndex: { start: 1, end: 2 } } as any,
       providerName,
       "/models",
@@ -161,7 +165,7 @@ describe("proxy", () => {
 
   it("routes supported providers through AI Gateway", async () => {
     const providerName = "openai";
-    Providers[providerName] = vi.fn(function () {
+    BUILT_IN_PROVIDER_CONSTRUCTORS[providerName] = vi.fn(function () {
       return mockProviderClass;
     });
     vi.spyOn(CloudflareAIGateway, "isSupportedProvider").mockReturnValue(true);
@@ -172,12 +176,12 @@ describe("proxy", () => {
         { method: "GET" },
       ]);
     const gateway = { buildProviderEndpointRequest } as any;
-    vi.mocked(fetch2).mockResolvedValue(new Response("gateway"));
+    vi.mocked(fetchWithLogging).mockResolvedValue(new Response("gateway"));
     const request = new Request("https://example.com/models", {
       headers: { "X-Request": "value" },
     });
 
-    const response = await proxy(
+    const response = await handleProviderProxyRequest(
       { request } as any,
       providerName,
       "/models",
@@ -196,7 +200,7 @@ describe("proxy", () => {
     );
     expect(gatewayHeaders.get("Authorization")).toBe("Bearer test-key");
     expect(gatewayHeaders.get("X-Request")).toBe("value");
-    expect(fetch2).toHaveBeenCalledWith(
+    expect(fetchWithLogging).toHaveBeenCalledWith(
       "https://gateway.example/openai/models",
       { method: "GET", signal: request.signal },
     );
@@ -205,7 +209,7 @@ describe("proxy", () => {
 
   it("does not forward proxy credentials to a provider", async () => {
     const providerName = "testProvider";
-    Providers[providerName] = vi.fn(function () {
+    BUILT_IN_PROVIDER_CONSTRUCTORS[providerName] = vi.fn(function () {
       return mockProviderClass;
     });
     const request = new Request("https://example.com/test", {
@@ -217,7 +221,7 @@ describe("proxy", () => {
       },
     });
 
-    await proxy({ request } as any, providerName, "/test");
+    await handleProviderProxyRequest({ request } as any, providerName, "/test");
 
     const init = mockProviderClass.fetch.mock.calls[0][1];
     expect(init.headers).toEqual({ "x-client-header": "preserved" });

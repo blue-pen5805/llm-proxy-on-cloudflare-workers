@@ -2,14 +2,14 @@ import {
   deploySecrets,
   executeWranglerSecretBulk,
   filterSecretsForDeployment,
-  generateSecretsJson,
+  serializeSecretsJson,
   getConfigPath,
-  main,
-  parseArgs,
+  runDeploySecretsCli,
+  parseDeploySecretsArguments,
   parseJsonc,
   showHelp,
   validateEnvironmentName,
-  valueToSecret,
+  serializeSecretValue,
   type FileSystemOperations,
 } from "../../scripts/deploy-secrets";
 import { execSync } from "child_process";
@@ -57,29 +57,33 @@ describe("deploy-secrets", () => {
     vi.mocked(fs.existsSync).mockReset().mockReturnValue(true);
   });
 
-  describe("parseArgs", () => {
+  describe("parseDeploySecretsArguments", () => {
     it("should parse empty arguments", () => {
-      const result = parseArgs([]);
+      const result = parseDeploySecretsArguments([]);
       expect(result).toEqual({});
     });
 
     it("should parse --env argument", () => {
-      const result = parseArgs(["--env", "production"]);
+      const result = parseDeploySecretsArguments(["--env", "production"]);
       expect(result).toEqual({ env: "production" });
     });
 
     it("should parse --dry-run argument", () => {
-      const result = parseArgs(["--dry-run"]);
+      const result = parseDeploySecretsArguments(["--dry-run"]);
       expect(result).toEqual({ dryRun: true });
     });
 
     it("should parse --help argument", () => {
-      const result = parseArgs(["--help"]);
+      const result = parseDeploySecretsArguments(["--help"]);
       expect(result).toEqual({ help: true });
     });
 
     it("should parse multiple arguments", () => {
-      const result = parseArgs(["--env", "prod", "--dry-run"]);
+      const result = parseDeploySecretsArguments([
+        "--env",
+        "prod",
+        "--dry-run",
+      ]);
       expect(result).toEqual({
         env: "prod",
         dryRun: true,
@@ -87,19 +91,19 @@ describe("deploy-secrets", () => {
     });
 
     it("should throw error for unknown option", () => {
-      expect(() => parseArgs(["--unknown"])).toThrow(
+      expect(() => parseDeploySecretsArguments(["--unknown"])).toThrow(
         "Unknown option: --unknown",
       );
     });
 
     it("should throw error for unexpected positional arguments", () => {
-      expect(() => parseArgs(["config.jsonc"])).toThrow(
+      expect(() => parseDeploySecretsArguments(["config.jsonc"])).toThrow(
         "Unexpected argument: config.jsonc",
       );
     });
 
     it("should throw error for missing env value", () => {
-      expect(() => parseArgs(["--env"])).toThrow(
+      expect(() => parseDeploySecretsArguments(["--env"])).toThrow(
         "--env option requires a value",
       );
     });
@@ -183,47 +187,50 @@ describe("deploy-secrets", () => {
     });
   });
 
-  describe("valueToSecret", () => {
+  describe("serializeSecretValue", () => {
     it("should handle string values", () => {
-      expect(valueToSecret("test")).toBe("test");
+      expect(serializeSecretValue("test")).toBe("test");
     });
 
     it("should handle number values", () => {
-      expect(valueToSecret(123)).toBe("123");
+      expect(serializeSecretValue(123)).toBe("123");
     });
 
     it("should handle boolean values", () => {
-      expect(valueToSecret(true)).toBe("true");
-      expect(valueToSecret(false)).toBe("false");
+      expect(serializeSecretValue(true)).toBe("true");
+      expect(serializeSecretValue(false)).toBe("false");
     });
 
     it("should handle array values", () => {
-      expect(valueToSecret(["a", "b", "c"])).toBe('["a","b","c"]');
+      expect(serializeSecretValue(["a", "b", "c"])).toBe('["a","b","c"]');
     });
 
     it("should stringify object secrets", () => {
       expect(
-        valueToSecret({ type: "service_account", region: "us-central1" }),
+        serializeSecretValue({
+          type: "service_account",
+          region: "us-central1",
+        }),
       ).toBe('{"type":"service_account","region":"us-central1"}');
     });
 
     it("should handle null/undefined/empty values", () => {
-      expect(valueToSecret(null)).toBe("");
-      expect(valueToSecret(undefined)).toBe("");
-      expect(valueToSecret("")).toBe("");
+      expect(serializeSecretValue(null)).toBe("");
+      expect(serializeSecretValue(undefined)).toBe("");
+      expect(serializeSecretValue("")).toBe("");
     });
 
     it("should handle empty arrays", () => {
-      expect(valueToSecret([])).toBe("");
+      expect(serializeSecretValue([])).toBe("");
     });
 
     it("should handle empty objects", () => {
-      expect(valueToSecret({})).toBe("");
+      expect(serializeSecretValue({})).toBe("");
     });
 
     it("should handle whitespace-only strings", () => {
-      expect(valueToSecret("   ")).toBe("");
-      expect(valueToSecret("\t\n")).toBe("");
+      expect(serializeSecretValue("   ")).toBe("");
+      expect(serializeSecretValue("\t\n")).toBe("");
     });
   });
 
@@ -261,14 +268,14 @@ describe("deploy-secrets", () => {
     });
   });
 
-  describe("generateSecretsJson", () => {
+  describe("serializeSecretsJson", () => {
     it("should generate properly formatted JSON", () => {
       const secrets = {
         API_KEY: "secret",
         ANOTHER_KEY: "value",
       };
 
-      const result = generateSecretsJson(secrets);
+      const result = serializeSecretsJson(secrets);
       const parsed = JSON.parse(result);
       expect(parsed).toEqual(secrets);
     });
@@ -477,7 +484,7 @@ describe("deploy-secrets", () => {
     });
   });
 
-  describe("main", () => {
+  describe("runDeploySecretsCli", () => {
     const originalArgv = process.argv;
 
     beforeEach(() => {
@@ -489,7 +496,7 @@ describe("deploy-secrets", () => {
       process.argv = ["node", "deploy-secrets.ts", "--help"];
       const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-      main();
+      runDeploySecretsCli();
 
       expect(log).toHaveBeenCalledWith(expect.stringContaining("Usage:"));
     });
@@ -503,7 +510,7 @@ describe("deploy-secrets", () => {
         throw new Error("exited");
       }) as never);
 
-      expect(() => main()).toThrow("exited");
+      expect(() => runDeploySecretsCli()).toThrow("exited");
       expect(error).toHaveBeenCalledWith("❌ Error: Unknown option: --bad");
     });
 
@@ -513,7 +520,7 @@ describe("deploy-secrets", () => {
       vi.mocked(fs.readFileSync).mockReturnValue('{"KEY":"value"}');
       const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-      main();
+      runDeploySecretsCli();
 
       expect(log).toHaveBeenCalledWith(
         expect.stringContaining("Deploying secrets from config.jsonc"),
@@ -527,7 +534,7 @@ describe("deploy-secrets", () => {
       vi.mocked(fs.readFileSync).mockReturnValue('{"KEY":"value"}');
       const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-      main();
+      runDeploySecretsCli();
 
       expect(log).toHaveBeenCalledWith("🎉 Secret deployment completed!");
     });
@@ -544,7 +551,7 @@ describe("deploy-secrets", () => {
       vi.mocked(fs.readFileSync).mockReturnValue('{"KEY":"value"}');
       const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-      main();
+      runDeploySecretsCli();
 
       expect(log).toHaveBeenCalledWith(
         "🔐 Deploying secrets from config.prod.jsonc to prod environment (dry run)...",
@@ -559,7 +566,7 @@ describe("deploy-secrets", () => {
         .spyOn(process, "exit")
         .mockImplementation((() => undefined) as never);
 
-      main();
+      runDeploySecretsCli();
 
       expect(exit).toHaveBeenCalledWith(1);
     });

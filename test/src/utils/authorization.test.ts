@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
-  authenticate,
+  isRequestAuthorized,
   stripProxyAuthorizationHeaders,
 } from "~/src/utils/authorization";
 import { Config } from "~/src/utils/config";
 
 vi.mock("~/src/utils/config");
 
-describe("authenticate", () => {
+describe("isRequestAuthorized", () => {
   // Mock the Config.apiKeys method to return a valid API key
   beforeEach(() => {
     vi.mocked(Config.apiKeys).mockReturnValue(["valid-key"]);
@@ -18,7 +18,7 @@ describe("authenticate", () => {
     vi.mocked(Config.apiKeys).mockReturnValue(undefined);
     const request = new Request("https://example.com");
 
-    expect(authenticate(request)).toBe(true);
+    expect(isRequestAuthorized(request)).toBe(true);
   });
 
   // Test when API key is set and authentication succeeds with Authorization header
@@ -29,7 +29,7 @@ describe("authenticate", () => {
       },
     });
 
-    expect(authenticate(request)).toBe(true);
+    expect(isRequestAuthorized(request)).toBe(true);
   });
 
   it("should tolerate repeated whitespace in an Authorization header", () => {
@@ -39,10 +39,10 @@ describe("authenticate", () => {
       },
     });
 
-    expect(authenticate(request)).toBe(true);
+    expect(isRequestAuthorized(request)).toBe(true);
   });
 
-  it("should authenticate any configured key", () => {
+  it("should isRequestAuthorized any configured key", () => {
     vi.mocked(Config.apiKeys).mockReturnValue(["first-key", "valid-key"]);
     const request = new Request("https://example.com", {
       headers: {
@@ -50,7 +50,7 @@ describe("authenticate", () => {
       },
     });
 
-    expect(authenticate(request)).toBe(true);
+    expect(isRequestAuthorized(request)).toBe(true);
   });
 
   // Test when API key is set and authentication succeeds with x-api-key header
@@ -61,7 +61,7 @@ describe("authenticate", () => {
       },
     });
 
-    expect(authenticate(request)).toBe(true);
+    expect(isRequestAuthorized(request)).toBe(true);
   });
 
   // Test when API key is set and authentication succeeds with x-goog-api-key header
@@ -72,21 +72,21 @@ describe("authenticate", () => {
       },
     });
 
-    expect(authenticate(request)).toBe(true);
+    expect(isRequestAuthorized(request)).toBe(true);
   });
 
   // Test when API key is set and authentication succeeds with query parameter 'key'
   it("should return true when valid 'key' query parameter is provided", () => {
     const request = new Request("https://example.com?key=valid-key");
 
-    expect(authenticate(request)).toBe(true);
+    expect(isRequestAuthorized(request)).toBe(true);
   });
 
   // Test when authentication fails due to missing headers
   it("should return false when no authorization header or query key is provided", () => {
     const request = new Request("https://example.com");
 
-    expect(authenticate(request)).toBe(false);
+    expect(isRequestAuthorized(request)).toBe(false);
   });
 
   // Test when authentication fails due to incorrect API key
@@ -97,7 +97,7 @@ describe("authenticate", () => {
       },
     });
 
-    expect(authenticate(request)).toBe(false);
+    expect(isRequestAuthorized(request)).toBe(false);
   });
 });
 

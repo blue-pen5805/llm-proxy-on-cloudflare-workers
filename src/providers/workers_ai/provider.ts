@@ -32,11 +32,11 @@ export const WorkersAi = defineProvider({
   },
 
   // Convert model list to OpenAI format
-  modelsToOpenAIFormat(data): OpenAIModelsListResponseBody {
-    const response = data as WorkersAiModelsListResponseBody;
+  convertModelsToOpenAIFormat(data): OpenAIModelsListResponseBody {
+    const providerResponse = data as WorkersAiModelsListResponseBody;
     return {
       object: "list",
-      data: response.result.map(({ name, ...model }) => ({
+      data: providerResponse.result.map(({ name, ...model }) => ({
         id: name,
         object: "model",
         created: 0,

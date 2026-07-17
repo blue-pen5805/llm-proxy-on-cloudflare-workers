@@ -48,8 +48,8 @@ export class CloudflareAIGateway {
    * If a provider is specified, it appends the provider to the URL.
    */
   baseUrl(provider: string | undefined = undefined): string {
-    const url = `${CloudflareAIGateway.origin}/${this.accountId}/${this.gatewayId}`;
-    return provider ? `${url}/${provider}` : url;
+    const gatewayBaseUrl = `${CloudflareAIGateway.origin}/${this.accountId}/${this.gatewayId}`;
+    return provider ? `${gatewayBaseUrl}/${provider}` : gatewayBaseUrl;
   }
 
   /**
@@ -106,10 +106,10 @@ export class CloudflareAIGateway {
     body?: BodyInit | null;
     headers?: CloudflareAIGatewayHeaders | HeadersInit;
   }): [RequestInfo, RequestInit] {
-    const url = `${this.baseUrl(provider)}/${path.replace(/^\/+/, "")}`;
+    const providerEndpointUrl = `${this.baseUrl(provider)}/${path.replace(/^\/+/, "")}`;
 
     return [
-      url,
+      providerEndpointUrl,
       {
         method,
         headers: this.buildHeaders(headers),
@@ -204,7 +204,7 @@ export class CloudflareAIGateway {
     headers: CloudflareAIGatewayHeaders | HeadersInit;
     apiKeys?: readonly string[];
   }): [RequestInfo, RequestInit][] {
-    const requestData =
+    const chatRequestBody =
       parsedBody ??
       (JSON.parse(body) as {
         model: string;
@@ -234,8 +234,8 @@ export class CloudflareAIGateway {
       return this.buildCompatibilityEndpointRequest({
         headers: headersObject,
         body: JSON.stringify({
-          ...requestData,
-          model: `${provider}/${requestData.model}`,
+          ...chatRequestBody,
+          model: `${provider}/${chatRequestBody.model}`,
         }),
       });
     });

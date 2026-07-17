@@ -11,11 +11,11 @@ export const OpenRouter = defineProvider({
   chatCompletionPath: "/v1/chat/completions",
   modelsPath: "/v1/models",
   // Convert model list to OpenAI format
-  modelsToOpenAIFormat(data): OpenAIModelsListResponseBody {
-    const response = data as OpenRouterModelsListResponseBody;
+  convertModelsToOpenAIFormat(data): OpenAIModelsListResponseBody {
+    const providerResponse = data as OpenRouterModelsListResponseBody;
     return {
       object: "list",
-      data: response.data.map(({ id, created, ...model }) => ({
+      data: providerResponse.data.map(({ id, created, ...model }) => ({
         id,
         object: "model",
         created,

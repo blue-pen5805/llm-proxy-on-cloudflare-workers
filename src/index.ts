@@ -1,4 +1,4 @@
-import { compose, MiddlewareContext } from "./middleware";
+import { composeMiddleware, MiddlewareContext } from "./middleware";
 import { aiGatewayMiddleware } from "./middlewares/ai_gateway";
 import { apiKeyPathMiddleware } from "./middlewares/api_key_path";
 import { authMiddleware } from "./middlewares/auth";
@@ -15,7 +15,7 @@ import { RequestLogger } from "./utils/logger";
 
 export { KeyRotationManager };
 
-const middlewareChain = compose([
+const middlewareChain = composeMiddleware([
   loggingMiddleware,
   errorMiddleware,
   requestMiddleware,
@@ -30,7 +30,7 @@ export default {
   async fetch(request, env, ctx): Promise<Response> {
     return Environments.run(env, () =>
       RequestLogger.run(request, () => {
-        const context: MiddlewareContext = {
+        const middlewareContext: MiddlewareContext = {
           request,
           env,
           ctx,
@@ -38,7 +38,7 @@ export default {
           providers: createProviderRegistry(env),
         };
 
-        return middlewareChain(context);
+        return middlewareChain(middlewareContext);
       }),
     );
   },

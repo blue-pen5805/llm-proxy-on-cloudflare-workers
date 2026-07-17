@@ -1,4 +1,4 @@
-import { fetch2 } from "../../utils/helpers";
+import { fetchWithLogging } from "../../utils/helpers";
 import { Secrets } from "../../utils/secrets";
 import {
   OpenAIChatCompletionsRequestBody,
@@ -53,21 +53,23 @@ export const GoogleAiStudio = defineProvider({
       };
       delete newHeaders["x-goog-api-key"];
 
-      return fetch2(this.baseUrl() + pathname, {
+      return fetchWithLogging(this.baseUrl() + pathname, {
         ...init,
         headers: newHeaders,
       });
     } else {
-      return fetch2(...(await this.buildRequest(pathname, init, apiKeyIndex)));
+      return fetchWithLogging(
+        ...(await this.buildRequest(pathname, init, apiKeyIndex)),
+      );
     }
   },
 
   // Convert model list to OpenAI format
-  modelsToOpenAIFormat(data): OpenAIModelsListResponseBody {
-    const response = data as GoogleAiStudioModelsListResponseBody;
+  convertModelsToOpenAIFormat(data): OpenAIModelsListResponseBody {
+    const providerResponse = data as GoogleAiStudioModelsListResponseBody;
     return {
       object: "list",
-      data: response.models.map(({ name, ...model }) => ({
+      data: providerResponse.models.map(({ name, ...model }) => ({
         id: `${name.replace("models/", "")}`,
         object: "model",
         created: 0,

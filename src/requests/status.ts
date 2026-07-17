@@ -1,11 +1,11 @@
 import { CloudflareAIGateway } from "../ai_gateway";
-import { getAllProviders } from "../providers";
+import { getAllProviderInstances } from "../providers";
 import type { ProviderRegistry } from "../providers";
 import { ProviderBase, ProviderNotSupportedError } from "../providers/provider";
 import { recordApiKeySelection } from "../utils/api_key_selection";
 import { Config } from "../utils/config";
 import { Environments } from "../utils/environments";
-import { fetch2, withTimeout } from "../utils/helpers";
+import { fetchWithLogging, withTimeout } from "../utils/helpers";
 import { RequestLogger } from "../utils/logger";
 
 const CONNECTIVITY_CHECK_TIMEOUT_MS = 5000;
@@ -43,14 +43,14 @@ function classifyConnectivity(response: Response): ConnectivityStatus {
  * @param aiGateway The AI Gateway instance.
  * @returns Connectivity status.
  */
-async function checkConnectivity(
-  instance: ProviderBase,
+async function checkProviderConnectivity(
+  providerInstance: ProviderBase,
   providerName: string,
   apiKeyIndex: number,
   keyCount: number,
   aiGateway?: CloudflareAIGateway,
 ): Promise<ConnectivityStatus> {
-  if (!instance.modelsPath) {
+  if (!providerInstance.modelsPath) {
     return "unknown";
   }
 
@@ -76,13 +76,13 @@ async function checkConnectivity(
         {
           provider: aiGatewayProvider,
           method: "GET",
-          path: instance.modelsPath,
-          headers: await instance.headers(apiKeyIndex),
+          path: providerInstance.modelsPath,
+          headers: await providerInstance.headers(apiKeyIndex),
         },
       );
 
       responsePromise = RequestLogger.withFields(keyLogFields, () =>
-        fetch2(requestInfo, {
+        fetchWithLogging(requestInfo, {
           ...requestInit,
           signal: abortController.signal,
         }),
@@ -90,9 +90,9 @@ async function checkConnectivity(
     } else {
       responsePromise = (async () => {
         const [requestInfo, requestInit] =
-          await instance.buildModelsRequest(apiKeyIndex);
+          await providerInstance.buildModelsRequest(apiKeyIndex);
         return RequestLogger.withFields(keyLogFields, () =>
-          instance.fetch(
+          providerInstance.fetch(
             requestInfo,
             { ...requestInit, signal: abortController.signal },
             apiKeyIndex,
@@ -101,14 +101,14 @@ async function checkConnectivity(
       })();
     }
 
-    const response = await withTimeout(
+    const connectivityResponse = await withTimeout(
       responsePromise,
       abortController,
       CONNECTIVITY_CHECK_TIMEOUT_MS,
       providerName,
     );
 
-    return classifyConnectivity(response);
+    return classifyConnectivity(connectivityResponse);
   } catch (error) {
     if (
       error instanceof ProviderNotSupportedError ||
@@ -123,12 +123,12 @@ async function checkConnectivity(
   }
 }
 
-export async function status(
+export async function handleStatusRequest(
   aiGateway?: CloudflareAIGateway,
   providerRegistry?: ProviderRegistry,
 ) {
   const aiGatewayConfig = Config.aiGateway();
-  const config = {
+  const configurationStatus = {
     DEV: Config.isDevelopment(),
     DEFAULT_MODEL: Config.defaultModel() || null,
     AI_GATEWAY: {
@@ -141,20 +141,20 @@ export async function status(
 
   const env = Environments.all();
   const providerEntries = Object.entries(
-    providerRegistry?.all() ?? getAllProviders(env),
+    providerRegistry?.all() ?? getAllProviderInstances(env),
   );
   const providersStatus = Object.fromEntries(
     await Promise.all(
-      providerEntries.map(async ([providerName, instance]) => {
-        const allKeys = instance.getApiKeys();
+      providerEntries.map(async ([providerName, providerInstance]) => {
+        const allApiKeys = providerInstance.getApiKeys();
         const keyStatuses = await Promise.all(
-          allKeys.map(async (key, apiKeyIndex) => ({
-            key: maskApiKey(key),
-            status: await checkConnectivity(
-              instance,
+          allApiKeys.map(async (apiKey, apiKeyIndex) => ({
+            key: maskApiKey(apiKey),
+            status: await checkProviderConnectivity(
+              providerInstance,
               providerName,
               apiKeyIndex,
-              allKeys.length,
+              allApiKeys.length,
               aiGateway,
             ),
           })),
@@ -163,7 +163,7 @@ export async function status(
         return [
           providerName,
           {
-            available: instance.available(),
+            available: providerInstance.available(),
             keys: keyStatuses,
           } satisfies ProviderStatus,
         ] as const;
@@ -172,7 +172,7 @@ export async function status(
   );
 
   const responseBody = {
-    config,
+    config: configurationStatus,
     providers: providersStatus,
   };
 

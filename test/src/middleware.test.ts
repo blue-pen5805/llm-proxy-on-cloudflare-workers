@@ -1,15 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
-import { compose, type MiddlewareContext } from "~/src/middleware";
+import { composeMiddleware, type MiddlewareContext } from "~/src/middleware";
 import { NotFoundError } from "~/src/utils/error";
 
 const context = {
   request: new Request("https://example.com"),
 } as MiddlewareContext;
 
-describe("compose", () => {
+describe("composeMiddleware", () => {
   it("executes middleware in onion order", async () => {
     const calls: string[] = [];
-    const pipeline = compose([
+    const pipeline = composeMiddleware([
       async (_context, next) => {
         calls.push("first:before");
         const response = await next();
@@ -30,7 +30,7 @@ describe("compose", () => {
 
   it("rejects when next is called more than once", async () => {
     let secondError: unknown;
-    const pipeline = compose([
+    const pipeline = composeMiddleware([
       async (_context, next) => {
         await next();
         try {
@@ -48,7 +48,7 @@ describe("compose", () => {
   });
 
   it("throws NotFoundError when the pipeline has no terminal handler", async () => {
-    expect(() => compose([])(context)).toThrow(NotFoundError);
+    expect(() => composeMiddleware([])(context)).toThrow(NotFoundError);
   });
 
   it("propagates synchronous middleware errors", async () => {
@@ -57,6 +57,6 @@ describe("compose", () => {
       throw error;
     });
 
-    expect(() => compose([middleware])(context)).toThrow(error);
+    expect(() => composeMiddleware([middleware])(context)).toThrow(error);
   });
 });

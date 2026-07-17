@@ -26,28 +26,31 @@ function maskSensitiveValue(value: string): string {
   return value.length > 0 ? MASK_PLACEHOLDER : value;
 }
 
-export function maskUrl(url: string): string {
+export function maskSensitiveUrl(url: string): string {
   try {
-    const urlObj = new URL(url);
+    const parsedUrl = new URL(url);
 
     // Mask only sensitive query parameters
-    if (urlObj.search) {
-      const params = new URLSearchParams(urlObj.search);
-      const maskedParams = new URLSearchParams();
+    if (parsedUrl.search) {
+      const queryParameters = new URLSearchParams(parsedUrl.search);
+      const maskedQueryParameters = new URLSearchParams();
 
-      for (const [key, value] of params.entries()) {
-        if (SENSITIVE_QUERY_PARAMETERS.has(key.toLowerCase())) {
-          maskedParams.set(key, maskSensitiveValue(value));
+      for (const [parameterName, parameterValue] of queryParameters.entries()) {
+        if (SENSITIVE_QUERY_PARAMETERS.has(parameterName.toLowerCase())) {
+          maskedQueryParameters.set(
+            parameterName,
+            maskSensitiveValue(parameterValue),
+          );
         } else {
           // Keep non-sensitive parameters as-is
-          maskedParams.set(key, value);
+          maskedQueryParameters.set(parameterName, parameterValue);
         }
       }
 
-      urlObj.search = maskedParams.toString();
+      parsedUrl.search = maskedQueryParameters.toString();
     }
 
-    return urlObj.toString();
+    return parsedUrl.toString();
   } catch {
     // If URL parsing fails, return masked version
     return (
@@ -56,28 +59,28 @@ export function maskUrl(url: string): string {
   }
 }
 
-export async function fetch2(
+export async function fetchWithLogging(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<Response> {
-  const url = input instanceof Request ? input.url : input.toString();
-  const method =
+  const requestUrl = input instanceof Request ? input.url : input.toString();
+  const requestMethod =
     init?.method ?? (input instanceof Request ? input.method : "GET");
-  const maskedUrl = maskUrl(url);
+  const maskedUrl = maskSensitiveUrl(requestUrl);
   const startedAt = performance.now();
 
   try {
-    const response = await fetch(input, init);
+    const upstreamResponse = await fetch(input, init);
     RequestLogger.info("subrequest.completed", {
-      method,
+      method: requestMethod,
       url: maskedUrl,
-      status: response.status,
+      status: upstreamResponse.status,
       duration_ms: RequestLogger.durationMs(startedAt),
     });
-    return response;
+    return upstreamResponse;
   } catch (error) {
     RequestLogger.error("subrequest.failed", error, {
-      method,
+      method: requestMethod,
       url: maskedUrl,
       duration_ms: RequestLogger.durationMs(startedAt),
     });
@@ -85,7 +88,7 @@ export async function fetch2(
   }
 }
 
-export function safeJsonParse(text: string): unknown {
+export function parseJsonOrReturnText(text: string): unknown {
   try {
     return JSON.parse(text);
   } catch {
@@ -93,45 +96,61 @@ export function safeJsonParse(text: string): unknown {
   }
 }
 
-export function getPathname(request: Request): string {
-  const url = new URL(request.url);
-  return `${url.pathname}${url.search}${url.hash}`;
+export function getRequestPath(request: Request): string {
+  const requestUrl = new URL(request.url);
+  return `${requestUrl.pathname}${requestUrl.search}${requestUrl.hash}`;
 }
 
 export function shuffleArray<T>(array: T[]): T[] {
-  const cloneArray = [...array];
+  const shuffledArray = [...array];
 
-  for (let i = cloneArray.length - 1; i > 0; i--) {
-    const j = randomInt(i + 1);
-    [cloneArray[i], cloneArray[j]] = [cloneArray[j], cloneArray[i]];
+  for (
+    let currentIndex = shuffledArray.length - 1;
+    currentIndex > 0;
+    currentIndex--
+  ) {
+    const randomIndex = randomInt(currentIndex + 1);
+    [shuffledArray[currentIndex], shuffledArray[randomIndex]] = [
+      shuffledArray[randomIndex],
+      shuffledArray[currentIndex],
+    ];
   }
 
-  return cloneArray;
+  return shuffledArray;
 }
 
-export function formatString(
+export function interpolateTemplate(
   template: string,
-  args: { [key: string]: string },
+  templateValues: Record<string, string>,
 ): string {
-  return Object.keys(args).reduce((formattedString: string, key) => {
-    return formattedString.replaceAll(`{${key}}`, args[key]);
+  return Object.keys(templateValues).reduce((formattedString, placeholder) => {
+    return formattedString.replaceAll(
+      `{${placeholder}}`,
+      templateValues[placeholder],
+    );
   }, template);
 }
 
-export function cleanPathname(pathname: string): string {
+export function removeAuthorizationQueryParameters(pathname: string): string {
   let cleanedPathname = pathname;
 
   // Remove authorization query parameters using regex
-  AUTHORIZATION_QUERY_PARAMETERS.forEach((param) => {
+  AUTHORIZATION_QUERY_PARAMETERS.forEach((parameterName) => {
     // Pattern to match: &key=value or ?key=value
-    const paramPattern = new RegExp(`[?&]${param}=([^&]*)`, "g");
+    const authorizationParameterPattern = new RegExp(
+      `[?&]${parameterName}=([^&]*)`,
+      "g",
+    );
     cleanedPathname = cleanedPathname.replace(
-      paramPattern,
-      (match, value, offset, str) => {
+      authorizationParameterPattern,
+      (matchedParameter, _parameterValue, matchOffset, fullPath) => {
         // If it's the first parameter (?key=value), replace with ? if there are other params
-        if (match.startsWith("?")) {
+        if (matchedParameter.startsWith("?")) {
           // Find the next parameter after this one
-          const nextAmpersand = str.indexOf("&", offset + match.length);
+          const nextAmpersand = fullPath.indexOf(
+            "&",
+            matchOffset + matchedParameter.length,
+          );
           if (nextAmpersand !== -1) {
             return "?";
           } else {
@@ -170,9 +189,9 @@ export async function withTimeout<T>(
     }, timeoutMs);
 
     promise
-      .then((result) => {
+      .then((resolvedValue) => {
         clearTimeout(timeoutId);
-        resolve(result);
+        resolve(resolvedValue);
       })
       .catch((error) => {
         clearTimeout(timeoutId);

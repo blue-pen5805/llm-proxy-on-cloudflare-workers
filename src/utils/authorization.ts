@@ -45,11 +45,11 @@ function matchesApiKey(candidate: string, configuredKeys: string[]): boolean {
  * supported authorization headers. If no API keys are configured in the system,
  * authentication is bypassed (returns true).
  *
- * @param request - The incoming request to authenticate
+ * @param request - The incoming request to isRequestAuthorized
  * @returns `true` if the request is authenticated (either because it contains a valid
  * API key or because authentication is disabled), `false` otherwise
  */
-export function authenticate(request: Request): boolean {
+export function isRequestAuthorized(request: Request): boolean {
   const apiKeys = Config.apiKeys();
   if (!apiKeys) {
     return true;
@@ -70,12 +70,14 @@ export function authenticate(request: Request): boolean {
         ? authorizationParts[1]
         : authorizationParts[0];
   } else {
-    const url = new URL(request.url);
-    const queryKey = AUTHORIZATION_QUERY_PARAMETERS.find((param) => {
-      return Boolean(url.searchParams.get(param));
-    });
-    if (queryKey) {
-      apiKey = url.searchParams.get(queryKey);
+    const requestUrl = new URL(request.url);
+    const queryParameterName = AUTHORIZATION_QUERY_PARAMETERS.find(
+      (parameterName) => {
+        return Boolean(requestUrl.searchParams.get(parameterName));
+      },
+    );
+    if (queryParameterName) {
+      apiKey = requestUrl.searchParams.get(queryParameterName);
     }
   }
 

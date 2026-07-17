@@ -22,24 +22,24 @@ export type Middleware = (
 /**
  * Composes multiple middlewares into a single middleware-like function.
  */
-export function compose(
+export function composeMiddleware(
   middlewares: Middleware[],
 ): (context: MiddlewareContext) => Promise<Response> {
   return function (context: MiddlewareContext): Promise<Response> {
-    let index = -1;
+    let lastDispatchedIndex = -1;
 
-    function dispatch(i: number): Promise<Response> {
-      if (i <= index) {
+    function dispatchMiddleware(middlewareIndex: number): Promise<Response> {
+      if (middlewareIndex <= lastDispatchedIndex) {
         return Promise.reject(new Error("next() called multiple times"));
       }
-      index = i;
-      const fn = middlewares[i];
-      if (i === middlewares.length) {
+      lastDispatchedIndex = middlewareIndex;
+      const middleware = middlewares[middlewareIndex];
+      if (middlewareIndex === middlewares.length) {
         throw new NotFoundError();
       }
-      return fn(context, () => dispatch(i + 1));
+      return middleware(context, () => dispatchMiddleware(middlewareIndex + 1));
     }
 
-    return dispatch(0);
+    return dispatchMiddleware(0);
   };
 }

@@ -56,36 +56,36 @@ export class ProviderRegistry {
   }
 
   get(providerName: string): ProviderBase | undefined {
-    const existing = this.builtInInstances.get(providerName);
-    if (existing) {
-      return existing;
+    const existingProvider = this.builtInInstances.get(providerName);
+    if (existingProvider) {
+      return existingProvider;
     }
 
     const BuiltInProvider = this.builtIns[providerName];
     const customEndpoint = this.firstCustomEndpointByName.get(providerName);
-    const provider = BuiltInProvider
+    const providerInstance = BuiltInProvider
       ? new BuiltInProvider()
       : customEndpoint
         ? this.getCustom(customEndpoint)
         : undefined;
 
-    if (provider && BuiltInProvider) {
-      this.builtInInstances.set(providerName, provider);
+    if (providerInstance && BuiltInProvider) {
+      this.builtInInstances.set(providerName, providerInstance);
     }
-    return provider;
+    return providerInstance;
   }
 
   all(): Record<string, ProviderBase> {
-    const providers = Object.fromEntries(
+    const providerInstances = Object.fromEntries(
       this.providerNames.map((providerName) => [
         providerName,
         this.get(providerName)!,
       ]),
     );
     for (const customEndpoint of this.customEndpoints) {
-      providers[customEndpoint.name] = this.getCustom(customEndpoint);
+      providerInstances[customEndpoint.name] = this.getCustom(customEndpoint);
     }
-    return providers;
+    return providerInstances;
   }
 
   match(pathname: string): ProviderRoute | undefined {
@@ -102,12 +102,12 @@ export class ProviderRegistry {
     };
   }
 
-  private getCustom(config: CustomOpenAIEndpointConfig): CustomOpenAI {
-    let provider = this.customInstances.get(config);
-    if (!provider) {
-      provider = new CustomOpenAI(config);
-      this.customInstances.set(config, provider);
+  private getCustom(endpointConfig: CustomOpenAIEndpointConfig): CustomOpenAI {
+    let providerInstance = this.customInstances.get(endpointConfig);
+    if (!providerInstance) {
+      providerInstance = new CustomOpenAI(endpointConfig);
+      this.customInstances.set(endpointConfig, providerInstance);
     }
-    return provider;
+    return providerInstance;
   }
 }

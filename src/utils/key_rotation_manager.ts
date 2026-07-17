@@ -38,15 +38,15 @@ export class KeyRotationManager extends DurableObject {
     `);
 
     // Get current index
-    const cursor = sql.exec(
+    const currentIndexQuery = sql.exec(
       "SELECT current_index FROM counters WHERE key_name = ?",
       keyName,
     );
-    const row = cursor.next().value;
+    const counterRow = currentIndexQuery.next().value;
 
-    let index = 0;
-    if (row) {
-      index = row.current_index as number;
+    let currentIndex = 0;
+    if (counterRow) {
+      currentIndex = counterRow.current_index as number;
     } else {
       // Initialize if not exists
       sql.exec(
@@ -56,11 +56,11 @@ export class KeyRotationManager extends DurableObject {
     }
 
     // Ensure index is within current bounds
-    if (index >= length) {
-      index = 0;
+    if (currentIndex >= length) {
+      currentIndex = 0;
     }
 
-    const nextIndex = (index + 1) % length;
+    const nextIndex = (currentIndex + 1) % length;
 
     // Update to next index
     sql.exec(
@@ -69,6 +69,6 @@ export class KeyRotationManager extends DurableObject {
       keyName,
     );
 
-    return index;
+    return currentIndex;
   }
 }

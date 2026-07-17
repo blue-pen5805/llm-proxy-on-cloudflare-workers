@@ -5,12 +5,12 @@ const REGION_PATTERN = /^[a-z]{2}(?:-gov)?-[a-z]+-\d$/;
 
 export type AwsBedrock = Provider & { readonly regionName: keyof Env };
 
-function region(provider: AwsBedrock): string {
-  const value = Secrets.get(provider.regionName);
-  if (!REGION_PATTERN.test(value)) {
+function getAwsRegionName(provider: AwsBedrock): string {
+  const regionName = Secrets.get(provider.regionName);
+  if (!REGION_PATTERN.test(regionName)) {
     throw new Error("AWS_BEDROCK_REGION is missing or invalid.");
   }
-  return value;
+  return regionName;
 }
 
 export const AwsBedrock = defineProvider({
@@ -19,9 +19,9 @@ export const AwsBedrock = defineProvider({
   apiKeyName: "AWS_BEARER_TOKEN_BEDROCK",
   pathnamePrefix: "/v1",
   baseUrl() {
-    return `https://bedrock-runtime.${region(this as AwsBedrock)}.amazonaws.com`;
+    return `https://bedrock-runtime.${getAwsRegionName(this as AwsBedrock)}.amazonaws.com`;
   },
   aiGatewayPath(pathname: string): string {
-    return `/bedrock-runtime/${encodeURIComponent(region(this as AwsBedrock))}/${pathname.replace(/^\/+/, "")}`;
+    return `/bedrock-runtime/${encodeURIComponent(getAwsRegionName(this as AwsBedrock))}/${pathname.replace(/^\/+/, "")}`;
   },
 }) as ProviderConstructor<[], AwsBedrock>;

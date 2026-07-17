@@ -40,13 +40,13 @@ function isNonEmptyString(value: unknown): value is string {
 
 const API_KEY_NAME = "GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON" as const;
 
-function parseCredentials(): ParsedCredentials {
-  const raw = Environments.get(API_KEY_NAME, false);
-  if (!raw?.trim()) return { credentials: [] };
+function parseServiceAccountCredentials(): ParsedCredentials {
+  const serializedCredentials = Environments.get(API_KEY_NAME, false);
+  if (!serializedCredentials?.trim()) return { credentials: [] };
 
-  let parsed: unknown;
+  let parsedCredentials: unknown;
   try {
-    parsed = JSON.parse(raw);
+    parsedCredentials = JSON.parse(serializedCredentials);
   } catch {
     return {
       credentials: [],
@@ -54,27 +54,36 @@ function parseCredentials(): ParsedCredentials {
     };
   }
 
-  const values = Array.isArray(parsed) ? parsed : [parsed];
-  if (values.length === 0) return { credentials: [] };
+  const credentialCandidates = Array.isArray(parsedCredentials)
+    ? parsedCredentials
+    : [parsedCredentials];
+  if (credentialCandidates.length === 0) return { credentials: [] };
 
   const credentials: ServiceAccountJson[] = [];
-  for (const value of values) {
+  for (const credentialCandidate of credentialCandidates) {
     if (
-      typeof value !== "object" ||
-      value === null ||
-      Array.isArray(value) ||
-      (value as Record<string, unknown>).type !== "service_account" ||
-      !isNonEmptyString((value as Record<string, unknown>).project_id) ||
-      !isNonEmptyString((value as Record<string, unknown>).private_key) ||
-      !isNonEmptyString((value as Record<string, unknown>).client_email) ||
-      !isNonEmptyString((value as Record<string, unknown>).region)
+      typeof credentialCandidate !== "object" ||
+      credentialCandidate === null ||
+      Array.isArray(credentialCandidate) ||
+      (credentialCandidate as Record<string, unknown>).type !==
+        "service_account" ||
+      !isNonEmptyString(
+        (credentialCandidate as Record<string, unknown>).project_id,
+      ) ||
+      !isNonEmptyString(
+        (credentialCandidate as Record<string, unknown>).private_key,
+      ) ||
+      !isNonEmptyString(
+        (credentialCandidate as Record<string, unknown>).client_email,
+      ) ||
+      !isNonEmptyString((credentialCandidate as Record<string, unknown>).region)
     ) {
       return {
         credentials: [],
         error: `${API_KEY_NAME} must be a service-account JSON object (or array of objects) with non-empty type, project_id, private_key, client_email, and region fields.`,
       };
     }
-    credentials.push(value as ServiceAccountJson);
+    credentials.push(credentialCandidate as ServiceAccountJson);
   }
 
   return { credentials };
@@ -89,7 +98,7 @@ export const GoogleVertexAi = defineProvider({
   requiresProviderCredentials: true,
   modelsPath: "",
   getApiKeys(): string[] {
-    const { credentials, error } = parseCredentials();
+    const { credentials, error } = parseServiceAccountCredentials();
     if (error) return [];
     return credentials.map((credential) =>
       encodeBase64Utf8(JSON.stringify(credential)),
@@ -105,7 +114,7 @@ export const GoogleVertexAi = defineProvider({
   },
 
   configurationError(): string | undefined {
-    return parseCredentials().error;
+    return parseServiceAccountCredentials().error;
   },
 
   async buildModelsRequest(): Promise<[string, RequestInit]> {

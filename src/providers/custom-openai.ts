@@ -21,26 +21,27 @@ export const CustomOpenAI = defineProvider<[CustomOpenAIEndpointConfig]>(
     modelsPath: config.modelsPath ?? "/models",
 
     async getNextApiKeyIndex(): Promise<number> {
-      const keys = this.getApiKeys();
-      return keys.length <= 1
+      const apiKeys = this.getApiKeys();
+      return apiKeys.length <= 1
         ? 0
-        : Secrets.getNextIndex(config.name, keys.length);
+        : Secrets.getNextIndex(config.name, apiKeys.length);
     },
 
     async headers(apiKeyIndex): Promise<HeadersInit> {
-      const keys = this.getApiKeys();
-      if (keys.length === 0) return { "Content-Type": "application/json" };
-      const index = apiKeyIndex !== undefined ? apiKeyIndex % keys.length : 0;
+      const apiKeys = this.getApiKeys();
+      if (apiKeys.length === 0) return { "Content-Type": "application/json" };
+      const selectedApiKeyIndex =
+        apiKeyIndex !== undefined ? apiKeyIndex % apiKeys.length : 0;
       return {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${keys[index]}`,
+        Authorization: `Bearer ${apiKeys[selectedApiKeyIndex]}`,
       };
     },
 
     // Custom endpoints are available by definition.
     available: () => true,
 
-    staticModels(): OpenAIModelsListResponseBody | undefined {
+    getStaticModels(): OpenAIModelsListResponseBody | undefined {
       if (!config.models || config.models.length === 0) return undefined;
       return {
         object: "list",

@@ -1,5 +1,8 @@
 #!/usr/bin/env node
-import { generateDevVars, getFilePaths } from "./generate-dev-vars.ts";
+import {
+  generateDevVars,
+  getConfigAndDevVarsPaths,
+} from "./generate-dev-vars.ts";
 import { getErrorMessage } from "./utils.ts";
 import { spawn } from "child_process";
 import fs from "fs";
@@ -8,112 +11,128 @@ import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const rootDir = path.resolve(__dirname, "..");
+const repositoryRoot = path.resolve(__dirname, "..");
 
-interface ParsedArgs {
+interface WithSecretsArguments {
   env?: string;
   command: string[];
 }
 
-export function parseArgs(args: string[]): ParsedArgs {
-  let env: string | undefined;
-  const command: string[] = [];
-  let isCommand = false;
+export function parseWithSecretsArguments(
+  commandLineArguments: string[],
+): WithSecretsArguments {
+  let environmentName: string | undefined;
+  const childCommand: string[] = [];
+  let hasReachedCommand = false;
 
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (isCommand) {
-      command.push(arg);
+  for (
+    let argumentIndex = 0;
+    argumentIndex < commandLineArguments.length;
+    argumentIndex++
+  ) {
+    const currentArgument = commandLineArguments[argumentIndex];
+    if (hasReachedCommand) {
+      childCommand.push(currentArgument);
       continue;
     }
 
-    if (arg === "--env") {
-      if (i + 1 >= args.length) {
+    if (currentArgument === "--env") {
+      if (argumentIndex + 1 >= commandLineArguments.length) {
         throw new Error("--env requires a value");
       }
-      env = args[i + 1];
-      i++;
-    } else if (arg === "--") {
-      isCommand = true;
+      environmentName = commandLineArguments[argumentIndex + 1];
+      argumentIndex++;
+    } else if (currentArgument === "--") {
+      hasReachedCommand = true;
     } else {
       // If we encounter something that doesn't look like our flag, treat it as start of command if we haven't seen '--'
       // But typically, we expect structure: [our-flags] -- [command]
       // To be safe and flexible, if we see something unknown and haven't seen '--', we could error or assume it's part of command?
       // The requirement was `ts-node scripts/with-secrets.ts --env develop -- wrangler dev ...`
       throw new Error(
-        `Unknown argument: ${arg}. Use '--' to separate the command.`,
+        `Unknown argument: ${currentArgument}. Use '--' to separate the command.`,
       );
     }
   }
 
-  if (command.length === 0) {
+  if (childCommand.length === 0) {
     throw new Error("No command specified.");
   }
 
-  return { env, command };
+  return { env: environmentName, command: childCommand };
 }
 
-export function cleanup(devVarsPath: string) {
+export function removeGeneratedDevVarsFile(devVarsPath: string): void {
   if (fs.existsSync(devVarsPath)) {
     try {
       fs.unlinkSync(devVarsPath);
       console.log(`🧹 Cleaned up ${path.basename(devVarsPath)}`);
-    } catch (e) {
-      console.error(`❌ Failed to cleanup ${path.basename(devVarsPath)}`, e);
+    } catch (error) {
+      console.error(
+        `❌ Failed to cleanup ${path.basename(devVarsPath)}`,
+        error,
+      );
     }
   }
 }
 
-export async function main() {
-  const args = process.argv.slice(2);
-  let parsed: ParsedArgs;
+export async function runCommandWithSecretsCli() {
+  const commandLineArguments = process.argv.slice(2);
+  let parsedArguments: WithSecretsArguments;
 
   try {
-    parsed = parseArgs(args);
-  } catch (e) {
-    console.error(`❌ ${getErrorMessage(e)}`);
+    parsedArguments = parseWithSecretsArguments(commandLineArguments);
+  } catch (error) {
+    console.error(`❌ ${getErrorMessage(error)}`);
     process.exit(1);
   }
 
   // Generate .dev.vars
-  console.log(`🔄 Generating secrets for env: ${parsed.env || "default"}...`);
-  const result = generateDevVars(rootDir, parsed.env);
+  console.log(
+    `🔄 Generating secrets for env: ${parsedArguments.env || "default"}...`,
+  );
+  const generationResult = generateDevVars(repositoryRoot, parsedArguments.env);
 
-  if (!result.success) {
-    result.messages.forEach((msg) => console.error(msg));
+  if (!generationResult.success) {
+    generationResult.messages.forEach((message) => console.error(message));
     process.exit(1);
   }
-  result.messages.forEach((msg) => console.log(msg));
+  generationResult.messages.forEach((message) => console.log(message));
 
-  const { devVarsPath } = getFilePaths(rootDir, parsed.env);
+  const { devVarsPath } = getConfigAndDevVarsPaths(
+    repositoryRoot,
+    parsedArguments.env,
+  );
 
   // Setup cleanup on exit
   const handleSignal = (signal: string) => {
     console.log(`\nReceived ${signal}. Cleaning up...`);
-    cleanup(devVarsPath);
+    removeGeneratedDevVarsFile(devVarsPath);
     process.exit();
   };
 
-  process.on("exit", () => cleanup(devVarsPath));
+  process.on("exit", () => removeGeneratedDevVarsFile(devVarsPath));
   process.on("SIGINT", () => handleSignal("SIGINT"));
   process.on("SIGTERM", () => handleSignal("SIGTERM"));
 
   // Spawn command
-  const [cmd, ...cmdArgs] = parsed.command;
-  console.log(`🚀 Running command: ${cmd} ${cmdArgs.join(" ")}`);
+  const [commandName, ...commandArguments] = parsedArguments.command;
+  console.log(
+    `🚀 Running command: ${commandName} ${commandArguments.join(" ")}`,
+  );
 
-  const child = spawn(cmd, cmdArgs, {
+  const childProcess = spawn(commandName, commandArguments, {
     stdio: "inherit",
     shell: process.platform === "win32", // Use shell only on Windows to resolve commands like 'wrangler'
   });
 
-  child.on("close", (code) => {
-    cleanup(devVarsPath);
-    process.exit(code ?? 0);
+  childProcess.on("close", (exitCode) => {
+    removeGeneratedDevVarsFile(devVarsPath);
+    process.exit(exitCode ?? 0);
   });
 }
 
 /* istanbul ignore next -- exercised by the runtime, not module tests */
 if (import.meta.url === `file://${process.argv[1]}`) {
-  main();
+  runCommandWithSecretsCli();
 }

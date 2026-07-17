@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ProviderBase } from "~/src/providers/provider";
 
 vi.mock("~/src/utils", () => ({
-  fetch2: vi.fn().mockImplementation(() => Promise.resolve(new Response())),
+  fetchWithLogging: vi
+    .fn()
+    .mockImplementation(() => Promise.resolve(new Response())),
 }));
 
 describe("ProviderBase", () => {

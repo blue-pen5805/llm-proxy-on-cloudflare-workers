@@ -4,9 +4,9 @@ import {
   CloudflareAIGatewayUniversalEndpointStep,
 } from "../ai_gateway/const";
 import { isCloudflareAIGatewayProvider } from "../ai_gateway/utils";
-import { Providers } from "../providers";
+import { BUILT_IN_PROVIDER_CONSTRUCTORS } from "../providers";
 import { recordApiKeySelection } from "../utils/api_key_selection";
-import { fetch2 } from "../utils/helpers";
+import { fetchWithLogging } from "../utils/helpers";
 import { Secrets } from "../utils/secrets";
 
 type UniversalEndpointRequest = {
@@ -19,31 +19,33 @@ type UniversalEndpointRequest = {
   };
 };
 
-export async function universalEndpoint(
+export async function handleUniversalEndpointRequest(
   request: Request,
   aiGateway: CloudflareAIGateway,
 ) {
-  const items: UniversalEndpointRequest[] = await request.json();
+  const endpointRequests: UniversalEndpointRequest[] = await request.json();
 
-  const mappedItems: CloudflareAIGatewayUniversalEndpointData =
+  const gatewaySteps: CloudflareAIGatewayUniversalEndpointData =
     await Promise.all(
-      items.map(
+      endpointRequests.map(
         async (
-          item,
-          step,
+          endpointRequest,
+          stepIndex,
         ): Promise<CloudflareAIGatewayUniversalEndpointStep> => {
-          const providerName = item.provider;
+          const providerName = endpointRequest.provider;
           if (!providerName) {
             throw new Error(`Provider not specified.`);
           }
           if (isCloudflareAIGatewayProvider(providerName) === false) {
             throw new Error(`Provider ${providerName} is not supported.`);
           }
-          const provider = Providers[providerName];
-          const providerClass = new provider();
-          const endpoint =
-            item.endpoint || providerClass.chatCompletionPath.replace("/", "");
-          const apiKeyName = providerClass.apiKeyName as keyof Env;
+          const ProviderConstructor =
+            BUILT_IN_PROVIDER_CONSTRUCTORS[providerName];
+          const providerInstance = new ProviderConstructor();
+          const endpointPath =
+            endpointRequest.endpoint ||
+            providerInstance.chatCompletionPath.replace("/", "");
+          const apiKeyName = providerInstance.apiKeyName as keyof Env;
           const apiKeyIndex = await Secrets.getNext(apiKeyName);
           recordApiKeySelection({
             provider: providerName,
@@ -52,26 +54,28 @@ export async function universalEndpoint(
             keyCount: Secrets.getAll(apiKeyName).length,
             selectionPolicy: "automatic_rotation",
             viaAiGateway: true,
-            step,
+            step: stepIndex,
           });
-          const headers = {
-            ...(await providerClass.headers(apiKeyIndex)),
-            ...item.headers,
+          const requestHeaders = {
+            ...(await providerInstance.headers(apiKeyIndex)),
+            ...endpointRequest.headers,
           };
-          const query = item.query;
 
           return {
             provider: providerName,
-            endpoint,
-            headers,
-            query,
+            endpoint: endpointPath,
+            headers: requestHeaders,
+            query: endpointRequest.query,
           };
         },
       ),
     );
 
   const [requestInfo, requestInit] = aiGateway.buildUniversalEndpointRequest({
-    data: mappedItems,
+    data: gatewaySteps,
   });
-  return fetch2(requestInfo, { ...requestInit, signal: request.signal });
+  return fetchWithLogging(requestInfo, {
+    ...requestInit,
+    signal: request.signal,
+  });
 }

@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
-import { Providers } from "~/src/providers";
-import { getProvider } from "~/src/providers";
-import { chatCompletions } from "~/src/requests/chat_completions";
+import { BUILT_IN_PROVIDER_CONSTRUCTORS } from "~/src/providers";
+import { getProviderByName } from "~/src/providers";
+import { handleChatCompletionsRequest } from "~/src/requests/chat_completions";
 import { Config } from "~/src/utils/config";
 import * as helpers from "~/src/utils/helpers";
 import { Secrets } from "~/src/utils/secrets";
@@ -13,17 +13,17 @@ vi.mock("~/src/providers", async () => {
     await vi.importActual<typeof import("~/src/providers")>("~/src/providers");
   return {
     ...actual,
-    getProvider: vi.fn(),
+    getProviderByName: vi.fn(),
   };
 });
 vi.mock("~/src/utils/config");
 vi.mock("~/src/utils/helpers");
 vi.mock("~/src/utils/secrets");
 
-describe("chatCompletions", () => {
+describe("handleChatCompletionsRequest", () => {
   const mockProviderClass = {
     buildChatCompletionsRequest: vi.fn(),
-    filterChatCompletionsRequest: vi.fn(
+    filterSupportedChatParameters: vi.fn(
       (data: Record<string, unknown>) => data,
     ),
     fetch: vi.fn(),
@@ -38,24 +38,24 @@ describe("chatCompletions", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(helpers.safeJsonParse).mockImplementation((str) => {
+    vi.mocked(helpers.parseJsonOrReturnText).mockImplementation((str) => {
       try {
         return JSON.parse(str);
       } catch {
         return str;
       }
     });
-    vi.mocked(helpers.fetch2).mockResolvedValue(new Response());
+    vi.mocked(helpers.fetchWithLogging).mockResolvedValue(new Response());
     vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(true);
-    Providers.openai = vi.fn(function () {
+    BUILT_IN_PROVIDER_CONSTRUCTORS.openai = vi.fn(function () {
       return mockProviderClass;
     });
     vi.mocked(Config.defaultModel).mockReturnValue("openai/gpt-4");
     vi.mocked(Secrets.getAll).mockReturnValue(["test-key"]);
     vi.mocked(Secrets.getNext).mockResolvedValue(0);
 
-    vi.mocked(getProvider).mockImplementation((name) => {
-      const ProviderClass = Providers[name];
+    vi.mocked(getProviderByName).mockImplementation((name) => {
+      const ProviderClass = BUILT_IN_PROVIDER_CONSTRUCTORS[name];
       return ProviderClass ? new (ProviderClass as any)() : undefined;
     });
   });
@@ -82,7 +82,7 @@ describe("chatCompletions", () => {
     mockProviderClass.fetch.mockResolvedValue(new Response());
 
     const providers = { get: vi.fn(() => mockProviderClass) };
-    await chatCompletions({ request, providers } as any);
+    await handleChatCompletionsRequest({ request, providers } as any);
 
     expect(providers.get).toHaveBeenCalledWith("openai");
     expect(mockProviderClass.buildChatCompletionsRequest).toHaveBeenCalledWith({
@@ -110,7 +110,7 @@ describe("chatCompletions", () => {
     ]);
     mockProviderClass.fetch.mockResolvedValue(new Response());
 
-    await chatCompletions({
+    await handleChatCompletionsRequest({
       request,
       apiKeyIndex: { start: 1, end: 2 },
     } as any);
@@ -151,7 +151,7 @@ describe("chatCompletions", () => {
     ]);
     mockProviderClass.fetch.mockResolvedValue(new Response());
 
-    await chatCompletions({ request } as any);
+    await handleChatCompletionsRequest({ request } as any);
 
     expect(Config.defaultModel).toHaveBeenCalled();
     expect(mockProviderClass.buildChatCompletionsRequest).toHaveBeenCalledWith({
@@ -169,7 +169,7 @@ describe("chatCompletions", () => {
       headers: { "Content-Type": "application/json" },
     });
 
-    const response = await chatCompletions({ request } as any);
+    const response = await handleChatCompletionsRequest({ request } as any);
 
     expect(response.status).toBe(400);
     const body = (await response.json()) as { error: string };
@@ -180,7 +180,7 @@ describe("chatCompletions", () => {
     [JSON.stringify({ messages: [] }), "a missing model"],
     [JSON.stringify({ model: 42, messages: [] }), "a non-string model"],
   ])("should return 400 for %s", async (body) => {
-    const response = await chatCompletions({
+    const response = await handleChatCompletionsRequest({
       request: new Request("https://example.com/chat/completions", {
         method: "POST",
         body,
@@ -193,7 +193,7 @@ describe("chatCompletions", () => {
 
   it("should return 400 when the default model is absent", async () => {
     vi.mocked(Config.defaultModel).mockReturnValue(undefined);
-    const response = await chatCompletions({
+    const response = await handleChatCompletionsRequest({
       request: new Request("https://example.com/chat/completions", {
         method: "POST",
         body: JSON.stringify({ model: "default", messages: [] }),
@@ -215,7 +215,7 @@ describe("chatCompletions", () => {
       headers: { "Content-Type": "application/json" },
     });
 
-    const response = await chatCompletions({ request } as any);
+    const response = await handleChatCompletionsRequest({ request } as any);
 
     expect(response.status).toBe(400);
     const body = (await response.json()) as { error: string };
@@ -236,7 +236,7 @@ describe("chatCompletions", () => {
         messages: [],
       }),
     });
-    const response = await chatCompletions({
+    const response = await handleChatCompletionsRequest({
       request,
       providers: { get: vi.fn(() => gatewayOnlyProvider) },
     } as any);
@@ -264,7 +264,7 @@ describe("chatCompletions", () => {
     });
     const buildChatCompletionsRequests = vi.fn();
 
-    const response = await chatCompletions(
+    const response = await handleChatCompletionsRequest(
       {
         request,
         providers: { get: vi.fn(() => gatewayOnlyProvider) },
@@ -306,7 +306,10 @@ describe("chatCompletions", () => {
       ],
     ]);
 
-    await chatCompletions({ request } as any, mockAIGateway as any);
+    await handleChatCompletionsRequest(
+      { request } as any,
+      mockAIGateway as any,
+    );
 
     expect(CloudflareAIGateway.isSupportedProvider).toHaveBeenCalledWith(
       "openai",
@@ -319,7 +322,7 @@ describe("chatCompletions", () => {
       headers: expect.any(Object),
       apiKeys: ["test-key"],
     });
-    expect(helpers.fetch2).toHaveBeenCalledWith(
+    expect(helpers.fetchWithLogging).toHaveBeenCalledWith(
       "https://gateway.ai.cloudflare.com/v1/account/gateway/compat/chat/completions",
       expect.objectContaining({ signal: request.signal }),
     );
@@ -346,7 +349,7 @@ describe("chatCompletions", () => {
       apiKeyName: "AZURE_OPENAI_API_KEY",
       getApiKeys: vi.fn().mockReturnValue(["azure-key"]),
       getNextApiKeyIndex: vi.fn().mockResolvedValue(0),
-      filterChatCompletionsRequest: vi.fn(
+      filterSupportedChatParameters: vi.fn(
         (data: Record<string, unknown>) => data,
       ),
       buildChatCompletionsRequest: vi
@@ -369,9 +372,9 @@ describe("chatCompletions", () => {
         "https://gateway.example/azure-openai/resource/gpt-4o/chat/completions",
         { method: "POST" },
       ]);
-    vi.mocked(helpers.fetch2).mockResolvedValue(new Response("ok"));
+    vi.mocked(helpers.fetchWithLogging).mockResolvedValue(new Response("ok"));
 
-    const response = await chatCompletions(
+    const response = await handleChatCompletionsRequest(
       {
         request,
         providers: { get: vi.fn(() => azureProvider) },
@@ -398,7 +401,7 @@ describe("chatCompletions", () => {
     expect(azureProvider.fetch).not.toHaveBeenCalled();
 
     providerRequest[1].headers = undefined;
-    await chatCompletions(
+    await handleChatCompletionsRequest(
       {
         request: requestWithoutNativeHeaders,
         providers: { get: vi.fn(() => azureProvider) },
@@ -430,7 +433,7 @@ describe("chatCompletions", () => {
       .mockReturnValueOnce(false)
       .mockReturnValueOnce(true);
 
-    await chatCompletions(
+    await handleChatCompletionsRequest(
       { request, providers: { get: vi.fn(() => provider) } } as any,
       mockAIGateway as any,
     );
@@ -466,7 +469,7 @@ describe("chatCompletions", () => {
     ]);
     mockProviderClass.fetch.mockResolvedValue(new Response());
 
-    await chatCompletions({ request } as any);
+    await handleChatCompletionsRequest({ request } as any);
 
     const headersArg =
       mockProviderClass.buildChatCompletionsRequest.mock.calls[0][0].headers;
@@ -502,7 +505,7 @@ describe("chatCompletions", () => {
     ]);
     mockProviderClass.fetch.mockResolvedValue(new Response());
 
-    await chatCompletions({ request } as any);
+    await handleChatCompletionsRequest({ request } as any);
 
     expect(mockProviderClass.buildChatCompletionsRequest).toHaveBeenCalledWith({
       body: "",

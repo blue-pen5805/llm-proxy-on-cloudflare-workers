@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
-import { Providers } from "~/src/providers";
-import { getAllProviders } from "~/src/providers";
+import { BUILT_IN_PROVIDER_CONSTRUCTORS } from "~/src/providers";
+import { getAllProviderInstances } from "~/src/providers";
 import { CustomOpenAI } from "~/src/providers/custom-openai";
 import { ProviderNotSupportedError } from "~/src/providers/provider";
-import { status } from "~/src/requests/status";
+import { handleStatusRequest } from "~/src/requests/status";
 import { Config } from "~/src/utils/config";
 import { Environments } from "~/src/utils/environments";
-import { fetch2, withTimeout } from "~/src/utils/helpers";
+import { fetchWithLogging, withTimeout } from "~/src/utils/helpers";
 import { Secrets } from "~/src/utils/secrets";
 
 vi.mock("~/src/providers", async () => {
@@ -15,7 +15,7 @@ vi.mock("~/src/providers", async () => {
     await vi.importActual<typeof import("~/src/providers")>("~/src/providers");
   return {
     ...actual,
-    getAllProviders: vi.fn(),
+    getAllProviderInstances: vi.fn(),
   };
 });
 vi.mock("~/src/utils/config");
@@ -37,9 +37,9 @@ describe("status", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // Clear Providers object
-    Object.keys(Providers).forEach((key) => {
-      delete Providers[key];
+    // Clear the built-in provider constructor map.
+    Object.keys(BUILT_IN_PROVIDER_CONSTRUCTORS).forEach((key) => {
+      delete BUILT_IN_PROVIDER_CONSTRUCTORS[key];
     });
 
     vi.mocked(Config.isDevelopment).mockReturnValue(false);
@@ -55,17 +55,17 @@ describe("status", () => {
     vi.mocked(Environments.getEnv).mockReturnValue({} as Env);
     vi.mocked(Environments.all).mockReturnValue({} as any);
 
-    Providers.openai = vi.fn(function () {
+    BUILT_IN_PROVIDER_CONSTRUCTORS.openai = vi.fn(function () {
       const instance = Object.create(mockProviderClass);
       instance.apiKeyName = "OPENAI_API_KEY";
       return instance;
     });
 
-    vi.mocked(getAllProviders).mockImplementation(() => {
+    vi.mocked(getAllProviderInstances).mockImplementation(() => {
       return Object.fromEntries(
-        Object.keys(Providers).map((key) => [
+        Object.keys(BUILT_IN_PROVIDER_CONSTRUCTORS).map((key) => [
           key,
-          new (Providers[key] as any)(),
+          new (BUILT_IN_PROVIDER_CONSTRUCTORS[key] as any)(),
         ]),
       );
     });
@@ -84,7 +84,7 @@ describe("status", () => {
       new Response(null, { status: 200 }),
     );
 
-    const response = await status();
+    const response = await handleStatusRequest();
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe("application/json");
 
@@ -120,7 +120,7 @@ describe("status", () => {
       new Response(null, { status: 401 }),
     );
 
-    const response = await status();
+    const response = await handleStatusRequest();
     const body = (await response.json()) as any;
 
     expect(body.providers.openai.keys[0].status).toBe("invalid");
@@ -132,14 +132,14 @@ describe("status", () => {
       new Response(null, { status: 500 }),
     );
 
-    const response = await status();
+    const response = await handleStatusRequest();
     const body = (await response.json()) as any;
 
     expect(body.providers.openai.keys[0].status).toBe("unknown");
   });
 
   it("should handle providers without API keys", async () => {
-    Providers.nokeys = vi.fn(function () {
+    BUILT_IN_PROVIDER_CONSTRUCTORS.nokeys = vi.fn(function () {
       return {
         apiKeyName: undefined,
         available: vi.fn().mockReturnValue(true),
@@ -147,7 +147,7 @@ describe("status", () => {
       };
     });
 
-    const response = await status();
+    const response = await handleStatusRequest();
     const body = (await response.json()) as any;
 
     expect(body.providers.nokeys).toEqual({
@@ -165,7 +165,7 @@ describe("status", () => {
     });
     vi.mocked(Secrets.getAll).mockReturnValue([]);
 
-    const body = await (await status()).json();
+    const body = await (await handleStatusRequest()).json();
 
     expect(body.config.AI_GATEWAY).toEqual({
       accountId: "acc-123",
@@ -182,7 +182,7 @@ describe("status", () => {
       new Response(null, { status: 200 }),
     );
 
-    const response = await status();
+    const response = await handleStatusRequest();
     const body = (await response.json()) as any;
 
     expect(body.providers.openai.keys[0].key).toBe("**ort"); // Math.min(10, 5-3) = 2 stars
@@ -190,7 +190,7 @@ describe("status", () => {
   });
 
   it("should skip connectivity check when modelsPath is missing", async () => {
-    Providers.skip = vi.fn(function () {
+    BUILT_IN_PROVIDER_CONSTRUCTORS.skip = vi.fn(function () {
       return {
         apiKeyName: "SKIP_API_KEY",
         modelsPath: "",
@@ -200,7 +200,7 @@ describe("status", () => {
     });
     vi.mocked(Secrets.getAll).mockReturnValue(["any-key"]);
 
-    const response = await status();
+    const response = await handleStatusRequest();
     const body = await response.json();
 
     expect(body.providers.skip.keys[0].status).toBe("unknown");
@@ -219,10 +219,10 @@ describe("status", () => {
     vi.spyOn(custom, "fetch").mockResolvedValue(
       new Response(null, { status: 200 }),
     );
-    vi.mocked(getAllProviders).mockReturnValue({ custom });
+    vi.mocked(getAllProviderInstances).mockReturnValue({ custom });
     vi.mocked(Config.defaultModel).mockReturnValue(undefined);
 
-    const response = await status();
+    const response = await handleStatusRequest();
     const body = await response.json();
 
     expect(body.config.DEFAULT_MODEL).toBeNull();
@@ -239,7 +239,7 @@ describe("status", () => {
       new ProviderNotSupportedError("unsupported"),
     );
 
-    const response = await status();
+    const response = await handleStatusRequest();
     const body = await response.json();
 
     expect(body.providers.openai.keys[0].status).toBe("unknown");
@@ -251,7 +251,7 @@ describe("status", () => {
     vi.mocked(Secrets.getAll).mockReturnValue(["key"]);
     vi.mocked(withTimeout).mockRejectedValue(timeoutError);
 
-    const response = await status();
+    const response = await handleStatusRequest();
     const body = await response.json();
 
     expect(body.providers.openai.keys[0].status).toBe("unknown");
@@ -271,7 +271,7 @@ describe("status", () => {
       .spyOn(console, "error")
       .mockImplementation(() => {});
 
-    const response = await status();
+    const response = await handleStatusRequest();
     const body = await response.json();
 
     expect(body.providers.openai.keys[0].status).toBe("invalid");
@@ -287,7 +287,7 @@ describe("status", () => {
   it("checks supported providers through AI Gateway", async () => {
     vi.mocked(Secrets.getAll).mockReturnValue(["valid", "invalid", "unknown"]);
     vi.spyOn(CloudflareAIGateway, "isSupportedProvider").mockReturnValue(true);
-    vi.mocked(fetch2)
+    vi.mocked(fetchWithLogging)
       .mockResolvedValueOnce(new Response(null, { status: 200 }))
       .mockResolvedValueOnce(new Response(null, { status: 403 }))
       .mockResolvedValueOnce(new Response(null, { status: 500 }));
@@ -297,7 +297,7 @@ describe("status", () => {
         .mockReturnValue(["https://gateway.example/models", { method: "GET" }]),
     } as any;
 
-    const response = await status(gateway);
+    const response = await handleStatusRequest(gateway);
     const body = await response.json();
 
     expect(body.providers.openai.keys.map((key: any) => key.status)).toEqual([
@@ -307,7 +307,7 @@ describe("status", () => {
     ]);
     expect(gateway.buildProviderEndpointRequest).toHaveBeenCalledTimes(3);
     expect(mockProviderClass.fetch).not.toHaveBeenCalled();
-    expect(fetch2).toHaveBeenCalledWith(
+    expect(fetchWithLogging).toHaveBeenCalledWith(
       "https://gateway.example/models",
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
@@ -332,10 +332,13 @@ describe("status", () => {
       buildModelsRequest: vi.fn().mockResolvedValue(["/models", {}]),
       fetch: vi.fn().mockResolvedValue(new Response(null, { status: 200 })),
     };
-    vi.mocked(getAllProviders).mockReturnValue({ first, second } as any);
+    vi.mocked(getAllProviderInstances).mockReturnValue({
+      first,
+      second,
+    } as any);
     vi.mocked(Secrets.getAll).mockReturnValue(["key"]);
 
-    const statusPromise = status();
+    const statusPromise = handleStatusRequest();
     await vi.waitFor(() => expect(second.fetch).toHaveBeenCalledOnce());
     releaseFirst(new Response(null, { status: 200 }));
 

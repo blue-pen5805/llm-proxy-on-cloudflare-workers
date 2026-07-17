@@ -16,24 +16,24 @@ export class Secrets {
    * @returns An array of string values, or an empty array if the key doesn't exist
    */
   static getAll(keyName: keyof Env, shuffle: boolean = false): string[] {
-    const value = Environments.get(keyName);
+    const configuredValue = Environments.get(keyName);
 
-    if (value === undefined) {
+    if (configuredValue === undefined) {
       return [];
     }
 
-    let result: string[] = [];
-    if (Array.isArray(value)) {
-      result = [...value];
-    } else if (typeof value === "string") {
-      result = [value];
+    let secretValues: string[] = [];
+    if (Array.isArray(configuredValue)) {
+      secretValues = [...configuredValue];
+    } else if (typeof configuredValue === "string") {
+      secretValues = [configuredValue];
     }
 
-    if (shuffle && result.length > 1) {
-      return shuffleArray(result);
+    if (shuffle && secretValues.length > 1) {
+      return shuffleArray(secretValues);
     }
 
-    return result;
+    return secretValues;
   }
 
   /**
@@ -68,9 +68,9 @@ export class Secrets {
 
     const env = Environments.getEnv();
     if (env && env.KEY_ROTATION_MANAGER && Config.isGlobalRoundRobinEnabled()) {
-      const id = env.KEY_ROTATION_MANAGER.idFromName(identifier);
-      const obj = env.KEY_ROTATION_MANAGER.get(id);
-      return obj.getNextIndex(identifier, length);
+      const durableObjectId = env.KEY_ROTATION_MANAGER.idFromName(identifier);
+      const rotationManager = env.KEY_ROTATION_MANAGER.get(durableObjectId);
+      return rotationManager.getNextIndex(identifier, length);
     }
 
     // Default to random if global round-robin is not enabled

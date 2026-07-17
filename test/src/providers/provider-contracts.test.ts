@@ -46,7 +46,7 @@ describe("provider contracts", () => {
       expect(provider.baseUrl()).toBe("https://example.com");
       expect(provider.pathnamePrefix()).toBe("");
       expect(await provider.headers()).toEqual({});
-      expect(provider.staticModels()).toBeUndefined();
+      expect(provider.getStaticModels()).toBeUndefined();
       expect(provider.aiGatewayPath("/models")).toBe("/models");
       await expect(
         provider.buildAiGatewayChatCompletionsRequest({
@@ -56,7 +56,7 @@ describe("provider contracts", () => {
       ).resolves.toBeUndefined();
 
       const models = { object: "list", data: [] } as const;
-      expect(provider.modelsToOpenAIFormat(models)).toBe(models);
+      expect(provider.convertModelsToOpenAIFormat(models)).toBe(models);
     });
 
     it("rotates configured credentials and merges request headers", async () => {
@@ -255,7 +255,7 @@ describe("provider contracts", () => {
         "anthropic-version": "2023-06-01",
       });
       expect(
-        provider.modelsToOpenAIFormat({
+        provider.convertModelsToOpenAIFormat({
           data: [
             {
               id: "claude",
@@ -284,7 +284,7 @@ describe("provider contracts", () => {
 
     it("converts provider model lists to the common format", () => {
       expect(
-        new Cohere().modelsToOpenAIFormat({
+        new Cohere().convertModelsToOpenAIFormat({
           models: [{ name: "command", endpoints: ["chat"] }],
           next_page_token: null,
         }),
@@ -302,7 +302,7 @@ describe("provider contracts", () => {
       });
 
       expect(
-        new GoogleAiStudio().modelsToOpenAIFormat({
+        new GoogleAiStudio().convertModelsToOpenAIFormat({
           models: [
             {
               name: "models/gemini",
@@ -343,7 +343,7 @@ describe("provider contracts", () => {
           },
         ],
       };
-      expect(new Groq().modelsToOpenAIFormat(openAiShaped)).toEqual({
+      expect(new Groq().convertModelsToOpenAIFormat(openAiShaped)).toEqual({
         object: "list",
         data: [
           {
@@ -355,7 +355,7 @@ describe("provider contracts", () => {
           },
         ],
       });
-      expect(new Mistral().modelsToOpenAIFormat(openAiShaped)).toEqual({
+      expect(new Mistral().convertModelsToOpenAIFormat(openAiShaped)).toEqual({
         object: "list",
         data: [
           {
@@ -368,7 +368,7 @@ describe("provider contracts", () => {
         ],
       });
       expect(
-        new OpenRouter().modelsToOpenAIFormat({
+        new OpenRouter().convertModelsToOpenAIFormat({
           data: [{ id: "router-model", created: 42, name: "Router" }],
         }),
       ).toEqual({
@@ -434,7 +434,7 @@ describe("provider contracts", () => {
         Authorization: "Bearer key-1",
       });
       expect(
-        provider.modelsToOpenAIFormat({
+        provider.convertModelsToOpenAIFormat({
           success: true,
           errors: [],
           messages: [],
@@ -510,7 +510,7 @@ describe("provider contracts", () => {
         "Content-Type": "application/json",
         Authorization: "Bearer first",
       });
-      expect(provider.staticModels()).toMatchObject({
+      expect(provider.getStaticModels()).toMatchObject({
         object: "list",
         data: [
           { id: "one", object: "model", owned_by: "custom" },
@@ -528,7 +528,7 @@ describe("provider contracts", () => {
       await expect(withoutKeys.headers()).resolves.toEqual({
         "Content-Type": "application/json",
       });
-      expect(withoutKeys.staticModels()).toBeUndefined();
+      expect(withoutKeys.getStaticModels()).toBeUndefined();
 
       const scalarKey = new CustomOpenAI({
         name: "scalar",
@@ -538,7 +538,7 @@ describe("provider contracts", () => {
       });
       expect(scalarKey.getApiKeys()).toEqual(["only"]);
       expect(await scalarKey.getNextApiKeyIndex()).toBe(0);
-      expect(scalarKey.staticModels()).toBeUndefined();
+      expect(scalarKey.getStaticModels()).toBeUndefined();
       expect(Secrets.getNextIndex).not.toHaveBeenCalled();
     });
   });

@@ -1,32 +1,42 @@
 import { describe, it, expect, vi } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
 import { handleRouting } from "~/src/middlewares/router";
-import { aiGatewayRest } from "~/src/requests/ai_gateway_rest";
-import { compat } from "~/src/requests/compat";
-import { proxy } from "~/src/requests/proxy";
+import { handleAiGatewayRestRequest } from "~/src/requests/ai_gateway_rest";
+import { handleCompatibilityRequest } from "~/src/requests/compat";
+import { handleProviderProxyRequest } from "~/src/requests/proxy";
 import { NotFoundError } from "~/src/utils/error";
 
 // Mock the request handlers
 vi.mock("~/src/requests/chat_completions", () => ({
-  chatCompletions: vi.fn(() => Promise.resolve(new Response("chat"))),
+  handleChatCompletionsRequest: vi.fn(() =>
+    Promise.resolve(new Response("chat")),
+  ),
 }));
 vi.mock("~/src/requests/ai_gateway_rest", () => ({
-  aiGatewayRest: vi.fn(() => Promise.resolve(new Response("rest"))),
+  handleAiGatewayRestRequest: vi.fn(() =>
+    Promise.resolve(new Response("rest")),
+  ),
 }));
 vi.mock("~/src/requests/models", () => ({
-  models: vi.fn(() => Promise.resolve(new Response("models"))),
+  handleModelsRequest: vi.fn(() => Promise.resolve(new Response("models"))),
 }));
 vi.mock("~/src/requests/proxy", () => ({
-  proxy: vi.fn(() => Promise.resolve(new Response("proxy"))),
+  handleProviderProxyRequest: vi.fn(() =>
+    Promise.resolve(new Response("proxy")),
+  ),
 }));
 vi.mock("~/src/requests/status", () => ({
-  status: vi.fn(() => Promise.resolve(new Response("status"))),
+  handleStatusRequest: vi.fn(() => Promise.resolve(new Response("status"))),
 }));
 vi.mock("~/src/requests/compat", () => ({
-  compat: vi.fn(() => Promise.resolve(new Response("compat"))),
+  handleCompatibilityRequest: vi.fn(() =>
+    Promise.resolve(new Response("compat")),
+  ),
 }));
 vi.mock("~/src/requests/universal_endpoint", () => ({
-  universalEndpoint: vi.fn(() => Promise.resolve(new Response("universal"))),
+  handleUniversalEndpointRequest: vi.fn(() =>
+    Promise.resolve(new Response("universal")),
+  ),
 }));
 
 describe("handleRouting", () => {
@@ -71,7 +81,7 @@ describe("handleRouting", () => {
       pathname: "/openai/v1/models",
     } as any);
     expect(await response.text()).toBe("proxy");
-    expect(proxy).toHaveBeenCalledWith(
+    expect(handleProviderProxyRequest).toHaveBeenCalledWith(
       expect.anything(),
       "openai",
       "/v1/models",
@@ -104,7 +114,10 @@ describe("handleRouting", () => {
     );
 
     expect(await response.text()).toBe("compat");
-    expect(compat).toHaveBeenCalledWith(postRequest, aiGateway);
+    expect(handleCompatibilityRequest).toHaveBeenCalledWith(
+      postRequest,
+      aiGateway,
+    );
   });
 
   it.each([
@@ -174,7 +187,7 @@ describe("handleRouting", () => {
       );
 
       expect(await response.text()).toBe("rest");
-      expect(aiGatewayRest).toHaveBeenLastCalledWith(
+      expect(handleAiGatewayRestRequest).toHaveBeenLastCalledWith(
         postRequest,
         path,
         aiGateway,

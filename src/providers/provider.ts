@@ -1,4 +1,4 @@
-import { fetch2 } from "../utils/helpers";
+import { fetchWithLogging } from "../utils/helpers";
 import { Secrets } from "../utils/secrets";
 import {
   OpenAIChatCompletionsRequestBody,
@@ -12,18 +12,20 @@ interface ModelWithMetadata {
   owned_by: string;
 }
 
-export function modelsToOpenAIFormatWithMetadata<
+export function convertModelsToOpenAIFormatWithMetadata<
   T extends ModelWithMetadata,
->(data: { data: T[] }): OpenAIModelsListResponseBody {
+>(providerResponse: { data: T[] }): OpenAIModelsListResponseBody {
   return {
     object: "list",
-    data: data.data.map(({ id, object, created, owned_by, ...model }) => ({
-      id,
-      object,
-      created,
-      owned_by,
-      _: model,
-    })),
+    data: providerResponse.data.map(
+      ({ id, object, created, owned_by, ...providerMetadata }) => ({
+        id,
+        object,
+        created,
+        owned_by,
+        _: providerMetadata,
+      }),
+    ),
   };
 }
 
@@ -105,11 +107,14 @@ export interface Provider {
     init?: RequestInit,
     apiKeyIndex?: number,
   ): Promise<[string, RequestInit]>;
-  requestData(init?: RequestInit, apiKeyIndex?: number): Promise<RequestInit>;
+  buildRequestInit(
+    init?: RequestInit,
+    apiKeyIndex?: number,
+  ): Promise<RequestInit>;
   buildChatCompletionsRequest(
     args: ChatCompletionsRequestArguments,
   ): Promise<[string, RequestInit]>;
-  filterChatCompletionsRequest(
+  filterSupportedChatParameters(
     data: Readonly<Record<string, unknown>>,
   ): Record<string, unknown>;
   buildModelsRequest(apiKeyIndex?: number): Promise<[string, RequestInit]>;
@@ -117,8 +122,8 @@ export interface Provider {
   buildAiGatewayChatCompletionsRequest(
     args: AiGatewayChatRequestArguments,
   ): Promise<[string, RequestInit] | undefined>;
-  modelsToOpenAIFormat(data: unknown): OpenAIModelsListResponseBody;
-  staticModels(): OpenAIModelsListResponseBody | undefined;
+  convertModelsToOpenAIFormat(data: unknown): OpenAIModelsListResponseBody;
+  getStaticModels(): OpenAIModelsListResponseBody | undefined;
 }
 
 /**
@@ -165,11 +170,11 @@ export interface ProviderDefinition {
     this: Provider,
     args: AiGatewayChatRequestArguments,
   ): Promise<[string, RequestInit] | undefined>;
-  modelsToOpenAIFormat?(
+  convertModelsToOpenAIFormat?(
     this: Provider,
     data: unknown,
   ): OpenAIModelsListResponseBody;
-  staticModels?(this: Provider): OpenAIModelsListResponseBody | undefined;
+  getStaticModels?(this: Provider): OpenAIModelsListResponseBody | undefined;
 }
 
 export type ProviderConstructor<
@@ -244,8 +249,8 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
       if (definition.getNextApiKeyIndex) {
         return definition.getNextApiKeyIndex.call(this);
       }
-      const keys = this.getApiKeys();
-      if (keys.length <= 1 || !this.apiKeyName) return 0;
+      const apiKeys = this.getApiKeys();
+      if (apiKeys.length <= 1 || !this.apiKeyName) return 0;
       return Secrets.getNext(this.apiKeyName);
     },
 
@@ -253,7 +258,9 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
       if (definition.fetch) {
         return definition.fetch.call(this, pathname, init, apiKeyIndex);
       }
-      return fetch2(...(await this.buildRequest(pathname, init, apiKeyIndex)));
+      return fetchWithLogging(
+        ...(await this.buildRequest(pathname, init, apiKeyIndex)),
+      );
     },
 
     baseUrl() {
@@ -274,23 +281,24 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
       }
       if (!definition.openAICompatible) return {};
 
-      const keys = this.getApiKeys();
-      if (keys.length === 0) return {};
-      const index = apiKeyIndex !== undefined ? apiKeyIndex % keys.length : 0;
+      const apiKeys = this.getApiKeys();
+      if (apiKeys.length === 0) return {};
+      const selectedApiKeyIndex =
+        apiKeyIndex !== undefined ? apiKeyIndex % apiKeys.length : 0;
       return {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${keys[index]}`,
+        Authorization: `Bearer ${apiKeys[selectedApiKeyIndex]}`,
       };
     },
 
     async buildRequest(pathname, init, apiKeyIndex) {
       return [
         this.baseUrl() + this.pathnamePrefix() + pathname,
-        await this.requestData(init, apiKeyIndex),
+        await this.buildRequestInit(init, apiKeyIndex),
       ];
     },
 
-    async requestData(init, apiKeyIndex) {
+    async buildRequestInit(init, apiKeyIndex) {
       return {
         ...init,
         headers: {
@@ -307,7 +315,7 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
       const { body, preparedData, headers, apiKeyIndex } = args;
       const trimmedData =
         preparedData ??
-        this.filterChatCompletionsRequest(
+        this.filterSupportedChatParameters(
           JSON.parse(body) as Record<string, unknown>,
         );
       return [
@@ -323,7 +331,7 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
       ];
     },
 
-    filterChatCompletionsRequest(data) {
+    filterSupportedChatParameters(data) {
       supportedChatParameters ??= new Set(
         this.CHAT_COMPLETIONS_SUPPORTED_PARAMETERS,
       );
@@ -356,14 +364,14 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
       return definition.buildAiGatewayChatCompletionsRequest?.call(this, args);
     },
 
-    modelsToOpenAIFormat(data) {
-      return definition.modelsToOpenAIFormat
-        ? definition.modelsToOpenAIFormat.call(this, data)
+    convertModelsToOpenAIFormat(data) {
+      return definition.convertModelsToOpenAIFormat
+        ? definition.convertModelsToOpenAIFormat.call(this, data)
         : (data as OpenAIModelsListResponseBody);
     },
 
-    staticModels() {
-      return definition.staticModels?.call(this);
+    getStaticModels() {
+      return definition.getStaticModels?.call(this);
     },
   };
 
@@ -388,11 +396,11 @@ export function defineProvider<Arguments extends unknown[] = []>(
     }
 
     constructor(...args: Arguments) {
-      const resolved =
+      const resolvedDefinition =
         typeof definition === "function" ? definition(...args) : definition;
-      const provider = createProvider(resolved);
-      Object.defineProperty(provider, brand, { value: true });
-      return provider as unknown as ComposedProvider;
+      const providerInstance = createProvider(resolvedDefinition);
+      Object.defineProperty(providerInstance, brand, { value: true });
+      return providerInstance as unknown as ComposedProvider;
     }
   }
 

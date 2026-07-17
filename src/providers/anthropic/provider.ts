@@ -20,11 +20,11 @@ export const Anthropic = defineProvider({
   },
 
   // Convert model list to OpenAI format
-  modelsToOpenAIFormat(data): OpenAIModelsListResponseBody {
-    const response = data as AnthropicModelsListResponseBody;
+  convertModelsToOpenAIFormat(data): OpenAIModelsListResponseBody {
+    const providerResponse = data as AnthropicModelsListResponseBody;
     return {
       object: "list",
-      data: response.data.map(({ id, type, created_at, ...model }) => ({
+      data: providerResponse.data.map(({ id, type, created_at, ...model }) => ({
         id,
         object: type,
         created: Math.floor(Date.parse(created_at) / 1000),

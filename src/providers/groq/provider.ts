@@ -1,6 +1,6 @@
 import {
   defineProvider,
-  modelsToOpenAIFormatWithMetadata,
+  convertModelsToOpenAIFormatWithMetadata,
   type Provider,
 } from "../provider";
 import { GroqModelsListResponseBody } from "./types";
@@ -12,9 +12,11 @@ export const Groq = defineProvider({
   apiKeyName: "GROQ_API_KEY",
   baseUrl: "https://api.groq.com/openai/v1",
   // Convert model list to OpenAI format
-  modelsToOpenAIFormat(
+  convertModelsToOpenAIFormat(
     data,
-  ): ReturnType<typeof modelsToOpenAIFormatWithMetadata> {
-    return modelsToOpenAIFormatWithMetadata(data as GroqModelsListResponseBody);
+  ): ReturnType<typeof convertModelsToOpenAIFormatWithMetadata> {
+    return convertModelsToOpenAIFormatWithMetadata(
+      data as GroqModelsListResponseBody,
+    );
   },
 });

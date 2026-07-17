@@ -84,8 +84,8 @@ describe("create-config.ts", () => {
     );
 
     // Dynamically import the script after mocks are set up
-    const { main } = await import("../../scripts/create-config");
-    await main();
+    const { runCreateConfigCli } = await import("../../scripts/create-config");
+    await runCreateConfigCli();
 
     expect(existsSync).toHaveBeenCalledWith("config.jsonc");
     expect(existsSync).toHaveBeenCalledWith("config.example.jsonc");
@@ -128,8 +128,8 @@ describe("create-config.ts", () => {
       },
     );
 
-    const { main } = await import("../../scripts/create-config");
-    await main();
+    const { runCreateConfigCli } = await import("../../scripts/create-config");
+    await runCreateConfigCli();
 
     expect(mockQuestion).toHaveBeenCalledWith(
       "config.jsonc already exists. Overwrite? (y/N): ",
@@ -154,8 +154,8 @@ describe("create-config.ts", () => {
       },
     );
 
-    const { main } = await import("../../scripts/create-config");
-    await main();
+    const { runCreateConfigCli } = await import("../../scripts/create-config");
+    await runCreateConfigCli();
 
     expect(writeFileSync).toHaveBeenCalledWith(
       "config.jsonc",
@@ -171,8 +171,8 @@ describe("create-config.ts", () => {
       false,
     ); // config.example.jsonc does not exist
 
-    const { main } = await import("../../scripts/create-config");
-    await main();
+    const { runCreateConfigCli } = await import("../../scripts/create-config");
+    await runCreateConfigCli();
 
     expect(mockConsoleError).toHaveBeenCalledWith(
       expect.stringContaining("Error: config.example.jsonc not found."),
@@ -202,8 +202,8 @@ describe("create-config.ts", () => {
       },
     );
 
-    const { main } = await import("../../scripts/create-config");
-    await main();
+    const { runCreateConfigCli } = await import("../../scripts/create-config");
+    await runCreateConfigCli();
 
     expect(mockQuestion).toHaveBeenCalledTimes(2); // Prompted twice for PROXY_API_KEY
     expect(mockConsoleLog).toHaveBeenCalledWith(
@@ -238,8 +238,8 @@ describe("create-config.ts", () => {
       },
     );
 
-    const { main } = await import("../../scripts/create-config");
-    await main();
+    const { runCreateConfigCli } = await import("../../scripts/create-config");
+    await runCreateConfigCli();
 
     expect(writeFileSync).toHaveBeenCalledWith(
       "config.jsonc",
@@ -271,8 +271,8 @@ describe("create-config.ts", () => {
       },
     );
 
-    const { main } = await import("../../scripts/create-config");
-    await main();
+    const { runCreateConfigCli } = await import("../../scripts/create-config");
+    await runCreateConfigCli();
 
     expect(mockConsoleLog).toHaveBeenCalledWith(
       expect.stringContaining(
@@ -293,8 +293,8 @@ describe("create-config.ts", () => {
       throw new Error("input failed");
     });
 
-    const { main } = await import("../../scripts/create-config");
-    await main();
+    const { runCreateConfigCli } = await import("../../scripts/create-config");
+    await runCreateConfigCli();
 
     expect(mockConsoleError).toHaveBeenCalledWith(
       "\nAn error occurred:",
@@ -324,8 +324,8 @@ describe("create-config.ts", () => {
       },
     );
 
-    const { main } = await import("../../scripts/create-config");
-    await main();
+    const { runCreateConfigCli } = await import("../../scripts/create-config");
+    await runCreateConfigCli();
 
     expect(writeFileSync).toHaveBeenCalledWith(
       "config.jsonc",
@@ -342,13 +342,13 @@ describe("create-config.ts", () => {
   });
 
   it("should expose deterministic parsing and description helpers", async () => {
-    const { getFieldDescription, parseJsoncFile } =
+    const { getFieldDescription, parseConfigTemplate } =
       await import("../../scripts/create-config");
 
-    expect(() => parseJsoncFile("")).toThrow(
-      "Invalid content provided to parseJsoncFile",
+    expect(() => parseConfigTemplate("")).toThrow(
+      "Invalid content provided to parseConfigTemplate",
     );
-    expect(parseJsoncFile('"PROXY_API_KEY": unquoted,').config).toEqual({
+    expect(parseConfigTemplate('"PROXY_API_KEY": unquoted,').config).toEqual({
       PROXY_API_KEY: "unquoted",
     });
     expect(getFieldDescription("CUSTOM_SETTING")).toBe("custom setting");

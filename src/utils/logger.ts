@@ -14,7 +14,7 @@ const MAX_ERROR_MESSAGE_LENGTH = 500;
 const requestLogContext = new AsyncLocalStorage<RequestLogContext>();
 const scopedLogFields = new AsyncLocalStorage<LogFields>();
 
-function compact(
+function omitUndefinedLogFields(
   fields: LogFields,
 ): Record<string, Exclude<LogValue, undefined>> {
   return Object.fromEntries(
@@ -58,20 +58,20 @@ function safeErrorFields(error: unknown): LogFields {
 
 function logRecord(event: string, fields: LogFields): Record<string, LogValue> {
   return {
-    ...compact(scopedLogFields.getStore() ?? {}),
+    ...omitUndefinedLogFields(scopedLogFields.getStore() ?? {}),
     event,
     request_id: requestLogContext.getStore()?.requestId ?? null,
-    ...compact(fields),
+    ...omitUndefinedLogFields(fields),
   };
 }
 
 export class RequestLogger {
   static run<T>(request: Request, callback: () => T): T {
-    const url = new URL(request.url);
+    const requestUrl = new URL(request.url);
     return requestLogContext.run(
       {
         method: request.method,
-        path: url.pathname,
+        path: requestUrl.pathname,
         requestId: request.headers.get("cf-ray") ?? crypto.randomUUID(),
         startedAt: performance.now(),
       },
@@ -85,7 +85,10 @@ export class RequestLogger {
 
   static withFields<T>(fields: LogFields, callback: () => T): T {
     return scopedLogFields.run(
-      { ...scopedLogFields.getStore(), ...compact(fields) },
+      {
+        ...scopedLogFields.getStore(),
+        ...omitUndefinedLogFields(fields),
+      },
       callback,
     );
   }
@@ -99,10 +102,10 @@ export class RequestLogger {
   }
 
   static requestFields(): LogFields {
-    const context = requestLogContext.getStore();
+    const logContext = requestLogContext.getStore();
     return {
-      method: context?.method,
-      path: context?.path,
+      method: logContext?.method,
+      path: logContext?.path,
     };
   }
 

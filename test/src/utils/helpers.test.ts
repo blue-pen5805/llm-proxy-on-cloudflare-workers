@@ -1,40 +1,40 @@
 import { describe, it, expect, vi } from "vitest";
 import {
-  safeJsonParse,
-  getPathname,
+  parseJsonOrReturnText,
+  getRequestPath,
   shuffleArray,
-  formatString,
-  maskUrl,
-  cleanPathname,
-  fetch2,
+  interpolateTemplate,
+  maskSensitiveUrl,
+  removeAuthorizationQueryParameters,
+  fetchWithLogging,
   withTimeout,
 } from "~/src/utils/helpers";
 import { RequestLogger } from "~/src/utils/logger";
 
-describe("safeJsonParse", () => {
+describe("parseJsonOrReturnText", () => {
   it("should parse valid JSON string", () => {
     const jsonString = '{"key": "value"}';
-    const result = safeJsonParse(jsonString);
+    const result = parseJsonOrReturnText(jsonString);
     expect(result).toEqual({ key: "value" });
   });
 
   it("should return the original string if JSON is invalid", () => {
     const invalidJsonString = "invalid json";
-    const result = safeJsonParse(invalidJsonString);
+    const result = parseJsonOrReturnText(invalidJsonString);
     expect(result).toBe(invalidJsonString);
   });
 });
 
-describe("getPathname", () => {
+describe("getRequestPath", () => {
   it("should return the pathname of the URL", () => {
     const request = new Request("https://example.com/pathname");
-    const result = getPathname(request);
+    const result = getRequestPath(request);
     expect(result).toBe("/pathname");
   });
 
   it("should preserve query parameters", () => {
     const request = new Request("https://example.com/pathname?model=gpt-4");
-    expect(getPathname(request)).toBe("/pathname?model=gpt-4");
+    expect(getRequestPath(request)).toBe("/pathname?model=gpt-4");
   });
 });
 
@@ -51,49 +51,49 @@ describe("shuffleArray", () => {
   });
 });
 
-describe("formatString", () => {
+describe("interpolateTemplate", () => {
   it("should format the string with the given arguments", () => {
     const template = "Hello, {name}!";
     const args = { name: "World" };
-    const result = formatString(template, args);
+    const result = interpolateTemplate(template, args);
     expect(result).toBe("Hello, World!");
   });
 
   it("should replace multiple occurrences of the same key", () => {
     const template = "{greeting}, {name}! {greeting} again!";
     const args = { greeting: "Hello", name: "World" };
-    const result = formatString(template, args);
+    const result = interpolateTemplate(template, args);
     expect(result).toBe("Hello, World! Hello again!");
   });
 
   it("should replace placeholder keys containing regular expression characters", () => {
-    expect(formatString("Value: {a.b}", { "a.b": "matched" })).toBe(
+    expect(interpolateTemplate("Value: {a.b}", { "a.b": "matched" })).toBe(
       "Value: matched",
     );
   });
 });
 
-describe("maskUrl", () => {
+describe("maskSensitiveUrl", () => {
   it("should mask sensitive parameters with long values", () => {
     const url = "https://api.example.com/v1/chat?apiKey=sk-1234567890abcdef";
-    const result = maskUrl(url);
+    const result = maskSensitiveUrl(url);
     expect(result).toBe("https://api.example.com/v1/chat?apiKey=sk-***");
   });
 
   it("should mask sensitive parameters with short values", () => {
     const url = "https://api.example.com/v1/chat?key=short";
-    const result = maskUrl(url);
+    const result = maskSensitiveUrl(url);
     expect(result).toBe("https://api.example.com/v1/chat?key=***");
   });
 
   it("should preserve empty sensitive parameter values", () => {
     const url = "https://api.example.com/v1/chat?key=";
-    expect(maskUrl(url)).toBe(url);
+    expect(maskSensitiveUrl(url)).toBe(url);
   });
 
   it("should not mask non-sensitive parameters", () => {
     const url = "https://api.example.com/v1/chat?model=gpt-4&temperature=0.7";
-    const result = maskUrl(url);
+    const result = maskSensitiveUrl(url);
     expect(result).toBe(
       "https://api.example.com/v1/chat?model=gpt-4&temperature=0.7",
     );
@@ -102,7 +102,7 @@ describe("maskUrl", () => {
   it("should mask only sensitive parameters in mixed query strings", () => {
     const url =
       "https://api.example.com/v1/chat?apiKey=sk-1234567890&model=gpt-4&token=abc123456789&temperature=0.7";
-    const result = maskUrl(url);
+    const result = maskSensitiveUrl(url);
     expect(result).toBe(
       "https://api.example.com/v1/chat?apiKey=sk-***&model=gpt-4&token=abc***&temperature=0.7",
     );
@@ -110,31 +110,31 @@ describe("maskUrl", () => {
 
   it("should handle URLs without query parameters", () => {
     const url = "https://api.example.com/v1/chat";
-    const result = maskUrl(url);
+    const result = maskSensitiveUrl(url);
     expect(result).toBe("https://api.example.com/v1/chat");
   });
 
   it("should handle invalid URLs gracefully", () => {
     const url = "not a valid url?param=value";
-    const result = maskUrl(url);
+    const result = maskSensitiveUrl(url);
     expect(result).toBe("not a valid url?***");
   });
 
   it("should handle invalid URLs without a query string", () => {
-    expect(maskUrl("not a valid url")).toBe("not a valid url");
+    expect(maskSensitiveUrl("not a valid url")).toBe("not a valid url");
   });
 
   it("should mask various sensitive parameter names", () => {
     const url =
       "https://api.example.com/v1?api_key=key1&access_token=token12345678901&password=pass1&secret=sec1";
-    const result = maskUrl(url);
+    const result = maskSensitiveUrl(url);
     expect(result).toBe(
       "https://api.example.com/v1?api_key=***&access_token=tok***&password=***&secret=***",
     );
   });
 });
 
-describe("fetch2", () => {
+describe("fetchWithLogging", () => {
   it("logs a structured successful subrequest with a masked URL", async () => {
     const response = new Response("ok", { status: 202 });
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(response);
@@ -143,7 +143,7 @@ describe("fetch2", () => {
     const result = await RequestLogger.withFields(
       { provider: "openai", key_index: 1 },
       () =>
-        fetch2(
+        fetchWithLogging(
           new Request("https://example.com/models?api_key=private", {
             method: "POST",
           }),
@@ -174,7 +174,9 @@ describe("fetch2", () => {
       .mockImplementation(() => {});
 
     await expect(
-      fetch2("https://example.com/models?key=private", { method: "DELETE" }),
+      fetchWithLogging("https://example.com/models?key=private", {
+        method: "DELETE",
+      }),
     ).rejects.toBe(error);
     expect(consoleError).toHaveBeenCalledWith({
       event: "subrequest.failed",
@@ -190,35 +192,35 @@ describe("fetch2", () => {
   });
 });
 
-describe("cleanPathname", () => {
+describe("removeAuthorizationQueryParameters", () => {
   it("should return the same pathname if no authorization params", () => {
     const pathname = "/v1/chat/completions";
-    const result = cleanPathname(pathname);
+    const result = removeAuthorizationQueryParameters(pathname);
     expect(result).toBe("/v1/chat/completions");
   });
 
   it("should remove authorization query parameters (single)", () => {
     const pathname = "/v1/chat/completions?key=val";
-    const result = cleanPathname(pathname);
+    const result = removeAuthorizationQueryParameters(pathname);
     expect(result).toBe("/v1/chat/completions");
   });
 
   it("should remove authorization query parameters (with others)", () => {
     const pathname = "/v1/chat/completions?key=val&model=gpt-4";
-    const result = cleanPathname(pathname);
+    const result = removeAuthorizationQueryParameters(pathname);
     expect(result).toBe("/v1/chat/completions?model=gpt-4");
   });
 
   it("should remove authorization query parameters (multiple auth params)", () => {
     // Current only "key" is in AUTHORIZATION_QUERY_PARAMETERS, but test the logic
     const pathname = "/v1/chat/completions?key=val&other=123&key=val2";
-    const result = cleanPathname(pathname);
+    const result = removeAuthorizationQueryParameters(pathname);
     expect(result).toBe("/v1/chat/completions?other=123");
   });
 
   it("should clean up invalid query string formats like ?&", () => {
     const pathname = "/v1/chat/completions?&model=gpt-4";
-    const result = cleanPathname(pathname);
+    const result = removeAuthorizationQueryParameters(pathname);
     expect(result).toBe("/v1/chat/completions?model=gpt-4");
   });
 });

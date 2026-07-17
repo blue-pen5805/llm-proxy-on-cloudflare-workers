@@ -2,13 +2,13 @@ import { CloudflareAIGateway } from "../ai_gateway";
 import { isCloudflareAIGatewayRestApiPath } from "../ai_gateway/utils";
 import { Middleware, MiddlewareContext } from "../middleware";
 import { createProviderRegistry } from "../providers";
-import { aiGatewayRest } from "../requests/ai_gateway_rest";
-import { chatCompletions } from "../requests/chat_completions";
-import { compat } from "../requests/compat";
-import { models } from "../requests/models";
-import { proxy } from "../requests/proxy";
-import { status } from "../requests/status";
-import { universalEndpoint } from "../requests/universal_endpoint";
+import { handleAiGatewayRestRequest } from "../requests/ai_gateway_rest";
+import { handleChatCompletionsRequest } from "../requests/chat_completions";
+import { handleCompatibilityRequest } from "../requests/compat";
+import { handleModelsRequest } from "../requests/models";
+import { handleProviderProxyRequest } from "../requests/proxy";
+import { handleStatusRequest } from "../requests/status";
+import { handleUniversalEndpointRequest } from "../requests/universal_endpoint";
 import { Environments } from "../utils/environments";
 import { BadRequestError, NotFoundError } from "../utils/error";
 
@@ -25,13 +25,13 @@ export async function handleRouting(
   }
 
   if (pathname === "/status") {
-    return await status(aiGateway, context.providers);
+    return await handleStatusRequest(aiGateway, context.providers);
   }
 
   if (aiGateway && /^\/compat(?:$|\/|\?)/.test(pathname)) {
     // Example: /g/{AI_GATEWAY_NAME}/compat/chat/completions
     if (request.method === "POST" && pathname === "/compat/chat/completions") {
-      return await compat(request, aiGateway);
+      return await handleCompatibilityRequest(request, aiGateway);
     }
 
     throw new NotFoundError();
@@ -47,7 +47,7 @@ export async function handleRouting(
           "AI Gateway REST API requires CLOUDFLARE_ACCOUNT_ID.",
         );
       }
-      return await aiGatewayRest(request, pathname, aiGateway);
+      return await handleAiGatewayRestRequest(request, pathname, aiGateway);
     }
 
     throw new NotFoundError();
@@ -62,7 +62,7 @@ export async function handleRouting(
     request.method === "POST" &&
     (pathname === "/chat/completions" || pathname === "/v1/chat/completions")
   ) {
-    return await chatCompletions(context, aiGateway);
+    return await handleChatCompletionsRequest(context, aiGateway);
   }
 
   // Models - https://platform.openai.com/docs/api-reference/models
@@ -73,18 +73,18 @@ export async function handleRouting(
     request.method === "GET" &&
     (pathname === "/models" || pathname === "/v1/models")
   ) {
-    return await models(context, aiGateway);
+    return await handleModelsRequest(context, aiGateway);
   }
 
   // Proxy
   // Example: /openai/v1/chat/completions
   //          /google-ai-studio/v1beta/models/{MODEL_NAME}:generateContent
   //          /g/{AI_GATEWAY_NAME}/openai/v1/chat/completions
-  const providers =
+  const providerRegistry =
     context.providers ?? createProviderRegistry(Environments.all());
-  const providerRoute = providers.match(pathname);
+  const providerRoute = providerRegistry.match(pathname);
   if (providerRoute) {
-    return await proxy(
+    return await handleProviderProxyRequest(
       context,
       providerRoute.providerName,
       providerRoute.pathname,
@@ -96,7 +96,7 @@ export async function handleRouting(
   // https://developers.cloudflare.com/ai-gateway/usage/universal/
   // Example: /g/{AI_GATEWAY_NAME}/
   if (aiGateway && request.method === "POST" && pathname === "/") {
-    return await universalEndpoint(request, aiGateway);
+    return await handleUniversalEndpointRequest(request, aiGateway);
   }
 
   throw new NotFoundError();

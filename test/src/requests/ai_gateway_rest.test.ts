@@ -1,16 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
-import { aiGatewayRest } from "~/src/requests/ai_gateway_rest";
-import { fetch2 } from "~/src/utils/helpers";
+import { handleAiGatewayRestRequest } from "~/src/requests/ai_gateway_rest";
+import { fetchWithLogging } from "~/src/utils/helpers";
 
 vi.mock("~/src/utils/helpers", () => ({
-  fetch2: vi.fn(),
+  fetchWithLogging: vi.fn(),
 }));
 
-describe("aiGatewayRest", () => {
+describe("handleAiGatewayRestRequest", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(fetch2).mockResolvedValue(new Response(null, { status: 200 }));
+    vi.mocked(fetchWithLogging).mockResolvedValue(
+      new Response(null, { status: 200 }),
+    );
   });
 
   it("streams a request without leaking proxy credentials", async () => {
@@ -35,7 +37,7 @@ describe("aiGatewayRest", () => {
         ]),
     } as unknown as CloudflareAIGateway;
 
-    await aiGatewayRest(request, "/ai/v1/responses", aiGateway);
+    await handleAiGatewayRestRequest(request, "/ai/v1/responses", aiGateway);
 
     const args = vi.mocked(aiGateway.buildRestApiRequest).mock.calls[0][0];
     const headers = new Headers(args.headers);
@@ -47,7 +49,7 @@ describe("aiGatewayRest", () => {
     expect(headers.has("x-goog-api-key")).toBe(false);
     expect(headers.get("cf-aig-metadata")).toBe('{"user":"123"}');
     expect(headers.get("x-client-header")).toBe("preserved");
-    expect(fetch2).toHaveBeenCalledWith(
+    expect(fetchWithLogging).toHaveBeenCalledWith(
       "https://api.cloudflare.com/client/v4/accounts/account/ai/v1/responses",
       { method: "POST", body },
     );
@@ -60,12 +62,12 @@ describe("aiGatewayRest", () => {
     });
 
     await expect(
-      aiGatewayRest(
+      handleAiGatewayRestRequest(
         request,
         "/ai/run",
         new CloudflareAIGateway("account", "default"),
       ),
     ).rejects.toThrow("AI Gateway REST API requires CLOUDFLARE_API_TOKEN.");
-    expect(fetch2).not.toHaveBeenCalled();
+    expect(fetchWithLogging).not.toHaveBeenCalled();
   });
 });

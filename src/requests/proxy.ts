@@ -1,20 +1,20 @@
 import { CloudflareAIGateway } from "../ai_gateway";
 import { MiddlewareContext } from "../middleware";
 import {
-  apiKeySelectionPolicy,
+  determineApiKeySelectionPolicy,
   recordApiKeySelection,
   selectApiKeyIndex,
 } from "../utils/api_key_selection";
 import { stripProxyAuthorizationHeaders } from "../utils/authorization";
 import { NotFoundError } from "../utils/error";
-import { fetch2 } from "../utils/helpers";
+import { fetchWithLogging } from "../utils/helpers";
 import { RequestLogger } from "../utils/logger";
 import {
-  providerConfigurationErrorResponse,
+  createProviderConfigurationErrorResponse,
   resolveProvider,
 } from "./provider_request";
 
-export async function proxy(
+export async function handleProviderProxyRequest(
   context: MiddlewareContext,
   providerName: string,
   pathname: string,
@@ -28,7 +28,7 @@ export async function proxy(
     throw new NotFoundError();
   }
 
-  const providerError = providerConfigurationErrorResponse(
+  const providerError = createProviderConfigurationErrorResponse(
     providerName,
     providerInstance,
     aiGateway,
@@ -51,7 +51,10 @@ export async function proxy(
     operation: "proxy",
     keyIndex: apiKeyIndex,
     keyCount: providerInstance.getApiKeys().length,
-    selectionPolicy: apiKeySelectionPolicy(contextApiKeyIndex, "rotate"),
+    selectionPolicy: determineApiKeySelectionPolicy(
+      contextApiKeyIndex,
+      "rotate",
+    ),
     viaAiGateway: aiGatewayProvider !== undefined,
   });
   const sanitizedHeaders = stripProxyAuthorizationHeaders(request.headers);
@@ -70,7 +73,7 @@ export async function proxy(
       headers: Object.fromEntries(sanitizedHeaders.entries()),
     });
     return RequestLogger.withFields(keyLogFields, () =>
-      fetch2(requestInfo, { ...requestInit, signal: request.signal }),
+      fetchWithLogging(requestInfo, { ...requestInit, signal: request.signal }),
     );
   }
 

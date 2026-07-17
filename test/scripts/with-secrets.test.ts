@@ -1,4 +1,8 @@
-import { cleanup, main, parseArgs } from "../../scripts/with-secrets";
+import {
+  removeGeneratedDevVarsFile,
+  runCommandWithSecretsCli,
+  parseWithSecretsArguments,
+} from "../../scripts/with-secrets";
 import path from "path";
 import { fileURLToPath } from "url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   unlinkSync: vi.fn(),
   spawn: vi.fn(),
   generateDevVars: vi.fn(),
-  getFilePaths: vi.fn(),
+  getConfigAndDevVarsPaths: vi.fn(),
 }));
 
 vi.mock("fs", () => ({
@@ -22,7 +26,7 @@ vi.mock("child_process", () => ({ spawn: mocks.spawn }));
 
 vi.mock("../../scripts/generate-dev-vars.ts", () => ({
   generateDevVars: mocks.generateDevVars,
-  getFilePaths: mocks.getFilePaths,
+  getConfigAndDevVarsPaths: mocks.getConfigAndDevVarsPaths,
 }));
 
 describe("with-secrets", () => {
@@ -37,10 +41,17 @@ describe("with-secrets", () => {
     vi.restoreAllMocks();
   });
 
-  describe("parseArgs", () => {
+  describe("parseWithSecretsArguments", () => {
     it("parses an environment and a command with arguments", () => {
       expect(
-        parseArgs(["--env", "develop", "--", "wrangler", "dev", "--local"]),
+        parseWithSecretsArguments([
+          "--env",
+          "develop",
+          "--",
+          "wrangler",
+          "dev",
+          "--local",
+        ]),
       ).toEqual({
         env: "develop",
         command: ["wrangler", "dev", "--local"],
@@ -48,18 +59,20 @@ describe("with-secrets", () => {
     });
 
     it("accepts a command without an environment", () => {
-      expect(parseArgs(["--", "npm", "test"])).toEqual({
+      expect(parseWithSecretsArguments(["--", "npm", "test"])).toEqual({
         env: undefined,
         command: ["npm", "test"],
       });
     });
 
     it("rejects malformed invocations", () => {
-      expect(() => parseArgs(["--env"])).toThrow("--env requires a value");
-      expect(() => parseArgs(["--unknown"])).toThrow(
+      expect(() => parseWithSecretsArguments(["--env"])).toThrow(
+        "--env requires a value",
+      );
+      expect(() => parseWithSecretsArguments(["--unknown"])).toThrow(
         "Unknown argument: --unknown",
       );
-      expect(() => parseArgs(["--env", "dev"])).toThrow(
+      expect(() => parseWithSecretsArguments(["--env", "dev"])).toThrow(
         "No command specified.",
       );
     });
@@ -69,7 +82,7 @@ describe("with-secrets", () => {
     it("does nothing when the generated file does not exist", () => {
       mocks.existsSync.mockReturnValue(false);
 
-      cleanup("/repo/.dev.vars");
+      removeGeneratedDevVarsFile("/repo/.dev.vars");
 
       expect(mocks.unlinkSync).not.toHaveBeenCalled();
     });
@@ -78,7 +91,7 @@ describe("with-secrets", () => {
       mocks.existsSync.mockReturnValue(true);
       const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-      cleanup("/repo/.dev.vars.develop");
+      removeGeneratedDevVarsFile("/repo/.dev.vars.develop");
 
       expect(mocks.unlinkSync).toHaveBeenCalledWith("/repo/.dev.vars.develop");
       expect(log).toHaveBeenCalledWith("🧹 Cleaned up .dev.vars.develop");
@@ -94,7 +107,7 @@ describe("with-secrets", () => {
         .spyOn(console, "error")
         .mockImplementation(() => undefined);
 
-      cleanup("/repo/.dev.vars");
+      removeGeneratedDevVarsFile("/repo/.dev.vars");
 
       expect(consoleError).toHaveBeenCalledWith(
         "❌ Failed to cleanup .dev.vars",
@@ -121,7 +134,7 @@ describe("with-secrets", () => {
       success: true,
       messages: ["generated"],
     });
-    mocks.getFilePaths.mockReturnValue({
+    mocks.getConfigAndDevVarsPaths.mockReturnValue({
       devVarsPath: "/repo/.dev.vars.dev",
     });
     mocks.existsSync.mockReturnValue(true);
@@ -142,7 +155,7 @@ describe("with-secrets", () => {
       .mockImplementation((() => undefined) as never);
     vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-    await main();
+    await runCommandWithSecretsCli();
 
     expect(mocks.generateDevVars).toHaveBeenCalledWith(expectedRootDir, "dev");
     expect(mocks.spawn).toHaveBeenCalledWith("tool", ["arg"], {
@@ -172,7 +185,7 @@ describe("with-secrets", () => {
       throw new Error("process exited");
     }) as never);
 
-    await expect(main()).rejects.toThrow("process exited");
+    await expect(runCommandWithSecretsCli()).rejects.toThrow("process exited");
     expect(consoleError).toHaveBeenCalledWith(
       "❌ Unknown argument: --bad. Use '--' to separate the command.",
     );
@@ -192,7 +205,7 @@ describe("with-secrets", () => {
       throw new Error("process exited");
     }) as never);
 
-    await expect(main()).rejects.toThrow("process exited");
+    await expect(runCommandWithSecretsCli()).rejects.toThrow("process exited");
     expect(consoleError).toHaveBeenCalledWith("missing config");
     expect(consoleError).toHaveBeenCalledWith("generation failed");
     expect(mocks.spawn).not.toHaveBeenCalled();

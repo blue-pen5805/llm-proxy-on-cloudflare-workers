@@ -2,7 +2,7 @@
 
 ## Representation
 
-The internal field is named `pathname`, but `getPathname` stores the URL suffix
+The internal field is named `pathname`, but `getRequestPath` stores the URL suffix
 after the origin, including the query string. This is necessary because the
 proxy preserves non-authentication query parameters for pass-through requests.
 

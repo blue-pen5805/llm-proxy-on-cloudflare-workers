@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { ProviderBase } from "~/src/providers/provider";
-import { providerConfigurationErrorResponse } from "~/src/requests/provider_request";
+import { createProviderConfigurationErrorResponse } from "~/src/requests/provider_request";
 
 describe("provider request configuration", () => {
   it("accepts a provider without additional requirements", () => {
     expect(
-      providerConfigurationErrorResponse("openai", new ProviderBase()),
+      createProviderConfigurationErrorResponse("openai", new ProviderBase()),
     ).toBeUndefined();
   });
 
@@ -17,7 +17,10 @@ describe("provider request configuration", () => {
     });
     vi.spyOn(provider, "available").mockReturnValue(false);
 
-    const response = providerConfigurationErrorResponse("openai", provider);
+    const response = createProviderConfigurationErrorResponse(
+      "openai",
+      provider,
+    );
 
     expect(response?.status).toBe(400);
     expect(await response?.json()).toEqual({
@@ -33,7 +36,7 @@ describe("provider request configuration", () => {
     vi.spyOn(provider, "available").mockReturnValue(true);
 
     expect(
-      providerConfigurationErrorResponse("openai", provider),
+      createProviderConfigurationErrorResponse("openai", provider),
     ).toBeUndefined();
   });
 });

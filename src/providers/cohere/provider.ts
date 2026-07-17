@@ -29,11 +29,11 @@ export const Cohere = defineProvider({
   ] satisfies (keyof OpenAIChatCompletionsRequestBody)[],
 
   // Convert model list to OpenAI format
-  modelsToOpenAIFormat(data): OpenAIModelsListResponseBody {
-    const response = data as CohereModelsListResponseBody;
+  convertModelsToOpenAIFormat(data): OpenAIModelsListResponseBody {
+    const providerResponse = data as CohereModelsListResponseBody;
     return {
       object: "list",
-      data: response.models.map(({ name, ...model }) => ({
+      data: providerResponse.models.map(({ name, ...model }) => ({
         id: name,
         object: "model",
         created: 0,

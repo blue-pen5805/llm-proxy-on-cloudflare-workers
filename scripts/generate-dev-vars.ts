@@ -2,8 +2,8 @@
 import {
   getErrorMessage,
   parseJsonc,
-  parseCliArgsOrExit,
-  parseEnvCliArgs,
+  parseCliArgumentsOrExit,
+  parseEnvironmentCliArguments,
   reportCliResult,
   validateEnvironmentName,
 } from "./utils.ts";
@@ -18,7 +18,7 @@ export type { FileSystemOperations } from "./utils.ts";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export interface CliArgs {
+export interface GenerateDevVarsCliArguments {
   env?: string;
   help?: boolean;
 }
@@ -26,7 +26,7 @@ export interface CliArgs {
 export type GenerationResult = OperationResult;
 
 export interface GenerationOptions {
-  rootDir: string;
+  repositoryRoot: string;
   env?: string;
   fsOps?: FileSystemOperations;
 }
@@ -34,19 +34,19 @@ export interface GenerationOptions {
 /**
  * Get file paths for given environment
  */
-export function getFilePaths(
-  rootDir: string,
-  env?: string,
+export function getConfigAndDevVarsPaths(
+  repositoryRoot: string,
+  environmentName?: string,
 ): { configPath: string; devVarsPath: string } {
-  if (env) {
+  if (environmentName) {
     return {
-      configPath: path.join(rootDir, `config.${env}.jsonc`),
-      devVarsPath: path.join(rootDir, `.dev.vars.${env}`),
+      configPath: path.join(repositoryRoot, `config.${environmentName}.jsonc`),
+      devVarsPath: path.join(repositoryRoot, `.dev.vars.${environmentName}`),
     };
   } else {
     return {
-      configPath: path.join(rootDir, "config.jsonc"),
-      devVarsPath: path.join(rootDir, ".dev.vars"),
+      configPath: path.join(repositoryRoot, "config.jsonc"),
+      devVarsPath: path.join(repositoryRoot, ".dev.vars"),
     };
   }
 }
@@ -54,12 +54,16 @@ export function getFilePaths(
 /**
  * Parse command line arguments
  */
-export function parseArgs(argv: string[] = process.argv.slice(2)): CliArgs {
-  const parsed = parseEnvCliArgs(argv);
-  const args: CliArgs = {};
-  if (parsed.env !== undefined) args.env = parsed.env;
-  if (parsed.help) args.help = true;
-  return args;
+export function parseGenerateDevVarsArguments(
+  commandLineArguments: string[] = process.argv.slice(2),
+): GenerateDevVarsCliArguments {
+  const commonArguments = parseEnvironmentCliArguments(commandLineArguments);
+  const generationArguments: GenerateDevVarsCliArguments = {};
+  if (commonArguments.env !== undefined) {
+    generationArguments.env = commonArguments.env;
+  }
+  if (commonArguments.help) generationArguments.help = true;
+  return generationArguments;
 }
 
 /**
@@ -88,7 +92,7 @@ Note: .dev.vars files contain sensitive authentication credentials for developme
 /**
  * Convert a value to environment variable format
  */
-export function valueToEnvVar(value: unknown): string {
+export function serializeEnvironmentValue(value: unknown): string {
   if (value === null || value === undefined) {
     return "";
   }
@@ -104,26 +108,30 @@ export function valueToEnvVar(value: unknown): string {
 /**
  * Convert JSON config to .dev.vars format
  */
-export function configToDevVars(
+export function convertConfigToDevVars(
   config: Record<string, unknown>,
-  env?: string,
+  environmentName?: string,
 ): string {
-  const lines: string[] = [];
+  const outputLines: string[] = [];
 
   // Add header comment
-  lines.push(`# Environment Variables${env ? ` (${env})` : ""}`);
-  lines.push(`# Generated from config${env ? `.${env}` : ""}.jsonc`);
-  lines.push("");
+  outputLines.push(
+    `# Environment Variables${environmentName ? ` (${environmentName})` : ""}`,
+  );
+  outputLines.push(
+    `# Generated from config${environmentName ? `.${environmentName}` : ""}.jsonc`,
+  );
+  outputLines.push("");
 
   // Skip $schema field
   for (const [key, value] of Object.entries(config)) {
     if (key === "$schema") continue;
 
-    const envValue = valueToEnvVar(value);
-    lines.push(`${key}=${envValue}`);
+    const environmentValue = serializeEnvironmentValue(value);
+    outputLines.push(`${key}=${environmentValue}`);
   }
 
-  return lines.join("\n") + "\n";
+  return outputLines.join("\n") + "\n";
 }
 
 /**
@@ -132,13 +140,13 @@ export function configToDevVars(
 export function generateSingleDevVarsFile(
   configPath: string,
   devVarsPath: string,
-  env: string | undefined,
-  fsOps: FileSystemOperations,
+  environmentName: string | undefined,
+  fileSystem: FileSystemOperations,
 ): { success: boolean; message: string } {
   const configFileName = path.basename(configPath);
   const devVarsFileName = path.basename(devVarsPath);
 
-  if (!fsOps.existsSync(configPath)) {
+  if (!fileSystem.existsSync(configPath)) {
     return {
       success: true,
       message: `⚠️  ${configFileName} not found, skipping ${devVarsFileName} generation`,
@@ -146,12 +154,15 @@ export function generateSingleDevVarsFile(
   }
 
   try {
-    const configContent = fsOps.readFileSync(configPath, "utf8");
-    const config = parseJsonc(configContent);
+    const configFileContent = fileSystem.readFileSync(configPath, "utf8");
+    const parsedConfig = parseJsonc(configFileContent);
 
-    const devVarsContent = configToDevVars(config, env);
+    const generatedDevVars = convertConfigToDevVars(
+      parsedConfig,
+      environmentName,
+    );
 
-    fsOps.writeFileSync(devVarsPath, devVarsContent);
+    fileSystem.writeFileSync(devVarsPath, generatedDevVars);
 
     return {
       success: true,
@@ -170,53 +181,63 @@ export function generateSingleDevVarsFile(
  * Generate dev vars files based on configuration
  */
 export function generateDevVars(
-  rootDir: string,
-  env?: string,
-  fsOps: FileSystemOperations = fs,
+  repositoryRoot: string,
+  environmentName?: string,
+  fileSystem: FileSystemOperations = fs,
 ): GenerationResult {
   // Validate environment name if provided
-  if (env && !validateEnvironmentName(env)) {
+  if (environmentName && !validateEnvironmentName(environmentName)) {
     return {
       success: false,
-      messages: [`❌ Invalid environment name: ${env}`],
+      messages: [`❌ Invalid environment name: ${environmentName}`],
     };
   }
 
-  const { configPath, devVarsPath } = getFilePaths(rootDir, env);
+  const { configPath, devVarsPath } = getConfigAndDevVarsPaths(
+    repositoryRoot,
+    environmentName,
+  );
 
-  const result = generateSingleDevVarsFile(configPath, devVarsPath, env, fsOps);
+  const generationResult = generateSingleDevVarsFile(
+    configPath,
+    devVarsPath,
+    environmentName,
+    fileSystem,
+  );
 
   return {
-    success: result.success,
-    messages: [result.message],
+    success: generationResult.success,
+    messages: [generationResult.message],
   };
 }
 
 /**
  * Main function to generate .dev.vars files
  */
-export function main(): void {
-  const args = parseCliArgsOrExit(() => parseArgs());
+export function runGenerateDevVarsCli(): void {
+  const generationArguments = parseCliArgumentsOrExit(() =>
+    parseGenerateDevVarsArguments(),
+  );
 
-  if (args.help) {
+  if (generationArguments.help) {
     console.log(showHelp());
     return;
   }
 
-  const rootDir = path.resolve(__dirname, "..");
-  const env = args.env;
+  const repositoryRoot = path.resolve(__dirname, "..");
+  const environmentName = generationArguments.env;
 
   console.log(
-    `🔄 Generating .dev.vars files${env ? ` for environment: ${env}` : ""}...`,
+    `🔄 Generating .dev.vars files${environmentName ? ` for environment: ${environmentName}` : ""}...`,
   );
 
-  const result = generateDevVars(rootDir, env);
+  const generationResult = generateDevVars(repositoryRoot, environmentName);
 
-  reportCliResult(result, "🎉 Dev vars generation completed!");
+  reportCliResult(generationResult, "🎉 Dev vars generation completed!");
 }
 
 // Run the script if called directly
 /* istanbul ignore next -- exercised by the runtime, not module tests */
 if (import.meta.url === `file://${process.argv[1]}`) {
-  main();
+  runGenerateDevVarsCli();
 }

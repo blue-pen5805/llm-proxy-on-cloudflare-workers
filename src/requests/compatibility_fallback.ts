@@ -1,4 +1,4 @@
-import { fetch2 } from "../utils/helpers";
+import { fetchWithLogging } from "../utils/helpers";
 
 export async function fetchCompatibilityFallback(
   requests: [RequestInfo, RequestInit][],
@@ -17,18 +17,21 @@ export async function fetchCompatibilityFallback(
     }
 
     try {
-      const response = await fetch2(requestInfo, { ...requestInit, signal });
-      if (response.ok) {
+      const upstreamResponse = await fetchWithLogging(requestInfo, {
+        ...requestInit,
+        signal,
+      });
+      if (upstreamResponse.ok) {
         if (lastResponse?.body) {
           await lastResponse.body.cancel();
         }
-        return response;
+        return upstreamResponse;
       }
 
       if (lastResponse?.body) {
         await lastResponse.body.cancel();
       }
-      lastResponse = response;
+      lastResponse = upstreamResponse;
     } catch (error) {
       if (signal?.aborted) {
         throw error;

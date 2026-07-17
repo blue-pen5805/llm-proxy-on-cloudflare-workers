@@ -1,6 +1,6 @@
 import {
   defineProvider,
-  modelsToOpenAIFormatWithMetadata,
+  convertModelsToOpenAIFormatWithMetadata,
   type Provider,
 } from "../provider";
 import { MistralModelsListResponseBody } from "./types";
@@ -14,10 +14,10 @@ export const Mistral = defineProvider({
   chatCompletionPath: "/v1/chat/completions",
   modelsPath: "/v1/models",
   // Convert model list to OpenAI format
-  modelsToOpenAIFormat(
+  convertModelsToOpenAIFormat(
     data,
-  ): ReturnType<typeof modelsToOpenAIFormatWithMetadata> {
-    return modelsToOpenAIFormatWithMetadata(
+  ): ReturnType<typeof convertModelsToOpenAIFormatWithMetadata> {
+    return convertModelsToOpenAIFormatWithMetadata(
       data as MistralModelsListResponseBody,
     );
   },

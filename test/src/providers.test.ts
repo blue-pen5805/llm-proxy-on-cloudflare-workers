@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  getAllProviders,
-  getProvider,
+  getAllProviderInstances,
+  getProviderByName,
   ProviderRegistry,
-  Providers,
+  BUILT_IN_PROVIDER_CONSTRUCTORS,
 } from "~/src/providers";
 import { CustomOpenAI } from "~/src/providers/custom-openai";
 import { OpenAI } from "~/src/providers/openai";
@@ -16,7 +16,7 @@ describe("provider registry", () => {
 
   it("constructs registered providers", () => {
     vi.spyOn(Config, "customOpenAIEndpoints").mockReturnValue(undefined);
-    expect(getProvider("openai", {} as Env)).toBeInstanceOf(OpenAI);
+    expect(getProviderByName("openai", {} as Env)).toBeInstanceOf(OpenAI);
   });
 
   it("constructs custom providers by configured name", () => {
@@ -24,7 +24,7 @@ describe("provider registry", () => {
       { name: "internal", baseUrl: "https://internal.example" },
     ]);
 
-    const provider = getProvider("internal", {} as Env);
+    const provider = getProviderByName("internal", {} as Env);
 
     expect(provider).toBeInstanceOf(CustomOpenAI);
     expect(provider?.baseUrl()).toBe("https://internal.example");
@@ -32,7 +32,7 @@ describe("provider registry", () => {
 
   it("returns undefined for unknown providers", () => {
     vi.spyOn(Config, "customOpenAIEndpoints").mockReturnValue(undefined);
-    expect(getProvider("missing", {} as Env)).toBeUndefined();
+    expect(getProviderByName("missing", {} as Env)).toBeUndefined();
   });
 
   it("returns every built-in and configured custom provider", () => {
@@ -41,10 +41,10 @@ describe("provider registry", () => {
       { name: "backup", baseUrl: "https://backup.example" },
     ]);
 
-    const providers = getAllProviders({} as Env);
+    const providers = getAllProviderInstances({} as Env);
 
     expect(Object.keys(providers)).toEqual([
-      ...Object.keys(Providers),
+      ...Object.keys(BUILT_IN_PROVIDER_CONSTRUCTORS),
       "internal",
       "backup",
     ]);
@@ -54,16 +54,16 @@ describe("provider registry", () => {
 
   it("works without custom endpoint configuration", () => {
     vi.spyOn(Config, "customOpenAIEndpoints").mockReturnValue(undefined);
-    expect(Object.keys(getAllProviders({} as Env))).toEqual(
-      Object.keys(Providers),
+    expect(Object.keys(getAllProviderInstances({} as Env))).toEqual(
+      Object.keys(BUILT_IN_PROVIDER_CONSTRUCTORS),
     );
-    expect(new ProviderRegistry(Providers).names()).toEqual(
-      Object.keys(Providers),
-    );
+    expect(
+      new ProviderRegistry(BUILT_IN_PROVIDER_CONSTRUCTORS).names(),
+    ).toEqual(Object.keys(BUILT_IN_PROVIDER_CONSTRUCTORS));
   });
 
   it("reuses lazily constructed providers within a registry", () => {
-    const registry = new ProviderRegistry(Providers, [
+    const registry = new ProviderRegistry(BUILT_IN_PROVIDER_CONSTRUCTORS, [
       { name: "internal", baseUrl: "https://internal.example" },
     ]);
 
@@ -74,7 +74,7 @@ describe("provider registry", () => {
   });
 
   it("matches provider paths without interpreting names as regular expressions", () => {
-    const registry = new ProviderRegistry(Providers, [
+    const registry = new ProviderRegistry(BUILT_IN_PROVIDER_CONSTRUCTORS, [
       { name: "internal.v2", baseUrl: "https://internal.example" },
     ]);
 
@@ -87,7 +87,7 @@ describe("provider registry", () => {
   });
 
   it("preserves existing built-in and listing precedence for name collisions", () => {
-    const registry = new ProviderRegistry(Providers, [
+    const registry = new ProviderRegistry(BUILT_IN_PROVIDER_CONSTRUCTORS, [
       { name: "openai", baseUrl: "https://custom.example" },
     ]);
 
@@ -99,7 +99,7 @@ describe("provider registry", () => {
   });
 
   it("preserves first-lookup and last-listing precedence for duplicate custom names", () => {
-    const registry = new ProviderRegistry(Providers, [
+    const registry = new ProviderRegistry(BUILT_IN_PROVIDER_CONSTRUCTORS, [
       { name: "duplicate", baseUrl: "https://first.example" },
       { name: "duplicate", baseUrl: "https://last.example" },
     ]);

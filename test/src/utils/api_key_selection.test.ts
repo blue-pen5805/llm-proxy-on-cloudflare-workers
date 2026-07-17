@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MiddlewareContext } from "~/src/middleware";
 import type { ProviderBase } from "~/src/providers/provider";
 import {
-  apiKeySelectionPolicy,
+  determineApiKeySelectionPolicy,
   recordApiKeySelection,
   selectApiKeyIndex,
 } from "~/src/utils/api_key_selection";
@@ -22,7 +22,7 @@ describe("API key selection logging", () => {
     "classifies selection %j with %s fallback as %s",
     (selection, fallback, expected) => {
       expect(
-        apiKeySelectionPolicy(
+        determineApiKeySelectionPolicy(
           selection as MiddlewareContext["apiKeyIndex"],
           fallback,
         ),

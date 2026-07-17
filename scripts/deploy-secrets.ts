@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import {
   getErrorMessage,
-  parseCliArgsOrExit,
-  parseEnvCliArgs,
+  parseCliArgumentsOrExit,
+  parseEnvironmentCliArguments,
   parseJsonc,
   reportCliResult,
   validateEnvironmentName,
@@ -19,7 +19,7 @@ export type { FileSystemOperations } from "./utils.ts";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export interface CliArgs {
+export interface DeploySecretsCliArguments {
   env?: string;
   dryRun?: boolean;
   help?: boolean;
@@ -30,24 +30,32 @@ export type DeployResult = OperationResult;
 /**
  * Get config file path for given environment
  */
-export function getConfigPath(rootDir: string, env?: string): string {
-  if (env) {
-    return path.join(rootDir, `config.${env}.jsonc`);
+export function getConfigPath(
+  repositoryRoot: string,
+  environmentName?: string,
+): string {
+  if (environmentName) {
+    return path.join(repositoryRoot, `config.${environmentName}.jsonc`);
   } else {
-    return path.join(rootDir, "config.jsonc");
+    return path.join(repositoryRoot, "config.jsonc");
   }
 }
 
 /**
  * Parse command line arguments
  */
-export function parseArgs(argv: string[] = process.argv.slice(2)): CliArgs {
-  const parsed = parseEnvCliArgs(argv, ["--dry-run"]);
-  const args: CliArgs = {};
-  if (parsed.env !== undefined) args.env = parsed.env;
-  if (parsed.flags.has("--dry-run")) args.dryRun = true;
-  if (parsed.help) args.help = true;
-  return args;
+export function parseDeploySecretsArguments(
+  commandLineArguments: string[] = process.argv.slice(2),
+): DeploySecretsCliArguments {
+  const commonArguments = parseEnvironmentCliArguments(commandLineArguments, [
+    "--dry-run",
+  ]);
+  const deployArguments: DeploySecretsCliArguments = {};
+  if (commonArguments.env !== undefined)
+    deployArguments.env = commonArguments.env;
+  if (commonArguments.flags.has("--dry-run")) deployArguments.dryRun = true;
+  if (commonArguments.help) deployArguments.help = true;
+  return deployArguments;
 }
 
 /**
@@ -78,7 +86,7 @@ Make sure you have authenticated with Wrangler before running this script.
 /**
  * Convert a value to secret format
  */
-export function valueToSecret(value: unknown): string {
+export function serializeSecretValue(value: unknown): string {
   // Check for null, undefined, or empty string
   if (value === null || value === undefined || value === "") {
     return "";
@@ -113,7 +121,7 @@ export function filterSecretsForDeployment(
   for (const [key, value] of Object.entries(config)) {
     if (key === "$schema") continue;
 
-    const secretValue = valueToSecret(value);
+    const secretValue = serializeSecretValue(value);
     if (secretValue !== "") {
       secrets[key] = secretValue;
     }
@@ -125,7 +133,7 @@ export function filterSecretsForDeployment(
 /**
  * Generate secrets JSON for wrangler secret bulk
  */
-export function generateSecretsJson(secrets: Record<string, string>): string {
+export function serializeSecretsJson(secrets: Record<string, string>): string {
   return JSON.stringify(secrets, null, 2);
 }
 
@@ -134,8 +142,8 @@ export function generateSecretsJson(secrets: Record<string, string>): string {
  */
 export function executeWranglerSecretBulk(
   secretsJson: string,
-  env?: string,
-  dryRun: boolean = false,
+  environmentName?: string,
+  isDryRun: boolean = false,
 ): { success: boolean; message: string } {
   try {
     // Create temporary file for secrets
@@ -143,23 +151,23 @@ export function executeWranglerSecretBulk(
     fs.writeFileSync(tempFilePath, secretsJson);
 
     // Build wrangler command
-    let command = `wrangler secret bulk "${tempFilePath}"`;
-    if (env) {
-      command += ` --env ${env}`;
+    let wranglerCommand = `wrangler secret bulk "${tempFilePath}"`;
+    if (environmentName) {
+      wranglerCommand += ` --env ${environmentName}`;
     }
 
-    if (dryRun) {
+    if (isDryRun) {
       // Clean up temp file
       fs.unlinkSync(tempFilePath);
       return {
         success: true,
-        message: `🔍 Dry run - would execute: ${command}`,
+        message: `🔍 Dry run - would execute: ${wranglerCommand}`,
       };
     }
 
     // Execute the command
-    console.log(`🚀 Executing: ${command}`);
-    execSync(command, { stdio: "inherit" });
+    console.log(`🚀 Executing: ${wranglerCommand}`);
+    execSync(wranglerCommand, { stdio: "inherit" });
 
     // Clean up temp file
     fs.unlinkSync(tempFilePath);
@@ -187,23 +195,23 @@ export function executeWranglerSecretBulk(
  * Deploy secrets based on configuration
  */
 export function deploySecrets(
-  rootDir: string,
-  env?: string,
-  dryRun: boolean = false,
-  fsOps: FileSystemOperations = fs,
+  repositoryRoot: string,
+  environmentName?: string,
+  isDryRun: boolean = false,
+  fileSystem: FileSystemOperations = fs,
 ): DeployResult {
   // Validate environment name if provided
-  if (env && !validateEnvironmentName(env)) {
+  if (environmentName && !validateEnvironmentName(environmentName)) {
     return {
       success: false,
-      messages: [`❌ Invalid environment name: ${env}`],
+      messages: [`❌ Invalid environment name: ${environmentName}`],
     };
   }
 
-  const configPath = getConfigPath(rootDir, env);
+  const configPath = getConfigPath(repositoryRoot, environmentName);
   const configFileName = path.basename(configPath);
 
-  if (!fsOps.existsSync(configPath)) {
+  if (!fileSystem.existsSync(configPath)) {
     return {
       success: false,
       messages: [`❌ ${configFileName} not found`],
@@ -211,11 +219,11 @@ export function deploySecrets(
   }
 
   try {
-    const configContent = fsOps.readFileSync(configPath, "utf8");
-    const config = parseJsonc(configContent);
+    const configFileContent = fileSystem.readFileSync(configPath, "utf8");
+    const parsedConfig = parseJsonc(configFileContent);
 
-    const secrets = filterSecretsForDeployment(config);
-    const secretCount = Object.keys(secrets).length;
+    const deployableSecrets = filterSecretsForDeployment(parsedConfig);
+    const secretCount = Object.keys(deployableSecrets).length;
 
     if (secretCount === 0) {
       return {
@@ -230,30 +238,36 @@ export function deploySecrets(
     );
 
     // List secrets (but don't show values for security)
-    Object.keys(secrets).forEach((key) => {
-      const value = secrets[key];
-      const displayValue =
-        value.length > 20 ? `${value.substring(0, 20)}...` : value;
-      messages.push(`   - ${key}: ${displayValue}`);
+    Object.keys(deployableSecrets).forEach((secretName) => {
+      const secretValue = deployableSecrets[secretName];
+      const maskedDisplayValue =
+        secretValue.length > 20
+          ? `${secretValue.substring(0, 20)}...`
+          : secretValue;
+      messages.push(`   - ${secretName}: ${maskedDisplayValue}`);
     });
 
-    if (env) {
-      messages.push(`🎯 Target environment: ${env}`);
+    if (environmentName) {
+      messages.push(`🎯 Target environment: ${environmentName}`);
     }
 
-    const secretsJson = generateSecretsJson(secrets);
+    const secretsJson = serializeSecretsJson(deployableSecrets);
 
-    if (dryRun) {
+    if (isDryRun) {
       messages.push("");
       messages.push("🔍 Dry run mode - JSON that would be deployed:");
       messages.push(secretsJson);
     }
 
-    const result = executeWranglerSecretBulk(secretsJson, env, dryRun);
-    messages.push(result.message);
+    const deploymentResult = executeWranglerSecretBulk(
+      secretsJson,
+      environmentName,
+      isDryRun,
+    );
+    messages.push(deploymentResult.message);
 
     return {
-      success: result.success,
+      success: deploymentResult.success,
       messages,
     };
   } catch (error) {
@@ -268,31 +282,37 @@ export function deploySecrets(
 /**
  * Main function to deploy secrets
  */
-export function main(): void {
-  const args = parseCliArgsOrExit(() => parseArgs());
+export function runDeploySecretsCli(): void {
+  const deployArguments = parseCliArgumentsOrExit(() =>
+    parseDeploySecretsArguments(),
+  );
 
-  if (args.help) {
+  if (deployArguments.help) {
     console.log(showHelp());
     return;
   }
 
-  const rootDir = path.resolve(__dirname, "..");
-  const { env, dryRun = false } = args;
+  const repositoryRoot = path.resolve(__dirname, "..");
+  const { env: environmentName, dryRun: isDryRun = false } = deployArguments;
 
   console.log(
-    `🔐 Deploying secrets${env ? ` from config.${env}.jsonc to ${env} environment` : " from config.jsonc to default environment"}${dryRun ? " (dry run)" : ""}...`,
+    `🔐 Deploying secrets${environmentName ? ` from config.${environmentName}.jsonc to ${environmentName} environment` : " from config.jsonc to default environment"}${isDryRun ? " (dry run)" : ""}...`,
   );
 
-  const result = deploySecrets(rootDir, env, dryRun);
+  const deploymentResult = deploySecrets(
+    repositoryRoot,
+    environmentName,
+    isDryRun,
+  );
 
   reportCliResult(
-    result,
-    dryRun ? undefined : "🎉 Secret deployment completed!",
+    deploymentResult,
+    isDryRun ? undefined : "🎉 Secret deployment completed!",
   );
 }
 
 // Run the script if called directly
 /* istanbul ignore next -- exercised by the runtime, not module tests */
 if (import.meta.url === `file://${process.argv[1]}`) {
-  main();
+  runDeploySecretsCli();
 }

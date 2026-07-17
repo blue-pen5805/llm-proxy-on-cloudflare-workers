@@ -1,16 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CloudflareAIGateway } from "~/src/ai_gateway";
-import { compat } from "~/src/requests/compat";
-import { fetch2 } from "~/src/utils/helpers";
+import { handleCompatibilityRequest } from "~/src/requests/compat";
+import { fetchWithLogging } from "~/src/utils/helpers";
 
 vi.mock("~/src/utils/helpers", () => ({
-  fetch2: vi.fn(),
+  fetchWithLogging: vi.fn(),
 }));
 
 describe("compat", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(fetch2).mockResolvedValue(new Response(null, { status: 200 }));
+    vi.mocked(fetchWithLogging).mockResolvedValue(
+      new Response(null, { status: 200 }),
+    );
   });
 
   it("forwards chat completions requests without leaking proxy authorization", async () => {
@@ -41,7 +43,7 @@ describe("compat", () => {
       ]),
     } as unknown as CloudflareAIGateway;
 
-    await compat(request, aiGateway);
+    await handleCompatibilityRequest(request, aiGateway);
 
     const callArgs = vi.mocked(aiGateway.buildCompatibilityEndpointRequest).mock
       .calls[0][0];
@@ -52,7 +54,7 @@ describe("compat", () => {
     expect(callArgs.headers["x-client-header"]).toBe("preserved");
     expect(callArgs.signal).toBe(request.signal);
 
-    expect(fetch2).toHaveBeenCalledWith(
+    expect(fetchWithLogging).toHaveBeenCalledWith(
       "https://gateway.ai.cloudflare.com/v1/account/gateway/compat/chat/completions",
       expect.objectContaining({
         method: "POST",

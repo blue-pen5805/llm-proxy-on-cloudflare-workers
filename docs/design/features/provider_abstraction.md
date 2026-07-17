@@ -27,9 +27,10 @@ construction, and instance reuse. Request handlers therefore consume one
 consistent provider view without rebuilding every adapter during route
 selection.
 
-The legacy `getProvider` and `getAllProviders` functions remain compatibility
-facades over the registry. Built-in provider lookup and aggregate listing keep
-their existing precedence when a custom endpoint reuses a built-in name.
+The top-level `getProviderByName` and `getAllProviderInstances` functions are
+convenience facades over the registry. Built-in provider lookup and aggregate
+listing keep their existing precedence when a custom endpoint reuses a built-in
+name.
 
 Availability is normally determined by whether a provider's configured key
 list is non-empty. Workers AI has additional account configuration, while

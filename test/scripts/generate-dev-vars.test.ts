@@ -1,14 +1,14 @@
 import {
-  configToDevVars,
+  convertConfigToDevVars,
   generateDevVars,
   generateSingleDevVarsFile,
-  getFilePaths,
-  main,
-  parseArgs,
+  getConfigAndDevVarsPaths,
+  runGenerateDevVarsCli,
+  parseGenerateDevVarsArguments,
   parseJsonc,
   showHelp,
   validateEnvironmentName,
-  valueToEnvVar,
+  serializeEnvironmentValue,
   type FileSystemOperations,
 } from "../../scripts/generate-dev-vars";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -28,51 +28,55 @@ const createMockFileSystem = (files: Record<string, string> = {}) => {
   return mockFs;
 };
 
-describe("parseArgs", () => {
+describe("parseGenerateDevVarsArguments", () => {
   it("should parse empty arguments", () => {
-    const result = parseArgs([]);
+    const result = parseGenerateDevVarsArguments([]);
     expect(result).toEqual({});
   });
 
   it("should parse --env argument", () => {
-    const result = parseArgs(["--env", "staging"]);
+    const result = parseGenerateDevVarsArguments(["--env", "staging"]);
     expect(result).toEqual({ env: "staging" });
   });
 
   it("should parse --help argument", () => {
-    const result = parseArgs(["--help"]);
+    const result = parseGenerateDevVarsArguments(["--help"]);
     expect(result).toEqual({ help: true });
   });
 
   it("should parse -h argument", () => {
-    const result = parseArgs(["-h"]);
+    const result = parseGenerateDevVarsArguments(["-h"]);
     expect(result).toEqual({ help: true });
   });
 
   it("should parse multiple arguments", () => {
-    const result = parseArgs(["--env", "prod", "--help"]);
+    const result = parseGenerateDevVarsArguments(["--env", "prod", "--help"]);
     expect(result).toEqual({ env: "prod", help: true });
   });
 
   it("should throw error for unknown options", () => {
-    expect(() => parseArgs(["--invalid"])).toThrow("Unknown option: --invalid");
-    expect(() => parseArgs(["--unknown", "value"])).toThrow(
+    expect(() => parseGenerateDevVarsArguments(["--invalid"])).toThrow(
+      "Unknown option: --invalid",
+    );
+    expect(() => parseGenerateDevVarsArguments(["--unknown", "value"])).toThrow(
       "Unknown option: --unknown",
     );
   });
 
   it("should throw error for unexpected arguments", () => {
-    expect(() => parseArgs(["somearg"])).toThrow(
+    expect(() => parseGenerateDevVarsArguments(["somearg"])).toThrow(
       "Unexpected argument: somearg",
     );
-    expect(() => parseArgs(["arg1", "arg2"])).toThrow(
+    expect(() => parseGenerateDevVarsArguments(["arg1", "arg2"])).toThrow(
       "Unexpected argument: arg1",
     );
   });
 
   it("should throw error for --env without value", () => {
-    expect(() => parseArgs(["--env"])).toThrow("--env option requires a value");
-    expect(() => parseArgs(["--env", "--help"])).toThrow(
+    expect(() => parseGenerateDevVarsArguments(["--env"])).toThrow(
+      "--env option requires a value",
+    );
+    expect(() => parseGenerateDevVarsArguments(["--env", "--help"])).toThrow(
       "--env option requires a value",
     );
   });
@@ -162,51 +166,56 @@ describe("parseJsonc", () => {
   });
 });
 
-describe("valueToEnvVar", () => {
+describe("serializeEnvironmentValue", () => {
   it("should convert null to empty string", () => {
-    expect(valueToEnvVar(null)).toBe("");
+    expect(serializeEnvironmentValue(null)).toBe("");
   });
 
   it("should convert undefined to empty string", () => {
-    expect(valueToEnvVar(undefined)).toBe("");
+    expect(serializeEnvironmentValue(undefined)).toBe("");
   });
 
   it("should convert string values", () => {
-    expect(valueToEnvVar("test")).toBe("test");
+    expect(serializeEnvironmentValue("test")).toBe("test");
   });
 
   it("should convert number values", () => {
-    expect(valueToEnvVar(42)).toBe("42");
+    expect(serializeEnvironmentValue(42)).toBe("42");
   });
 
   it("should convert boolean values", () => {
-    expect(valueToEnvVar(true)).toBe("true");
-    expect(valueToEnvVar(false)).toBe("false");
+    expect(serializeEnvironmentValue(true)).toBe("true");
+    expect(serializeEnvironmentValue(false)).toBe("false");
   });
 
   it("should stringify arrays", () => {
-    expect(valueToEnvVar(["a", "b", "c"])).toBe('["a","b","c"]');
+    expect(serializeEnvironmentValue(["a", "b", "c"])).toBe('["a","b","c"]');
   });
 
   it("should stringify objects within arrays", () => {
-    expect(valueToEnvVar([{ name: "test" }])).toBe('[{"name":"test"}]');
+    expect(serializeEnvironmentValue([{ name: "test" }])).toBe(
+      '[{"name":"test"}]',
+    );
   });
 
   it("should stringify object secrets", () => {
     expect(
-      valueToEnvVar({ type: "service_account", region: "us-central1" }),
+      serializeEnvironmentValue({
+        type: "service_account",
+        region: "us-central1",
+      }),
     ).toBe('{"type":"service_account","region":"us-central1"}');
   });
 });
 
-describe("configToDevVars", () => {
+describe("convertConfigToDevVars", () => {
   it("should convert simple config to dev vars format", () => {
     const config = {
       API_KEY: "test-key",
       DEBUG: true,
       PORT: 3000,
     };
-    const result = configToDevVars(config);
+    const result = convertConfigToDevVars(config);
 
     expect(result).toContain("# Environment Variables");
     expect(result).toContain("# Generated from config.jsonc");
@@ -220,7 +229,7 @@ describe("configToDevVars", () => {
       $schema: "./config-schema.json",
       API_KEY: "test-key",
     };
-    const result = configToDevVars(config);
+    const result = convertConfigToDevVars(config);
 
     expect(result).not.toContain("$schema");
     expect(result).toContain("API_KEY=test-key");
@@ -230,7 +239,7 @@ describe("configToDevVars", () => {
     const config = {
       FEATURES: ["feature1", "feature2"],
     };
-    const result = configToDevVars(config);
+    const result = convertConfigToDevVars(config);
 
     expect(result).toContain('FEATURES=["feature1","feature2"]');
   });
@@ -239,14 +248,14 @@ describe("configToDevVars", () => {
     const config = {
       OPTIONAL_KEY: null,
     };
-    const result = configToDevVars(config);
+    const result = convertConfigToDevVars(config);
 
     expect(result).toContain("OPTIONAL_KEY=");
   });
 
   it("should add environment-specific header", () => {
     const config = { API_KEY: "test" };
-    const result = configToDevVars(config, "staging");
+    const result = convertConfigToDevVars(config, "staging");
 
     expect(result).toContain("# Environment Variables (staging)");
     expect(result).toContain("# Generated from config.staging.jsonc");
@@ -254,7 +263,7 @@ describe("configToDevVars", () => {
 
   it("should not add environment header when no env is provided", () => {
     const config = { API_KEY: "test" };
-    const result = configToDevVars(config);
+    const result = convertConfigToDevVars(config);
 
     expect(result).toContain("# Environment Variables");
     expect(result).not.toContain("# Environment Variables (");
@@ -280,9 +289,9 @@ describe("validateEnvironmentName", () => {
   });
 });
 
-describe("getFilePaths", () => {
+describe("getConfigAndDevVarsPaths", () => {
   it("should return default paths when no env is provided", () => {
-    const result = getFilePaths("/test");
+    const result = getConfigAndDevVarsPaths("/test");
     expect(result).toEqual({
       configPath: "/test/config.jsonc",
       devVarsPath: "/test/.dev.vars",
@@ -290,7 +299,7 @@ describe("getFilePaths", () => {
   });
 
   it("should return example paths for env=example", () => {
-    const result = getFilePaths("/test", "example");
+    const result = getConfigAndDevVarsPaths("/test", "example");
     expect(result).toEqual({
       configPath: "/test/config.example.jsonc",
       devVarsPath: "/test/.dev.vars.example",
@@ -298,7 +307,7 @@ describe("getFilePaths", () => {
   });
 
   it("should return environment-specific paths for custom env", () => {
-    const result = getFilePaths("/test", "staging");
+    const result = getConfigAndDevVarsPaths("/test", "staging");
     expect(result).toEqual({
       configPath: "/test/config.staging.jsonc",
       devVarsPath: "/test/.dev.vars.staging",
@@ -452,7 +461,7 @@ describe("generateDevVars", () => {
   });
 });
 
-describe("main", () => {
+describe("runGenerateDevVarsCli", () => {
   const originalArgv = process.argv;
 
   beforeEach(() => {
@@ -464,7 +473,7 @@ describe("main", () => {
     process.argv = ["node", "generate-dev-vars.ts", "--help"];
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-    main();
+    runGenerateDevVarsCli();
 
     expect(log).toHaveBeenCalledWith(expect.stringContaining("Usage:"));
   });
@@ -478,7 +487,7 @@ describe("main", () => {
       throw new Error("exited");
     }) as never);
 
-    expect(() => main()).toThrow("exited");
+    expect(() => runGenerateDevVarsCli()).toThrow("exited");
     expect(error).toHaveBeenCalledWith("❌ Error: Unknown option: --bad");
     expect(error).toHaveBeenCalledWith(
       "Use --help or -h for usage information.",
@@ -489,7 +498,7 @@ describe("main", () => {
     process.argv = ["node", "generate-dev-vars.ts"];
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-    main();
+    runGenerateDevVarsCli();
 
     expect(log).toHaveBeenCalledWith("🔄 Generating .dev.vars files...");
     expect(log).toHaveBeenCalledWith("🎉 Dev vars generation completed!");
@@ -502,7 +511,7 @@ describe("main", () => {
       .spyOn(process, "exit")
       .mockImplementation((() => undefined) as never);
 
-    main();
+    runGenerateDevVarsCli();
 
     expect(exit).toHaveBeenCalledWith(1);
   });

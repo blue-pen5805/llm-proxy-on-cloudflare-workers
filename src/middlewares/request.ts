@@ -1,8 +1,8 @@
 import { Middleware } from "../middleware";
-import { getPathname } from "../utils/helpers";
+import { getRequestPath } from "../utils/helpers";
 
 export const requestMiddleware: Middleware = async (context, next) => {
-  context.pathname = getPathname(context.request);
+  context.pathname = getRequestPath(context.request);
 
   return await next();
 };

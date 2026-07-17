@@ -44,7 +44,7 @@ const API_KEY_FIELDS_GROUP = [
   "AWS_BEARER_TOKEN_BEDROCK",
 ];
 
-interface ConfigValue {
+interface ConfigField {
   key: string;
   value: unknown;
   comment?: string;
@@ -57,66 +57,71 @@ function createReadlineInterface(): Interface {
   });
 }
 
-function question(rl: Interface, prompt: string): Promise<string> {
+function askQuestion(
+  readlineInterface: Interface,
+  promptText: string,
+): Promise<string> {
   return new Promise((resolve) => {
-    rl.question(prompt, (answer) => {
+    readlineInterface.question(promptText, (answer) => {
       resolve(answer);
     });
   });
 }
 
-export function parseJsoncFile(content: string): {
+export function parseConfigTemplate(jsoncText: string): {
   config: Record<string, unknown>;
-  structure: ConfigValue[];
+  structure: ConfigField[];
 } {
-  if (!content || typeof content !== "string") {
-    throw new Error("Invalid content provided to parseJsoncFile");
+  if (!jsoncText || typeof jsoncText !== "string") {
+    throw new Error("Invalid content provided to parseConfigTemplate");
   }
 
-  const lines = content.split("\n");
-  const structure: ConfigValue[] = [];
-  const comments: string[] = [];
+  const sourceLines = jsoncText.split("\n");
+  const configFields: ConfigField[] = [];
+  const pendingComments: string[] = [];
 
-  for (const line of lines) {
-    const trimmed = line.trim();
+  for (const sourceLine of sourceLines) {
+    const trimmedLine = sourceLine.trim();
 
-    if (trimmed.startsWith("//")) {
-      const comment = trimmed.substring(2).trim();
-      comments.push(comment);
+    if (trimmedLine.startsWith("//")) {
+      const commentText = trimmedLine.substring(2).trim();
+      pendingComments.push(commentText);
       continue;
     }
 
-    const match = trimmed.match(/^"([^"]+)":\s*(.+?),?$/);
-    if (match) {
-      const [, key, valueStr] = match;
-      let value;
+    const propertyMatch = trimmedLine.match(/^"([^"]+)":\s*(.+?),?$/);
+    if (propertyMatch) {
+      const [, fieldName, serializedValue] = propertyMatch;
+      let parsedValue: unknown;
 
       try {
-        const cleanValueStr = valueStr.replace(/,$/, "");
-        value = JSON.parse(cleanValueStr);
+        const valueWithoutTrailingComma = serializedValue.replace(/,$/, "");
+        parsedValue = JSON.parse(valueWithoutTrailingComma);
       } catch {
-        value = valueStr.replace(/^"|"$/g, "").replace(/,$/, "");
+        parsedValue = serializedValue.replace(/^"|"$/g, "").replace(/,$/, "");
       }
 
       const relevantComment =
-        comments.length > 0 ? comments[comments.length - 1] : undefined;
+        pendingComments.length > 0
+          ? pendingComments[pendingComments.length - 1]
+          : undefined;
 
-      structure.push({
-        key,
-        value,
+      configFields.push({
+        key: fieldName,
+        value: parsedValue,
         comment: relevantComment,
       });
 
-      comments.length = 0;
+      pendingComments.length = 0;
     }
   }
 
   const config: Record<string, unknown> = {};
-  for (const item of structure) {
-    config[item.key] = item.value;
+  for (const configField of configFields) {
+    config[configField.key] = configField.value;
   }
 
-  return { config, structure };
+  return { config, structure: configFields };
 }
 
 export function getFieldDescription(key: string, comment?: string): string {
@@ -133,8 +138,7 @@ export function getFieldDescription(key: string, comment?: string): string {
 }
 
 async function promptForValue(
-  rl: Interface,
-  key: string,
+  readlineInterface: Interface,
   description: string,
   isRequired: boolean,
   currentValue?: unknown,
@@ -146,81 +150,81 @@ async function promptForValue(
     currentValue !== null && currentValue !== undefined
       ? ` [current: ${JSON.stringify(currentValue)}]`
       : "";
-  const prompt = `${description}${currentText}${requiredText}: `;
+  const promptText = `${description}${currentText}${requiredText}: `;
 
-  let value: string;
+  let enteredValue: string;
   do {
-    value = await question(rl, prompt);
-    if (isRequired && !value.trim()) {
+    enteredValue = await askQuestion(readlineInterface, promptText);
+    if (isRequired && !enteredValue.trim()) {
       console.log("This field is required. Please enter a value.");
     }
-  } while (isRequired && !value.trim());
+  } while (isRequired && !enteredValue.trim());
 
-  if (!value.trim()) {
+  if (!enteredValue.trim()) {
     return null; // Return null for empty input instead of currentValue
   }
 
   // Try to parse as JSON, otherwise return as string
   try {
-    return JSON.parse(value);
+    return JSON.parse(enteredValue);
   } catch {
-    return value;
+    return enteredValue;
   }
 }
 
-export function reconstructJsonc(
-  structure: ConfigValue[],
+export function serializeConfigJsonc(
+  configFields: ConfigField[],
   config: Record<string, unknown>,
 ): string {
-  let result = '{\n  "$schema": "schemas/config-schema.json",\n\n';
+  let jsoncOutput = '{\n  "$schema": "schemas/config-schema.json",\n\n';
 
   let currentSection = "";
 
-  for (const item of structure) {
-    if (IGNORED_FIELDS.includes(item.key)) {
+  for (const configField of configFields) {
+    if (IGNORED_FIELDS.includes(configField.key)) {
       continue;
     }
 
     // Skip null values (empty inputs)
-    const value = config[item.key];
-    if (value === null || value === undefined) {
+    const configuredValue = config[configField.key];
+    if (configuredValue === null || configuredValue === undefined) {
       continue;
     }
 
     // Add section headers based on comments
-    if (item.comment && item.comment.includes("---")) {
+    if (configField.comment && configField.comment.includes("---")) {
       if (currentSection) {
-        result += "\n";
+        jsoncOutput += "\n";
       }
-      result += `  // ${item.comment}\n`;
-      currentSection = item.comment;
-    } else if (item.comment && !item.comment.includes("---")) {
-      result += `  // ${item.comment}\n`;
+      jsoncOutput += `  // ${configField.comment}\n`;
+      currentSection = configField.comment;
+    } else if (configField.comment && !configField.comment.includes("---")) {
+      jsoncOutput += `  // ${configField.comment}\n`;
     }
 
     // Add the key-value pair
-    result += `  "${item.key}": ${JSON.stringify(value)},\n`;
+    jsoncOutput += `  "${configField.key}": ${JSON.stringify(configuredValue)},\n`;
   }
 
   // Remove trailing comma and close
-  result = result.replace(/,\n$/, "\n");
-  result += "}";
+  jsoncOutput = jsoncOutput.replace(/,\n$/, "\n");
+  jsoncOutput += "}";
 
-  return result;
+  return jsoncOutput;
 }
 
-async function main(): Promise<void> {
+async function runCreateConfigCli(): Promise<void> {
   console.log("🚀 Config.jsonc Creation Tool\n");
 
   if (existsSync(CONFIG_OUTPUT_PATH)) {
-    const rl = createReadlineInterface();
-    const overwrite = await question(
-      rl,
+    const overwritePrompt = createReadlineInterface();
+    const overwriteAnswer = await askQuestion(
+      overwritePrompt,
       `${CONFIG_OUTPUT_PATH} already exists. Overwrite? (y/N): `,
     );
-    rl.close();
+    overwritePrompt.close();
 
-    if (!["y", "yes"].includes(overwrite.toLowerCase())) {
+    if (!["y", "yes"].includes(overwriteAnswer.toLowerCase())) {
       console.log("Cancelled.");
       process.exit(0);
       return;
@@ -233,10 +237,11 @@ async function main(): Promise<void> {
     return;
   }
 
-  const exampleContent = readFileSync(CONFIG_EXAMPLE_PATH, "utf8");
-  const { config, structure } = parseJsoncFile(exampleContent);
+  const exampleConfigText = readFileSync(CONFIG_EXAMPLE_PATH, "utf8");
+  const { config, structure: configFields } =
+    parseConfigTemplate(exampleConfigText);
 
-  const rl = createReadlineInterface();
+  const configurationPrompt = createReadlineInterface();
 
   try {
     console.log(
@@ -244,37 +249,43 @@ async function main(): Promise<void> {
     );
 
     // Process all fields from the structure
-    for (const item of structure) {
-      if (IGNORED_FIELDS.includes(item.key)) {
+    for (const configField of configFields) {
+      if (IGNORED_FIELDS.includes(configField.key)) {
         continue;
       }
 
-      const isRequired = REQUIRED_FIELDS.includes(item.key);
-      const description = getFieldDescription(item.key, item.comment);
+      const isRequired = REQUIRED_FIELDS.includes(configField.key);
+      const description = getFieldDescription(
+        configField.key,
+        configField.comment,
+      );
 
-      config[item.key] = await promptForValue(
-        rl,
-        item.key,
+      config[configField.key] = await promptForValue(
+        configurationPrompt,
         description,
         isRequired,
-        config[item.key],
+        config[configField.key],
       );
     }
 
     // Check if at least one API key is provided
-    const hasApiKey = API_KEY_FIELDS_GROUP.some((key) => {
-      const value = config[key];
-      return value !== null && value !== undefined && value !== "";
+    const hasConfiguredProviderKey = API_KEY_FIELDS_GROUP.some((fieldName) => {
+      const configuredValue = config[fieldName];
+      return (
+        configuredValue !== null &&
+        configuredValue !== undefined &&
+        configuredValue !== ""
+      );
     });
 
-    if (!hasApiKey) {
+    if (!hasConfiguredProviderKey) {
       console.log(
         "\nWarning: No API keys configured. At least one provider API key is recommended.",
       );
     }
 
-    const configContent = reconstructJsonc(structure, config);
-    writeFileSync(CONFIG_OUTPUT_PATH, configContent);
+    const generatedConfigText = serializeConfigJsonc(configFields, config);
+    writeFileSync(CONFIG_OUTPUT_PATH, generatedConfigText);
 
     console.log(`\n✅ ${CONFIG_OUTPUT_PATH} created successfully!`);
     console.log("\nNext steps:");
@@ -287,14 +298,14 @@ async function main(): Promise<void> {
     process.exit(1);
     return;
   } finally {
-    rl.close();
+    configurationPrompt.close();
   }
 }
 
-export { main };
+export { runCreateConfigCli };
 
-// Run main function if this script is executed directly
+// Run the CLI only when this script is executed directly.
 /* istanbul ignore next -- exercised by the runtime, not module tests */
 if (import.meta.url === `file://${process.argv[1]}`) {
-  main().catch(console.error);
+  runCreateConfigCli().catch(console.error);
 }

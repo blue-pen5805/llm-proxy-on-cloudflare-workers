@@ -8,8 +8,8 @@ rewriting, Gateway selection, and route handlers independent. A shared
 environment, execution context, normalized path, optional key selection,
 optional AI Gateway client, and the request's provider registry.
 
-`compose` enforces single forward traversal. Calling `next()` twice rejects, and
-reaching the end of the chain produces a not-found error.
+`composeMiddleware` enforces single forward traversal. Calling `next()` twice
+rejects, and reaching the end of the chain produces a not-found error.
 
 ## Ordered stages
 

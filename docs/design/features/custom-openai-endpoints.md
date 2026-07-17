@@ -19,10 +19,11 @@ validation responsibilities.
 
 ## Resolution and routing
 
-`getProvider` resolves built-in providers before custom endpoints, so a custom
-name cannot override a built-in route. `getAllProviders` then adds custom entries
-to the provider map; a colliding custom name can replace the built-in instance in
-aggregate operations. Names must therefore be unique across both sets.
+`getProviderByName` resolves built-in providers before custom endpoints, so a
+custom name cannot override a built-in route. `getAllProviderInstances` then
+adds custom entries to the provider map; a colliding custom name can replace the
+built-in instance in aggregate operations. Names must therefore be unique across
+both sets.
 
 Once resolved, the endpoint supports:
 

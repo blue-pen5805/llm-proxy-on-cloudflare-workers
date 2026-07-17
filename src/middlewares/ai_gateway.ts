@@ -11,9 +11,9 @@ export const aiGatewayMiddleware: Middleware = async (context, next) => {
   } = Config.aiGateway();
 
   if (context.pathname.startsWith("/g/") && accountId) {
-    const parts = context.pathname.split("/");
-    const aiGatewayName = parts[2];
-    context.pathname = `/${parts.slice(3).join("/")}`;
+    const pathSegments = context.pathname.split("/");
+    const aiGatewayName = pathSegments[2];
+    context.pathname = `/${pathSegments.slice(3).join("/")}`;
 
     context.aiGateway = new CloudflareAIGateway(
       accountId,
