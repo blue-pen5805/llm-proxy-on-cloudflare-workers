@@ -18,8 +18,8 @@
     "tsc": "tsc --noEmit",
     "prettier": "prettier --write .",
     "prettier-ci": "prettier --check .",
-    "lint": "eslint 'src/**/*.ts'",
-    "lint:fix": "eslint --fix 'src/**/*.ts'",
+    "lint": "eslint 'src/**/*.ts' 'scripts/**/*.ts'",
+    "lint:fix": "eslint --fix 'src/**/*.ts' 'scripts/**/*.ts'",
     "secrets:deploy": "ts-node scripts/deploy-secrets.ts",
     "secrets:create": "ts-node scripts/create-config.ts"
   },

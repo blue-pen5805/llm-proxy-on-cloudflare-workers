@@ -54,6 +54,21 @@ describe("handleOptions", () => {
     expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
   });
 
+  it("should handle preflight without requested headers", async () => {
+    const request = new Request("https://example.com", {
+      method: "OPTIONS",
+      headers: {
+        Origin: "https://client.example",
+        "Access-Control-Request-Method": "POST",
+      },
+    });
+
+    const response = await handleOptions(request);
+
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(response.headers.get("Access-Control-Allow-Headers")).toBeNull();
+  });
+
   it("should handle OPTIONS request with Access-Control-Request-Method but no Origin", async () => {
     const request = new Request("https://example.com", {
       method: "OPTIONS",

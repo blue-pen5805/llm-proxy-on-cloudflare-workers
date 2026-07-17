@@ -17,9 +17,9 @@ export { KeyRotationManager };
 
 const middlewareChain = composeMiddleware([
   loggingMiddleware,
+  corsMiddleware,
   errorMiddleware,
   requestMiddleware,
-  corsMiddleware,
   apiKeyPathMiddleware,
   authMiddleware,
   aiGatewayMiddleware,

@@ -78,7 +78,8 @@ vi.mock("~/src/utils/environments", () => ({
     run: vi.fn((_env, callback) => callback()),
   },
 }));
-vi.mock("~/src/requests/options", () => ({
+vi.mock("~/src/requests/options", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("~/src/requests/options")>()),
   handleOptions: vi.fn(async () => new Response()),
 }));
 vi.mock("~/src/requests/proxy", () => ({
@@ -166,6 +167,17 @@ describe("fetch", () => {
 
     expect(isRequestAuthorized).toHaveBeenCalled();
     expect(response.status).toBe(401);
+  });
+
+  it("should add CORS headers to authentication errors", async () => {
+    vi.mocked(isRequestAuthorized).mockReturnValue(false);
+
+    const response = await SELF.fetch("https://example.com/ping", {
+      headers: { Origin: "https://client.example" },
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
   });
 
   it("should skip authentication in development mode", async () => {

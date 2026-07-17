@@ -18,8 +18,9 @@ Authentication is bypassed only if `DEV` is explicitly `true`. If
 `PROXY_API_KEY` is absent, empty, or invalid in other modes, the Worker fails
 closed with HTTP 503.
 
-CORS preflight is answered before authentication. This permits browser clients
-to negotiate CORS but does not grant access to protected request methods.
+CORS preflight is answered before authentication. Actual cross-origin responses,
+including authentication and routing errors, receive the matching CORS origin
+header without changing the authentication requirement.
 
 ## Credential isolation
 
@@ -40,8 +41,10 @@ providers.
 
 Local JSONC files are operator inputs, not runtime files. `deploy-secrets.ts`
 serializes each non-empty top-level value and supplies it to `wrangler secret
-bulk`. Arrays and custom endpoint objects therefore arrive as JSON strings and
-are parsed by the environment utilities.
+bulk`; a top-level `null` is preserved as Wrangler's explicit deletion
+operation. Arrays and custom endpoint objects therefore arrive as JSON strings
+and are parsed by the environment utilities. Before invoking Wrangler, every
+non-null serialized value is checked against Cloudflare's 5 KiB secret limit.
 
 The schema validates shape during editing and critical custom-endpoint
 constraints are checked again at runtime. Configuration files contain live

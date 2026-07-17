@@ -27,6 +27,10 @@ export interface DeploySecretsCliArguments {
 }
 
 export type DeployResult = OperationResult;
+export type SecretOperationValue = string | null;
+
+// Cloudflare limits each Worker environment variable/secret to 5 KiB.
+export const MAX_WORKER_SECRET_BYTES = 5 * 1024;
 
 /**
  * Get config file path for given environment
@@ -87,9 +91,13 @@ Make sure you have authenticated with Wrangler before running this script.
 /**
  * Convert a value to secret format
  */
-export function serializeSecretValue(value: unknown): string {
-  // Check for null, undefined, or empty string
-  if (value === null || value === undefined || value === "") {
+export function serializeSecretValue(value: unknown): SecretOperationValue {
+  // In Wrangler's JSON bulk format, null is an explicit delete operation.
+  if (value === null) {
+    return null;
+  }
+
+  if (value === undefined || value === "") {
     return "";
   }
 
@@ -115,17 +123,26 @@ export function serializeSecretValue(value: unknown): string {
  */
 export function filterSecretsForDeployment(
   config: Record<string, unknown>,
-): Record<string, string> {
-  const secrets: Record<string, string> = {};
+): Record<string, SecretOperationValue> {
+  const secrets: Record<string, SecretOperationValue> = {};
 
-  // Skip $schema field and empty values
+  // Skip $schema and empty values. Preserve null as an explicit deletion.
   for (const [key, value] of Object.entries(config)) {
     if (key === "$schema") continue;
 
     const secretValue = serializeSecretValue(value);
-    if (secretValue !== "") {
-      secrets[key] = secretValue;
+    if (secretValue === "") continue;
+
+    if (
+      secretValue !== null &&
+      Buffer.byteLength(secretValue, "utf8") > MAX_WORKER_SECRET_BYTES
+    ) {
+      throw new Error(
+        `${key} exceeds Cloudflare's ${MAX_WORKER_SECRET_BYTES}-byte secret limit.`,
+      );
     }
+
+    secrets[key] = secretValue;
   }
 
   return secrets;
@@ -134,7 +151,9 @@ export function filterSecretsForDeployment(
 /**
  * Generate secrets JSON for wrangler secret bulk
  */
-export function serializeSecretsJson(secrets: Record<string, string>): string {
+export function serializeSecretsJson(
+  secrets: Record<string, SecretOperationValue>,
+): string {
   return JSON.stringify(secrets, null, 2);
 }
 
@@ -226,7 +245,7 @@ export function deploySecrets(
     if (secretCount === 0) {
       return {
         success: true,
-        messages: [`⚠️  No secrets with values found in ${configFileName}`],
+        messages: [`⚠️  No secret operations found in ${configFileName}`],
       };
     }
 
@@ -237,8 +256,10 @@ export function deploySecrets(
 
     // List names only. Prefixes, lengths, and dry-run JSON are still secret
     // material and commonly end up in terminal scrollback or CI logs.
-    Object.keys(deployableSecrets).forEach((secretName) => {
-      messages.push(`   - ${secretName}: [set]`);
+    Object.entries(deployableSecrets).forEach(([secretName, secretValue]) => {
+      messages.push(
+        `   - ${secretName}: ${secretValue === null ? "[delete]" : "[set]"}`,
+      );
     });
 
     if (environmentName) {

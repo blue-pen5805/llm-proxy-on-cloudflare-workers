@@ -2,6 +2,7 @@ import {
   deploySecrets,
   executeWranglerSecretBulk,
   filterSecretsForDeployment,
+  MAX_WORKER_SECRET_BYTES,
   serializeSecretsJson,
   getConfigPath,
   runDeploySecretsCli,
@@ -214,8 +215,11 @@ describe("deploy-secrets", () => {
       ).toBe('{"type":"service_account","region":"us-central1"}');
     });
 
-    it("should handle null/undefined/empty values", () => {
-      expect(serializeSecretValue(null)).toBe("");
+    it("should preserve null as a secret deletion", () => {
+      expect(serializeSecretValue(null)).toBeNull();
+    });
+
+    it("should handle undefined and empty values", () => {
       expect(serializeSecretValue(undefined)).toBe("");
       expect(serializeSecretValue("")).toBe("");
     });
@@ -235,7 +239,7 @@ describe("deploy-secrets", () => {
   });
 
   describe("filterSecretsForDeployment", () => {
-    it("should filter out empty and null values", () => {
+    it("should filter empty values and preserve null deletions", () => {
       const config = {
         $schema: "schema.json",
         VALID_KEY: "valid-value",
@@ -251,8 +255,23 @@ describe("deploy-secrets", () => {
       const result = filterSecretsForDeployment(config);
       expect(result).toEqual({
         VALID_KEY: "valid-value",
+        NULL_KEY: null,
         ARRAY_KEY: '["item1","item2"]',
       });
+    });
+
+    it("accepts a secret exactly at Cloudflare's byte limit", () => {
+      const value = "a".repeat(MAX_WORKER_SECRET_BYTES);
+      expect(filterSecretsForDeployment({ KEY: value })).toEqual({
+        KEY: value,
+      });
+    });
+
+    it("rejects a secret above Cloudflare's UTF-8 byte limit", () => {
+      const value = "é".repeat(MAX_WORKER_SECRET_BYTES / 2 + 1);
+      expect(() => filterSecretsForDeployment({ LARGE_SECRET: value })).toThrow(
+        `LARGE_SECRET exceeds Cloudflare's ${MAX_WORKER_SECRET_BYTES}-byte secret limit.`,
+      );
     });
 
     it("should exclude $schema field", () => {
@@ -273,6 +292,7 @@ describe("deploy-secrets", () => {
       const secrets = {
         API_KEY: "secret",
         ANOTHER_KEY: "value",
+        DELETED_KEY: null,
       };
 
       const result = serializeSecretsJson(secrets);
@@ -301,10 +321,10 @@ describe("deploy-secrets", () => {
       expect(execFileSync).toHaveBeenCalled();
     });
 
-    it("should return warning when no secrets with values found", () => {
+    it("should return warning when no secret operations are found", () => {
       const configContent = `{
         "$schema": "schema.json",
-        "EMPTY_KEY": null,
+        "EMPTY_KEY": "",
         "ANOTHER_EMPTY": ""
       }`;
       const mockFs = createMockFsOps({
@@ -314,7 +334,33 @@ describe("deploy-secrets", () => {
       const result = deploySecrets("/root", undefined, true, mockFs);
 
       expect(result.success).toBe(true);
-      expect(result.messages[0]).toContain("No secrets with values found");
+      expect(result.messages[0]).toContain("No secret operations found");
+    });
+
+    it("should include null values as redacted delete operations", () => {
+      const mockFs = createMockFsOps({
+        "/root/config.jsonc": '{"OLD_API_KEY":null}',
+      });
+
+      const result = deploySecrets("/root", undefined, true, mockFs);
+
+      expect(result.success).toBe(true);
+      expect(result.messages).toContain("   - OLD_API_KEY: [delete]");
+      expect(result.messages.join("\n")).not.toContain("null");
+    });
+
+    it("should reject oversized serialized secrets before invoking Wrangler", () => {
+      const mockFs = createMockFsOps({
+        "/root/config.jsonc": JSON.stringify({
+          LARGE_SECRET: "x".repeat(MAX_WORKER_SECRET_BYTES + 1),
+        }),
+      });
+
+      const result = deploySecrets("/root", undefined, true, mockFs);
+
+      expect(result.success).toBe(false);
+      expect(result.messages[0]).toContain("exceeds Cloudflare's");
+      expect(execFileSync).not.toHaveBeenCalled();
     });
 
     it("should process valid config in dry run mode", () => {

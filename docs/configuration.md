@@ -21,6 +21,17 @@ manually afterward.
 The `$schema` path for a file in the repository root is
 `schemas/config-schema.json`.
 
+`npm run secrets:deploy` treats a top-level `null` as an explicit deletion of
+that deployed Worker secret. A setting omitted from the file is left unchanged,
+while empty strings, empty arrays, and empty objects are ignored. Dry-run output
+labels each name as `[set]` or `[delete]` without showing its value.
+
+Cloudflare limits each serialized Worker secret to 5 KiB. The deployment script
+checks the UTF-8 byte length before invoking Wrangler and fails without printing
+the value when a setting is too large. Structured settings such as
+`CUSTOM_OPENAI_ENDPOINTS` count as one JSON-serialized secret, so their complete
+serialized form must fit within this limit.
+
 ## Authentication
 
 | Setting         | Type               | Required | Meaning                                                                                                          |
@@ -46,7 +57,8 @@ proxy credentials accordingly.
 ## Provider credentials
 
 Each provider key accepts a string, an array of strings, or `null`. Arrays
-enable random selection or global round-robin selection.
+enable random selection or global round-robin selection. Setting a key to
+`null` deletes the corresponding deployed secret on the next secrets deployment.
 
 | Route name         | Setting                                           |
 | ------------------ | ------------------------------------------------- |

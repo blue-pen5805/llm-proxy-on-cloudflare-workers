@@ -7,7 +7,8 @@
    For a named environment, first declare the matching environment in
    `wrangler.jsonc`.
 3. Preview settings with `npm run secrets:deploy -- --dry-run [--env <env>]`.
-   Values, prefixes, and lengths are redacted from the output.
+   Values, prefixes, and lengths are redacted; each operation is shown as
+   `[set]` or `[delete]`.
 4. Run `npm run tsc`, `npm run lint`, and `npm test`.
 5. Deploy code with `npm run deploy` (or `npm run deploy -- --env <env>` for a
    declared Wrangler environment).
@@ -29,6 +30,10 @@ dotenv values are quoted and escaped to prevent line injection.
 - Keep `config.jsonc`, environment-specific variants, `.dev.vars*`, and
   `.secrets-temp*.json` out of version control.
 - Use distinct `PROXY_API_KEY` values per environment.
+- Set a setting to `null` and deploy secrets to delete it from the Worker.
+  Omitting a setting preserves its current deployed value.
+- Keep every serialized setting within Cloudflare's 5 KiB per-secret limit.
+  The deployment command validates this before contacting Wrangler.
 - Replace a provider key in the configuration, deploy secrets, verify it, and
   only then revoke the old key at the provider.
 - When changing an array's order with global round-robin enabled, expect the

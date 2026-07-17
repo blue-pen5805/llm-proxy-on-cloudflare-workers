@@ -13,6 +13,7 @@
     "module": "es2022",
     /* Specify how TypeScript looks up a file from a given module specifier. */
     "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
     /* Specify type package names to be included without being referenced in a source file. */
     "types": ["node"],
     /* Enable importing .json files */
@@ -40,5 +41,5 @@
     "skipLibCheck": true
   },
   "exclude": ["test"],
-  "include": ["worker-configuration.d.ts", "src/**/*.ts"]
+  "include": ["worker-configuration.d.ts", "src/**/*.ts", "scripts/**/*.ts"]
 }

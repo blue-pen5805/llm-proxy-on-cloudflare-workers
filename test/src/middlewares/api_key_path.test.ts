@@ -82,6 +82,7 @@ describe("apiKeyPathMiddleware", () => {
   });
 
   it.each([
+    "/key/",
     "/key/999999999999999999999999/openai/v1/models",
     "/key/5-2/openai/v1/models",
     "/key/-/openai/v1/models",
