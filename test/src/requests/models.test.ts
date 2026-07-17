@@ -227,6 +227,30 @@ describe("models", () => {
     expect(body.data[0].id).toBe("openai/gpt-4");
   });
 
+  it("should skip unavailable providers that cannot list models through AI Gateway", async () => {
+    const unavailableProviderClass = {
+      ...mockProviderClass,
+      available: vi.fn().mockReturnValue(false),
+      supportsAiGatewayModels: false,
+      buildModelsRequest: vi.fn(),
+    };
+
+    Object.keys(BUILT_IN_PROVIDER_CONSTRUCTORS).forEach((key) => {
+      delete BUILT_IN_PROVIDER_CONSTRUCTORS[key];
+    });
+    BUILT_IN_PROVIDER_CONSTRUCTORS.unavailable = mockProviderConstructor(
+      unavailableProviderClass,
+    );
+
+    const response = await handleModelsRequest({} as any, mockAIGateway as any);
+
+    await expect(response.json()).resolves.toEqual({
+      object: "list",
+      data: [],
+    });
+    expect(unavailableProviderClass.buildModelsRequest).not.toHaveBeenCalled();
+  });
+
   it("should use AI Gateway when available and provider supported", async () => {
     mockAIGateway.buildProviderEndpointRequest.mockReturnValue([
       "https://gateway.ai.cloudflare.com/v1/account/gateway/openai/models",

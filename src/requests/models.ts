@@ -26,7 +26,10 @@ async function fetchProviderModels(
   selection: MiddlewareContext["apiKeyIndex"],
   aiGateway?: CloudflareAIGateway,
 ): Promise<OpenAIModelsListResponseBody> {
-  if (!provider.available() && !aiGateway) {
+  if (
+    !provider.available() &&
+    (!aiGateway || provider.supportsAiGatewayModels === false)
+  ) {
     return EMPTY_MODELS;
   }
 

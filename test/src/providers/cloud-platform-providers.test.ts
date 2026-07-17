@@ -193,6 +193,17 @@ describe("cloud platform providers", () => {
     );
   });
 
+  it("silently omits Bedrock model discovery when no region is configured", async () => {
+    delete values.AWS_BEDROCK_REGION;
+    try {
+      await expect(
+        new AwsBedrock().buildModelsRequest(),
+      ).rejects.toBeInstanceOf(ProviderNotSupportedError);
+    } finally {
+      values.AWS_BEDROCK_REGION = "us-east-1";
+    }
+  });
+
   it.each([
     [
       new AzureOpenAI(),

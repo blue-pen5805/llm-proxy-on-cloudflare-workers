@@ -1,5 +1,10 @@
 import { Secrets } from "../../utils/secrets";
-import { defineProvider, Provider, ProviderConstructor } from "../provider";
+import {
+  defineProvider,
+  Provider,
+  ProviderConstructor,
+  ProviderNotSupportedError,
+} from "../provider";
 
 const REGION_PATTERN = /^[a-z]{2}(?:-gov)?-[a-z]+-\d$/;
 
@@ -20,6 +25,17 @@ export const AwsBedrock = defineProvider({
   pathnamePrefix: "/v1",
   baseUrl() {
     return `https://bedrock-runtime.${getAwsRegionName(this as AwsBedrock)}.amazonaws.com`;
+  },
+  async buildModelsRequest(apiKeyIndex?: number) {
+    if (!Secrets.get((this as AwsBedrock).regionName)) {
+      throw new ProviderNotSupportedError(
+        "Amazon Bedrock model discovery requires AWS_BEDROCK_REGION.",
+      );
+    }
+    return [
+      this.modelsPath,
+      { method: "GET", headers: await this.headers(apiKeyIndex) },
+    ];
   },
   aiGatewayPath(pathname: string): string {
     return `/bedrock-runtime/${encodeURIComponent(getAwsRegionName(this as AwsBedrock))}/${pathname.replace(/^\/+/, "")}`;
