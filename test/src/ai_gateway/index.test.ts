@@ -140,6 +140,16 @@ describe("CloudflareAIGateway", () => {
       });
     });
 
+    it("does not allow additional headers to replace the Gateway token", () => {
+      const headers = gateway.buildHeaders({
+        "cf-aig-authorization": "Bearer attacker-token",
+      });
+
+      expect(new Headers(headers).get("cf-aig-authorization")).toBe(
+        "Bearer test-key",
+      );
+    });
+
     it("omits authorization when no gateway token is configured", () => {
       expect(
         new CloudflareAIGateway("account", "gateway").buildHeaders(),

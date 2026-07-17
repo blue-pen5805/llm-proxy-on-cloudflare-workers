@@ -104,7 +104,7 @@ vi.mock("~/src/utils/authorization", () => ({
   AUTHORIZATION_QUERY_PARAMETERS: ["key"],
 }));
 vi.mock("~/src/utils/config", () => ({
-  Config: { isDevelopment: vi.fn(), aiGateway: vi.fn() },
+  Config: { isDevelopment: vi.fn(), apiKeys: vi.fn(), aiGateway: vi.fn() },
 }));
 
 describe("fetch", () => {
@@ -113,6 +113,7 @@ describe("fetch", () => {
 
     vi.mocked(isRequestAuthorized).mockReturnValue(true);
     vi.mocked(Config.isDevelopment).mockReturnValue(false);
+    vi.mocked(Config.apiKeys).mockReturnValue(["test-key"]);
     vi.mocked(Config.aiGateway).mockReturnValue({
       accountId: "test-account-id",
       name: "test-gateway",

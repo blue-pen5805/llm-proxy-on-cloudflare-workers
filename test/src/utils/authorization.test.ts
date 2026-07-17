@@ -14,11 +14,11 @@ describe("isRequestAuthorized", () => {
   });
 
   // Test when no API key is set in the environment
-  it("should return true when no PROXY_API_KEY is set", () => {
+  it("should return false when no PROXY_API_KEY is set", () => {
     vi.mocked(Config.apiKeys).mockReturnValue(undefined);
     const request = new Request("https://example.com");
 
-    expect(isRequestAuthorized(request)).toBe(true);
+    expect(isRequestAuthorized(request)).toBe(false);
   });
 
   // Test when API key is set and authentication succeeds with Authorization header
@@ -40,6 +40,13 @@ describe("isRequestAuthorized", () => {
     });
 
     expect(isRequestAuthorized(request)).toBe(true);
+  });
+
+  it("rejects a non-Bearer authorization scheme", () => {
+    const request = new Request("https://example.com", {
+      headers: { Authorization: "Basic valid-key" },
+    });
+    expect(isRequestAuthorized(request)).toBe(false);
   });
 
   it("should isRequestAuthorized any configured key", () => {
@@ -107,6 +114,7 @@ describe("stripProxyAuthorizationHeaders", () => {
       Authorization: "Bearer proxy-secret",
       "x-api-key": "proxy-secret",
       "x-goog-api-key": "proxy-secret",
+      "cf-aig-authorization": "Bearer attacker-token",
       "x-client-header": "preserved",
     });
 
@@ -115,6 +123,7 @@ describe("stripProxyAuthorizationHeaders", () => {
     expect(sanitized.has("Authorization")).toBe(false);
     expect(sanitized.has("x-api-key")).toBe(false);
     expect(sanitized.has("x-goog-api-key")).toBe(false);
+    expect(sanitized.has("cf-aig-authorization")).toBe(false);
     expect(sanitized.get("x-client-header")).toBe("preserved");
     expect(original.get("Authorization")).toBe("Bearer proxy-secret");
   });

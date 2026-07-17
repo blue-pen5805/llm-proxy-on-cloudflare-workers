@@ -23,17 +23,17 @@ The `$schema` path for a file in the repository root is
 
 ## Authentication
 
-| Setting         | Type               | Required    | Meaning                                                                          |
-| --------------- | ------------------ | ----------- | -------------------------------------------------------------------------------- |
-| `PROXY_API_KEY` | string or string[] | Recommended | Credentials accepted from proxy clients. If omitted, authentication is disabled. |
-| `DEV`           | boolean            | No          | Disables proxy authentication when true. Use only for local development.         |
+| Setting         | Type               | Required | Meaning                                                                                     |
+| --------------- | ------------------ | -------- | ------------------------------------------------------------------------------------------- |
+| `PROXY_API_KEY` | string or string[] | Required | Credentials accepted from proxy clients. Missing or empty values fail closed with HTTP 503. |
+| `DEV`           | boolean            | No       | Disables proxy authentication only when explicitly `true`. Use only for local development.  |
 
 Clients can send a proxy credential as a Bearer token, `x-api-key`,
 `x-goog-api-key`, or the `key` query parameter. Headers accepted for proxy
 authentication are removed before the upstream request is built.
 
-> `DEV=true` and an omitted `PROXY_API_KEY` both expose the proxy without client
-> authentication. Do not use either configuration on a public deployment.
+> `DEV=true` exposes the proxy without client authentication. A missing
+> `PROXY_API_KEY` no longer enables anonymous access; it returns HTTP 503.
 
 ## Provider credentials
 
@@ -140,7 +140,8 @@ listing intentionally uses the first key unless an explicit selection is given.
 }
 ```
 
-`name` and `baseUrl` are required. The name must be unique and must not collide
+`name` and `baseUrl` are required. `baseUrl` must use HTTPS and cannot contain
+userinfo, a query string, or a fragment. The name must be unique and must not collide
 with a built-in provider route. `apiKeys` is optional for endpoints that do not
 require authentication. `models` avoids an upstream request during model
 listing. The two path overrides default to `/chat/completions` and `/models`.
@@ -164,9 +165,8 @@ Deploy the default configuration:
 npm run secrets:deploy
 ```
 
-The helper currently prints a value preview for every setting before invoking
-Wrangler. Run it only in a trusted terminal and protect its output as secret
-material.
+The helper lists setting names but never values, prefixes, or lengths. Dry-run
+output is redacted as well.
 
 Deploy `config.production.jsonc` to the Wrangler `production` environment:
 

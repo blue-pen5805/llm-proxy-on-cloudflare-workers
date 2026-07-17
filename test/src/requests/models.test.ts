@@ -70,6 +70,9 @@ describe("models", () => {
         },
       );
     }
+    vi.mocked(helpers.readResponseJson).mockImplementation((response) =>
+      response.json(),
+    );
 
     vi.mocked(helpers.fetchWithLogging).mockImplementation(() =>
       Promise.resolve(new Response(JSON.stringify({ data: [] }))),

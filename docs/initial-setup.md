@@ -58,8 +58,8 @@ npm test
 npm run secrets:deploy -- --dry-run
 ```
 
-The dry run prints values as well as names. Run it only in a private terminal;
-do not copy its output into logs or issues.
+The dry run lists setting names while redacting all values, prefixes, and
+lengths.
 
 ## 5. Deploy code and configuration
 

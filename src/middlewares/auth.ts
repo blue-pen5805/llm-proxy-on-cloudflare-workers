@@ -1,16 +1,24 @@
 import { Middleware } from "../middleware";
 import { isRequestAuthorized } from "../utils/authorization";
 import { Config } from "../utils/config";
-import { UnauthorizedError } from "../utils/error";
+import { ServiceUnavailableError, UnauthorizedError } from "../utils/error";
 import { removeAuthorizationQueryParameters } from "../utils/helpers";
 
 export const authMiddleware: Middleware = async (context, next) => {
   context.pathname = removeAuthorizationQueryParameters(context.pathname);
 
-  if (
-    !Config.isDevelopment() &&
-    isRequestAuthorized(context.request) === false
-  ) {
+  if (Config.isDevelopment()) {
+    return await next();
+  }
+
+  const configuredKeys = Config.apiKeys();
+  if (!configuredKeys || configuredKeys.length === 0) {
+    throw new ServiceUnavailableError(
+      "Proxy authentication is not configured.",
+    );
+  }
+
+  if (isRequestAuthorized(context.request) === false) {
     throw new UnauthorizedError();
   }
 

@@ -6,10 +6,66 @@ function isStringArray(value: unknown): value is string[] {
   );
 }
 
+interface CustomOpenAIEndpoint {
+  name: string;
+  baseUrl: string;
+  apiKeys?: string | string[];
+  models?: string[];
+  chatCompletionPath?: string;
+  modelsPath?: string;
+}
+
+function isOptionalStringArray(value: unknown): value is string[] | undefined {
+  return value === undefined || isStringArray(value);
+}
+
+function isSafeCustomEndpoint(value: unknown): value is CustomOpenAIEndpoint {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const endpoint = value as Record<string, unknown>;
+  if (
+    typeof endpoint.name !== "string" ||
+    !/^[A-Za-z0-9._~-]{1,128}$/.test(endpoint.name) ||
+    typeof endpoint.baseUrl !== "string"
+  ) {
+    return false;
+  }
+
+  try {
+    const baseUrl = new URL(endpoint.baseUrl);
+    if (
+      baseUrl.protocol !== "https:" ||
+      baseUrl.username ||
+      baseUrl.password ||
+      baseUrl.search ||
+      baseUrl.hash
+    ) {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+
+  const validOptionalPath = (path: unknown): boolean =>
+    path === undefined ||
+    (typeof path === "string" &&
+      path.startsWith("/") &&
+      !path.startsWith("//"));
+  return (
+    (endpoint.apiKeys === undefined ||
+      typeof endpoint.apiKeys === "string" ||
+      isStringArray(endpoint.apiKeys)) &&
+    isOptionalStringArray(endpoint.models) &&
+    validOptionalPath(endpoint.chatCompletionPath) &&
+    validOptionalPath(endpoint.modelsPath)
+  );
+}
+
 export class Config {
   static isDevelopment(): boolean {
     const dev = Environments.get("DEV", false);
-    return dev !== undefined && dev !== "False" && dev !== "false";
+    return dev?.trim().toLowerCase() === "true";
   }
 
   static apiKeys(): string[] | undefined {
@@ -20,10 +76,11 @@ export class Config {
     }
 
     if (isStringArray(apiKeys)) {
-      return apiKeys;
+      return apiKeys.map((key) => key.trim()).filter(Boolean);
     }
     if (typeof apiKeys === "string") {
-      return [apiKeys];
+      const normalizedKey = apiKeys.trim();
+      return normalizedKey ? [normalizedKey] : [];
     }
 
     return undefined;
@@ -68,16 +125,20 @@ export class Config {
       return undefined;
     }
 
+    let parsedEndpoints: unknown = endpoints;
     if (typeof endpoints === "string") {
       try {
-        return JSON.parse(endpoints);
+        parsedEndpoints = JSON.parse(endpoints) as unknown;
       } catch {
         return undefined;
       }
     }
 
-    if (Array.isArray(endpoints)) {
-      return endpoints;
+    if (
+      Array.isArray(parsedEndpoints) &&
+      parsedEndpoints.every(isSafeCustomEndpoint)
+    ) {
+      return parsedEndpoints;
     }
 
     return undefined;

@@ -369,10 +369,14 @@
         "type": "object",
         "properties": {
           "name": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9._~-]+$"
           },
           "baseUrl": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^https://"
           },
           "apiKeys": {
             "oneOf": [
@@ -394,10 +398,12 @@
             }
           },
           "chatCompletionPath": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^/(?:[^/].*)?$"
           },
           "modelsPath": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^/(?:[^/].*)?$"
           }
         },
         "required": ["name", "baseUrl"]

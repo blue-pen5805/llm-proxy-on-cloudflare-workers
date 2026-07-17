@@ -7,7 +7,7 @@ import {
 } from "../utils/api_key_selection";
 import { stripProxyAuthorizationHeaders } from "../utils/authorization";
 import { Config } from "../utils/config";
-import { parseJsonOrReturnText } from "../utils/helpers";
+import { parseJsonOrReturnText, readRequestText } from "../utils/helpers";
 import { RequestLogger } from "../utils/logger";
 import { fetchCompatibilityFallback } from "./compatibility_fallback";
 import {
@@ -24,7 +24,9 @@ export async function handleChatCompletionsRequest(
   const sanitizedHeaders = stripProxyAuthorizationHeaders(request.headers);
 
   // Validate Request Data Structure
-  const parsedRequestBody = parseJsonOrReturnText(await request.text());
+  const parsedRequestBody = parseJsonOrReturnText(
+    await readRequestText(request),
+  );
   if (
     typeof parsedRequestBody !== "object" ||
     parsedRequestBody === null ||

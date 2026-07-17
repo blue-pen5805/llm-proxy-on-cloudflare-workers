@@ -12,13 +12,13 @@ import {
   serializeSecretValue,
   type FileSystemOperations,
 } from "../../scripts/deploy-secrets";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import fs from "fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock child_process module
 vi.mock("child_process", () => ({
-  execSync: vi.fn(),
+  execFileSync: vi.fn(),
 }));
 
 // Mock fs module
@@ -50,7 +50,7 @@ const createMockFsOps = (
 
 describe("deploy-secrets", () => {
   beforeEach(() => {
-    vi.mocked(execSync).mockReset();
+    vi.mocked(execFileSync).mockReset();
     vi.mocked(fs.writeFileSync).mockReset();
     vi.mocked(fs.readFileSync).mockReset();
     vi.mocked(fs.unlinkSync).mockReset();
@@ -298,7 +298,7 @@ describe("deploy-secrets", () => {
       expect(deploySecrets("/root", undefined, undefined, mockFs).success).toBe(
         true,
       );
-      expect(execSync).toHaveBeenCalled();
+      expect(execFileSync).toHaveBeenCalled();
     });
 
     it("should return warning when no secrets with values found", () => {
@@ -342,6 +342,8 @@ describe("deploy-secrets", () => {
       expect(result.messages.some((msg) => msg.includes("Dry run mode"))).toBe(
         true,
       );
+      expect(result.messages.join("\n")).not.toContain("secret-value");
+      expect(result.messages.join("\n")).not.toContain("another-secret");
     });
 
     it("should handle environment-specific config", () => {
@@ -370,7 +372,7 @@ describe("deploy-secrets", () => {
       expect(result.messages[0]).toContain("Invalid environment name");
     });
 
-    it("should truncate long secret values in display", () => {
+    it("should fully redact secret values in display", () => {
       const longSecret = "a".repeat(30);
       const configContent = `{
         "LONG_SECRET": "${longSecret}"
@@ -385,8 +387,8 @@ describe("deploy-secrets", () => {
       const secretLine = result.messages.find((msg) =>
         msg.includes("LONG_SECRET:"),
       );
-      expect(secretLine).toContain("...");
-      expect(secretLine?.length).toBeLessThan(longSecret.length + 20);
+      expect(secretLine).toBe("   - LONG_SECRET: [set]");
+      expect(result.messages.join("\n")).not.toContain(longSecret);
     });
 
     it("should report malformed configuration", () => {
@@ -413,15 +415,12 @@ describe("deploy-secrets", () => {
   });
 
   describe("executeWranglerSecretBulk", () => {
-    it("builds a dry-run command and removes its temporary file", () => {
+    it("builds a dry-run command without writing plaintext", () => {
       const result = executeWranglerSecretBulk('{"KEY":"value"}', "prod", true);
 
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
-        expect.stringMatching(/\.secrets-temp\.json$/),
-        '{"KEY":"value"}',
-      );
-      expect(fs.unlinkSync).toHaveBeenCalled();
-      expect(execSync).not.toHaveBeenCalled();
+      expect(fs.writeFileSync).not.toHaveBeenCalled();
+      expect(fs.unlinkSync).not.toHaveBeenCalled();
+      expect(execFileSync).not.toHaveBeenCalled();
       expect(result).toEqual({
         success: true,
         message: expect.stringContaining("--env prod"),
@@ -433,8 +432,14 @@ describe("deploy-secrets", () => {
 
       const result = executeWranglerSecretBulk('{"KEY":"value"}');
 
-      expect(execSync).toHaveBeenCalledWith(
-        expect.stringContaining("wrangler secret bulk"),
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        expect.stringMatching(/\.secrets-temp-.*\.json$/),
+        '{"KEY":"value"}',
+        { flag: "wx", mode: 0o600 },
+      );
+      expect(execFileSync).toHaveBeenCalledWith(
+        "wrangler",
+        ["secret", "bulk", expect.stringMatching(/\.secrets-temp-.*\.json$/)],
         { stdio: "inherit" },
       );
       expect(log).toHaveBeenCalledWith(
@@ -448,7 +453,7 @@ describe("deploy-secrets", () => {
     });
 
     it("cleans up and reports execution failures", () => {
-      vi.mocked(execSync).mockImplementation(() => {
+      vi.mocked(execFileSync).mockImplementation(() => {
         throw new Error("wrangler failed");
       });
       vi.mocked(fs.existsSync).mockReturnValue(true);

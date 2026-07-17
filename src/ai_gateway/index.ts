@@ -59,10 +59,10 @@ export class CloudflareAIGateway {
   buildHeaders(additionalHeaders: HeadersInit = {}): HeadersInit {
     return {
       "Content-Type": "application/json",
+      ...additionalHeaders,
       ...(this.apiKey
         ? { "cf-aig-authorization": `Bearer ${this.apiKey}` }
         : {}),
-      ...additionalHeaders,
     };
   }
 
@@ -128,11 +128,7 @@ export class CloudflareAIGateway {
     body?: BodyInit | null;
     signal?: AbortSignal | null;
   }): [RequestInfo, RequestInit] {
-    const gatewayHeaders = new Headers(this.buildHeaders());
-    const additionalHeaders = new Headers(headers);
-    additionalHeaders.forEach((value, key) => {
-      gatewayHeaders.set(key, value);
-    });
+    const gatewayHeaders = new Headers(this.buildHeaders(headers));
 
     const requestInit: RequestInit = {
       method: "POST",

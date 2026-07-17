@@ -51,12 +51,12 @@ describe("Config", () => {
       expect(result).toBe(false);
     });
 
-    it("should return true when DEV is any other string", () => {
+    it("should return false when DEV is any other string", () => {
       vi.mocked(Environments.get).mockReturnValue("development");
 
       const result = Config.isDevelopment();
 
-      expect(result).toBe(true);
+      expect(result).toBe(false);
     });
   });
 
@@ -220,17 +220,29 @@ describe("Config", () => {
   describe("customOpenAIEndpoints", () => {
     it("parses JSON strings", () => {
       vi.mocked(Environments.get).mockReturnValue(
-        '[{"name":"local","baseUrl":"http://localhost"}]',
+        '[{"name":"local","baseUrl":"https://localhost"}]',
       );
       expect(Config.customOpenAIEndpoints()).toEqual([
-        { name: "local", baseUrl: "http://localhost" },
+        { name: "local", baseUrl: "https://localhost" },
       ]);
     });
 
     it("returns arrays unchanged", () => {
-      const endpoints = [{ name: "local", baseUrl: "http://localhost" }];
+      const endpoints = [{ name: "local", baseUrl: "https://localhost" }];
       vi.mocked(Environments.get).mockReturnValue(endpoints);
       expect(Config.customOpenAIEndpoints()).toBe(endpoints);
+    });
+
+    it.each([
+      [{ name: "bad/name", baseUrl: "https://example.com" }],
+      [{ name: "local", baseUrl: "http://example.com" }],
+      [{ name: "local", baseUrl: "https://user:pass@example.com" }],
+      [{ name: "local", baseUrl: "https://example.com?token=secret" }],
+      [{ name: "local", baseUrl: "https://example.com", models: [1] }],
+      [{ name: "local", baseUrl: "https://example.com", modelsPath: "models" }],
+    ])("rejects unsafe custom endpoint configuration %s", (value) => {
+      vi.mocked(Environments.get).mockReturnValue(value as never);
+      expect(Config.customOpenAIEndpoints()).toBeUndefined();
     });
 
     it.each([undefined, null, 42, { name: "invalid" }, "not-json"])(

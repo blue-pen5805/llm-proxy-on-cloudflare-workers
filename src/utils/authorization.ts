@@ -9,13 +9,20 @@ export const AUTHORIZATION_KEYS = [
 
 export const AUTHORIZATION_QUERY_PARAMETERS = ["key"];
 
+const UPSTREAM_CONTROLLED_AUTHORIZATION_HEADERS = [
+  ...AUTHORIZATION_KEYS,
+  "cf-aig-authorization",
+];
+
 /**
  * Returns a copy of request headers without credentials accepted by this
  * proxy. Provider credentials are added separately after this sanitization.
  */
 export function stripProxyAuthorizationHeaders(headers: HeadersInit): Headers {
   const sanitizedHeaders = new Headers(headers);
-  AUTHORIZATION_KEYS.forEach((key) => sanitizedHeaders.delete(key));
+  UPSTREAM_CONTROLLED_AUTHORIZATION_HEADERS.forEach((key) =>
+    sanitizedHeaders.delete(key),
+  );
   return sanitizedHeaders;
 }
 
@@ -51,8 +58,8 @@ function matchesApiKey(candidate: string, configuredKeys: string[]): boolean {
  */
 export function isRequestAuthorized(request: Request): boolean {
   const apiKeys = Config.apiKeys();
-  if (!apiKeys) {
-    return true;
+  if (!apiKeys || apiKeys.length === 0) {
+    return false;
   }
 
   let apiKey: string | null = null;
@@ -64,11 +71,12 @@ export function isRequestAuthorized(request: Request): boolean {
   const authorizationValue = request.headers.get(authorizationKey);
 
   if (authorizationKey && authorizationValue) {
-    const authorizationParts = authorizationValue.trim().split(/\s+/);
-    apiKey =
-      authorizationParts.length > 1
-        ? authorizationParts[1]
-        : authorizationParts[0];
+    if (authorizationKey.toLowerCase() === "authorization") {
+      const bearerMatch = authorizationValue.match(/^Bearer\s+(\S+)$/i);
+      apiKey = bearerMatch?.[1] ?? null;
+    } else {
+      apiKey = authorizationValue.trim();
+    }
   } else {
     const requestUrl = new URL(request.url);
     const queryParameterName = AUTHORIZATION_QUERY_PARAMETERS.find(

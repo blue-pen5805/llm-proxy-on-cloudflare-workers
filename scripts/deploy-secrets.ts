@@ -8,7 +8,8 @@ import {
   validateEnvironmentName,
 } from "./utils.ts";
 import type { FileSystemOperations, OperationResult } from "./utils.ts";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
+import { randomUUID } from "crypto";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -145,29 +146,27 @@ export function executeWranglerSecretBulk(
   environmentName?: string,
   isDryRun: boolean = false,
 ): { success: boolean; message: string } {
+  const tempFilePath = path.join(
+    process.cwd(),
+    `.secrets-temp-${randomUUID()}.json`,
+  );
   try {
-    // Create temporary file for secrets
-    const tempFilePath = path.join(process.cwd(), ".secrets-temp.json");
-    fs.writeFileSync(tempFilePath, secretsJson);
-
-    // Build wrangler command
-    let wranglerCommand = `wrangler secret bulk "${tempFilePath}"`;
-    if (environmentName) {
-      wranglerCommand += ` --env ${environmentName}`;
-    }
+    const wranglerArguments = ["secret", "bulk", tempFilePath];
+    if (environmentName) wranglerArguments.push("--env", environmentName);
+    const commandDisplay = `wrangler ${wranglerArguments.join(" ")}`;
 
     if (isDryRun) {
-      // Clean up temp file
-      fs.unlinkSync(tempFilePath);
       return {
         success: true,
-        message: `🔍 Dry run - would execute: ${wranglerCommand}`,
+        message: `🔍 Dry run - would execute: ${commandDisplay}`,
       };
     }
 
-    // Execute the command
-    console.log(`🚀 Executing: ${wranglerCommand}`);
-    execSync(wranglerCommand, { stdio: "inherit" });
+    // Exclusive creation prevents a symlink or concurrent process from being
+    // overwritten. Owner-only permissions protect the short-lived plaintext.
+    fs.writeFileSync(tempFilePath, secretsJson, { flag: "wx", mode: 0o600 });
+    console.log(`🚀 Executing: ${commandDisplay}`);
+    execFileSync("wrangler", wranglerArguments, { stdio: "inherit" });
 
     // Clean up temp file
     fs.unlinkSync(tempFilePath);
@@ -178,7 +177,6 @@ export function executeWranglerSecretBulk(
     };
   } catch (error) {
     // Clean up temp file if it exists
-    const tempFilePath = path.join(process.cwd(), ".secrets-temp.json");
     if (fs.existsSync(tempFilePath)) {
       fs.unlinkSync(tempFilePath);
     }
@@ -237,14 +235,10 @@ export function deploySecrets(
       `📋 Found ${secretCount} secrets to deploy from ${configFileName}:`,
     );
 
-    // List secrets (but don't show values for security)
+    // List names only. Prefixes, lengths, and dry-run JSON are still secret
+    // material and commonly end up in terminal scrollback or CI logs.
     Object.keys(deployableSecrets).forEach((secretName) => {
-      const secretValue = deployableSecrets[secretName];
-      const maskedDisplayValue =
-        secretValue.length > 20
-          ? `${secretValue.substring(0, 20)}...`
-          : secretValue;
-      messages.push(`   - ${secretName}: ${maskedDisplayValue}`);
+      messages.push(`   - ${secretName}: [set]`);
     });
 
     if (environmentName) {
@@ -255,8 +249,7 @@ export function deploySecrets(
 
     if (isDryRun) {
       messages.push("");
-      messages.push("🔍 Dry run mode - JSON that would be deployed:");
-      messages.push(secretsJson);
+      messages.push("🔍 Dry run mode - values are intentionally redacted.");
     }
 
     const deploymentResult = executeWranglerSecretBulk(

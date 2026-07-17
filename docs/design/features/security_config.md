@@ -13,8 +13,9 @@ token, `x-api-key`, `x-goog-api-key`, or the `key` query parameter. Candidate an
 configured values are SHA-256 hashed and compared at fixed length without an
 early return across configured keys.
 
-Authentication is bypassed if `PROXY_API_KEY` is absent or `DEV` evaluates to
-true. These modes exist for development and make a public Worker unsafe.
+Authentication is bypassed only if `DEV` is explicitly `true`. If
+`PROXY_API_KEY` is absent, empty, or invalid in other modes, the Worker fails
+closed with HTTP 503.
 
 CORS preflight is answered before authentication. This permits browser clients
 to negotiate CORS but does not grant access to protected request methods.
@@ -38,9 +39,10 @@ serializes each non-empty top-level value and supplies it to `wrangler secret
 bulk`. Arrays and custom endpoint objects therefore arrive as JSON strings and
 are parsed by the environment utilities.
 
-The schema validates shape during editing but does not replace runtime checks.
-Configuration files and dry-run output can contain live credentials and must not
-be committed or exposed in CI logs.
+The schema validates shape during editing and critical custom-endpoint
+constraints are checked again at runtime. Configuration files contain live
+credentials and must not be committed. Deployment and dry-run output list names
+only and redact values.
 
 ## Error and diagnostic disclosure
 
@@ -57,7 +59,7 @@ metadata.
 
 - Per-user authorization, quotas, and tenant isolation
 - Request-body redaction or data-loss prevention
-- Validation of arbitrary custom endpoint origins
+- DNS-level allowlisting of custom endpoint origins
 - A Web Application Firewall or provider-specific content policy
 
 Operators that need these controls should add appropriate Cloudflare and

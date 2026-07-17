@@ -26,9 +26,15 @@ route may be prefixed with `/g/<gateway>` to choose a Gateway for that request,
 and with `/key/<selection>` to select provider credentials. When both are used,
 the key prefix comes first: `/key/1/g/team-gateway/v1/models`.
 
+The legacy Universal Endpoint body must be a non-empty JSON array with at most
+16 steps. Each step needs a supported `provider` and an object-valued `query`.
+Client-provided authentication headers cannot override the configured provider
+credential.
+
 ## Chat completions
 
-The request body must be JSON with a provider-qualified model:
+The request body must be JSON with a provider-qualified model and is limited to
+10 MiB:
 
 ```bash
 curl https://your-worker.example/v1/chat/completions \

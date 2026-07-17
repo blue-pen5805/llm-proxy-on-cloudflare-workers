@@ -7,8 +7,7 @@
    For a named environment, first declare the matching environment in
    `wrangler.jsonc`.
 3. Preview settings with `npm run secrets:deploy -- --dry-run [--env <env>]`.
-   The current dry-run output includes secret values, so use it only in a
-   private terminal and never attach it to CI logs or support reports.
+   Values, prefixes, and lengths are redacted from the output.
 4. Run `npm run tsc`, `npm run lint`, and `npm test`.
 5. Deploy code with `npm run deploy` (or `npm run deploy -- --env <env>` for a
    declared Wrangler environment).
@@ -20,14 +19,13 @@ The code deployment and secret deployment are separate. A successful Worker
 deployment does not prove that the expected secrets exist in the same Wrangler
 environment.
 
-The repository's secret deployment script prints each non-empty setting with up
-to the first 20 characters of its value before invoking Wrangler. Treat normal
-deployment output as sensitive too; do not retain it in public CI logs.
+The repository's secret deployment script prints setting names only. The
+temporary JSON is owner-readable only and is removed after Wrangler finishes.
 
 ## Safe configuration changes
 
 - Keep `config.jsonc`, environment-specific variants, `.dev.vars*`, and
-  `.secrets-temp.json` out of version control.
+  `.secrets-temp*.json` out of version control.
 - Use distinct `PROXY_API_KEY` values per environment.
 - Replace a provider key in the configuration, deploy secrets, verify it, and
   only then revoke the old key at the provider.

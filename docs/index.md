@@ -9,6 +9,7 @@ LLM proxy. Start with the setup guide, then use the task-oriented guides below.
 - [Configuration reference](configuration.md)
 - [HTTP API and routing](api.md)
 - [Operations and troubleshooting](operations.md)
+- [Adversarial security review (日本語)](adversarial-review.md)
 
 ## Contributor guides
 

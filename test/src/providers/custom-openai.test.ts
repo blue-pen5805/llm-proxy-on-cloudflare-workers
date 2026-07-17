@@ -42,4 +42,15 @@ describe("CustomOpenAI Provider (Paths)", () => {
     const [modelsUrl] = await provider.buildModelsRequest();
     expect(modelsUrl).toBe("/custom/models");
   });
+
+  it.each([
+    "http://example.com",
+    "https://user:password@example.com",
+    "https://example.com?token=secret",
+    "not-a-url",
+  ])("rejects an unsafe base URL: %s", (baseUrl) => {
+    expect(() => new CustomOpenAI({ name: "unsafe", baseUrl })).toThrow(
+      /baseUrl/,
+    );
+  });
 });

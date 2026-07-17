@@ -115,6 +115,11 @@ describe("Secrets", () => {
   });
 
   describe("resolveApiKeyIndex", () => {
+    it("returns zero for an empty or single-key credential set", () => {
+      expect(Secrets.resolveApiKeyIndex(99, 0)).toBe(0);
+      expect(Secrets.resolveApiKeyIndex({ start: 99 }, 1)).toBe(0);
+    });
+
     it("should return the index itself for numeric selection", () => {
       expect(Secrets.resolveApiKeyIndex(1, 3)).toBe(1);
       expect(Secrets.resolveApiKeyIndex(4, 3)).toBe(1); // 4 % 3 = 1

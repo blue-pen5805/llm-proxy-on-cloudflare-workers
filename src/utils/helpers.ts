@@ -1,10 +1,13 @@
 import { AUTHORIZATION_QUERY_PARAMETERS } from "./authorization";
+import { BadRequestError, PayloadTooLargeError } from "./error";
 import { RequestLogger } from "./logger";
 import { randomInt } from "node:crypto";
 
 const MASK_THRESHOLD = 10;
 const MASK_PREFIX_LENGTH = 3;
 const MASK_PLACEHOLDER = "***";
+export const MAX_BUFFERED_BODY_BYTES = 10 * 1024 * 1024;
+export const MAX_BUFFERED_RESPONSE_BYTES = 5 * 1024 * 1024;
 const SENSITIVE_QUERY_PARAMETERS = new Set([
   "apikey",
   "api_key",
@@ -94,6 +97,69 @@ export function parseJsonOrReturnText(text: string): unknown {
   } catch {
     return text;
   }
+}
+
+/** Read a request body without buffering more than the configured limit. */
+export async function readRequestText(
+  request: Request,
+  maximumBytes: number = MAX_BUFFERED_BODY_BYTES,
+): Promise<string> {
+  const contentLength = request.headers.get("content-length");
+  if (contentLength !== null) {
+    const declaredBytes = Number(contentLength);
+    if (!Number.isSafeInteger(declaredBytes) || declaredBytes < 0) {
+      throw new BadRequestError("Invalid Content-Length header.");
+    }
+    if (declaredBytes > maximumBytes) {
+      throw new PayloadTooLargeError();
+    }
+  }
+
+  if (!request.body) return "";
+
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let receivedBytes = 0;
+  let text = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      receivedBytes += value.byteLength;
+      if (receivedBytes > maximumBytes) {
+        await reader.cancel("request body limit exceeded");
+        throw new PayloadTooLargeError();
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    return text + decoder.decode();
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+export async function readJsonRequest(request: Request): Promise<unknown> {
+  const text = await readRequestText(request);
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new BadRequestError("Request body must be valid JSON.");
+  }
+}
+
+/** Parse a bounded upstream JSON response used for model discovery. */
+export async function readResponseJson(
+  response: Response,
+  maximumBytes: number = MAX_BUFFERED_RESPONSE_BYTES,
+): Promise<unknown> {
+  const request = new Request("https://bounded-body.invalid", {
+    method: "POST",
+    headers: response.headers,
+    body: response.body,
+  });
+  const text = await readRequestText(request, maximumBytes);
+  return JSON.parse(text) as unknown;
 }
 
 export function getRequestPath(request: Request): string {

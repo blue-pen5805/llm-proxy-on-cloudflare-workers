@@ -9,7 +9,11 @@ import {
   selectApiKeyIndex,
 } from "../utils/api_key_selection";
 import { Environments } from "../utils/environments";
-import { fetchWithLogging, withTimeout } from "../utils/helpers";
+import {
+  fetchWithLogging,
+  readResponseJson,
+  withTimeout,
+} from "../utils/helpers";
 import { RequestLogger } from "../utils/logger";
 
 // Timeout for individual provider model fetch operations (milliseconds)
@@ -83,7 +87,9 @@ async function fetchProviderModels(
   }
 
   const modelsPromise = responsePromise.then(async (upstreamResponse) =>
-    provider.convertModelsToOpenAIFormat(await upstreamResponse.json()),
+    provider.convertModelsToOpenAIFormat(
+      await readResponseJson(upstreamResponse),
+    ),
   );
   return withTimeout(
     modelsPromise,

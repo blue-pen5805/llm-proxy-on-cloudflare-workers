@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { BadRequestError, PayloadTooLargeError } from "~/src/utils/error";
 import {
   parseJsonOrReturnText,
   getRequestPath,
@@ -7,6 +8,9 @@ import {
   maskSensitiveUrl,
   removeAuthorizationQueryParameters,
   fetchWithLogging,
+  readJsonRequest,
+  readRequestText,
+  readResponseJson,
   withTimeout,
 } from "~/src/utils/helpers";
 import { RequestLogger } from "~/src/utils/logger";
@@ -22,6 +26,45 @@ describe("parseJsonOrReturnText", () => {
     const invalidJsonString = "invalid json";
     const result = parseJsonOrReturnText(invalidJsonString);
     expect(result).toBe(invalidJsonString);
+  });
+});
+
+describe("bounded body parsing", () => {
+  it("rejects an oversized declared request body before reading it", async () => {
+    const request = new Request("https://example.com", {
+      method: "POST",
+      body: "{}",
+      headers: { "content-length": "11" },
+    });
+    await expect(readRequestText(request, 10)).rejects.toBeInstanceOf(
+      PayloadTooLargeError,
+    );
+  });
+
+  it("rejects a streamed body that exceeds the limit", async () => {
+    const request = new Request("https://example.com", {
+      method: "POST",
+      body: "hello",
+    });
+    await expect(readRequestText(request, 4)).rejects.toBeInstanceOf(
+      PayloadTooLargeError,
+    );
+  });
+
+  it("rejects malformed JSON as a client error", async () => {
+    const request = new Request("https://example.com", {
+      method: "POST",
+      body: "not-json",
+    });
+    await expect(readJsonRequest(request)).rejects.toBeInstanceOf(
+      BadRequestError,
+    );
+  });
+
+  it("parses bounded upstream JSON", async () => {
+    await expect(
+      readResponseJson(new Response('{"data":[]}')),
+    ).resolves.toEqual({ data: [] });
   });
 });
 

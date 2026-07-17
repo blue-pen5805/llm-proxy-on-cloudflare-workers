@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MiddlewareContext } from "~/src/middleware";
 import { authMiddleware } from "~/src/middlewares/auth";
 import { Config } from "~/src/utils/config";
-import { UnauthorizedError } from "~/src/utils/error";
+import { ServiceUnavailableError, UnauthorizedError } from "~/src/utils/error";
 
 describe("authMiddleware", () => {
   let context: MiddlewareContext;
@@ -56,15 +56,12 @@ describe("authMiddleware", () => {
     expect(next).toHaveBeenCalled();
   });
 
-  it("should allow request if no API keys are configured", async () => {
+  it("should fail closed if no API keys are configured", async () => {
     vi.spyOn(Config, "isDevelopment").mockReturnValue(false);
     vi.spyOn(Config, "apiKeys").mockReturnValue(undefined);
-    const nextResponse = new Response("ok");
-    next.mockResolvedValue(nextResponse);
-
-    const response = await authMiddleware(context, next);
-
-    expect(response).toBe(nextResponse);
-    expect(next).toHaveBeenCalled();
+    await expect(authMiddleware(context, next)).rejects.toThrow(
+      ServiceUnavailableError,
+    );
+    expect(next).not.toHaveBeenCalled();
   });
 });

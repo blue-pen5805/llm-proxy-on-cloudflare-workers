@@ -45,6 +45,9 @@ describe("handleChatCompletionsRequest", () => {
         return str;
       }
     });
+    vi.mocked(helpers.readRequestText).mockImplementation((request) =>
+      request.text(),
+    );
     vi.mocked(helpers.fetchWithLogging).mockResolvedValue(new Response());
     vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(true);
     BUILT_IN_PROVIDER_CONSTRUCTORS.openai = vi.fn(function () {

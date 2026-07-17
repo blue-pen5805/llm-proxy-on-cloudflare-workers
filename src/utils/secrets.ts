@@ -99,6 +99,8 @@ export class Secrets {
     selection: number | { start?: number; end?: number },
     length: number,
   ): number {
+    if (length <= 1) return 0;
+
     if (typeof selection === "number") {
       return selection % length;
     }
