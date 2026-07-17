@@ -40,9 +40,9 @@ flowchart
 | Groq             | ✅               | ✅     | ✅                 | `groq`              | `GROQ_API_KEY`                               |
 | Mistral          | ✅               | ✅     | ✅                 | `mistral`           | `MISTRAL_API_KEY`                            |
 | Perplexity       | ✅               | ✅     | ✅                 | `perplexity`        | `PERPLEXITY_API_KEY`                         |
-| Azure OpenAI     | ❌               | ❌     | ❌                 | `azure-openai`      |                                              |
-| Vertex AI        | ❌               | ❌     | ❌                 | `google-vertex-ai`  |                                              |
-| Amazon Bedrock   | ❌               | ❌     | ❌                 | `aws-bedrock`       |                                              |
+| Azure OpenAI     | ✅               | ✅     | ✅                 | `azure-openai`      | `AZURE_OPENAI_API_KEY`                       |
+| Vertex AI        | ✅               | ❌     | ✅                 | `google-vertex-ai`  | `GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON`      |
+| Amazon Bedrock   | ✅               | ✅     | ✅                 | `aws-bedrock`       | `AWS_BEARER_TOKEN_BEDROCK`                   |
 | OpenRouter       | ✅               | ✅     | ✅                 | `openrouter`        | `OPENROUTER_API_KEY`                         |
 | Workers AI       | ✅               | ✅     | ✅                 | `workers-ai`        | `CLOUDFLARE_ACCOUNT_ID` `CLOUDFLARE_API_KEY` |
 | HuggingFace      | ❌               | ✅     | ✅                 | `huggingface`       | `HUGGINGFACE_API_KEY`                        |

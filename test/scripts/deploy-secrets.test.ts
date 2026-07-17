@@ -201,6 +201,12 @@ describe("deploy-secrets", () => {
       expect(valueToSecret(["a", "b", "c"])).toBe('["a","b","c"]');
     });
 
+    it("should stringify object secrets", () => {
+      expect(
+        valueToSecret({ type: "service_account", region: "us-central1" }),
+      ).toBe('{"type":"service_account","region":"us-central1"}');
+    });
+
     it("should handle null/undefined/empty values", () => {
       expect(valueToSecret(null)).toBe("");
       expect(valueToSecret(undefined)).toBe("");

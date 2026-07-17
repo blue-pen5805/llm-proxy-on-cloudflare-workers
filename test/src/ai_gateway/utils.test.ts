@@ -73,7 +73,7 @@ describe("AI Gateway Utils", () => {
         isCloudflareAIGatewayOpenAICompatibleProvider("azure-openai"),
       ).toBe(false);
       expect(isCloudflareAIGatewayOpenAICompatibleProvider("aws-bedrock")).toBe(
-        false,
+        true,
       );
       expect(isCloudflareAIGatewayOpenAICompatibleProvider("cartesia")).toBe(
         false,
@@ -83,7 +83,7 @@ describe("AI Gateway Utils", () => {
       );
       expect(
         isCloudflareAIGatewayOpenAICompatibleProvider("google-vertex-ai"),
-      ).toBe(false);
+      ).toBe(true);
       expect(isCloudflareAIGatewayOpenAICompatibleProvider("huggingface")).toBe(
         false,
       );

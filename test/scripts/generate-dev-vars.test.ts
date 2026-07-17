@@ -191,6 +191,12 @@ describe("valueToEnvVar", () => {
   it("should stringify objects within arrays", () => {
     expect(valueToEnvVar([{ name: "test" }])).toBe('[{"name":"test"}]');
   });
+
+  it("should stringify object secrets", () => {
+    expect(
+      valueToEnvVar({ type: "service_account", region: "us-central1" }),
+    ).toBe('{"type":"service_account","region":"us-central1"}');
+  });
 });
 
 describe("configToDevVars", () => {

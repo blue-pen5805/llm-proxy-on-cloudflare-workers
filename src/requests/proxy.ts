@@ -28,6 +28,39 @@ export async function proxy(
     throw new NotFoundError();
   }
 
+  if (providerInstance.requiresAiGateway && !aiGateway) {
+    return new Response(
+      JSON.stringify({
+        error: `${providerName} requires Cloudflare AI Gateway.`,
+      }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  }
+  if (providerInstance.requiresAuthenticatedAiGateway && !aiGateway?.apiKey) {
+    return new Response(
+      JSON.stringify({ error: `${providerName} requires CF_AIG_TOKEN.` }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  }
+  const configurationError = providerInstance.configurationError?.();
+  if (configurationError) {
+    return new Response(JSON.stringify({ error: configurationError }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  if (
+    providerInstance.requiresProviderCredentials &&
+    !providerInstance.available()
+  ) {
+    return new Response(
+      JSON.stringify({
+        error: `${providerName} requires ${String(providerInstance.apiKeyName)}.`,
+      }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
   const apiKeyIndex = await selectApiKeyIndex(
     providerInstance,
     contextApiKeyIndex,
@@ -56,7 +89,7 @@ export async function proxy(
     const [requestInfo, requestInit] = aiGateway.buildProviderEndpointRequest({
       provider: aiGatewayProvider,
       method: request.method,
-      path: pathname,
+      path: providerInstance.aiGatewayPath?.(pathname) ?? pathname,
       body: request.body,
       headers: Object.fromEntries(sanitizedHeaders.entries()),
     });

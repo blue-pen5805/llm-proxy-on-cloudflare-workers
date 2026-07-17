@@ -1,12 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
-import { Secrets } from "~/src/utils/secrets";
-
-vi.mock("~/src/utils/secrets", () => ({
-  Secrets: {
-    getAll: vi.fn(),
-  },
-}));
 
 describe("CloudflareAIGateway", () => {
   beforeEach(() => {
@@ -40,7 +33,7 @@ describe("CloudflareAIGateway", () => {
         CloudflareAIGateway.isSupportedProvider("azure-openai", true),
       ).toBe(false);
       expect(CloudflareAIGateway.isSupportedProvider("aws-bedrock", true)).toBe(
-        false,
+        true,
       );
       expect(CloudflareAIGateway.isSupportedProvider("replicate", true)).toBe(
         false,
@@ -423,7 +416,6 @@ describe("CloudflareAIGateway", () => {
         "test-gateway",
         "test-key",
       );
-      vi.mocked(Secrets.getAll).mockReturnValue(["sk-test-1", "sk-test-2"]);
     });
 
     it("should build chat completions request with multiple API keys", () => {
@@ -436,7 +428,7 @@ describe("CloudflareAIGateway", () => {
         provider: "openai",
         body,
         headers: { "Custom-Header": "custom-value" },
-        apiKeyName: "OPENAI_API_KEY" as keyof Env,
+        apiKeys: ["sk-test-1", "sk-test-2"],
       });
 
       expect(requests).toHaveLength(2);
@@ -457,13 +449,9 @@ describe("CloudflareAIGateway", () => {
           messages: [{ role: "user", content: "Hello" }],
         });
       }
-
-      expect(Secrets.getAll).toHaveBeenCalledWith("OPENAI_API_KEY", true);
     });
 
     it("should handle single API key", () => {
-      vi.mocked(Secrets.getAll).mockReturnValue(["sk-test-single"]);
-
       const body = JSON.stringify({
         model: "claude-3-opus-20240229",
         messages: [{ role: "user", content: "Hello" }],
@@ -473,7 +461,7 @@ describe("CloudflareAIGateway", () => {
         provider: "anthropic",
         body,
         headers: {},
-        apiKeyName: "ANTHROPIC_API_KEY" as keyof Env,
+        apiKeys: ["sk-test-single"],
       });
 
       const expectedBody = JSON.parse(init.body as string);
@@ -486,15 +474,52 @@ describe("CloudflareAIGateway", () => {
       });
     });
 
-    it("uses a pre-parsed body without parsing the serialized fallback", () => {
-      vi.mocked(Secrets.getAll).mockReturnValue(["sk-test"]);
+    it("builds one BYOK request when no provider key is configured", () => {
+      const requests = gateway.buildChatCompletionsRequests({
+        provider: "aws-bedrock",
+        body: JSON.stringify({ model: "model-id", messages: [] }),
+        headers: { Authorization: "Bearer proxy-credential" },
+      });
 
+      expect(requests).toHaveLength(1);
+      const [, init] = requests[0];
+      expect(new Headers(init.headers).has("authorization")).toBe(false);
+      expect(new Headers(init.headers).get("cf-aig-authorization")).toBe(
+        "Bearer test-key",
+      );
+      expect(JSON.parse(init.body as string).model).toBe(
+        "aws-bedrock/model-id",
+      );
+    });
+
+    it("builds a Vertex request with a Base64 service-account credential", () => {
+      const requests = gateway.buildChatCompletionsRequests({
+        provider: "google-vertex-ai",
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [],
+        }),
+        headers: {},
+        apiKeys: ["base64-service-account"],
+      });
+
+      expect(requests).toHaveLength(1);
+      const [, init] = requests[0];
+      expect(new Headers(init.headers).get("authorization")).toBe(
+        "Bearer base64-service-account",
+      );
+      expect(JSON.parse(init.body as string).model).toBe(
+        "google-vertex-ai/google/gemini-2.5-flash",
+      );
+    });
+
+    it("uses a pre-parsed body without parsing the serialized fallback", () => {
       const [[, init]] = gateway.buildChatCompletionsRequests({
         provider: "openai",
         body: "not valid JSON",
         parsedBody: { model: "gpt-4o", messages: [] },
         headers: {},
-        apiKeyName: "OPENAI_API_KEY",
+        apiKeys: ["sk-test"],
       });
 
       expect(JSON.parse(init.body as string)).toEqual({

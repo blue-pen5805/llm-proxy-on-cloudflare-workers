@@ -1,4 +1,3 @@
-import { Secrets } from "../utils/secrets";
 import {
   CloudflareAIGatewayHeaders,
   CloudflareAIGatewayOpenAICompatibleProvider,
@@ -182,13 +181,13 @@ export class CloudflareAIGateway {
     body,
     parsedBody,
     headers,
-    apiKeyName,
+    apiKeys = [],
   }: {
     provider: CloudflareAIGatewayOpenAICompatibleProvider;
     body: string;
     parsedBody?: { model: string; [key: string]: unknown };
     headers: CloudflareAIGatewayHeaders | HeadersInit;
-    apiKeyName: keyof Env;
+    apiKeys?: readonly string[];
   }): [RequestInfo, RequestInit][] {
     const requestData =
       parsedBody ??
@@ -197,12 +196,19 @@ export class CloudflareAIGateway {
         [key: string]: unknown;
       });
 
-    const apiKeys = Secrets.getAll(apiKeyName, true);
+    // A missing provider key is valid when AI Gateway BYOK is configured. In
+    // that case Gateway injects its stored credential for the upstream call.
+    const credentials: readonly (string | undefined)[] =
+      apiKeys.length > 0 ? apiKeys : [undefined];
 
-    return apiKeys.map((apiKey) => {
+    return credentials.map((apiKey) => {
       // Overwrite authorization header with the provider's API key
       const newHeaders = new Headers(headers);
-      newHeaders.set("authorization", `Bearer ${apiKey}`);
+      if (apiKey) {
+        newHeaders.set("authorization", `Bearer ${apiKey}`);
+      } else {
+        newHeaders.delete("authorization");
+      }
 
       // Convert Headers to plain object
       const headersObject: Record<string, string> = {};

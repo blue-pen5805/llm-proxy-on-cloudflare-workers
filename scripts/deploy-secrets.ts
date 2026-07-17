@@ -104,18 +104,12 @@ export function valueToSecret(value: unknown): string {
     return "";
   }
 
-  // Check for empty arrays
-  if (Array.isArray(value)) {
-    if (value.length === 0) {
+  // Preserve structured secrets such as service-account JSON.
+  if (typeof value === "object") {
+    if (Object.keys(value).length === 0) {
       return "";
     }
-    // For arrays, stringify the entire array
     return JSON.stringify(value);
-  }
-
-  // Check for empty objects
-  if (typeof value === "object" && Object.keys(value).length === 0) {
-    return "";
   }
 
   // Convert to string and check if it's just whitespace

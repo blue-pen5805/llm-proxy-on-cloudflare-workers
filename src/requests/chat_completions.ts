@@ -62,6 +62,36 @@ export async function chatCompletions(
     );
   }
 
+  if (provider.requiresAiGateway && !aiGateway) {
+    return new Response(
+      JSON.stringify({
+        error: `${providerName} requires Cloudflare AI Gateway.`,
+      }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  }
+  if (provider.requiresAuthenticatedAiGateway && !aiGateway?.apiKey) {
+    return new Response(
+      JSON.stringify({ error: `${providerName} requires CF_AIG_TOKEN.` }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  }
+  const configurationError = provider.configurationError?.();
+  if (configurationError) {
+    return new Response(JSON.stringify({ error: configurationError }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  if (provider.requiresProviderCredentials && !provider.available()) {
+    return new Response(
+      JSON.stringify({
+        error: `${providerName} requires ${String(provider.apiKeyName)}.`,
+      }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
   // Get API key apiKeyIndex
   const apiKeyIndex = await selectApiKeyIndex(
     provider,
@@ -78,7 +108,9 @@ export async function chatCompletions(
     keyIndex: apiKeyIndex,
     keyCount: provider.getApiKeys().length,
     selectionPolicy: apiKeySelectionPolicy(contextApiKeyIndex, "rotate"),
-    viaAiGateway: aiGatewayProvider !== undefined,
+    viaAiGateway:
+      aiGatewayProvider !== undefined ||
+      Boolean(aiGateway && provider.supportsAiGatewayNativeChat),
   });
 
   // Generate chat completions request
@@ -102,11 +134,37 @@ export async function chatCompletions(
       body: requestInit.body as string,
       parsedBody: filteredData as { model: string; [key: string]: unknown },
       headers: requestInit.headers ?? {},
-      apiKeyName: provider.apiKeyName as keyof Env,
+      apiKeys: provider.getAiGatewayApiKeys?.() ?? provider.getApiKeys(),
     });
     return RequestLogger.withFields(keyLogFields, () =>
       fetchCompatibilityFallback(gatewayRequests, request.signal),
     );
+  }
+
+  // Some Gateway providers (notably Azure OpenAI) require account-specific
+  // path segments and are not represented by the Compatibility Endpoint.
+  if (aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)) {
+    const providerRequest = await provider.buildAiGatewayChatCompletionsRequest(
+      {
+        data: filteredData as Record<string, unknown> & { model: string },
+        headers,
+        apiKeyIndex,
+      },
+    );
+    if (providerRequest) {
+      const [path, init] = providerRequest;
+      const [url, gatewayInit] = aiGateway.buildProviderEndpointRequest({
+        provider: providerName,
+        method: init.method,
+        path,
+        body: init.body,
+        headers: init.headers ?? {},
+      });
+      return RequestLogger.withFields(
+        { ...keyLogFields, via_ai_gateway: true },
+        () => fetchCompatibilityFallback([[url, gatewayInit]], request.signal),
+      );
+    }
   }
 
   // Request to the provider endpoint

@@ -45,6 +45,15 @@ The adapters retain only parameters supported by each upstream API. Translation
 is therefore OpenAI-compatible at the endpoint level, not a guarantee that every
 OpenAI field or provider feature has identical semantics.
 
+Cloud-platform model examples are `azure-openai/<deployment-name>`,
+`google-vertex-ai/google/<gemini-model>`, and
+`aws-bedrock/<inference-profile-or-model-id>`. Azure sends the deployment name
+as `model` to the Azure OpenAI v1 API. Bedrock uses its native OpenAI-compatible
+endpoint. Vertex chat is sent only through AI Gateway using the configured
+service-account JSON; direct requests are rejected with HTTP 400. Vertex model
+discovery is not available through the compatibility API and is therefore
+omitted from `/v1/models`.
+
 ## Models
 
 `GET /v1/models` queries every configured provider concurrently and prefixes
@@ -71,6 +80,13 @@ The proxy replaces client authentication headers with the selected upstream
 credential. Provider-specific request and response formats remain the caller's
 responsibility. Routes are the keys registered in `src/providers.ts`; configured
 custom endpoint names are added dynamically.
+
+For cloud-platform pass-through, direct routes use the upstream provider path.
+Bedrock paths beginning with `/v1` are automatically prefixed with
+`bedrock-runtime/<region>` when routed through AI Gateway. Azure's classic
+`/openai/deployments/<deployment>/...` path is similarly converted to Gateway's
+`<resource>/<deployment>/...` form. Vertex pass-through is available only with
+AI Gateway, and its provider-native path already matches the Gateway suffix.
 
 ## Explicit key selection
 

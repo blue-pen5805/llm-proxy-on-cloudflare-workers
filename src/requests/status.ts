@@ -2,6 +2,7 @@ import { CloudflareAIGateway } from "../ai_gateway";
 import { getAllProviders } from "../providers";
 import type { ProviderRegistry } from "../providers";
 import { CustomOpenAI } from "../providers/custom-openai";
+import { GoogleVertexAi } from "../providers/google-vertex-ai";
 import { ProviderBase, ProviderNotSupportedError } from "../providers/provider";
 import { recordApiKeySelection } from "../utils/api_key_selection";
 import { Config } from "../utils/config";
@@ -38,7 +39,7 @@ function classifyConnectivity(response: Response): ConnectivityStatus {
 }
 
 function getProviderKeys(instance: ProviderBase): string[] {
-  if (instance instanceof CustomOpenAI) {
+  if (instance instanceof CustomOpenAI || instance instanceof GoogleVertexAi) {
     return instance.getApiKeys();
   }
   return instance.apiKeyName ? Secrets.getAll(instance.apiKeyName) : [];

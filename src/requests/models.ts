@@ -26,7 +26,7 @@ async function fetchProviderModels(
   selection: MiddlewareContext["apiKeyIndex"],
   aiGateway?: CloudflareAIGateway,
 ): Promise<OpenAIModelsListResponseBody> {
-  if (!provider.available()) {
+  if (!provider.available() && !aiGateway) {
     return EMPTY_MODELS;
   }
 
@@ -52,11 +52,15 @@ async function fetchProviderModels(
   const abortController = new AbortController();
 
   let responsePromise: Promise<Response>;
-  if (aiGateway && aiGatewayProvider) {
+  if (
+    aiGateway &&
+    aiGatewayProvider &&
+    provider.supportsAiGatewayModels !== false
+  ) {
     const [gatewayUrl, gatewayInit] = aiGateway.buildProviderEndpointRequest({
       provider: aiGatewayProvider,
       method: init.method,
-      path,
+      path: provider.aiGatewayPath?.(path) ?? path,
       headers: await provider.headers(apiKeyIndex),
     });
     responsePromise = RequestLogger.withFields(keyLogFields, () =>

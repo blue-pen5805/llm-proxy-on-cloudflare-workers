@@ -222,6 +222,65 @@ describe("chatCompletions", () => {
     expect(body.error).toBe("Invalid provider.");
   });
 
+  it("rejects a Gateway-only provider when no Gateway is active", async () => {
+    const gatewayOnlyProvider = {
+      ...mockProviderClass,
+      requiresAiGateway: true,
+      requiresAuthenticatedAiGateway: true,
+      fetch: vi.fn(),
+    };
+    const request = new Request("https://example.com/v1/chat/completions", {
+      method: "POST",
+      body: JSON.stringify({
+        model: "google-vertex-ai/google/gemini-2.5-flash",
+        messages: [],
+      }),
+    });
+
+    const response = await chatCompletions({
+      request,
+      providers: { get: vi.fn(() => gatewayOnlyProvider) },
+    } as any);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "google-vertex-ai requires Cloudflare AI Gateway.",
+    });
+    expect(gatewayOnlyProvider.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects Vertex when the Gateway is not authenticated", async () => {
+    const gatewayOnlyProvider = {
+      ...mockProviderClass,
+      requiresAiGateway: true,
+      requiresAuthenticatedAiGateway: true,
+      fetch: vi.fn(),
+    };
+    const request = new Request("https://example.com/v1/chat/completions", {
+      method: "POST",
+      body: JSON.stringify({
+        model: "google-vertex-ai/google/gemini-2.5-flash",
+        messages: [],
+      }),
+    });
+    const buildChatCompletionsRequests = vi.fn();
+
+    const response = await chatCompletions(
+      {
+        request,
+        providers: { get: vi.fn(() => gatewayOnlyProvider) },
+      } as any,
+      { apiKey: undefined, buildChatCompletionsRequests } as any,
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "google-vertex-ai requires CF_AIG_TOKEN.",
+    });
+    expect(buildChatCompletionsRequests).not.toHaveBeenCalled();
+    expect(gatewayOnlyProvider.fetch).not.toHaveBeenCalled();
+  });
+
   it("should use AI Gateway when available and provider supported", async () => {
     const requestBody = {
       model: "openai/gpt-4",
@@ -259,12 +318,84 @@ describe("chatCompletions", () => {
       body: JSON.stringify({ ...requestBody, model: "gpt-4" }),
       parsedBody: { ...requestBody, model: "gpt-4" },
       headers: expect.any(Object),
-      apiKeyName: "OPENAI_API_KEY",
+      apiKeys: ["test-key"],
     });
     expect(helpers.fetch2).toHaveBeenCalledWith(
       "https://gateway.ai.cloudflare.com/v1/account/gateway/compat/chat/completions",
       expect.objectContaining({ signal: request.signal }),
     );
+  });
+
+  it("uses a provider-native AI Gateway chat request for Azure OpenAI", async () => {
+    const request = new Request("https://example.com/v1/chat/completions", {
+      method: "POST",
+      body: JSON.stringify({
+        model: "azure-openai/gpt-4o",
+        messages: [{ role: "user", content: "Hello" }],
+      }),
+    });
+    const providerRequest: [string, RequestInit] = [
+      "/resource/gpt-4o/chat/completions?api-version=2024-10-21",
+      {
+        method: "POST",
+        body: JSON.stringify({ messages: [] }),
+        headers: { "api-key": "azure-key" },
+      },
+    ];
+    const azureProvider = {
+      apiKeyName: "AZURE_OPENAI_API_KEY",
+      getApiKeys: vi.fn().mockReturnValue(["azure-key"]),
+      getNextApiKeyIndex: vi.fn().mockResolvedValue(0),
+      filterChatCompletionsRequest: vi.fn(
+        (data: Record<string, unknown>) => data,
+      ),
+      buildChatCompletionsRequest: vi
+        .fn()
+        .mockResolvedValue([
+          "/chat/completions",
+          { method: "POST", body: JSON.stringify({ model: "gpt-4o" }) },
+        ]),
+      buildAiGatewayChatCompletionsRequest: vi
+        .fn()
+        .mockResolvedValue(providerRequest),
+      fetch: vi.fn(),
+    };
+    vi.mocked(CloudflareAIGateway.isSupportedProvider).mockImplementation(
+      (_provider, compatibility) => !compatibility,
+    );
+    const buildProviderEndpointRequest = vi
+      .fn()
+      .mockReturnValue([
+        "https://gateway.example/azure-openai/resource/gpt-4o/chat/completions",
+        { method: "POST" },
+      ]);
+    vi.mocked(helpers.fetch2).mockResolvedValue(new Response("ok"));
+
+    const response = await chatCompletions(
+      {
+        request,
+        providers: { get: vi.fn(() => azureProvider) },
+      } as any,
+      { buildProviderEndpointRequest } as any,
+    );
+
+    expect(
+      azureProvider.buildAiGatewayChatCompletionsRequest,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ model: "gpt-4o" }),
+        apiKeyIndex: 0,
+      }),
+    );
+    expect(buildProviderEndpointRequest).toHaveBeenCalledWith({
+      provider: "azure-openai",
+      method: "POST",
+      path: providerRequest[0],
+      body: providerRequest[1].body,
+      headers: providerRequest[1].headers,
+    });
+    expect(await response.text()).toBe("ok");
+    expect(azureProvider.fetch).not.toHaveBeenCalled();
   });
 
   it("should remove all proxy authorization headers", async () => {

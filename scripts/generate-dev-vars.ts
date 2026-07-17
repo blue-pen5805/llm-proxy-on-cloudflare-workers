@@ -112,8 +112,8 @@ export function valueToEnvVar(value: unknown): string {
     return "";
   }
 
-  if (Array.isArray(value)) {
-    // For arrays, stringify the entire array
+  if (typeof value === "object") {
+    // Structured secrets (including service-account JSON) must remain JSON.
     return JSON.stringify(value);
   }
 

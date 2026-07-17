@@ -19,6 +19,11 @@ export class ProviderBase {
   get modelsPath(): string {
     return "/models";
   }
+  readonly supportsAiGatewayModels: boolean = true;
+  readonly supportsAiGatewayNativeChat: boolean = false;
+  readonly requiresAiGateway: boolean = false;
+  readonly requiresAuthenticatedAiGateway: boolean = false;
+  readonly requiresProviderCredentials: boolean = false;
 
   // --- Core Methods ---
   available(): boolean {
@@ -30,6 +35,17 @@ export class ProviderBase {
       return Secrets.getAll(this.apiKeyName);
     }
     return [];
+  }
+
+  getAiGatewayApiKeys(): string[] {
+    if (this.apiKeyName) {
+      return Secrets.getAll(this.apiKeyName, true);
+    }
+    return [];
+  }
+
+  configurationError(): string | undefined {
+    return undefined;
   }
 
   async getNextApiKeyIndex(): Promise<number> {
@@ -152,6 +168,28 @@ export class ProviderBase {
         headers: await this.headers(apiKeyIndex),
       },
     ];
+  }
+
+  /**
+   * Convert a direct-provider path to the provider-native AI Gateway path.
+   * Most providers use the same suffix; providers whose Gateway URL embeds
+   * region or deployment information can override this hook.
+   */
+  aiGatewayPath(pathname: string): string {
+    return pathname;
+  }
+
+  /**
+   * Build a provider-native Gateway request when the Compatibility Endpoint
+   * cannot represent this provider. Returning undefined leaves chat requests
+   * on the direct provider endpoint.
+   */
+  async buildAiGatewayChatCompletionsRequest(_args: {
+    data: Readonly<Record<string, unknown>> & { model: string };
+    headers: HeadersInit;
+    apiKeyIndex?: number;
+  }): Promise<[string, RequestInit] | undefined> {
+    return undefined;
   }
 
   modelsToOpenAIFormat(data: unknown): OpenAIModelsListResponseBody {

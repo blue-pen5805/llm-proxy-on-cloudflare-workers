@@ -30,6 +30,17 @@ custom endpoints are available by definition. Availability controls model
 aggregation and status metadata; routing still resolves a registered provider
 class even when it has no key.
 
+AI Gateway-managed authentication is a deliberate exception: chat and model
+requests may be sent
+without a locally configured provider key when a Gateway context exists. The
+Gateway then injects its stored credential. Adapters can rewrite provider-native
+Gateway paths, opt model listing out of Gateway, or build a native Gateway chat
+request when the Compatibility Endpoint does not support the provider shape.
+Providers may also declare Gateway as mandatory; direct chat and pass-through
+then fail before any upstream request is attempted. Vertex AI uses this mode;
+its service-account JSON is converted to the Gateway credential header instead
+of being treated as a short-lived OAuth access token.
+
 Commented imports or provider directories that are not registered are not
 supported routes. Documentation should distinguish three independent
 capabilities:

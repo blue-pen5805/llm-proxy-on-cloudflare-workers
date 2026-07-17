@@ -111,6 +111,28 @@ describe("proxy", () => {
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
+  it("rejects direct pass-through for a Gateway-only provider", async () => {
+    const gatewayOnlyProvider = {
+      ...mockProviderClass,
+      requiresAiGateway: true,
+      requiresAuthenticatedAiGateway: true,
+    };
+    const response = await proxy(
+      {
+        request: new Request("https://example.com/google-vertex-ai/path"),
+        providers: { get: vi.fn(() => gatewayOnlyProvider) },
+      } as any,
+      "google-vertex-ai",
+      "/path",
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "google-vertex-ai requires Cloudflare AI Gateway.",
+    });
+    expect(gatewayOnlyProvider.fetch).not.toHaveBeenCalled();
+  });
+
   it("resolves an explicit key selection from middleware context", async () => {
     const providerName = "selectedProvider";
     Providers[providerName] = vi.fn(function () {

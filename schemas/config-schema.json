@@ -289,6 +289,39 @@
         }
       ]
     },
+    "AZURE_OPENAI_API_KEY": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } },
+        { "type": "null" }
+      ]
+    },
+    "AZURE_OPENAI_RESOURCE_NAME": {
+      "oneOf": [{ "type": "string" }, { "type": "null" }]
+    },
+    "AZURE_OPENAI_API_VERSION": {
+      "oneOf": [{ "type": "string" }, { "type": "null" }]
+    },
+    "GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON": {
+      "oneOf": [
+        { "$ref": "#/definitions/googleVertexServiceAccount" },
+        {
+          "type": "array",
+          "items": { "$ref": "#/definitions/googleVertexServiceAccount" }
+        },
+        { "type": "null" }
+      ]
+    },
+    "AWS_BEARER_TOKEN_BEDROCK": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } },
+        { "type": "null" }
+      ]
+    },
+    "AWS_BEDROCK_REGION": {
+      "oneOf": [{ "type": "string" }, { "type": "null" }]
+    },
 
     "DEV": {
       "oneOf": [
@@ -362,5 +395,25 @@
     }
   },
   "required": ["$schema", "PROXY_API_KEY"],
+  "definitions": {
+    "googleVertexServiceAccount": {
+      "type": "object",
+      "required": [
+        "type",
+        "project_id",
+        "private_key",
+        "client_email",
+        "region"
+      ],
+      "properties": {
+        "type": { "const": "service_account" },
+        "project_id": { "type": "string", "minLength": 1 },
+        "private_key": { "type": "string", "minLength": 1 },
+        "client_email": { "type": "string", "minLength": 1 },
+        "region": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": true
+    }
+  },
   "additionalProperties": false
 }

@@ -38,6 +38,8 @@ export const OPENAI_COMPATIBLE_PROVIDERS = [
   "deepseek",
   "cerebras",
   "openrouter",
+  "aws-bedrock",
+  "google-vertex-ai",
 ] as const;
 
 export type CloudflareAIGatewayOpenAICompatibleProvider =

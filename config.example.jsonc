@@ -41,6 +41,18 @@
   "CLOUDFLARE_API_KEY": null,
   // Ollama Cloud: https://ollama.com/
   "OLLAMA_API_KEY": null,
+  // Azure OpenAI: https://azure.microsoft.com/products/ai-services/openai-service
+  "AZURE_OPENAI_API_KEY": null,
+  "AZURE_OPENAI_RESOURCE_NAME": null,
+  "AZURE_OPENAI_API_VERSION": "2024-10-21",
+  // Google Vertex AI through Cloudflare AI Gateway.
+  // Paste the downloaded service-account JSON and add "region": "us-central1".
+  "GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON": null,
+  // Amazon Bedrock: https://aws.amazon.com/bedrock/
+  // Use an Amazon Bedrock short-term or long-term bearer token.
+  // AI Gateway BYOK may omit it.
+  "AWS_BEARER_TOKEN_BEDROCK": null,
+  "AWS_BEDROCK_REGION": "us-east-1",
 
   // --- Custom OpenAI Compatible Endpoints ---
   "CUSTOM_OPENAI_ENDPOINTS": [

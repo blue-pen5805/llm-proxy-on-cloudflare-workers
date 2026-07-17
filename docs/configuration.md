@@ -57,6 +57,32 @@ enable random selection or global round-robin selection.
 | `replicate`        | `REPLICATE_API_KEY`                               |
 | `workers-ai`       | `CLOUDFLARE_API_KEY` plus `CLOUDFLARE_ACCOUNT_ID` |
 | `ollama`           | `OLLAMA_API_KEY`                                  |
+| `azure-openai`     | `AZURE_OPENAI_API_KEY`                            |
+| `google-vertex-ai` | `GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON`           |
+| `aws-bedrock`      | `AWS_BEARER_TOKEN_BEDROCK`                        |
+
+The cloud-platform adapters also require endpoint metadata:
+
+| Provider         | Additional settings                                                                    |
+| ---------------- | -------------------------------------------------------------------------------------- |
+| Azure OpenAI     | `AZURE_OPENAI_RESOURCE_NAME`; optional `AZURE_OPENAI_API_VERSION` for Gateway requests |
+| Google Vertex AI | A `region` field inside `GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON`                        |
+| Amazon Bedrock   | `AWS_BEDROCK_REGION`                                                                   |
+
+For direct Bedrock calls, `AWS_BEARER_TOKEN_BEDROCK` is an Amazon Bedrock bearer
+token, not an AWS access-key ID. It can contain a short-term or long-term
+Amazon Bedrock API key. Azure accepts its resource API key. Both key settings
+can be arrays.
+
+Google Vertex AI is supported only through Cloudflare AI Gateway. Set
+`GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON` to the downloaded service-account JSON
+object and add a `region` field such as `"us-central1"`. The Worker validates
+and Base64-encodes the JSON for AI Gateway; it does not generate or store a
+short-lived Google access token. `CF_AIG_TOKEN` is also required so the Worker
+can authenticate to the Gateway. An array of service-account objects enables
+credential fallback. When AI Gateway BYOK is configured for Bedrock,
+`AWS_BEARER_TOKEN_BEDROCK` may be omitted because Gateway injects the stored
+provider credential.
 
 An unconfigured static provider is reported as unavailable and omitted from
 model aggregation. Its route name still resolves, so an attempted request will
