@@ -42,8 +42,9 @@ remain usable when no selection prefix is supplied.
 
 ## Operational implications
 
-- Rotation distributes requests; it does not retry a failed request with the
-  next key unless AI Gateway independently provides retry/fallback behavior.
+- Rotation distributes direct and provider-endpoint requests. OpenAI-compatible
+  Gateway chat requests additionally try the shuffled configured keys in order
+  until a request succeeds.
 - Reordering the configured array changes which credential a stored numeric
   counter refers to.
 - Reducing the array length is safe because an out-of-range stored counter is

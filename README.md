@@ -14,7 +14,7 @@ This is a serverless proxy built on [Cloudflare Workers](https://www.cloudflare.
 - **OpenAI-Compatible Endpoints:** Use standard OpenAI endpoints for seamless integration with existing tools and libraries.
   - `/v1/chat/completions`
   - `/v1/models`
-- **Cloudflare AI Gateway Integration:** Leverage [Cloudflare AI Gateway](https://www.cloudflare.com/developer-platform/products/ai-gateway/), including its [Universal Endpoint](https://developers.cloudflare.com/ai-gateway/providers/universal/), for logging, analytics, and other features.
+- **Cloudflare AI Gateway Integration:** Leverage [Cloudflare AI Gateway](https://www.cloudflare.com/developer-platform/products/ai-gateway/) through its [OpenAI-compatible endpoint](https://developers.cloudflare.com/ai-gateway/usage/chat-completion/) and [Universal Endpoint](https://developers.cloudflare.com/ai-gateway/usage/universal/) for logging, analytics, and other features.
 - **Global Round-Robin Key Rotation:** Consistency across all isolates using Cloudflare Durable Objects.
 - **API Key Selection via Path Parameter:** Explicitly select or rotate within a range of API keys using `/key/{index|range}/` in the URL path.
 

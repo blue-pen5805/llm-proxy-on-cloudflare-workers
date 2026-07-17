@@ -64,8 +64,8 @@ export class CloudflareAIGateway {
 
   /**
    * Build a request for the Universal Endpoint of AI Gateway.
-   * Supports fallbacks, request retries, and advanced configurations
-   * https://developers.cloudflare.com/ai-gateway/universal/
+   * Supports fallbacks, request retries, and advanced configurations.
+   * https://developers.cloudflare.com/ai-gateway/usage/universal/
    */
   buildUniversalEndpointRequest({
     data,
@@ -154,11 +154,30 @@ export class CloudflareAIGateway {
     return [`${this.baseUrl()}${normalizedPath}`, requestInit];
   }
 
+  /** Build an OpenAI-compatible request through AI Gateway. */
+  buildCompatibilityEndpointRequest({
+    endpoint = "chat/completions",
+    query,
+    headers = {},
+  }: {
+    endpoint?: string;
+    query: Record<string, unknown>;
+    headers?: CloudflareAIGatewayHeaders | HeadersInit;
+  }): [RequestInfo, RequestInit] {
+    const normalizedEndpoint = endpoint.replace(/^\/+/, "");
+    return this.buildCompatRequest({
+      path: `/compat/${normalizedEndpoint}`,
+      method: "POST",
+      headers,
+      body: JSON.stringify(query),
+    });
+  }
+
   /**
    * Build a request for OpenAI-compatible chat completions.
    * https://developers.cloudflare.com/ai-gateway/chat-completion/
    */
-  buildChatCompletionsRequest({
+  buildChatCompletionsRequests({
     provider,
     body,
     parsedBody,
@@ -170,7 +189,7 @@ export class CloudflareAIGateway {
     parsedBody?: { model: string; [key: string]: unknown };
     headers: CloudflareAIGatewayHeaders | HeadersInit;
     apiKeyName: keyof Env;
-  }): [RequestInfo, RequestInit] {
+  }): [RequestInfo, RequestInit][] {
     const requestData =
       parsedBody ??
       (JSON.parse(body) as {
@@ -180,37 +199,24 @@ export class CloudflareAIGateway {
 
     const apiKeys = Secrets.getAll(apiKeyName, true);
 
-    const data: CloudflareAIGatewayUniversalEndpointData = apiKeys.map(
-      (apiKey) => {
-        // Overwrite authorization header with the provider's API key
-        const newHeaders = new Headers(headers);
-        newHeaders.set("authorization", `Bearer ${apiKey}`);
+    return apiKeys.map((apiKey) => {
+      // Overwrite authorization header with the provider's API key
+      const newHeaders = new Headers(headers);
+      newHeaders.set("authorization", `Bearer ${apiKey}`);
 
-        // Convert Headers to plain object
-        const headersObject: Record<string, string> = {};
-        newHeaders.forEach((value, key) => {
-          headersObject[key] = value;
-        });
+      // Convert Headers to plain object
+      const headersObject: Record<string, string> = {};
+      newHeaders.forEach((value, key) => {
+        headersObject[key] = value;
+      });
 
-        return {
-          provider: "compat",
-          endpoint: "chat/completions",
-          headers: headersObject,
-          query: {
-            ...requestData,
-            model: `${provider}/${requestData.model}`,
-          },
-        };
-      },
-    );
-
-    return [
-      this.baseUrl(),
-      {
-        method: "POST",
-        headers: this.buildHeaders(headers),
-        body: JSON.stringify(data),
-      },
-    ];
+      return this.buildCompatibilityEndpointRequest({
+        headers: headersObject,
+        query: {
+          ...requestData,
+          model: `${provider}/${requestData.model}`,
+        },
+      });
+    });
   }
 }

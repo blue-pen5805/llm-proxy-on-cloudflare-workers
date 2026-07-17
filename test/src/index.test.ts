@@ -17,8 +17,9 @@ vi.mock("~/src/ai_gateway", () => {
       baseUrl: vi.fn(() => "https://gateway.ai.cloudflare.com"),
       buildHeaders: vi.fn(() => ({})),
       buildUniversalEndpointRequest: vi.fn(() => ["", {}]),
+      buildCompatibilityEndpointRequest: vi.fn(() => ["", {}]),
       buildProviderEndpointRequest: vi.fn(() => ["", {}]),
-      buildChatCompletionsRequest: vi.fn(() => ["", {}]),
+      buildChatCompletionsRequests: vi.fn(() => [["", {}]]),
       buildCompatRequest: vi.fn(() => ["", {}]),
     };
   });

@@ -33,7 +33,7 @@ describe("chatCompletions", () => {
   };
 
   const mockAIGateway = {
-    buildChatCompletionsRequest: vi.fn(),
+    buildChatCompletionsRequests: vi.fn(),
   };
 
   beforeEach(() => {
@@ -241,9 +241,11 @@ describe("chatCompletions", () => {
         body: JSON.stringify({ ...requestBody, model: "gpt-4" }),
       },
     ]);
-    mockAIGateway.buildChatCompletionsRequest.mockReturnValue([
-      "https://gateway.ai.cloudflare.com/v1/account/gateway",
-      { method: "POST", body: JSON.stringify([]) },
+    mockAIGateway.buildChatCompletionsRequests.mockReturnValue([
+      [
+        "https://gateway.ai.cloudflare.com/v1/account/gateway/compat/chat/completions",
+        { method: "POST", body: JSON.stringify(requestBody) },
+      ],
     ]);
 
     await chatCompletions({ request } as any, mockAIGateway as any);
@@ -252,7 +254,7 @@ describe("chatCompletions", () => {
       "openai",
       true,
     );
-    expect(mockAIGateway.buildChatCompletionsRequest).toHaveBeenCalledWith({
+    expect(mockAIGateway.buildChatCompletionsRequests).toHaveBeenCalledWith({
       provider: "openai",
       body: JSON.stringify({ ...requestBody, model: "gpt-4" }),
       parsedBody: { ...requestBody, model: "gpt-4" },
@@ -260,7 +262,7 @@ describe("chatCompletions", () => {
       apiKeyName: "OPENAI_API_KEY",
     });
     expect(helpers.fetch2).toHaveBeenCalledWith(
-      "https://gateway.ai.cloudflare.com/v1/account/gateway",
+      "https://gateway.ai.cloudflare.com/v1/account/gateway/compat/chat/completions",
       expect.objectContaining({ signal: request.signal }),
     );
   });

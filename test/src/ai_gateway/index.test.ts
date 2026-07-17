@@ -375,6 +375,45 @@ describe("CloudflareAIGateway", () => {
     });
   });
 
+  describe("buildCompatibilityEndpointRequest", () => {
+    it("builds a JSON request to the compatibility endpoint", () => {
+      const gateway = new CloudflareAIGateway(
+        "test-account",
+        "test-gateway",
+        "test-key",
+      );
+      const query = { model: "openai/gpt-4", messages: [] };
+
+      const [url, init] = gateway.buildCompatibilityEndpointRequest({
+        query,
+        headers: { authorization: "Bearer sk-test" },
+      });
+
+      expect(url).toBe(
+        "https://gateway.ai.cloudflare.com/v1/test-account/test-gateway/compat/chat/completions",
+      );
+      expect(new Headers(init.headers).get("authorization")).toBe(
+        "Bearer sk-test",
+      );
+      expect(new Headers(init.headers).get("cf-aig-authorization")).toBe(
+        "Bearer test-key",
+      );
+      expect(init.body).toBe(JSON.stringify(query));
+    });
+
+    it("normalizes a custom endpoint", () => {
+      const gateway = new CloudflareAIGateway("account", "gateway");
+      const [url] = gateway.buildCompatibilityEndpointRequest({
+        endpoint: "/embeddings",
+        query: { model: "openai/text-embedding-3-small", input: "hello" },
+      });
+
+      expect(url).toBe(
+        "https://gateway.ai.cloudflare.com/v1/account/gateway/compat/embeddings",
+      );
+    });
+  });
+
   describe("buildChatCompletionsRequest", () => {
     let gateway: CloudflareAIGateway;
 
@@ -393,50 +432,31 @@ describe("CloudflareAIGateway", () => {
         messages: [{ role: "user", content: "Hello" }],
       });
 
-      const [url, init] = gateway.buildChatCompletionsRequest({
+      const requests = gateway.buildChatCompletionsRequests({
         provider: "openai",
         body,
         headers: { "Custom-Header": "custom-value" },
         apiKeyName: "OPENAI_API_KEY" as keyof Env,
       });
 
-      expect(url).toBe(
-        "https://gateway.ai.cloudflare.com/v1/test-account/test-gateway",
-      );
-      expect(init).toEqual({
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "cf-aig-authorization": "Bearer test-key",
-          "Custom-Header": "custom-value",
-        },
-        body: JSON.stringify([
-          {
-            provider: "compat",
-            endpoint: "chat/completions",
-            headers: {
-              authorization: "Bearer sk-test-1",
-              "custom-header": "custom-value",
-            },
-            query: {
-              model: "openai/gpt-4",
-              messages: [{ role: "user", content: "Hello" }],
-            },
-          },
-          {
-            provider: "compat",
-            endpoint: "chat/completions",
-            headers: {
-              authorization: "Bearer sk-test-2",
-              "custom-header": "custom-value",
-            },
-            query: {
-              model: "openai/gpt-4",
-              messages: [{ role: "user", content: "Hello" }],
-            },
-          },
-        ]),
-      });
+      expect(requests).toHaveLength(2);
+      for (const [index, [url, init]] of requests.entries()) {
+        expect(url).toBe(
+          "https://gateway.ai.cloudflare.com/v1/test-account/test-gateway/compat/chat/completions",
+        );
+        const requestHeaders = new Headers(init.headers);
+        expect(requestHeaders.get("authorization")).toBe(
+          `Bearer sk-test-${index + 1}`,
+        );
+        expect(requestHeaders.get("cf-aig-authorization")).toBe(
+          "Bearer test-key",
+        );
+        expect(requestHeaders.get("custom-header")).toBe("custom-value");
+        expect(JSON.parse(init.body as string)).toEqual({
+          model: "openai/gpt-4",
+          messages: [{ role: "user", content: "Hello" }],
+        });
+      }
 
       expect(Secrets.getAll).toHaveBeenCalledWith("OPENAI_API_KEY", true);
     });
@@ -449,7 +469,7 @@ describe("CloudflareAIGateway", () => {
         messages: [{ role: "user", content: "Hello" }],
       });
 
-      const [_url, init] = gateway.buildChatCompletionsRequest({
+      const [[, init]] = gateway.buildChatCompletionsRequests({
         provider: "anthropic",
         body,
         headers: {},
@@ -457,24 +477,19 @@ describe("CloudflareAIGateway", () => {
       });
 
       const expectedBody = JSON.parse(init.body as string);
-      expect(expectedBody).toHaveLength(1);
-      expect(expectedBody[0]).toEqual({
-        provider: "compat",
-        endpoint: "chat/completions",
-        headers: {
-          authorization: "Bearer sk-test-single",
-        },
-        query: {
-          model: "anthropic/claude-3-opus-20240229",
-          messages: [{ role: "user", content: "Hello" }],
-        },
+      expect(new Headers(init.headers).get("authorization")).toBe(
+        "Bearer sk-test-single",
+      );
+      expect(expectedBody).toEqual({
+        model: "anthropic/claude-3-opus-20240229",
+        messages: [{ role: "user", content: "Hello" }],
       });
     });
 
     it("uses a pre-parsed body without parsing the serialized fallback", () => {
       vi.mocked(Secrets.getAll).mockReturnValue(["sk-test"]);
 
-      const [, init] = gateway.buildChatCompletionsRequest({
+      const [[, init]] = gateway.buildChatCompletionsRequests({
         provider: "openai",
         body: "not valid JSON",
         parsedBody: { model: "gpt-4o", messages: [] },
@@ -482,7 +497,7 @@ describe("CloudflareAIGateway", () => {
         apiKeyName: "OPENAI_API_KEY",
       });
 
-      expect(JSON.parse(init.body as string)[0].query).toEqual({
+      expect(JSON.parse(init.body as string)).toEqual({
         model: "openai/gpt-4o",
         messages: [],
       });

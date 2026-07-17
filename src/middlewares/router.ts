@@ -71,7 +71,7 @@ export async function handleRouting(
   }
 
   // Universal Endpoint
-  // https://developers.cloudflare.com/ai-gateway/providers/universal/
+  // https://developers.cloudflare.com/ai-gateway/usage/universal/
   // Example: /g/{AI_GATEWAY_NAME}/
   if (aiGateway && request.method === "POST" && pathname === "/") {
     return await universalEndpoint(request, aiGateway);

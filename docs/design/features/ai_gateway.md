@@ -6,7 +6,8 @@ The Worker can route supported provider traffic through Cloudflare AI Gateway
 without changing its public authentication contract. Gateway performs its own
 logging, analytics, caching, retry, or fallback behavior according to the
 operator's Gateway configuration; the Worker is responsible for constructing
-Gateway URLs, headers, and Universal Endpoint payloads.
+Gateway URLs, headers, Compatibility Endpoint requests, and explicit Universal
+Endpoint payloads.
 
 ## Gateway selection
 
@@ -35,19 +36,20 @@ the locally maintained supported set are called directly instead.
 
 ### OpenAI-compatible chat
 
-For providers in the OpenAI-compatible Gateway subset, the chat handler builds
-a Universal Endpoint request containing `compat` steps. It shuffles configured
-keys and creates one step per key, allowing Gateway to attempt the generated
-sequence. The model is rewritten to `<provider>/<model>` for Gateway's
-compatibility endpoint.
+For providers in the OpenAI-compatible Gateway subset, the chat handler shuffles
+configured keys and creates one Compatibility Endpoint request per key. It sends
+those requests in order until one succeeds, preserving credential fallback
+without calling the deprecated Universal Endpoint. The model is rewritten to
+`<provider>/<model>` for Gateway's compatibility endpoint.
 
 ### Universal Endpoint and compatibility pass-through
 
 `POST /g/<gateway>/` accepts the repository's Universal Endpoint request shape,
 validates provider names against the supported set, injects selected provider
-headers, and forwards the mapped steps to Gateway. `/g/<gateway>/compat/...`
-forwards directly to the Gateway compatibility path after stripping proxy
-credentials.
+headers, and forwards the mapped steps to Gateway's Universal Endpoint. This
+explicit route remains available even though normal OpenAI-compatible chat uses
+the Compatibility Endpoint. `/g/<gateway>/compat/...` forwards directly to the
+Gateway compatibility path after stripping proxy credentials.
 
 ## Maintenance risk
 
@@ -59,5 +61,6 @@ not automatically Gateway-supported.
 ## References
 
 - [Cloudflare AI Gateway](https://developers.cloudflare.com/ai-gateway/)
-- [AI Gateway Universal Endpoint](https://developers.cloudflare.com/ai-gateway/providers/universal/)
+- [AI Gateway OpenAI-compatible endpoint](https://developers.cloudflare.com/ai-gateway/usage/chat-completion/)
+- [AI Gateway Universal Endpoint](https://developers.cloudflare.com/ai-gateway/usage/universal/)
 - [AI Gateway provider endpoints](https://developers.cloudflare.com/ai-gateway/providers/)

@@ -9,8 +9,9 @@ import {
 import { stripProxyAuthorizationHeaders } from "../utils/authorization";
 import { Config } from "../utils/config";
 import { Environments } from "../utils/environments";
-import { fetch2, safeJsonParse } from "../utils/helpers";
+import { safeJsonParse } from "../utils/helpers";
 import { RequestLogger } from "../utils/logger";
+import { fetchCompatibilityFallback } from "./compatibility_fallback";
 
 export async function chatCompletions(
   context: MiddlewareContext,
@@ -96,19 +97,15 @@ export async function chatCompletions(
 
   // If AI Gateway is enabled and the provider supports it, use AI Gateway
   if (aiGateway && aiGatewayProvider) {
-    const [gatewayRequestInfo, gatewayRequestInit] =
-      await aiGateway.buildChatCompletionsRequest({
-        provider: aiGatewayProvider,
-        body: requestInit.body as string,
-        parsedBody: filteredData as { model: string; [key: string]: unknown },
-        headers: requestInit.headers ?? {},
-        apiKeyName: provider.apiKeyName as keyof Env,
-      });
+    const gatewayRequests = await aiGateway.buildChatCompletionsRequests({
+      provider: aiGatewayProvider,
+      body: requestInit.body as string,
+      parsedBody: filteredData as { model: string; [key: string]: unknown },
+      headers: requestInit.headers ?? {},
+      apiKeyName: provider.apiKeyName as keyof Env,
+    });
     return RequestLogger.withFields(keyLogFields, () =>
-      fetch2(gatewayRequestInfo, {
-        ...gatewayRequestInit,
-        signal: request.signal,
-      }),
+      fetchCompatibilityFallback(gatewayRequests, request.signal),
     );
   }
 

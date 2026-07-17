@@ -14,7 +14,7 @@
 - **OpenAI互換エンドポイント:** 既存のツールやライブラリとのシームレスな統合のための標準OpenAIエンドポイント。
   - `/v1/chat/completions`
   - `/v1/models`
-- **Cloudflare AI Gateway統合:** ログ、分析、その他の機能のために [Cloudflare AI Gateway](https://www.cloudflare.com/developer-platform/products/ai-gateway/) の [Universal Endpoint](https://developers.cloudflare.com/ai-gateway/providers/universal/) を含む統合を活用。
+- **Cloudflare AI Gateway統合:** ログ、分析、その他の機能のために [Cloudflare AI Gateway](https://www.cloudflare.com/developer-platform/products/ai-gateway/) の [OpenAI互換エンドポイント](https://developers.cloudflare.com/ai-gateway/usage/chat-completion/) と [Universal Endpoint](https://developers.cloudflare.com/ai-gateway/usage/universal/) を活用。
 - **グローバル・ラウンドロビン・キーローテーション:** Cloudflare Durable Objects を使用して、すべてのアイソレート間で一貫したローテーションを実現。
 - **パスパラメータによるAPIキー指定:** URLパスに `/key/{index|range}/` を含めることで、使用するAPIキーのインデックスや範囲を明示的に指定・制限可能。
 

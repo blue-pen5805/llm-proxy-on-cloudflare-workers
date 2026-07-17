@@ -26,9 +26,10 @@ accepts for its own authentication. The provider adapter then adds the selected
 upstream key. The `key` query parameter is removed during middleware processing;
 other query parameters are retained.
 
-AI Gateway tokens are added as `cf-aig-authorization`. Provider credentials may
-also be embedded into Universal Endpoint steps because Gateway needs them to
-call providers.
+AI Gateway tokens are added as `cf-aig-authorization`. Provider credentials are
+sent in the upstream authorization headers of Compatibility Endpoint requests,
+or embedded into Universal Endpoint steps, because Gateway needs them to call
+providers.
 
 ## Configuration lifecycle
 
