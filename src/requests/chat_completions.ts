@@ -1,4 +1,8 @@
 import { CloudflareAIGateway } from "../ai_gateway";
+import {
+  gatewayProviderPath,
+  resolveGatewayProvider,
+} from "../ai_gateway/custom_provider";
 import { MiddlewareContext } from "../middleware";
 import {
   determineApiKeySelectionPolicy,
@@ -85,14 +89,19 @@ export async function handleChatCompletionsRequest(
     "rotate",
   );
   const aiGatewayProvider =
-    aiGateway && CloudflareAIGateway.isSupportedProvider(providerName, true)
+    aiGateway &&
+    !providerInstance.requiresCustomAiGatewayProvider &&
+    CloudflareAIGateway.isSupportedProvider(providerName, true)
       ? providerName
       : undefined;
   // Retain request-level Gateway controls only when this provider will use
   // AI Gateway. Direct provider requests must not receive Cloudflare metadata.
   const sanitizedHeaders = stripProxyAuthorizationHeaders(request.headers, {
     preserveAiGatewayHeaders: Boolean(
-      aiGateway && CloudflareAIGateway.isSupportedProvider(providerName),
+      aiGateway &&
+      (aiGateway.alwaysUse ||
+        (!providerInstance.requiresCustomAiGatewayProvider &&
+          CloudflareAIGateway.isSupportedProvider(providerName))),
     ),
   });
   const configuredApiKeys = providerInstance.getApiKeys();
@@ -111,7 +120,10 @@ export async function handleChatCompletionsRequest(
       selectionPolicy,
       viaAiGateway:
         aiGatewayProvider !== undefined ||
-        Boolean(aiGateway && providerInstance.supportsAiGatewayNativeChat),
+        Boolean(
+          aiGateway &&
+          (aiGateway.alwaysUse || providerInstance.supportsAiGatewayNativeChat),
+        ),
     });
 
   // Generate chat completions request
@@ -165,7 +177,11 @@ export async function handleChatCompletionsRequest(
 
   // Some Gateway providers (notably Azure OpenAI) require account-specific
   // path segments and are not represented by the Compatibility Endpoint.
-  if (aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)) {
+  if (
+    aiGateway &&
+    !providerInstance.requiresCustomAiGatewayProvider &&
+    CloudflareAIGateway.isSupportedProvider(providerName)
+  ) {
     const providerRequest =
       await providerInstance.buildAiGatewayChatCompletionsRequest({
         data: supportedRequestBody as Record<string, unknown> & {
@@ -188,6 +204,37 @@ export async function handleChatCompletionsRequest(
         () => fetchCompatibilityFallback([[url, gatewayInit]], request.signal),
       );
     }
+  }
+
+  // In strict Gateway mode, a provider-specific endpoint is the final route
+  // for native providers without Compatibility support and for Custom
+  // Providers registered by the deployment helper. Direct fallback is never
+  // allowed in this mode.
+  const strictGatewayProvider = aiGateway?.alwaysUse
+    ? resolveGatewayProvider(
+        providerName,
+        aiGateway,
+        !providerInstance.requiresCustomAiGatewayProvider &&
+          CloudflareAIGateway.isSupportedProvider(providerName),
+      )
+    : undefined;
+  if (aiGateway && strictGatewayProvider) {
+    const [url, gatewayInit] = aiGateway.buildProviderEndpointRequest({
+      provider: strictGatewayProvider,
+      method: requestInit.method,
+      path: gatewayProviderPath(
+        providerName,
+        providerInstance,
+        providerInstance.chatCompletionPath,
+        strictGatewayProvider,
+      ),
+      body: requestInit.body,
+      headers: requestInit.headers ?? {},
+    });
+    return RequestLogger.withFields(
+      { ...keyLogFields, via_ai_gateway: true },
+      () => fetchCompatibilityFallback([[url, gatewayInit]], request.signal),
+    );
   }
 
   // Request to the provider endpoint

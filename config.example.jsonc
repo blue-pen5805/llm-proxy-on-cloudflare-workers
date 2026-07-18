@@ -8,8 +8,12 @@
   // --- AI Gateway ---
   "CLOUDFLARE_ACCOUNT_ID": null,
   "AI_GATEWAY_NAME": null,
+  // Route every upstream provider request through AI Gateway. Uses the
+  // "default" Gateway when AI_GATEWAY_NAME is null.
+  "ALWAYS_USE_AI_GATEWAY": false,
   "CF_AIG_TOKEN": null,
-  // Cloudflare API token with AI Gateway permission for /ai/* REST API routes.
+  // Cloudflare API token with AI Gateway permission for /ai/* REST API routes
+  // and AI Gateway Write permission for Custom Provider synchronization.
   "CLOUDFLARE_API_TOKEN": null,
 
   // --- API keys for providers ---

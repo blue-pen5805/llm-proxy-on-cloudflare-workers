@@ -53,6 +53,7 @@ describe("status", () => {
       name: "gw-123",
       token: "tok-123",
       restApiToken: "rest-tok-123",
+      alwaysUse: false,
     });
     vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(true);
 
@@ -105,6 +106,7 @@ describe("status", () => {
         name: "gw-123",
         token: "***",
         restApiToken: "***",
+        alwaysUse: false,
       },
       GLOBAL_ROUND_ROBIN: true,
     });
@@ -341,6 +343,35 @@ describe("status", () => {
     expect(mockProviderClass.fetch).toHaveBeenCalledOnce();
     expect(gateway.buildProviderEndpointRequest).not.toHaveBeenCalled();
     expect(fetchWithLogging).not.toHaveBeenCalled();
+  });
+
+  it("uses a Custom Provider for unsupported connectivity in strict mode", async () => {
+    vi.mocked(Secrets.getAll).mockReturnValue(["key"]);
+    mockProviderClass.supportsAiGatewayModels = false;
+    vi.spyOn(CloudflareAIGateway, "isSupportedProvider").mockReturnValue(false);
+    vi.mocked(fetchWithLogging).mockResolvedValue(
+      new Response(null, { status: 200 }),
+    );
+    const gateway = {
+      alwaysUse: true,
+      buildProviderEndpointRequest: vi
+        .fn()
+        .mockReturnValue([
+          "https://gateway.example/custom-llm-proxy-openai/models",
+          { method: "GET" },
+        ]),
+    } as any;
+
+    const body = await (await handleStatusRequest(gateway)).json();
+
+    expect(body.providers.openai.keys[0].status).toBe("valid");
+    expect(gateway.buildProviderEndpointRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "custom-llm-proxy-openai",
+        path: "/models",
+      }),
+    );
+    expect(mockProviderClass.fetch).not.toHaveBeenCalled();
   });
 
   it("reports unknown when neither Gateway nor direct model discovery is supported", async () => {

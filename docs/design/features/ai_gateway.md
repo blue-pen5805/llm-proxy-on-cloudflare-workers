@@ -16,6 +16,12 @@ requests, and explicit Universal Endpoint payloads.
 requests. A leading `/g/<gateway>/` path selects a different Gateway for one
 request and is removed before normal routing.
 
+`ALWAYS_USE_AI_GATEWAY=true` enables strict Gateway routing. It requires an
+account ID, selects `AI_GATEWAY_NAME` when present, and otherwise selects the
+Gateway named `default`. The explicit `/g/<gateway>/` prefix continues to
+override that selection for one request. Strict mode fails closed rather than
+falling back to a direct provider request.
+
 If `CF_AIG_TOKEN` exists, requests add
 `cf-aig-authorization: Bearer <token>`. The token is never returned verbatim by
 the status handler.
@@ -62,7 +68,31 @@ https://gateway.ai.cloudflare.com/v1/<account>/<gateway>/<provider>/<path>
 ```
 
 Provider-specific authentication headers are included. Providers absent from
-the locally maintained supported set are called directly instead.
+the locally maintained supported set are called directly unless strict Gateway
+routing is enabled.
+
+In strict mode, provider operations with a native AI Gateway route continue to
+use that route. An operation without a native route uses an account-level
+Custom Provider whose display name is `LLM Proxy / <name>`. Simple provider
+names produce a stored slug of `llm-proxy-<name>` and therefore a Gateway URL
+provider segment of `custom-llm-proxy-<name>`. Names that require slug
+normalization receive a deterministic hash suffix so distinct configured names
+do not silently collapse to the same slug.
+
+The Custom Provider stores the adapter's Base URL. The Worker retains the
+adapter's fixed path prefix in the Gateway request path, so Cloudflare combines
+the two into the same upstream URL that direct routing would have selected.
+This provider-specific endpoint preserves native request bodies and supports
+non-standard paths; it does not force the Compatibility Endpoint contract on
+an incompatible operation.
+
+Custom Providers are synchronized by `npm run secrets:deploy` before Worker
+secrets are applied. The helper lists account providers and creates missing
+managed definitions or updates their Base URL, display name, and enabled state.
+It does not store provider credentials in Custom Provider metadata, delete stale
+definitions, or overwrite an existing slug owned by a different display name.
+Synchronization uses `CLOUDFLARE_API_TOKEN` with AI Gateway Write permission
+and sends no management API requests during `--dry-run`.
 
 When no local provider key exists, a single request without an upstream
 `Authorization` header is built so AI Gateway BYOK can inject its stored
@@ -115,8 +145,9 @@ The supported-provider arrays in `src/ai_gateway/const.ts` are code, not dynamic
 Gateway discovery. They must normally be checked against current Cloudflare
 documentation when providers are added or Gateway behavior changes. A tested
 operational exception such as OpenRouter must be documented and covered by
-integration tests. Custom endpoint names are not automatically
-Gateway-supported.
+integration tests. Strict routing marks configured custom endpoints explicitly
+so a name that happens to match a Cloudflare-native provider cannot escape its
+managed Custom Provider route.
 
 ## References
 
@@ -125,3 +156,5 @@ Gateway-supported.
 - [AI Gateway OpenAI-compatible endpoint](https://developers.cloudflare.com/ai-gateway/usage/chat-completion/)
 - [AI Gateway Universal Endpoint](https://developers.cloudflare.com/ai-gateway/usage/universal/)
 - [AI Gateway provider endpoints](https://developers.cloudflare.com/ai-gateway/providers/)
+- [AI Gateway Custom Providers](https://developers.cloudflare.com/ai-gateway/configuration/custom-providers/)
+- [AI Gateway Custom Provider API](https://developers.cloudflare.com/api/resources/ai_gateway/subresources/custom_providers/)

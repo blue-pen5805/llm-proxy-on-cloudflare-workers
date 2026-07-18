@@ -12,5 +12,8 @@ update is explicitly approved.
 
 ### 2026-07-18
 
+- Added strict `ALWAYS_USE_AI_GATEWAY` routing with `default` Gateway fallback
+  and deployment-time Custom Provider synchronization for provider operations
+  that lack native AI Gateway routes.
 - Fixed provider request header merging so case variants such as `Content-Type`
   and `content-type` produce one upstream field.

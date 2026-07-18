@@ -41,6 +41,7 @@ export const CustomOpenAI = defineProvider<[CustomOpenAIEndpointConfig]>(
     assertSafeEndpointConfig(config);
     return {
       properties: { name: config.name },
+      requiresCustomAiGatewayProvider: true,
       baseUrl: config.baseUrl,
       chatCompletionPath: config.chatCompletionPath ?? "/chat/completions",
       modelsPath: config.modelsPath ?? "/models",

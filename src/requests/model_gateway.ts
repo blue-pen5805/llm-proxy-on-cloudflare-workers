@@ -1,16 +1,19 @@
 import { CloudflareAIGateway } from "../ai_gateway";
-import type { CloudflareAIGatewayProvider } from "../ai_gateway/const";
+import { resolveGatewayProvider } from "../ai_gateway/custom_provider";
 import type { ProviderBase } from "../providers/provider";
 
 /** Resolve whether model discovery for a provider may use AI Gateway. */
 export function resolveAiGatewayModelsProvider(
   providerName: string,
-  provider: Pick<ProviderBase, "supportsAiGatewayModels">,
+  provider: Pick<
+    ProviderBase,
+    "supportsAiGatewayModels" | "requiresCustomAiGatewayProvider"
+  >,
   aiGateway?: CloudflareAIGateway,
-): CloudflareAIGatewayProvider | undefined {
-  return aiGateway &&
+): string | undefined {
+  const nativeSupported =
+    !provider.requiresCustomAiGatewayProvider &&
     provider.supportsAiGatewayModels !== false &&
-    CloudflareAIGateway.isSupportedProvider(providerName)
-    ? providerName
-    : undefined;
+    CloudflareAIGateway.isSupportedProvider(providerName);
+  return resolveGatewayProvider(providerName, aiGateway, nativeSupported);
 }

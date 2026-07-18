@@ -22,6 +22,12 @@ When `LLM_PROXY_GATEWAY_NAME` is set, all applicable paths use the corresponding
 This exercises the AI Gateway provider endpoint for the Direct request and the
 proxy's Compatibility Endpoint selection for supported providers.
 
+When the Worker configuration sets `ALWAYS_USE_AI_GATEWAY=true`, the checks
+retain their route labels for comparison, but neither route contacts a provider
+directly. Unsupported provider operations use the synchronized AI Gateway
+Custom Provider. Run `npm run secrets:deploy` before the live test so those
+account-level definitions match the local configuration.
+
 All routes use `/key/0` by default. Besides making the credential choice
 repeatable, explicit key selection disables the proxy's compatibility fallback
 to additional credentials, keeping each check to one upstream attempt. Set

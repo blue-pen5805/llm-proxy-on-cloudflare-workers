@@ -239,6 +239,42 @@ describe("proxy", () => {
     expect(await response.text()).toBe("gateway");
   });
 
+  it("routes unsupported providers through a Custom Provider in strict mode", async () => {
+    const provider = {
+      ...mockProviderClass,
+      pathnamePrefix: vi.fn(() => "/v1"),
+      requiresCustomAiGatewayProvider: false,
+    };
+    vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(false);
+    const buildProviderEndpointRequest = vi
+      .fn()
+      .mockReturnValue([
+        "https://gateway.example/custom-llm-proxy-ollama/v1/models",
+        { method: "GET" },
+      ]);
+    const gateway = {
+      alwaysUse: true,
+      buildProviderEndpointRequest,
+    } as any;
+    vi.mocked(fetchWithLogging).mockResolvedValue(new Response("gateway"));
+    const request = new Request("https://example.com/ollama/models");
+
+    await handleProviderProxyRequest(
+      { request, providers: { get: vi.fn(() => provider) } } as any,
+      "ollama",
+      "/models",
+      gateway,
+    );
+
+    expect(buildProviderEndpointRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "custom-llm-proxy-ollama",
+        path: "/v1/models",
+      }),
+    );
+    expect(provider.fetch).not.toHaveBeenCalled();
+  });
+
   it("does not forward proxy credentials to a provider", async () => {
     const providerName = "testProvider";
     BUILT_IN_PROVIDER_CONSTRUCTORS[providerName] = vi.fn(function () {

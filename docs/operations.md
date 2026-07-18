@@ -107,6 +107,26 @@ also requires `AI_GATEWAY_NAME`. Confirm that the provider is in the supported
 AI Gateway set and that the path follows the patterns in [HTTP API and
 routing](api.md).
 
+With `ALWAYS_USE_AI_GATEWAY=true`, an absent `AI_GATEWAY_NAME` intentionally
+selects `default`. If a `custom-llm-proxy-*` route returns 404, rerun
+`npm run secrets:deploy` and confirm that `CLOUDFLARE_API_TOKEN` has AI Gateway
+Write permission. The command fails before applying secrets when a generated
+slug is already owned by an unrelated account-level Custom Provider; resolve
+that collision explicitly rather than renaming or deleting providers blindly.
+
+### Custom Provider synchronization fails
+
+- `ALWAYS_USE_AI_GATEWAY=true` requires both `CLOUDFLARE_ACCOUNT_ID` and a
+  `CLOUDFLARE_API_TOKEN` with AI Gateway Write permission.
+- Use `npm run secrets:deploy -- --dry-run` to validate configuration without
+  contacting Cloudflare. The dry run cannot verify account permissions or
+  existing provider ownership.
+- A real deployment creates or updates required definitions but deliberately
+  does not delete stale `LLM Proxy / ...` providers. Review and remove stale
+  account resources separately after confirming they are unused.
+- Do not publish the configuration, API response body, Custom Provider Base
+  URLs, or tokens when investigating a failure.
+
 ### An `/ai/...` request returns 400, 401, or 403
 
 - HTTP 400 from the proxy means `CLOUDFLARE_ACCOUNT_ID` or

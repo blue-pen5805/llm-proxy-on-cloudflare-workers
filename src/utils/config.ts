@@ -120,12 +120,21 @@ export class Config {
     name: string | undefined;
     token: string | undefined;
     restApiToken: string | undefined;
+    alwaysUse: boolean;
   } {
+    const accountId = Environments.get("CLOUDFLARE_ACCOUNT_ID", false);
+    const name = Environments.get("AI_GATEWAY_NAME", false);
+    const token = Environments.get("CF_AIG_TOKEN", false);
+    const restApiToken = Environments.get("CLOUDFLARE_API_TOKEN", false);
+    const alwaysUse = Environments.get("ALWAYS_USE_AI_GATEWAY", false);
     return {
-      accountId: Environments.get("CLOUDFLARE_ACCOUNT_ID", false),
-      name: Environments.get("AI_GATEWAY_NAME", false),
-      token: Environments.get("CF_AIG_TOKEN", false),
-      restApiToken: Environments.get("CLOUDFLARE_API_TOKEN", false),
+      accountId,
+      name,
+      token,
+      restApiToken,
+      alwaysUse:
+        typeof alwaysUse === "string" &&
+        alwaysUse.trim().toLowerCase() === "true",
     };
   }
 

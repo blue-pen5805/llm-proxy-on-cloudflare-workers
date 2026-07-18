@@ -65,6 +65,21 @@ describe("with-secrets", () => {
       });
     });
 
+    it("accepts type-generation null placeholders", () => {
+      expect(
+        parseWithSecretsArguments([
+          "--include-null-placeholders",
+          "--",
+          "wrangler",
+          "types",
+        ]),
+      ).toEqual({
+        env: undefined,
+        includeNullPlaceholders: true,
+        command: ["wrangler", "types"],
+      });
+    });
+
     it("rejects malformed invocations", () => {
       expect(() => parseWithSecretsArguments(["--env"])).toThrow(
         "--env requires a value",
@@ -157,7 +172,12 @@ describe("with-secrets", () => {
 
     await runCommandWithSecretsCli();
 
-    expect(mocks.generateDevVars).toHaveBeenCalledWith(expectedRootDir, "dev");
+    expect(mocks.generateDevVars).toHaveBeenCalledWith(
+      expectedRootDir,
+      "dev",
+      expect.any(Object),
+      undefined,
+    );
     expect(mocks.spawn).toHaveBeenCalledWith("tool", ["arg"], {
       stdio: "inherit",
       shell: process.platform === "win32",

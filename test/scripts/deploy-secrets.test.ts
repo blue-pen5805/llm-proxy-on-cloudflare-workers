@@ -543,16 +543,16 @@ describe("deploy-secrets", () => {
       vi.restoreAllMocks();
     });
 
-    it("prints help", () => {
+    it("prints help", async () => {
       process.argv = ["node", "deploy-secrets.ts", "--help"];
       const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-      runDeploySecretsCli();
+      await runDeploySecretsCli();
 
       expect(log).toHaveBeenCalledWith(expect.stringContaining("Usage:"));
     });
 
-    it("reports invalid arguments", () => {
+    it("reports invalid arguments", async () => {
       process.argv = ["node", "deploy-secrets.ts", "--bad"];
       const error = vi
         .spyOn(console, "error")
@@ -561,17 +561,17 @@ describe("deploy-secrets", () => {
         throw new Error("exited");
       }) as never);
 
-      expect(() => runDeploySecretsCli()).toThrow("exited");
+      await expect(runDeploySecretsCli()).rejects.toThrow("exited");
       expect(error).toHaveBeenCalledWith("❌ Error: Unknown option: --bad");
     });
 
-    it("prints a successful dry run", () => {
+    it("prints a successful dry run", async () => {
       process.argv = ["node", "deploy-secrets.ts", "--dry-run"];
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockReturnValue('{"KEY":"value"}');
       const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-      runDeploySecretsCli();
+      await runDeploySecretsCli();
 
       expect(log).toHaveBeenCalledWith(
         expect.stringContaining("Deploying secrets from config.jsonc"),
@@ -579,18 +579,18 @@ describe("deploy-secrets", () => {
       expect(log).not.toHaveBeenCalledWith("🎉 Secret deployment completed!");
     });
 
-    it("prints completion after a real deployment", () => {
+    it("prints completion after a real deployment", async () => {
       process.argv = ["node", "deploy-secrets.ts"];
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockReturnValue('{"KEY":"value"}');
       const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-      runDeploySecretsCli();
+      await runDeploySecretsCli();
 
       expect(log).toHaveBeenCalledWith("🎉 Secret deployment completed!");
     });
 
-    it("describes an environment-specific dry run", () => {
+    it("describes an environment-specific dry run", async () => {
       process.argv = [
         "node",
         "deploy-secrets.ts",
@@ -602,14 +602,14 @@ describe("deploy-secrets", () => {
       vi.mocked(fs.readFileSync).mockReturnValue('{"KEY":"value"}');
       const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-      runDeploySecretsCli();
+      await runDeploySecretsCli();
 
       expect(log).toHaveBeenCalledWith(
         "🔐 Deploying secrets from config.prod.jsonc to prod environment (dry run)...",
       );
     });
 
-    it("exits when deployment fails", () => {
+    it("exits when deployment fails", async () => {
       process.argv = ["node", "deploy-secrets.ts"];
       vi.mocked(fs.existsSync).mockReturnValue(false);
       vi.spyOn(console, "log").mockImplementation(() => undefined);
@@ -617,7 +617,7 @@ describe("deploy-secrets", () => {
         .spyOn(process, "exit")
         .mockImplementation((() => undefined) as never);
 
-      runDeploySecretsCli();
+      await runDeploySecretsCli();
 
       expect(exit).toHaveBeenCalledWith(1);
     });

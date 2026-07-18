@@ -15,6 +15,7 @@ const repositoryRoot = path.resolve(__dirname, "..");
 
 interface WithSecretsArguments {
   env?: string;
+  includeNullPlaceholders?: boolean;
   command: string[];
 }
 
@@ -24,6 +25,7 @@ export function parseWithSecretsArguments(
   let environmentName: string | undefined;
   const childCommand: string[] = [];
   let hasReachedCommand = false;
+  let includeNullPlaceholders = false;
 
   for (
     let argumentIndex = 0;
@@ -42,13 +44,15 @@ export function parseWithSecretsArguments(
       }
       environmentName = commandLineArguments[argumentIndex + 1];
       argumentIndex++;
+    } else if (currentArgument === "--include-null-placeholders") {
+      includeNullPlaceholders = true;
     } else if (currentArgument === "--") {
       hasReachedCommand = true;
     } else {
       // If we encounter something that doesn't look like our flag, treat it as start of command if we haven't seen '--'
       // But typically, we expect structure: [our-flags] -- [command]
       // To be safe and flexible, if we see something unknown and haven't seen '--', we could error or assume it's part of command?
-      // The requirement was `ts-node scripts/with-secrets.ts --env develop -- wrangler dev ...`
+      // The requirement was `tsx scripts/with-secrets.ts --env develop -- wrangler dev ...`
       throw new Error(
         `Unknown argument: ${currentArgument}. Use '--' to separate the command.`,
       );
@@ -59,7 +63,11 @@ export function parseWithSecretsArguments(
     throw new Error("No command specified.");
   }
 
-  return { env: environmentName, command: childCommand };
+  return {
+    env: environmentName,
+    ...(includeNullPlaceholders ? { includeNullPlaceholders: true } : {}),
+    command: childCommand,
+  };
 }
 
 export function removeGeneratedDevVarsFile(devVarsPath: string): void {
@@ -91,7 +99,12 @@ export async function runCommandWithSecretsCli() {
   console.log(
     `🔄 Generating secrets for env: ${parsedArguments.env || "default"}...`,
   );
-  const generationResult = generateDevVars(repositoryRoot, parsedArguments.env);
+  const generationResult = generateDevVars(
+    repositoryRoot,
+    parsedArguments.env,
+    fs,
+    parsedArguments.includeNullPlaceholders,
+  );
 
   if (!generationResult.success) {
     generationResult.messages.forEach((message) => console.error(message));

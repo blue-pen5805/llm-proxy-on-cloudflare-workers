@@ -1,4 +1,4 @@
-#!/usr/bin/env ts-node
+#!/usr/bin/env tsx
 import { getErrorMessage } from "./utils.ts";
 import { chmodSync, readFileSync, writeFileSync, existsSync } from "fs";
 import { createInterface, Interface } from "readline";
@@ -14,6 +14,7 @@ const IGNORED_FIELDS = [
   "$schema",
   "CLOUDFLARE_ACCOUNT_ID",
   "AI_GATEWAY_NAME",
+  "ALWAYS_USE_AI_GATEWAY",
   "CF_AIG_TOKEN",
   "CLOUDFLARE_API_TOKEN",
   "CUSTOM_OPENAI_ENDPOINTS",

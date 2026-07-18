@@ -1,4 +1,8 @@
 import { CloudflareAIGateway } from "../ai_gateway";
+import {
+  gatewayProviderPath,
+  resolveGatewayProvider,
+} from "../ai_gateway/custom_provider";
 import { MiddlewareContext } from "../middleware";
 import {
   determineApiKeySelectionPolicy,
@@ -42,10 +46,12 @@ export async function handleProviderProxyRequest(
     contextApiKeyIndex,
     "rotate",
   );
-  const aiGatewayProvider =
-    aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)
-      ? providerName
-      : undefined;
+  const aiGatewayProvider = resolveGatewayProvider(
+    providerName,
+    aiGateway,
+    !providerInstance.requiresCustomAiGatewayProvider &&
+      CloudflareAIGateway.isSupportedProvider(providerName),
+  );
   const keyLogFields = recordApiKeySelection({
     provider: providerName,
     operation: "proxy",
@@ -70,7 +76,12 @@ export async function handleProviderProxyRequest(
     const [requestInfo, requestInit] = aiGateway.buildProviderEndpointRequest({
       provider: aiGatewayProvider,
       method: request.method,
-      path: providerInstance.aiGatewayPath?.(pathname) ?? pathname,
+      path: gatewayProviderPath(
+        providerName,
+        providerInstance,
+        pathname,
+        aiGatewayProvider,
+      ),
       body: request.body,
       headers: Object.fromEntries(sanitizedHeaders.entries()),
     });

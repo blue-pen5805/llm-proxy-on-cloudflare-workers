@@ -2,7 +2,7 @@ import { CloudflareAIGateway } from "../ai_gateway";
 import { isSafeCloudflareAIGatewayId } from "../ai_gateway/utils";
 import { Middleware } from "../middleware";
 import { Config } from "../utils/config";
-import { BadRequestError } from "../utils/error";
+import { BadRequestError, ConfigurationError } from "../utils/error";
 
 export const aiGatewayMiddleware: Middleware = async (context, next) => {
   const {
@@ -10,7 +10,12 @@ export const aiGatewayMiddleware: Middleware = async (context, next) => {
     name: defaultGatewayId,
     token,
     restApiToken,
+    alwaysUse,
   } = Config.aiGateway();
+
+  if (alwaysUse && !accountId) {
+    throw new ConfigurationError("ALWAYS_USE_AI_GATEWAY");
+  }
 
   if (context.pathname.startsWith("/g/") && accountId) {
     const pathSegments = context.pathname.split("/");
@@ -30,16 +35,18 @@ export const aiGatewayMiddleware: Middleware = async (context, next) => {
       aiGatewayName,
       token,
       restApiToken,
+      alwaysUse,
     );
   } else if (
     accountId &&
-    (defaultGatewayId || /^\/ai(?:$|\/|\?)/.test(context.pathname))
+    (alwaysUse || defaultGatewayId || /^\/ai(?:$|\/|\?)/.test(context.pathname))
   ) {
     context.aiGateway = new CloudflareAIGateway(
       accountId,
       defaultGatewayId ?? "default",
       token,
       restApiToken,
+      alwaysUse,
     );
   }
 

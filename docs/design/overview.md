@@ -28,8 +28,9 @@ flowchart LR
   Router --> Health[Health and status]
   OpenAI --> Adapter[Provider adapter]
   Pass --> Adapter
-  Gateway --> AIG[Cloudflare AI Gateway]
-  Adapter --> Upstream[LLM provider]
+  Adapter --> Policy{Gateway policy}
+  Policy --> AIG[Cloudflare AI Gateway]
+  Policy --> Upstream[LLM provider]
   AIG --> Upstream
 ```
 

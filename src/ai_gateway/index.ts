@@ -38,6 +38,7 @@ export class CloudflareAIGateway {
     public gatewayId: string,
     public apiKey: string | undefined = undefined,
     public restApiToken: string | undefined = undefined,
+    public alwaysUse: boolean = false,
   ) {
     if (
       !isSafeCloudflareAccountId(this.accountId) ||
@@ -107,7 +108,7 @@ export class CloudflareAIGateway {
     body = null,
     headers = {},
   }: {
-    provider: CloudflareAIGatewayProvider;
+    provider: string;
     method?: string;
     path: string;
     body?: BodyInit | null;

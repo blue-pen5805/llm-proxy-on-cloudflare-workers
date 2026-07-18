@@ -119,12 +119,13 @@ models; consult [HTTP API and routing](api.md) for endpoint behavior.
 
 ## AI Gateway
 
-| Setting                 | Type           | Meaning                                                                    |
-| ----------------------- | -------------- | -------------------------------------------------------------------------- |
-| `CLOUDFLARE_ACCOUNT_ID` | string or null | Cloudflare account used to construct Gateway URLs and Workers AI URLs.     |
-| `AI_GATEWAY_NAME`       | string or null | Default Gateway for supported provider and REST API requests.              |
-| `CF_AIG_TOKEN`          | string or null | Optional Gateway token sent as `cf-aig-authorization` on provider routes.  |
-| `CLOUDFLARE_API_TOKEN`  | string or null | Cloudflare API token with AI Gateway permission for the `/ai` REST routes. |
+| Setting                 | Type           | Meaning                                                                                   |
+| ----------------------- | -------------- | ----------------------------------------------------------------------------------------- |
+| `CLOUDFLARE_ACCOUNT_ID` | string or null | Cloudflare account used to construct Gateway URLs and Workers AI URLs.                    |
+| `AI_GATEWAY_NAME`       | string or null | Default Gateway for supported provider and REST API requests.                             |
+| `ALWAYS_USE_AI_GATEWAY` | boolean        | Routes every upstream provider request through AI Gateway; defaults to `false`.           |
+| `CF_AIG_TOKEN`          | string or null | Optional Gateway token sent as `cf-aig-authorization` on provider routes.                 |
+| `CLOUDFLARE_API_TOKEN`  | string or null | Token for `/ai` REST routes and Custom Provider sync; strict mode needs AI Gateway Write. |
 
 When the account ID and default Gateway name are both set, supported traffic is
 routed through that Gateway. A request under `/g/<gateway>/...` overrides the
@@ -136,6 +137,23 @@ select the `default` Gateway; `/g/<gateway>/ai/...` overrides either choice.
 `CLOUDFLARE_API_TOKEN` becomes the upstream `Authorization` credential and is
 distinct from `CF_AIG_TOKEN`, which authenticates provider, compatibility, and
 Universal Endpoint requests.
+
+With `ALWAYS_USE_AI_GATEWAY=true`, `CLOUDFLARE_ACCOUNT_ID` and
+`CLOUDFLARE_API_TOKEN` are required. `AI_GATEWAY_NAME` is optional: the Worker
+uses the Gateway named `default` when it is absent. A `/g/<gateway>/` prefix
+still overrides the selected Gateway for one request. Native provider routes
+are used where Cloudflare supports the operation. Other operations use managed
+AI Gateway Custom Providers and never fall back to a direct origin.
+
+Apply strict-mode configuration with `npm run secrets:deploy`. Before applying
+Worker secrets, the command reconciles the necessary account-level Custom
+Providers. Their display names are `LLM Proxy / <name>`. For a simple lowercase
+provider name, Cloudflare stores `llm-proxy-<name>` and the request URL uses
+`custom-llm-proxy-<name>`; normalized names include a deterministic hash
+suffix. The command updates managed Base URLs but neither deletes stale
+providers nor overwrites an unrelated provider that already owns the slug.
+`--dry-run` validates prerequisites and reports only the number of definitions;
+it does not contact Cloudflare or expose Base URLs and credentials.
 
 ## Routing and key selection
 

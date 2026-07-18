@@ -1,4 +1,5 @@
 import { CloudflareAIGateway } from "../ai_gateway";
+import { gatewayProviderPath } from "../ai_gateway/custom_provider";
 import { getAllProviderInstances } from "../providers";
 import type { ProviderRegistry } from "../providers";
 import { ProviderBase, ProviderNotSupportedError } from "../providers/provider";
@@ -67,7 +68,12 @@ async function checkProviderConnectivity(
         {
           provider: aiGatewayProvider,
           method: "GET",
-          path: providerInstance.modelsPath,
+          path: gatewayProviderPath(
+            providerName,
+            providerInstance,
+            providerInstance.modelsPath,
+            aiGatewayProvider,
+          ),
           headers: await providerInstance.headers(apiKeyIndex),
         },
       );

@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import * as process from "node:process";
 
-const requestEnvironment = new AsyncLocalStorage<Env>();
+const requestEnvironment = new AsyncLocalStorage<Env | Partial<Env>>();
 
 /**
  * Utility class for accessing and manipulating environment variables
@@ -24,6 +24,25 @@ export class Environments {
   }
 
   /**
+   * Install operator configuration for Node-based deployment tooling. Config
+   * values are serialized exactly as Worker secret bindings would be.
+   */
+  static runWithConfig<T>(
+    config: Record<string, unknown>,
+    callback: () => T,
+  ): T {
+    const serializedConfig = Object.fromEntries(
+      Object.entries(config)
+        .filter(([key, value]) => key !== "$schema" && value != null)
+        .map(([key, value]) => [
+          key,
+          typeof value === "object" ? JSON.stringify(value) : String(value),
+        ]),
+    ) as Partial<Env>;
+    return requestEnvironment.run(serializedConfig, callback);
+  }
+
+  /**
    * Sets the current environment object.
    *
    * @param {Env} env - The environment object from Cloudflare Workers
@@ -37,7 +56,7 @@ export class Environments {
    *
    * @returns {Env | undefined} The current environment object
    */
-  static getEnv(): Env | undefined {
+  static getEnv(): Env | Partial<Env> | undefined {
     return requestEnvironment.getStore() ?? this.currentEnv;
   }
 
@@ -49,7 +68,8 @@ export class Environments {
   static all(): Env {
     // Node's ProcessEnv cannot describe generated Workers bindings, but this
     // fallback is only used by local tooling before a Worker Env is installed.
-    return (this.getEnv() ?? process.env) as unknown as Env;
+    const environment = this.getEnv();
+    return environment ? (environment as Env) : (process.env as unknown as Env);
   }
 
   /**

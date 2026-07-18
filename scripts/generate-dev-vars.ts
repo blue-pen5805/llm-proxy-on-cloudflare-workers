@@ -29,6 +29,7 @@ export interface GenerationOptions {
   repositoryRoot: string;
   env?: string;
   fsOps?: FileSystemOperations;
+  includeNullPlaceholders?: boolean;
 }
 
 /**
@@ -151,6 +152,7 @@ export function quoteEnvironmentValueForDotenv(value: string): string {
 export function convertConfigToDevVars(
   config: Record<string, unknown>,
   environmentName?: string,
+  includeNullPlaceholders: boolean = false,
 ): string {
   const outputLines: string[] = [];
 
@@ -165,7 +167,8 @@ export function convertConfigToDevVars(
 
   // Skip $schema field
   for (const [key, value] of Object.entries(config)) {
-    if (key === "$schema" || value === null || value === undefined) continue;
+    if (key === "$schema" || value === undefined) continue;
+    if (value === null && !includeNullPlaceholders) continue;
 
     const environmentValue = serializeEnvironmentValue(value);
     outputLines.push(
@@ -184,6 +187,7 @@ export function generateSingleDevVarsFile(
   devVarsPath: string,
   environmentName: string | undefined,
   fileSystem: FileSystemOperations,
+  includeNullPlaceholders: boolean = false,
 ): { success: boolean; message: string } {
   const configFileName = path.basename(configPath);
   const devVarsFileName = path.basename(devVarsPath);
@@ -202,6 +206,7 @@ export function generateSingleDevVarsFile(
     const generatedDevVars = convertConfigToDevVars(
       parsedConfig,
       environmentName,
+      includeNullPlaceholders,
     );
 
     fileSystem.writeFileSync(devVarsPath, generatedDevVars, { mode: 0o600 });
@@ -227,6 +232,7 @@ export function generateDevVars(
   repositoryRoot: string,
   environmentName?: string,
   fileSystem: FileSystemOperations = fs,
+  includeNullPlaceholders: boolean = false,
 ): GenerationResult {
   // Validate environment name if provided
   if (environmentName && !validateEnvironmentName(environmentName)) {
@@ -246,6 +252,7 @@ export function generateDevVars(
     devVarsPath,
     environmentName,
     fileSystem,
+    includeNullPlaceholders,
   );
 
   return {

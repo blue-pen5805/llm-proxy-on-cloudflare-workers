@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { syncAiGatewayCustomProviders } from "./sync-ai-gateway-custom-providers.ts";
 import {
   getErrorMessage,
   parseCliArgumentsOrExit,
@@ -296,7 +297,7 @@ export function deploySecrets(
 /**
  * Main function to deploy secrets
  */
-export function runDeploySecretsCli(): void {
+export async function runDeploySecretsCli(): Promise<void> {
   const deployArguments = parseCliArgumentsOrExit(() =>
     parseDeploySecretsArguments(),
   );
@@ -313,6 +314,29 @@ export function runDeploySecretsCli(): void {
     `🔐 Deploying secrets${environmentName ? ` from config.${environmentName}.jsonc to ${environmentName} environment` : " from config.jsonc to default environment"}${isDryRun ? " (dry run)" : ""}...`,
   );
 
+  const configPath = getConfigPath(repositoryRoot, environmentName);
+  if (fs.existsSync(configPath)) {
+    try {
+      const config = parseJsonc(fs.readFileSync(configPath, "utf8"));
+      const syncResult = await syncAiGatewayCustomProviders(config, isDryRun);
+      if (syncResult.enabled) {
+        console.log(
+          syncResult.dryRun
+            ? `☁️  AI Gateway Custom Providers: ${syncResult.desired} definitions would be reconciled.`
+            : `☁️  AI Gateway Custom Providers: ${syncResult.created} created, ${syncResult.updated} updated, ${syncResult.unchanged} unchanged.`,
+        );
+      }
+    } catch (error) {
+      reportCliResult({
+        success: false,
+        messages: [
+          `❌ AI Gateway Custom Provider synchronization failed: ${getErrorMessage(error)}`,
+        ],
+      });
+      return;
+    }
+  }
+
   const deploymentResult = deploySecrets(
     repositoryRoot,
     environmentName,
@@ -328,5 +352,8 @@ export function runDeploySecretsCli(): void {
 // Run the script if called directly
 /* istanbul ignore next -- exercised by the runtime, not module tests */
 if (import.meta.url === `file://${process.argv[1]}`) {
-  runDeploySecretsCli();
+  void runDeploySecretsCli().catch((error) => {
+    console.error(`❌ ${getErrorMessage(error)}`);
+    process.exit(1);
+  });
 }

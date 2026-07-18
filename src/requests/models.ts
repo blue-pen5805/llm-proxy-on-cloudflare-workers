@@ -1,4 +1,5 @@
 import { CloudflareAIGateway } from "../ai_gateway";
+import { gatewayProviderPath } from "../ai_gateway/custom_provider";
 import { MiddlewareContext } from "../middleware";
 import { getAllProviderInstances } from "../providers";
 import { OpenAIModelsListResponseBody } from "../providers/openai/types";
@@ -71,7 +72,12 @@ async function fetchProviderModels(
     const [gatewayUrl, gatewayInit] = aiGateway.buildProviderEndpointRequest({
       provider: aiGatewayProvider,
       method: init.method,
-      path: provider.aiGatewayPath?.(path) ?? path,
+      path: gatewayProviderPath(
+        providerName,
+        provider,
+        path,
+        aiGatewayProvider,
+      ),
       headers: gatewayHeaders,
     });
     responsePromise = RequestLogger.withFields(keyLogFields, () =>

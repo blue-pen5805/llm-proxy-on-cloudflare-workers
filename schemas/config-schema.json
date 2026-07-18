@@ -48,6 +48,16 @@
         }
       ]
     },
+    "ALWAYS_USE_AI_GATEWAY": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "CF_AIG_TOKEN": {
       "oneOf": [
         {
@@ -430,6 +440,31 @@
     }
   },
   "required": ["$schema", "PROXY_API_KEY"],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "ALWAYS_USE_AI_GATEWAY": { "const": true }
+        },
+        "required": ["ALWAYS_USE_AI_GATEWAY"]
+      },
+      "then": {
+        "properties": {
+          "CLOUDFLARE_ACCOUNT_ID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "CLOUDFLARE_API_TOKEN": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"]
+      }
+    }
+  ],
   "definitions": {
     "googleVertexServiceAccount": {
       "type": "object",

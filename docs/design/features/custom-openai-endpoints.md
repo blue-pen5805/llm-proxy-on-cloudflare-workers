@@ -32,6 +32,11 @@ Once resolved, the endpoint supports:
 - model aggregation through a static list or the configured models path;
 - status checks for each configured key.
 
+When `ALWAYS_USE_AI_GATEWAY=true`, every upstream operation uses the endpoint's
+managed AI Gateway Custom Provider instead of its direct Base URL. The
+deployment helper registers the Base URL under `LLM Proxy / <name>`; the Worker
+appends each configured chat, models, or pass-through path at request time.
+
 ## Authentication and rotation
 
 Keys are optional. When present, the adapter adds Bearer authentication and uses
@@ -55,3 +60,4 @@ the aggregate handler, producing IDs of `<name>/<model>`.
 
 - [OpenAI API reference](https://platform.openai.com/docs/api-reference)
 - [Workers secrets](https://developers.cloudflare.com/workers/configuration/secrets/)
+- [AI Gateway Custom Providers](https://developers.cloudflare.com/ai-gateway/configuration/custom-providers/)

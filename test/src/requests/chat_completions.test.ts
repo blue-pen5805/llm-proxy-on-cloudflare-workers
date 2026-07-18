@@ -348,6 +348,54 @@ describe("handleChatCompletionsRequest", () => {
     );
   });
 
+  it("uses a Custom Provider without direct fallback in strict mode", async () => {
+    const requestBody = { model: "ollama/model-a", messages: [] };
+    const request = new Request("https://example.com/chat/completions", {
+      method: "POST",
+      body: JSON.stringify(requestBody),
+      headers: { "cf-aig-skip-cache": "true" },
+    });
+    const provider = {
+      ...mockProviderClass,
+      chatCompletionPath: "/chat/completions",
+      pathnamePrefix: vi.fn(() => "/v1"),
+      requiresCustomAiGatewayProvider: false,
+      buildAiGatewayChatCompletionsRequest: vi.fn(),
+    };
+    provider.buildChatCompletionsRequest.mockReturnValue([
+      "/chat/completions",
+      {
+        method: "POST",
+        body: JSON.stringify({ ...requestBody, model: "model-a" }),
+        headers: { "Content-Type": "application/json" },
+      },
+    ]);
+    vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(false);
+    const buildProviderEndpointRequest = vi
+      .fn()
+      .mockReturnValue([
+        "https://gateway.example/custom-llm-proxy-ollama/v1/chat/completions",
+        { method: "POST" },
+      ]);
+
+    await handleChatCompletionsRequest(
+      { request, providers: { get: vi.fn(() => provider) } } as any,
+      {
+        alwaysUse: true,
+        buildProviderEndpointRequest,
+      } as any,
+    );
+
+    expect(buildProviderEndpointRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "custom-llm-proxy-ollama",
+        path: "/v1/chat/completions",
+      }),
+    );
+    expect(provider.fetch).not.toHaveBeenCalled();
+    expect(helpers.fetchWithLogging).toHaveBeenCalled();
+  });
+
   it("uses a provider-native AI Gateway chat request for Azure OpenAI", async () => {
     const request = new Request("https://example.com/v1/chat/completions", {
       method: "POST",

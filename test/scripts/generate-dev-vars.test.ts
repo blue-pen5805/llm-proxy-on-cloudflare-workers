@@ -259,6 +259,17 @@ describe("convertConfigToDevVars", () => {
     expect(result).toContain("PRESENT_KEY='configured'");
   });
 
+  it("includes null placeholders only for Wrangler type generation", () => {
+    const result = convertConfigToDevVars(
+      { OPTIONAL_KEY: null, MISSING_KEY: undefined },
+      "example",
+      true,
+    );
+
+    expect(result).toContain("OPTIONAL_KEY=''");
+    expect(result).not.toContain("MISSING_KEY=");
+  });
+
   it("should add environment-specific header", () => {
     const config = { API_KEY: "test" };
     const result = convertConfigToDevVars(config, "staging");

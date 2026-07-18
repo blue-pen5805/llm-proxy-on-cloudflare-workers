@@ -27,6 +27,14 @@ OpenAI-compatible chat, models, and registered provider pass-through routes may
 also use `/key/<selection>` to select provider credentials. When both are used,
 the key prefix comes first: `/key/1/g/team-gateway/v1/models`.
 
+When `ALWAYS_USE_AI_GATEWAY=true`, every provider subrequest made by chat,
+models, status, or provider pass-through routing uses AI Gateway. The configured
+`AI_GATEWAY_NAME` is selected automatically; when it is absent, the Gateway
+name is `default`. An explicit `/g/<gateway>` prefix still overrides it. Native
+Gateway provider routes are preferred, while unsupported operations use the
+managed `custom-llm-proxy-<provider>` provider segment. Strict mode never
+silently falls back to the direct Base URL.
+
 The legacy Universal Endpoint body must be a non-empty JSON array with at most
 16 steps. Each step needs a supported `provider` and an object-valued `query`.
 Client-provided authentication headers cannot override the configured provider
@@ -105,6 +113,11 @@ authentication and stored-credential selection remain operator-controlled.
 Provider-specific request and response formats remain the caller's
 responsibility. Routes are the keys registered in `src/providers.ts`; configured
 custom endpoint names are added dynamically.
+
+In strict Gateway mode, pass-through paths for a managed Custom Provider retain
+the adapter's fixed path prefix. Cloudflare appends that path to the Base URL
+synchronized by `npm run secrets:deploy`, preserving the direct route's final
+upstream URL without contacting the origin from the Worker.
 
 For cloud-platform pass-through, direct routes use the upstream provider path.
 Bedrock paths beginning with `/v1` are automatically prefixed with

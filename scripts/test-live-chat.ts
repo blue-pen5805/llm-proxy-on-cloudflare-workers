@@ -1,4 +1,4 @@
-#!/usr/bin/env ts-node
+#!/usr/bin/env tsx
 import { getErrorMessage, parseJsonc } from "./utils.ts";
 import { readFileSync } from "fs";
 import path from "path";

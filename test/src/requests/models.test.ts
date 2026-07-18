@@ -291,6 +291,39 @@ describe("models", () => {
     expect(helpers.fetchWithLogging).toHaveBeenCalled();
   });
 
+  it("uses a Custom Provider for unsupported model endpoints in strict mode", async () => {
+    const provider = {
+      ...mockProviderClass,
+      supportsAiGatewayModels: false,
+      requiresCustomAiGatewayProvider: false,
+      pathnamePrefix: vi.fn(() => "/v1"),
+    };
+    provider.available.mockReturnValue(true);
+    provider.buildModelsRequest.mockReturnValue(["/models", { method: "GET" }]);
+    const buildProviderEndpointRequest = vi
+      .fn()
+      .mockReturnValue([
+        "https://gateway.example/custom-llm-proxy-ollama/v1/models",
+        { method: "GET" },
+      ]);
+    vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(false);
+
+    await handleModelsRequest(
+      {
+        providers: { all: vi.fn(() => ({ ollama: provider })) },
+      } as any,
+      { alwaysUse: true, buildProviderEndpointRequest } as any,
+    );
+
+    expect(buildProviderEndpointRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "custom-llm-proxy-ollama",
+        path: "/v1/models",
+      }),
+    );
+    expect(provider.fetch).not.toHaveBeenCalled();
+  });
+
   it("should isolate AI Gateway request failures", async () => {
     mockAIGateway.buildProviderEndpointRequest.mockReturnValue([
       "https://gateway.ai.cloudflare.com/models",

@@ -68,6 +68,37 @@ describe("aiGatewayMiddleware", () => {
     expect(next).toHaveBeenCalled();
   });
 
+  it("uses the default Gateway for every route in strict mode", async () => {
+    vi.spyOn(Config, "aiGateway").mockReturnValue({
+      accountId: "test-account",
+      name: undefined,
+      token: "test-token",
+      restApiToken: "rest-token",
+      alwaysUse: true,
+    });
+
+    await aiGatewayMiddleware(context, next);
+
+    expect(context.aiGateway?.gatewayId).toBe("default");
+    expect(context.aiGateway?.alwaysUse).toBe(true);
+    expect(next).toHaveBeenCalled();
+  });
+
+  it("fails closed when strict mode has no account ID", async () => {
+    vi.spyOn(Config, "aiGateway").mockReturnValue({
+      accountId: undefined,
+      name: undefined,
+      token: undefined,
+      restApiToken: undefined,
+      alwaysUse: true,
+    });
+
+    await expect(aiGatewayMiddleware(context, next)).rejects.toThrow(
+      "Invalid configuration for ALWAYS_USE_AI_GATEWAY",
+    );
+    expect(next).not.toHaveBeenCalled();
+  });
+
   it("should create a REST context that reports a missing token", async () => {
     vi.spyOn(Config, "aiGateway").mockReturnValue({
       accountId: "test-account",
