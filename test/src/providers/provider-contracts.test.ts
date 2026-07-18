@@ -46,6 +46,7 @@ describe("provider contracts", () => {
       expect(provider.baseUrl()).toBe("https://example.com");
       expect(provider.pathnamePrefix()).toBe("");
       expect(await provider.headers()).toEqual({});
+      expect(await provider.buildHeadersForPath("/resource")).toEqual({});
       expect(provider.getStaticModels()).toBeUndefined();
       expect(provider.aiGatewayPath("/models")).toBe("/models");
       await expect(
@@ -394,20 +395,48 @@ describe("provider contracts", () => {
         "Content-Type": "application/json",
         "x-goog-api-key": "key-1",
       });
+      await expect(
+        provider.buildHeadersForPath(
+          "/v1beta/openai/chat/completions",
+          undefined,
+          1,
+        ),
+      ).resolves.toEqual({
+        authorization: "Bearer key-1",
+        "content-type": "application/json",
+      });
+      await expect(
+        provider.buildHeadersForPath("/v1beta/models", undefined, 1),
+      ).resolves.toEqual({
+        "content-type": "application/json",
+        "x-goog-api-key": "key-1",
+      });
+      vi.mocked(Secrets.getAll).mockReturnValue([]);
+      await expect(
+        provider.buildHeadersForPath(
+          "/v1beta/openai/chat/completions",
+          undefined,
+          0,
+        ),
+      ).resolves.toEqual({
+        "content-type": "application/json",
+      });
+      vi.mocked(Secrets.getAll).mockReturnValue(["key-0", "key-1"]);
       await provider.fetch(
         "/v1beta/openai/chat/completions",
         { headers: { "x-goog-api-key": "old", "X-Custom": "value" } },
         1,
       );
-      expect(fetchMock).toHaveBeenLastCalledWith(
+      const [chatUrl, chatInit] = fetchMock.mock.calls.at(-1) ?? [];
+      expect(chatUrl).toBe(
         "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-        {
-          headers: {
-            Authorization: "Bearer key-1",
-            "Content-Type": "application/json",
-            "X-Custom": "value",
-          },
-        },
+      );
+      expect(new Headers(chatInit?.headers)).toEqual(
+        new Headers({
+          Authorization: "Bearer key-1",
+          "Content-Type": "application/json",
+          "X-Custom": "value",
+        }),
       );
 
       await provider.fetch("/v1beta/models", undefined, 0);

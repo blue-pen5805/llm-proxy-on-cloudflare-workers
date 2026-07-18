@@ -3,6 +3,7 @@ import {
   BUILT_IN_LIVE_CHAT_CONTRACTS,
   MAX_ERROR_DETAIL_BYTES,
   MIN_COMPLETION_TOKENS,
+  parseLiveChatArguments,
   parseLiveChatConfig,
   parseLocalWorkerAuthentication,
   runLiveChatTests,
@@ -13,6 +14,31 @@ import { BUILT_IN_PROVIDER_CONSTRUCTORS } from "../../src/providers";
 import { describe, expect, it, vi } from "vitest";
 
 describe("live Chat Completions test script", () => {
+  it("accepts provider names as positional or named arguments", () => {
+    expect(
+      parseLiveChatArguments(["openai", "--provider", "anthropic", "openai"]),
+    ).toEqual({
+      configPath: "live-chat-models.jsonc",
+      providers: new Set(["openai", "anthropic"]),
+      help: false,
+    });
+
+    expect(
+      parseLiveChatArguments([
+        "--config",
+        "live-chat-models.staging.jsonc",
+        "-h",
+      ]),
+    ).toEqual({
+      configPath: "live-chat-models.staging.jsonc",
+      providers: undefined,
+      help: true,
+    });
+    expect(() => parseLiveChatArguments(["--unknown"])).toThrow(
+      "Unexpected argument: --unknown",
+    );
+  });
+
   it("reads proxy authentication from the local Worker configuration", () => {
     expect(
       parseLocalWorkerAuthentication(
@@ -207,6 +233,38 @@ describe("live Chat Completions test script", () => {
     expect(fetcher.mock.calls[2][0]).toBe(
       "http://127.0.0.1:8787/key/0/g/default/chat/completions",
     );
+  });
+
+  it("runs only the providers selected by arguments", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    const testCases = parseLiveChatConfig(
+      '{"providers":{"openai":"gpt-test","ollama":"model-test"}}',
+    );
+
+    const results = await runLiveChatTests(testCases, {
+      baseUrl: "http://127.0.0.1:8787",
+      proxyApiKey: "proxy-secret",
+      providers: new Set(["ollama"]),
+      fetcher,
+    });
+
+    expect(results.map(({ provider, route }) => ({ provider, route }))).toEqual(
+      [
+        { provider: "ollama", route: "direct" },
+        { provider: "ollama", route: "compatibility" },
+      ],
+    );
+    expect(fetcher).toHaveBeenCalledTimes(2);
+
+    await expect(
+      runLiveChatTests(testCases, {
+        baseUrl: "http://127.0.0.1:8787",
+        providers: new Set(["not-configured"]),
+        fetcher,
+      }),
+    ).rejects.toThrow("No configured providers matched the requested names");
   });
 
   it("rejects deployed Worker targets", async () => {

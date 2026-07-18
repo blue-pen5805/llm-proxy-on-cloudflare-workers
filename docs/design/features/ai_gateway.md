@@ -67,9 +67,11 @@ to:
 https://gateway.ai.cloudflare.com/v1/<account>/<gateway>/<provider>/<path>
 ```
 
-Provider-specific authentication headers are included. Providers absent from
-the locally maintained supported set are called directly unless strict Gateway
-routing is enabled.
+Provider-specific, path-aware authentication headers are included. This preserves
+endpoint differences such as Google AI Studio's Bearer authentication for
+OpenAI-compatible paths and `x-goog-api-key` for native Gemini paths. Providers
+absent from the locally maintained supported set are called directly unless
+strict Gateway routing is enabled.
 
 In strict mode, provider operations with a native AI Gateway route continue to
 use that route. An operation without a native route uses an account-level

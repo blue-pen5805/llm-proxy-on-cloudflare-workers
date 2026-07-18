@@ -120,10 +120,13 @@ To select a non-default AI Gateway, set its name before running:
 export LLM_PROXY_GATEWAY_NAME="production"
 ```
 
-Use `--provider` one or more times for a smaller run, or `--config` for another
+Pass one or more provider names after `--` for a smaller run. The explicit
+`--provider` option remains available when preferred. Use `--config` for another
 model file:
 
 ```bash
+npm run test:live-chat -- openai
+npm run test:live-chat -- openai anthropic
 npm run test:live-chat -- --provider openai --provider anthropic
 npm run test:live-chat -- --config live-chat-models.staging.jsonc
 ```

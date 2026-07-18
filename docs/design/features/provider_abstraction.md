@@ -71,7 +71,11 @@ require adapter methods and tests for the provider's actual formats.
 Provider and client headers are merged with the Fetch API `Headers` abstraction
 so field names remain case-insensitive. Provider-controlled authentication and
 content-type values replace matching client values instead of producing multiple
-wire values with different casing.
+wire values with different casing. Adapters can select authentication headers by
+request path when one provider exposes endpoints with different credential
+contracts. Google AI Studio uses `Authorization: Bearer` for its OpenAI-compatible
+paths and `x-goog-api-key` for its native Gemini paths, including when the request
+uses an AI Gateway provider endpoint.
 
 ## OpenAI-compatible chat flow
 

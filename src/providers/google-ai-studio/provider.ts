@@ -1,5 +1,3 @@
-import { fetchWithLogging } from "../../utils/helpers";
-import { Secrets } from "../../utils/secrets";
 import {
   OpenAIChatCompletionsRequestBody,
   OpenAIModelsListResponseBody,
@@ -31,37 +29,34 @@ export const GoogleAiStudio = defineProvider({
   ] satisfies (keyof OpenAIChatCompletionsRequestBody)[],
 
   async headers(apiKeyIndex): Promise<HeadersInit> {
-    const apiKey = Secrets.get("GEMINI_API_KEY", apiKeyIndex);
+    const apiKeys = this.getApiKeys();
+    const apiKey =
+      apiKeys.length > 0 ? apiKeys[(apiKeyIndex ?? 0) % apiKeys.length] : null;
     return {
       "Content-Type": "application/json",
-      "x-goog-api-key": apiKey,
+      ...(apiKey ? { "x-goog-api-key": apiKey } : {}),
     };
   },
 
-  async fetch(
-    pathname: string,
-    init?: Parameters<typeof fetch>[1],
-    apiKeyIndex?: number,
-  ): ReturnType<typeof fetch> {
+  async buildHeadersForPath(
+    pathname,
+    headers,
+    apiKeyIndex,
+  ): Promise<HeadersInit> {
+    const mergedHeaders = new Headers(headers);
+    new Headers(await this.headers(apiKeyIndex)).forEach((value, key) => {
+      mergedHeaders.set(key, value);
+    });
     if (pathname.startsWith("/v1beta/openai")) {
-      const apiKey = Secrets.get("GEMINI_API_KEY", apiKeyIndex);
-
-      const newHeaders: Record<string, string> = {
-        "Content-Type": "application/json",
-        ...(init?.headers as Record<string, string>),
-        Authorization: `Bearer ${apiKey}`,
-      };
-      delete newHeaders["x-goog-api-key"];
-
-      return fetchWithLogging(this.baseUrl() + pathname, {
-        ...init,
-        headers: newHeaders,
-      });
-    } else {
-      return fetchWithLogging(
-        ...(await this.buildRequest(pathname, init, apiKeyIndex)),
-      );
+      const apiKey = mergedHeaders.get("x-goog-api-key");
+      mergedHeaders.delete("x-goog-api-key");
+      if (apiKey) {
+        mergedHeaders.set("Authorization", `Bearer ${apiKey}`);
+      } else {
+        mergedHeaders.delete("Authorization");
+      }
     }
+    return Object.fromEntries(mergedHeaders.entries());
   },
 
   // Convert model list to OpenAI format

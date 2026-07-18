@@ -30,6 +30,12 @@ describe("proxy", () => {
     getApiKeys: vi.fn().mockReturnValue(["test-key"]),
     getNextApiKeyIndex: vi.fn().mockResolvedValue(0),
     headers: vi.fn().mockResolvedValue({ Authorization: "Bearer test-key" }),
+    buildHeadersForPath: vi
+      .fn()
+      .mockImplementation(async (_pathname, headers) => ({
+        ...Object.fromEntries(new Headers(headers).entries()),
+        Authorization: "Bearer test-key",
+      })),
   };
 
   beforeEach(() => {
@@ -237,6 +243,33 @@ describe("proxy", () => {
       { method: "GET", signal: request.signal },
     );
     expect(await response.text()).toBe("gateway");
+  });
+
+  it("uses path-specific Google authentication through AI Gateway", async () => {
+    vi.spyOn(CloudflareAIGateway, "isSupportedProvider").mockReturnValue(true);
+    const buildProviderEndpointRequest = vi
+      .fn()
+      .mockReturnValue([
+        "https://gateway.example/google-ai-studio/v1beta/openai/chat/completions",
+        { method: "POST" },
+      ]);
+    const request = new Request("https://example.com/chat/completions", {
+      method: "POST",
+      body: JSON.stringify({ model: "gemini-test", messages: [] }),
+    });
+
+    await handleProviderProxyRequest(
+      { request } as any,
+      "google-ai-studio",
+      "/v1beta/openai/chat/completions",
+      { buildProviderEndpointRequest } as any,
+    );
+
+    const gatewayHeaders = new Headers(
+      buildProviderEndpointRequest.mock.calls[0][0].headers,
+    );
+    expect(gatewayHeaders.get("Authorization")).toBe("Bearer test-key");
+    expect(gatewayHeaders.has("x-goog-api-key")).toBe(false);
   });
 
   it("routes unsupported providers through a Custom Provider in strict mode", async () => {

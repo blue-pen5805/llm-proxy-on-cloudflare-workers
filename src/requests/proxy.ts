@@ -70,9 +70,12 @@ export async function handleProviderProxyRequest(
   // Handle AI Gateway requests
   if (aiGateway && aiGatewayProvider) {
     const providerHeaders = new Headers(
-      await providerInstance.headers(apiKeyIndex),
+      await providerInstance.buildHeadersForPath(
+        pathname,
+        sanitizedHeaders,
+        apiKeyIndex,
+      ),
     );
-    providerHeaders.forEach((value, key) => sanitizedHeaders.set(key, value));
     const [requestInfo, requestInit] = aiGateway.buildProviderEndpointRequest({
       provider: aiGatewayProvider,
       method: request.method,
@@ -83,7 +86,7 @@ export async function handleProviderProxyRequest(
         aiGatewayProvider,
       ),
       body: request.body,
-      headers: Object.fromEntries(sanitizedHeaders.entries()),
+      headers: Object.fromEntries(providerHeaders.entries()),
     });
     return RequestLogger.withFields(keyLogFields, () =>
       fetchWithLogging(requestInfo, { ...requestInit, signal: request.signal }),

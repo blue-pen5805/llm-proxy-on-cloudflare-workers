@@ -12,6 +12,8 @@ update is explicitly approved.
 
 ### 2026-07-18
 
+- Fixed strict AI Gateway pass-through to authenticate Google AI Studio's
+  OpenAI-compatible paths with the required Bearer credential.
 - Added strict `ALWAYS_USE_AI_GATEWAY` routing with `default` Gateway fallback
   and deployment-time Custom Provider synchronization for provider operations
   that lack native AI Gateway routes.

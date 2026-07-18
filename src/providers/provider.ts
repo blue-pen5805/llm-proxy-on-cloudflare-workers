@@ -104,6 +104,11 @@ export interface Provider {
   baseUrl(): string;
   pathnamePrefix(): string;
   headers(apiKeyIndex?: number): Promise<HeadersInit>;
+  buildHeadersForPath(
+    pathname: string,
+    headers?: HeadersInit,
+    apiKeyIndex?: number,
+  ): Promise<HeadersInit>;
   buildRequest(
     pathname: string,
     init?: RequestInit,
@@ -160,6 +165,12 @@ export interface ProviderDefinition {
     apiKeyIndex?: number,
   ): Promise<Response>;
   headers?(this: Provider, apiKeyIndex?: number): Promise<HeadersInit>;
+  buildHeadersForPath?(
+    this: Provider,
+    pathname: string,
+    headers?: HeadersInit,
+    apiKeyIndex?: number,
+  ): Promise<HeadersInit>;
   buildChatCompletionsRequest?(
     this: Provider,
     args: ChatCompletionsRequestArguments,
@@ -307,10 +318,29 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
       };
     },
 
+    async buildHeadersForPath(pathname, headers, apiKeyIndex) {
+      if (definition.buildHeadersForPath) {
+        return definition.buildHeadersForPath.call(
+          this,
+          pathname,
+          headers,
+          apiKeyIndex,
+        );
+      }
+      return mergeHeaders(headers, await this.headers(apiKeyIndex));
+    },
+
     async buildRequest(pathname, init, apiKeyIndex) {
       return [
         this.baseUrl() + this.pathnamePrefix() + pathname,
-        await this.buildRequestInit(init, apiKeyIndex),
+        {
+          ...init,
+          headers: await this.buildHeadersForPath(
+            pathname,
+            init?.headers,
+            apiKeyIndex,
+          ),
+        },
       ];
     },
 

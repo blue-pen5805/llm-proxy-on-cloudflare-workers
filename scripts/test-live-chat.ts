@@ -560,7 +560,7 @@ export async function runLiveChatTests(
     ? testCases.filter((testCase) => options.providers?.has(testCase.provider))
     : testCases;
   if (selectedTestCases.length === 0) {
-    throw new Error("No configured providers matched --provider.");
+    throw new Error("No configured providers matched the requested names.");
   }
 
   const normalizedOptions = {
@@ -624,7 +624,7 @@ export async function verifyLocalDevelopmentServer(
   }
 }
 
-function parseArguments(args: string[]): {
+export function parseLiveChatArguments(args: string[]): {
   configPath: string;
   providers?: ReadonlySet<string>;
   help: boolean;
@@ -644,6 +644,8 @@ function parseArguments(args: string[]): {
       providers.add(value);
     } else if (argument === "--help" || argument === "-h") {
       help = true;
+    } else if (!argument.startsWith("-")) {
+      providers.add(argument);
     } else {
       throw new Error(`Unexpected argument: ${argument}`);
     }
@@ -663,12 +665,15 @@ Options:
   --provider <name>     Run one configured provider; may be repeated
   --help, -h            Show this help
 
+Provider names may also be passed directly, for example:
+  npm run test:live-chat -- openai anthropic
+
 Start the local Worker with "npm run dev" before running live checks.`);
 }
 
 async function main(): Promise<void> {
   try {
-    const { configPath, providers, help } = parseArguments(
+    const { configPath, providers, help } = parseLiveChatArguments(
       process.argv.slice(2),
     );
     if (help) {
