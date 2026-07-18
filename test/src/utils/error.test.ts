@@ -6,6 +6,7 @@ import {
   ForbiddenError,
   NotFoundError,
   InternalServerError,
+  ServiceUnavailableError,
 } from "~/src/utils/error";
 
 describe("Error Classes", () => {
@@ -45,5 +46,11 @@ describe("Error Classes", () => {
     const error = new InternalServerError();
     expect(error.status).toBe(500);
     expect(error.message).toBe("Internal Server Error");
+  });
+
+  it("ServiceUnavailableError should use its default message", () => {
+    const error = new ServiceUnavailableError();
+    expect(error.status).toBe(503);
+    expect(error.message).toBe("Service Unavailable");
   });
 });

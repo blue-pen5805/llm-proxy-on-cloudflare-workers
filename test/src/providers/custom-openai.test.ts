@@ -53,4 +53,13 @@ describe("CustomOpenAI Provider (Paths)", () => {
       /baseUrl/,
     );
   });
+
+  it.each(["", "unsafe name", "x".repeat(129)])(
+    "rejects an unsafe endpoint name: %s",
+    (name) => {
+      expect(
+        () => new CustomOpenAI({ name, baseUrl: "https://example.com" }),
+      ).toThrow("name is invalid");
+    },
+  );
 });

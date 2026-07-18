@@ -98,7 +98,13 @@ npm run tsc
 npm run prettier-ci
 npm run lint
 npm run test
+npm run test:coverage
 ```
+
+Coverage is a required contract: statements, branches, functions, and lines
+must each remain at 100%. Add meaningful assertions for reachable behavior.
+Use narrowly scoped Istanbul exclusions only for structurally unreachable or
+runtime-only code, and document the reason inline at every exclusion.
 
 ESLint uses the TypeScript project service for `src` and `scripts` so
 Promise-returning expressions are checked by

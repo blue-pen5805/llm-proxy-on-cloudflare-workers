@@ -341,6 +341,21 @@ describe("quoteEnvironmentValueForDotenv", () => {
     expect(serialized).not.toContain("\nDEV=true");
     expect(parseWranglerDotenvValue(serialized)).toBe(value);
   });
+
+  it("uses the remaining lossless dotenv representations", () => {
+    expect(quoteEnvironmentValueForDotenv("both-'and-`quotes")).toBe(
+      "both-'and-`quotes",
+    );
+    expect(quoteEnvironmentValueForDotenv(" both-'and-`quotes ")).toBe(
+      '" both-\'and-`quotes "',
+    );
+    expect(() =>
+      quoteEnvironmentValueForDotenv(" both-'and-`and-\"quotes "),
+    ).toThrow("cannot be represented losslessly");
+    expect(() =>
+      quoteEnvironmentValueForDotenv(" both-'and-`quotes\\n "),
+    ).toThrow("cannot be represented losslessly");
+  });
 });
 
 describe("validateEnvironmentName", () => {

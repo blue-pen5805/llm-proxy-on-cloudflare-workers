@@ -173,6 +173,7 @@ export async function handleChatCompletionsRequest(
       fetchCompatibilityFallback(
         gatewayRequests,
         request.signal,
+        /* istanbul ignore next -- Gateway requests and credential indexes are built one-to-one */
         (attemptIndex) =>
           recordSelection(gatewayApiKeyIndexes[attemptIndex] ?? 0),
       ),
@@ -238,7 +239,8 @@ export async function handleChatCompletionsRequest(
         strictGatewayProvider,
       ),
       body: requestInit.body,
-      headers: requestInit.headers ?? {},
+      // Provider request builders always normalize headers before returning.
+      headers: requestInit.headers!,
     });
     return transformResponse(
       RequestLogger.withFields({ ...keyLogFields, via_ai_gateway: true }, () =>

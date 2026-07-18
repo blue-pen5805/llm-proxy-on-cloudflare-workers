@@ -30,6 +30,11 @@ describe("parseJsonOrReturnText", () => {
 });
 
 describe("bounded body parsing", () => {
+  it("returns an empty string when the request has no body", async () => {
+    await expect(
+      readRequestText(new Request("https://example.com")),
+    ).resolves.toBe("");
+  });
   it("rejects an invalid declared Content-Length", async () => {
     const request = new Request("https://example.com", {
       method: "POST",

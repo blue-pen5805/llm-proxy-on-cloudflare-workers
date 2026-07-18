@@ -10,12 +10,14 @@ function createContext(
   selection?: MiddlewareContext["apiKeyIndex"],
   providerName = "openai",
   automaticIndex = 0,
+  apiKeys: string[] = API_KEYS,
+  gatewayApiKeys: string[] = apiKeys,
 ): MiddlewareContext {
   const provider = createProvider({
     openAICompatible: true,
     baseUrl: "https://api.example.com/v1",
-    getApiKeys: () => API_KEYS,
-    getAiGatewayApiKeys: () => API_KEYS,
+    getApiKeys: () => apiKeys,
+    getAiGatewayApiKeys: () => gatewayApiKeys,
     getNextApiKeyIndex: async () => automaticIndex,
   });
   const request = new Request("https://proxy.example/v1/chat/completions", {
@@ -114,6 +116,34 @@ describe("Gateway chat key selection", () => {
       2,
       Number(attemptedCredentials[1].slice(-1)),
     ]);
+  });
+
+  it("supports Gateway-managed BYOK without local provider keys", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("ok"));
+    vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await handleChatCompletionsRequest(
+      createContext(undefined, "openai", 0, [], []),
+      new CloudflareAIGateway("account", "gateway", "operator-gateway-token"),
+    );
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("falls back to direct provider keys when Gateway keys are absent", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("ok"));
+    vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await handleChatCompletionsRequest(
+      createContext(undefined, "openai", 0, API_KEYS, []),
+      new CloudflareAIGateway("account", "gateway", "operator-gateway-token"),
+    );
+
+    expect(authorizationHeaders(fetchMock)[0]).toBe("Bearer provider-key-0");
   });
 
   it("retains the verified OpenRouter Compatibility Endpoint route", async () => {

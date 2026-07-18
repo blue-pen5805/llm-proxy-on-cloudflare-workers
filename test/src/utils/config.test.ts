@@ -71,6 +71,11 @@ describe("Config", () => {
       expect(Environments.get).toHaveBeenCalledWith("PROXY_API_KEY");
     });
 
+    it("returns an empty array when PROXY_API_KEY is blank", () => {
+      vi.mocked(Environments.get).mockReturnValue("   ");
+      expect(Config.apiKeys()).toEqual([]);
+    });
+
     it("should return array when PROXY_API_KEY is an array", () => {
       vi.mocked(Environments.get).mockReturnValue(["key1", "key2"]);
 
@@ -327,6 +332,27 @@ describe("Config", () => {
         { name: "openai", baseUrl: "https://custom.example" },
       ]);
       expect(() => Config.customOpenAIEndpoints()).toThrow(ConfigurationError);
+    });
+
+    it.each([
+      [null],
+      [{ name: "local", baseUrl: "http://example.com" }],
+      [{ name: "local", baseUrl: "not a URL" }],
+      [{ name: "local", baseUrl: "https://example.com", apiKeys: " " }],
+    ])("deeply validates each custom endpoint: %s", (endpoint) => {
+      vi.mocked(Environments.get).mockReturnValue([endpoint] as never);
+      expect(() => Config.customOpenAIEndpoints()).toThrow(ConfigurationError);
+    });
+
+    it("accepts a non-empty scalar custom endpoint key", () => {
+      vi.mocked(Environments.get).mockReturnValue([
+        {
+          name: "local",
+          baseUrl: "https://example.com",
+          apiKeys: "key",
+        },
+      ]);
+      expect(Config.customOpenAIEndpoints()).toHaveLength(1);
     });
 
     it("rejects more than sixteen custom endpoints", () => {

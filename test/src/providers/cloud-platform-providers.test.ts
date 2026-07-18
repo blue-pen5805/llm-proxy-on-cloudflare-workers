@@ -204,6 +204,19 @@ describe("cloud platform providers", () => {
     }
   });
 
+  it("builds Bedrock model discovery when its region is configured", async () => {
+    await expect(new AwsBedrock().buildModelsRequest()).resolves.toEqual([
+      "/models",
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer bedrock-key",
+        },
+      },
+    ]);
+  });
+
   it.each([
     [
       new AzureOpenAI(),

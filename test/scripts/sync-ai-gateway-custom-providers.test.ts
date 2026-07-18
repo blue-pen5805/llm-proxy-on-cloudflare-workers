@@ -59,6 +59,17 @@ describe("AI Gateway Custom Provider synchronization", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("uses defaults when strict mode is disabled", async () => {
+    await expect(syncAiGatewayCustomProviders({})).resolves.toMatchObject({
+      enabled: false,
+      dryRun: false,
+    });
+    expect(buildCustomProviderTargets({})).toEqual([]);
+    expect(
+      buildCustomProviderTargets({ ALWAYS_USE_AI_GATEWAY: "true" }),
+    ).not.toEqual([]);
+  });
+
   it("validates strict-mode deployment prerequisites even during dry-run", async () => {
     await expect(
       syncAiGatewayCustomProviders({ ALWAYS_USE_AI_GATEWAY: true }, true),
@@ -173,6 +184,54 @@ describe("AI Gateway Custom Provider synchronization", () => {
     await expect(
       syncAiGatewayCustomProviders(strictConfig, false, fetchMock),
     ).rejects.not.toThrow("sensitive upstream diagnostic");
+  });
+
+  it("rejects malformed Cloudflare response envelopes and lists", async () => {
+    for (const payload of [
+      null,
+      {},
+      { success: false, result: [] },
+      { success: true },
+      { success: true, result: {} },
+    ]) {
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+      await expect(
+        syncAiGatewayCustomProviders(strictConfig, false, fetchMock),
+      ).rejects.toThrow("invalid JSON");
+    }
+  });
+
+  it("paginates provider listings and rejects duplicate slugs", async () => {
+    const duplicate = {
+      id: "duplicate",
+      name: "duplicate",
+      slug: "duplicate-slug",
+      base_url: "https://example.com",
+      enable: true,
+    };
+    const firstPage = Array.from({ length: 100 }, (_, index) => ({
+      ...duplicate,
+      id: `provider-${index}`,
+      slug: index < 2 ? duplicate.slug : `slug-${index}`,
+    }));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(apiResponse(firstPage, { total_count: 101 }))
+      .mockResolvedValueOnce(
+        apiResponse([{ ...duplicate, slug: "last-slug" }], {
+          total_count: 101,
+        }),
+      );
+
+    await expect(
+      syncAiGatewayCustomProviders(strictConfig, false, fetchMock),
+    ).rejects.toThrow("duplicate AI Gateway Custom Provider slugs");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("does not overwrite an unrelated definition with the managed slug", async () => {

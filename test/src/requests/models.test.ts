@@ -382,6 +382,26 @@ describe("models", () => {
     });
   });
 
+  it("handles a non-successful upstream response without a body", async () => {
+    Object.keys(BUILT_IN_PROVIDER_CONSTRUCTORS).forEach((key) => {
+      delete BUILT_IN_PROVIDER_CONSTRUCTORS[key];
+    });
+    BUILT_IN_PROVIDER_CONSTRUCTORS.openai =
+      mockProviderConstructor(mockProviderClass);
+    mockAIGateway.buildProviderEndpointRequest.mockReturnValue([
+      "https://gateway.ai.cloudflare.com/models",
+      { method: "GET" },
+    ]);
+    vi.mocked(helpers.fetchWithLogging).mockResolvedValue(
+      new Response(null, { status: 401 }),
+    );
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const response = await handleModelsRequest({} as any, mockAIGateway as any);
+
+    expect((await response.json()).data).toEqual([]);
+  });
+
   it("should handle provider errors gracefully", async () => {
     const errorProviderClass = {
       ...mockProviderClass,

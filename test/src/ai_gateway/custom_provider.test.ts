@@ -20,6 +20,9 @@ describe("AI Gateway Custom Provider routing", () => {
     expect(customProviderSlug("Internal.V2")).not.toBe(
       customProviderSlug("internal-v2"),
     );
+    expect(customProviderSlug("!!!")).toMatch(
+      /^llm-proxy-provider-[a-f0-9]{8}$/,
+    );
   });
 
   it("uses Custom Providers only when strict mode has no native route", () => {
@@ -33,6 +36,8 @@ describe("AI Gateway Custom Provider routing", () => {
     expect(
       resolveGatewayProvider("ollama", { alwaysUse: false } as never, false),
     ).toBeUndefined();
+    expect(resolveGatewayProvider("openai", undefined)).toBeUndefined();
+    expect(resolveGatewayProvider("openai", strictGateway)).toBe("openai");
   });
 
   it("retains fixed provider prefixes only for Custom Provider routes", () => {

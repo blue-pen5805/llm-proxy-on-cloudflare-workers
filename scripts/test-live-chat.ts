@@ -140,6 +140,17 @@ interface RunOptions {
   providers?: ReadonlySet<string>;
 }
 
+type NormalizedRunOptions = Omit<
+  RunOptions,
+  "baseUrl" | "fetcher" | "keySelection" | "sensitiveValues" | "timeoutMs"
+> & {
+  baseUrl: string;
+  fetcher: typeof fetch;
+  keySelection: string | null;
+  sensitiveValues: readonly string[];
+  timeoutMs: number;
+};
+
 export interface LocalWorkerAuthentication {
   developmentMode: boolean;
   proxyApiKey?: string;
@@ -478,7 +489,7 @@ async function formatHttpError(
 async function executeRequest(
   testCase: LiveChatTestCase,
   route: LiveChatTestResult["route"],
-  options: Required<Pick<RunOptions, "timeoutMs" | "fetcher">> & RunOptions,
+  options: NormalizedRunOptions,
 ): Promise<LiveChatTestResult> {
   const usesCompatibilityFormat = route !== "direct";
   const requestPath =
@@ -499,7 +510,7 @@ async function executeRequest(
       joinRoute(
         options.baseUrl,
         gatewayName,
-        options.keySelection === undefined ? "0" : options.keySelection,
+        options.keySelection,
         requestPath,
       ),
       {
@@ -519,7 +530,7 @@ async function executeRequest(
       provider: testCase.provider,
       route,
       status: response.status,
-      error: await formatHttpError(response, options.sensitiveValues ?? []),
+      error: await formatHttpError(response, options.sensitiveValues),
     };
   } catch (error) {
     return {
@@ -530,7 +541,7 @@ async function executeRequest(
           ? `Timed out after ${options.timeoutMs} ms`
           : redactSensitiveString(
               getErrorMessage(error),
-              options.sensitiveValues ?? [],
+              options.sensitiveValues,
             ),
     };
   } finally {
@@ -679,7 +690,7 @@ Provider names may also be passed directly, for example:
 Start the local Worker with "npm run dev" before running live checks.`);
 }
 
-async function main(): Promise<void> {
+export async function runLiveChatCli(): Promise<void> {
   try {
     const { configPath, providers, help } = parseLiveChatArguments(
       process.argv.slice(2),
@@ -730,9 +741,10 @@ async function main(): Promise<void> {
   }
 }
 
+/* istanbul ignore next -- exercised by the runtime, not module tests */
 if (
   process.argv[1] &&
   fileURLToPath(import.meta.url) === path.resolve(process.argv[1])
 ) {
-  void main();
+  void runLiveChatCli();
 }

@@ -13,6 +13,7 @@ import {
   serializeSecretValue,
   type FileSystemOperations,
 } from "../../scripts/deploy-secrets";
+import { syncAiGatewayCustomProviders } from "../../scripts/sync-ai-gateway-custom-providers";
 import { execFileSync } from "child_process";
 import fs from "fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -20,6 +21,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Mock child_process module
 vi.mock("child_process", () => ({
   execFileSync: vi.fn(),
+}));
+
+vi.mock("../../scripts/sync-ai-gateway-custom-providers", () => ({
+  syncAiGatewayCustomProviders: vi.fn(),
 }));
 
 // Mock fs module
@@ -56,6 +61,14 @@ describe("deploy-secrets", () => {
     vi.mocked(fs.readFileSync).mockReset();
     vi.mocked(fs.unlinkSync).mockReset();
     vi.mocked(fs.existsSync).mockReset().mockReturnValue(true);
+    vi.mocked(syncAiGatewayCustomProviders).mockResolvedValue({
+      enabled: false,
+      desired: 0,
+      created: 0,
+      updated: 0,
+      unchanged: 0,
+      dryRun: false,
+    });
   });
 
   describe("parseDeploySecretsArguments", () => {
@@ -607,6 +620,56 @@ describe("deploy-secrets", () => {
       expect(log).toHaveBeenCalledWith(
         "🔐 Deploying secrets from config.prod.jsonc to prod environment (dry run)...",
       );
+    });
+
+    it.each([
+      [
+        true,
+        "☁️  AI Gateway Custom Providers: 3 definitions would be reconciled.",
+      ],
+      [
+        false,
+        "☁️  AI Gateway Custom Providers: 1 created, 1 updated, 1 unchanged.",
+      ],
+    ])("reports Custom Provider synchronization", async (dryRun, message) => {
+      process.argv = [
+        "node",
+        "deploy-secrets.ts",
+        ...(dryRun ? ["--dry-run"] : []),
+      ];
+      vi.mocked(fs.readFileSync).mockReturnValue("{}");
+      vi.mocked(syncAiGatewayCustomProviders).mockResolvedValue({
+        enabled: true,
+        desired: 3,
+        created: 1,
+        updated: 1,
+        unchanged: 1,
+        dryRun,
+      });
+      const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+      await runDeploySecretsCli();
+
+      expect(log).toHaveBeenCalledWith(message);
+    });
+
+    it("reports Custom Provider synchronization failures", async () => {
+      process.argv = ["node", "deploy-secrets.ts"];
+      vi.mocked(fs.readFileSync).mockReturnValue("{}");
+      vi.mocked(syncAiGatewayCustomProviders).mockRejectedValue(
+        new Error("sync failed"),
+      );
+      const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+      const exit = vi
+        .spyOn(process, "exit")
+        .mockImplementation((() => undefined) as never);
+
+      await runDeploySecretsCli();
+
+      expect(log).toHaveBeenCalledWith(
+        "❌ AI Gateway Custom Provider synchronization failed: sync failed",
+      );
+      expect(exit).toHaveBeenCalledWith(1);
     });
 
     it("exits when deployment fails", async () => {

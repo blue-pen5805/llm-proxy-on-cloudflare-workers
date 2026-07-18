@@ -40,6 +40,12 @@ describe("WorkersAi Provider", () => {
       expect(provider.configurationError()).toContain("invalid");
       expect(() => provider.baseUrl()).toThrow("missing or invalid");
     });
+
+    it("has no configuration error for a valid or absent account", () => {
+      expect(new WorkersAi().configurationError()).toBeUndefined();
+      vi.mocked(Secrets.Secrets.get).mockReturnValue("");
+      expect(new WorkersAi().configurationError()).toBeUndefined();
+    });
   });
 
   describe("available", () => {

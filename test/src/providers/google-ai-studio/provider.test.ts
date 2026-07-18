@@ -41,4 +41,21 @@ describe("GoogleAiStudio Provider", () => {
       expect(provider.available()).toBe(false);
     });
   });
+
+  it("omits the API-key header when no key is configured", async () => {
+    vi.mocked(Secrets.Secrets.getAll).mockReturnValue([]);
+    await expect(new GoogleAiStudio().headers()).resolves.toEqual({
+      "Content-Type": "application/json",
+    });
+  });
+
+  it("selects the requested API-key index", async () => {
+    vi.mocked(Secrets.Secrets.getAll).mockReturnValue(["first", "second"]);
+    await expect(new GoogleAiStudio().headers()).resolves.toMatchObject({
+      "x-goog-api-key": "first",
+    });
+    await expect(new GoogleAiStudio().headers(1)).resolves.toMatchObject({
+      "x-goog-api-key": "second",
+    });
+  });
 });

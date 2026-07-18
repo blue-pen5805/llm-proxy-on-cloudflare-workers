@@ -98,6 +98,7 @@ export function buildCustomProviderTargets(
   }
 
   const slugs = targets.map(({ slug }) => slug);
+  /* istanbul ignore next -- route names are unique and non-simple names include a hash */
   if (new Set(slugs).size !== slugs.length) {
     throw new Error("AI Gateway Custom Provider slugs are not unique.");
   }

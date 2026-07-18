@@ -68,3 +68,8 @@ These instructions apply to the entire repository.
 - Verify changes according to
   [Development and Verification](docs/development.md#required-verification) and
   report commands that were not run or did not pass.
+- For code, configuration, or dependency changes, always run
+  `npm run test:coverage` and confirm statements, branches, functions, and
+  lines remain at 100%. Cover reachable behavior with meaningful assertions;
+  exclude only structurally unreachable or runtime-only code, narrowly and
+  with an inline rationale.

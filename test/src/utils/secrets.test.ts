@@ -133,6 +133,7 @@ describe("Secrets", () => {
     it("should return the index itself for numeric selection", () => {
       expect(Secrets.resolveApiKeyIndex(1, 3)).toBe(1);
       expect(Secrets.resolveApiKeyIndex(4, 3)).toBe(1); // 4 % 3 = 1
+      expect(Secrets.resolveApiKeyIndex(-1, 3)).toBe(0);
     });
 
     it("should return a random index within range for range selection", () => {

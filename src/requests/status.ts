@@ -41,6 +41,7 @@ async function checkProviderConnectivity(
   keyCount: number,
   aiGateway?: CloudflareAIGateway,
 ): Promise<ConnectivityStatus> {
+  /* istanbul ignore next -- callers exclude providers without a models route */
   if (!providerInstance.modelsPath) {
     return "unknown";
   }

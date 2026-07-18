@@ -127,6 +127,7 @@ export async function handleUniversalEndpointRequest(
           stepIndex,
         ): Promise<CloudflareAIGatewayUniversalEndpointStep> => {
           const providerName = endpointRequest.provider;
+          /* istanbul ignore next -- request validation requires provider on every step */
           if (!providerName) {
             throw new BadRequestError(`Provider not specified.`);
           }

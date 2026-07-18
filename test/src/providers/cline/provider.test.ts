@@ -251,4 +251,11 @@ describe("Cline provider", () => {
       ],
     });
   });
+
+  it("treats missing recommended-model groups as empty", () => {
+    expect(new Cline().convertModelsToOpenAIFormat({})).toEqual({
+      object: "list",
+      data: [],
+    });
+  });
 });

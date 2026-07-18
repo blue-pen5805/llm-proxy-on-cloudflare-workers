@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ProviderBase } from "~/src/providers/provider";
+import { createProvider, ProviderBase } from "~/src/providers/provider";
 
 vi.mock("~/src/utils", () => ({
   fetchWithLogging: vi
@@ -33,5 +33,34 @@ describe("ProviderBase", () => {
       });
       expect(headersSpy).toHaveBeenCalled();
     });
+
+    it("builds request init with provider headers", async () => {
+      await expect(
+        providerBase.buildRequestInit({
+          method: "POST",
+          headers: { "X-Request": "test" },
+        }),
+      ).resolves.toEqual({
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-request": "test",
+        },
+      });
+    });
+  });
+});
+
+describe("createProvider defaults", () => {
+  it("creates a provider without a definition", () => {
+    const provider = createProvider();
+    expect(provider.baseUrl()).toBe("https://example.com");
+    expect(provider.pathnamePrefix()).toBe("");
+  });
+
+  it("uses a pathname-prefix hook", () => {
+    expect(
+      createProvider({ pathnamePrefix: () => "/hook" }).pathnamePrefix(),
+    ).toBe("/hook");
   });
 });
