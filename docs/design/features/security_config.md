@@ -27,10 +27,12 @@ header without changing the authentication requirement.
 Before chat or pass-through forwarding, the proxy removes every header format it
 accepts for its own authentication, provider credential aliases such as
 `api-key`, hop-by-hop headers, cookies, and client network metadata. On AI
-Gateway routes it retains request-level `cf-aig-*` controls; direct provider
-requests remove them. The provider adapter then adds the selected upstream key.
-Credential-like query parameters are removed during middleware processing;
-other query parameters are retained.
+Gateway routes it retains request-level `cf-aig-*` controls except
+`cf-aig-authorization`; direct provider requests remove all of them. A client can
+therefore override non-credential Gateway request controls, while Gateway
+authentication always comes from operator configuration. The provider adapter
+then adds the selected upstream key. Credential-like query parameters are
+removed during middleware processing; other query parameters are retained.
 
 AI Gateway tokens are added as `cf-aig-authorization`. Provider credentials are
 sent in the upstream authorization headers of Compatibility Endpoint requests,
@@ -54,8 +56,9 @@ only and redact values.
 ## Error and diagnostic disclosure
 
 Known application errors return stable public messages. Unexpected exceptions
-are logged and returned as a generic HTTP 500 error. Subrequest logging masks a
-defined list of sensitive query parameter names.
+are logged and returned as a generic HTTP 500 error. Subrequest logging records
+only the upstream URL scheme, host, and path; query strings and fragments are
+omitted entirely.
 
 `/status` never returns key values or suffixes, but intentionally reveals
 provider availability, credential slot numbers, the default model, AI Gateway

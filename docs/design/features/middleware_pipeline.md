@@ -15,16 +15,20 @@ rejects, and reaching the end of the chain produces a not-found error.
 
 The order in `src/index.ts` is behaviorally significant:
 
-1. `errorMiddleware` converts known application errors to JSON and redacts
+1. `loggingMiddleware` records the final response status and request latency.
+2. `corsMiddleware` answers preflight requests immediately and adds CORS headers
+   to actual cross-origin responses, including errors.
+3. `errorMiddleware` converts known application errors to JSON and redacts
    unexpected error details from clients.
-2. `requestMiddleware` initializes the path, including its query string.
-3. `corsMiddleware` answers preflight requests immediately.
-4. `apiKeyPathMiddleware` extracts a `/key/...` prefix.
-5. `authMiddleware` removes credential-like query parameters and authenticates
+4. `requestMiddleware` initializes the path, including its query string.
+5. `apiKeyPathMiddleware` extracts a `/key/...` prefix.
+6. `authMiddleware` removes credential-like query parameters and authenticates
    header credentials unless development mode is enabled.
-6. `aiGatewayMiddleware` selects the default or path-specific Gateway and
+7. `providerRegistryMiddleware` validates custom endpoint configuration and
+   creates the request-scoped provider registry.
+8. `aiGatewayMiddleware` selects the default or path-specific Gateway and
    removes a `/g/<name>` prefix.
-7. `routerMiddleware` dispatches health, compatibility, OpenAI-compatible,
+9. `routerMiddleware` dispatches health, compatibility, OpenAI-compatible,
    provider pass-through, and Universal Endpoint requests.
 
 The preflight short circuit intentionally occurs before authentication. Other
@@ -36,10 +40,13 @@ accepted as proxy credentials and then add the selected provider credential.
 The entry point runs the entire chain inside `Environments.run`, backed by
 `AsyncLocalStorage`. Provider instances and utility functions can read the
 current `Env` without a global mutable variable, which prevents concurrent
-requests in the same isolate from overwriting one another's configuration. It
-also creates one `ProviderRegistry` inside that scope. Routing uses provider
-names without eagerly constructing adapters, while downstream handlers reuse
-the lazily created adapter instances.
+requests in the same isolate from overwriting one another's configuration.
+After authentication, `providerRegistryMiddleware` creates one
+`ProviderRegistry` inside that scope. Invalid custom endpoint configuration is
+therefore converted by the error boundary to a safe HTTP 503 response without
+being disclosed to unauthenticated requests. Routing uses provider names without
+eagerly constructing adapters, while downstream handlers reuse the lazily
+created adapter instances.
 
 ## Failure behavior
 

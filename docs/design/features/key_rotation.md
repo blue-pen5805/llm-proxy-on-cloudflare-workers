@@ -42,9 +42,10 @@ remain usable when no selection prefix is supplied.
 
 ## Operational implications
 
-- Rotation distributes direct and provider-endpoint requests. OpenAI-compatible
-  Gateway chat requests additionally try the shuffled configured keys in order
-  until a request succeeds.
+- Rotation distributes direct and provider-endpoint requests. With automatic
+  selection, OpenAI-compatible Gateway chat requests additionally try the
+  shuffled configured keys in order until a request succeeds. An explicit
+  index or range resolves one key and disables this fallback.
 - Reordering the configured array changes which credential a stored numeric
   counter refers to.
 - Reducing the array length is safe because an out-of-range stored counter is

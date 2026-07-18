@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Config } from "~/src/utils/config";
 import { Environments } from "~/src/utils/environments";
+import { ConfigurationError } from "~/src/utils/error";
 
 vi.mock("~/src/utils/environments");
 
@@ -285,14 +286,24 @@ describe("Config", () => {
       ["not-an-object"],
     ])("rejects unsafe custom endpoint configuration %s", (value) => {
       vi.mocked(Environments.get).mockReturnValue(value as never);
-      expect(Config.customOpenAIEndpoints()).toBeUndefined();
+      expect(() => Config.customOpenAIEndpoints()).toThrow(ConfigurationError);
     });
 
-    it.each([undefined, null, 42, { name: "invalid" }, "not-json"])(
-      "rejects invalid endpoint configuration %s",
+    it.each([undefined, null])(
+      "treats absent endpoint configuration %s as unconfigured",
       (value) => {
         vi.mocked(Environments.get).mockReturnValue(value as never);
         expect(Config.customOpenAIEndpoints()).toBeUndefined();
+      },
+    );
+
+    it.each([42, { name: "invalid" }, "not-json"])(
+      "rejects invalid endpoint configuration %s",
+      (value) => {
+        vi.mocked(Environments.get).mockReturnValue(value as never);
+        expect(() => Config.customOpenAIEndpoints()).toThrow(
+          "Invalid configuration for CUSTOM_OPENAI_ENDPOINTS.",
+        );
       },
     );
 
@@ -301,12 +312,12 @@ describe("Config", () => {
         { name: "duplicate", baseUrl: "https://first.example" },
         { name: "duplicate", baseUrl: "https://second.example" },
       ]);
-      expect(Config.customOpenAIEndpoints()).toBeUndefined();
+      expect(() => Config.customOpenAIEndpoints()).toThrow(ConfigurationError);
 
       vi.mocked(Environments.get).mockReturnValue([
         { name: "openai", baseUrl: "https://custom.example" },
       ]);
-      expect(Config.customOpenAIEndpoints()).toBeUndefined();
+      expect(() => Config.customOpenAIEndpoints()).toThrow(ConfigurationError);
     });
 
     it("rejects more than sixteen custom endpoints", () => {
@@ -316,7 +327,7 @@ describe("Config", () => {
           baseUrl: `https://custom-${index}.example`,
         })),
       );
-      expect(Config.customOpenAIEndpoints()).toBeUndefined();
+      expect(() => Config.customOpenAIEndpoints()).toThrow(ConfigurationError);
     });
   });
 });

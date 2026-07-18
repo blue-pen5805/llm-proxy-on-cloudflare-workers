@@ -42,11 +42,13 @@ Gateway. `/g/<gateway>/ai/...` selects an explicit Gateway; otherwise
 `AI_GATEWAY_NAME` or the fallback ID `default` is used. No other `/ai` path is
 forwarded. Gateway/account path segments are validated and URL-encoded.
 
-Client-supplied `cf-aig-*` headers are retained on AI Gateway routes because
-request-level Gateway settings intentionally take precedence over Gateway
-defaults. This allows callers to control logging, cache keys, retries, cost, and
-metadata per request. The Worker still applies configured Gateway/REST
-credentials and the route-selected Gateway ID after sanitization.
+Client-supplied `cf-aig-*` control headers are retained on AI Gateway routes
+because request-level Gateway settings intentionally take precedence over
+Gateway defaults. This allows callers to control logging, cache keys, retries,
+cost, and metadata per request. `cf-aig-authorization` is the exception: it is
+always removed from client input, and only the operator-configured
+`CF_AIG_TOKEN` may supply that credential. The Worker also applies REST
+authorization and the route-selected Gateway ID after sanitization.
 
 ### Provider endpoint
 
@@ -76,11 +78,19 @@ are rejected when either required credential is absent.
 
 ### OpenAI-compatible chat
 
-For providers in the OpenAI-compatible Gateway subset, the chat handler shuffles
-configured keys and creates at most four Compatibility Endpoint requests. It
-tries another credential only after a network error, HTTP 401/403, or HTTP 429;
-deterministic client and provider errors return immediately. The model is
+For providers in the OpenAI-compatible Gateway subset, automatic selection
+shuffles configured keys and creates at most four Compatibility Endpoint
+requests. It tries another credential only after a network error, HTTP 401/403,
+or HTTP 429; deterministic client and provider errors return immediately. An
+explicit `/key/<selection>` resolves one credential and sends exactly one
+request, so fallback cannot override the caller's selection. The model is
 rewritten to `<provider>/<model>` for Gateway's compatibility endpoint.
+
+OpenRouter is retained in this subset because the Compatibility Endpoint has
+been verified to accept it in production even though the current provider list
+in Cloudflare documentation does not advertise that combination. Treat this as
+an operational compatibility contract and reverify it when Gateway behavior
+changes.
 
 ### Legacy Universal Endpoint and compatibility pass-through
 
@@ -96,9 +106,11 @@ other path under `/compat` is exposed.
 ## Maintenance risk
 
 The supported-provider arrays in `src/ai_gateway/const.ts` are code, not dynamic
-Gateway discovery. They must be checked against current Cloudflare documentation
-when providers are added or Gateway behavior changes. Custom endpoint names are
-not automatically Gateway-supported.
+Gateway discovery. They must normally be checked against current Cloudflare
+documentation when providers are added or Gateway behavior changes. A tested
+operational exception such as OpenRouter must be documented and covered by
+integration tests. Custom endpoint names are not automatically
+Gateway-supported.
 
 ## References
 

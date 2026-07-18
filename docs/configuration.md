@@ -44,8 +44,10 @@ Clients can send a proxy credential as a Bearer token, `x-api-key`, or
 commonly retained by intermediaries and access logs. Proxy credentials,
 hop-by-hop fields, Cloudflare/client network metadata, and cookies are removed
 before the upstream request is built. On AI Gateway routes, client `cf-aig-*`
-headers are retained so each request can override Gateway defaults. They are
-removed from requests sent directly to a provider.
+control headers are retained so each request can override Gateway defaults.
+Client `cf-aig-authorization` is always removed; only the configured
+`CF_AIG_TOKEN` can authenticate the Worker to Gateway. All `cf-aig-*` headers
+are removed from requests sent directly to a provider.
 
 Possession of a proxy credential therefore includes permission to change AI
 Gateway cache, retry, logging, cost, and metadata behavior per request. Restrict
@@ -171,6 +173,12 @@ in `baseUrl` and include the upstream API version in one place only.
 
 Because the full custom endpoint array is deployed as one Worker secret, treat
 the entire configuration file as sensitive.
+
+Malformed JSON, unsafe URLs or paths, limit violations, duplicate names, and
+built-in route collisions cause authenticated requests to fail with HTTP 503.
+The public error identifies `CUSTOM_OPENAI_ENDPOINTS` as invalid without
+including its contents. Missing or explicit `null` configuration still means no
+custom endpoints are configured.
 
 ## Applying changes
 

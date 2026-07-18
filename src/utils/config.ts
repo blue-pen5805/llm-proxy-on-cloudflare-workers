@@ -1,5 +1,6 @@
 import { BUILT_IN_PROVIDER_NAME_SET } from "../providers/names";
 import { Environments } from "./environments";
+import { ConfigurationError } from "./error";
 
 export const MAX_CUSTOM_OPENAI_ENDPOINTS = 16;
 export const MAX_PROXY_API_KEYS = 64;
@@ -158,7 +159,7 @@ export class Config {
       try {
         parsedEndpoints = JSON.parse(endpoints) as unknown;
       } catch {
-        return undefined;
+        throw new ConfigurationError("CUSTOM_OPENAI_ENDPOINTS");
       }
     }
 
@@ -167,12 +168,14 @@ export class Config {
       parsedEndpoints.length > MAX_CUSTOM_OPENAI_ENDPOINTS ||
       !parsedEndpoints.every(isSafeCustomEndpoint)
     ) {
-      return undefined;
+      throw new ConfigurationError("CUSTOM_OPENAI_ENDPOINTS");
     }
 
     const validatedEndpoints = parsedEndpoints as CustomOpenAIEndpoint[];
     const endpointNames = validatedEndpoints.map((endpoint) => endpoint.name);
-    if (new Set(endpointNames).size !== endpointNames.length) return undefined;
+    if (new Set(endpointNames).size !== endpointNames.length) {
+      throw new ConfigurationError("CUSTOM_OPENAI_ENDPOINTS");
+    }
     return validatedEndpoints;
   }
 }

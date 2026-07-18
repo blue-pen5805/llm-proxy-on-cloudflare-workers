@@ -128,38 +128,34 @@ describe("interpolateTemplate", () => {
 });
 
 describe("maskSensitiveUrl", () => {
-  it("should mask sensitive parameters with long values", () => {
+  it("removes query strings containing long credential values", () => {
     const url = "https://api.example.com/v1/chat?apiKey=sk-1234567890abcdef";
     const result = maskSensitiveUrl(url);
-    expect(result).toBe("https://api.example.com/v1/chat?apiKey=sk-***");
+    expect(result).toBe("https://api.example.com/v1/chat");
   });
 
-  it("should mask sensitive parameters with short values", () => {
+  it("removes query strings containing short credential values", () => {
     const url = "https://api.example.com/v1/chat?key=short";
     const result = maskSensitiveUrl(url);
-    expect(result).toBe("https://api.example.com/v1/chat?key=***");
+    expect(result).toBe("https://api.example.com/v1/chat");
   });
 
-  it("should preserve empty sensitive parameter values", () => {
+  it("removes empty query parameters", () => {
     const url = "https://api.example.com/v1/chat?key=";
-    expect(maskSensitiveUrl(url)).toBe(url);
+    expect(maskSensitiveUrl(url)).toBe("https://api.example.com/v1/chat");
   });
 
-  it("should not mask non-sensitive parameters", () => {
+  it("removes non-sensitive query parameters as customer content", () => {
     const url = "https://api.example.com/v1/chat?model=gpt-4&temperature=0.7";
     const result = maskSensitiveUrl(url);
-    expect(result).toBe(
-      "https://api.example.com/v1/chat?model=gpt-4&temperature=0.7",
-    );
+    expect(result).toBe("https://api.example.com/v1/chat");
   });
 
-  it("should mask only sensitive parameters in mixed query strings", () => {
+  it("removes mixed query strings without retaining credential fragments", () => {
     const url =
       "https://api.example.com/v1/chat?apiKey=sk-1234567890&model=gpt-4&token=abc123456789&temperature=0.7";
     const result = maskSensitiveUrl(url);
-    expect(result).toBe(
-      "https://api.example.com/v1/chat?apiKey=sk-***&model=gpt-4&token=abc***&temperature=0.7",
-    );
+    expect(result).toBe("https://api.example.com/v1/chat");
   });
 
   it("should handle URLs without query parameters", () => {
@@ -171,20 +167,18 @@ describe("maskSensitiveUrl", () => {
   it("should handle invalid URLs gracefully", () => {
     const url = "not a valid url?param=value";
     const result = maskSensitiveUrl(url);
-    expect(result).toBe("not a valid url?***");
+    expect(result).toBe("[invalid-url]");
   });
 
   it("should handle invalid URLs without a query string", () => {
-    expect(maskSensitiveUrl("not a valid url")).toBe("not a valid url");
+    expect(maskSensitiveUrl("not a valid url")).toBe("[invalid-url]");
   });
 
-  it("should mask various sensitive parameter names", () => {
+  it("removes query strings with various sensitive parameter names", () => {
     const url =
       "https://api.example.com/v1?api_key=key1&access_token=token12345678901&password=pass1&secret=sec1";
     const result = maskSensitiveUrl(url);
-    expect(result).toBe(
-      "https://api.example.com/v1?api_key=***&access_token=tok***&password=***&secret=***",
-    );
+    expect(result).toBe("https://api.example.com/v1");
   });
 });
 
@@ -212,7 +206,7 @@ describe("fetchWithLogging", () => {
       provider: "openai",
       key_index: 1,
       method: "POST",
-      url: "https://example.com/models?api_key=***",
+      url: "https://example.com/models",
       status: 202,
       duration_ms: expect.any(Number),
     });
@@ -236,7 +230,7 @@ describe("fetchWithLogging", () => {
       event: "subrequest.failed",
       request_id: null,
       method: "DELETE",
-      url: "https://example.com/models?key=***",
+      url: "https://example.com/models",
       duration_ms: expect.any(Number),
       error_name: "Error",
       error_message: "request failed with token=***",

@@ -147,9 +147,7 @@ describe("stripProxyAuthorizationHeaders", () => {
       { preserveAiGatewayHeaders: true },
     );
 
-    expect(sanitized.get("cf-aig-authorization")).toBe(
-      "Bearer client-gateway-token",
-    );
+    expect(sanitized.has("cf-aig-authorization")).toBe(false);
     expect(sanitized.get("cf-aig-max-attempts")).toBe("3");
     expect(sanitized.get("cf-aig-metadata")).toBe('{"tenant":"example"}');
     expect(sanitized.has("cf-connecting-ip")).toBe(false);

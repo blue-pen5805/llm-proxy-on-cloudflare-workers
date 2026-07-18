@@ -3,62 +3,16 @@ import { BadRequestError, PayloadTooLargeError } from "./error";
 import { RequestLogger } from "./logger";
 import { randomInt } from "node:crypto";
 
-const MASK_THRESHOLD = 10;
-const MASK_PREFIX_LENGTH = 3;
-const MASK_PLACEHOLDER = "***";
 export const MAX_BUFFERED_BODY_BYTES = 10 * 1024 * 1024;
 export const MAX_BUFFERED_RESPONSE_BYTES = 5 * 1024 * 1024;
-const SENSITIVE_QUERY_PARAMETERS = new Set([
-  "apikey",
-  "api_key",
-  "token",
-  "access_token",
-  "accesstoken",
-  "auth",
-  "authorization",
-  "password",
-  "secret",
-  "key",
-  "api-key",
-]);
-
-function maskSensitiveValue(value: string): string {
-  if (value.length > MASK_THRESHOLD) {
-    return `${value.slice(0, MASK_PREFIX_LENGTH)}${MASK_PLACEHOLDER}`;
-  }
-  return value.length > 0 ? MASK_PLACEHOLDER : value;
-}
 
 export function maskSensitiveUrl(url: string): string {
   try {
     const parsedUrl = new URL(url);
-
-    // Mask only sensitive query parameters
-    if (parsedUrl.search) {
-      const queryParameters = new URLSearchParams(parsedUrl.search);
-      const maskedQueryParameters = new URLSearchParams();
-
-      for (const [parameterName, parameterValue] of queryParameters.entries()) {
-        if (SENSITIVE_QUERY_PARAMETERS.has(parameterName.toLowerCase())) {
-          maskedQueryParameters.set(
-            parameterName,
-            maskSensitiveValue(parameterValue),
-          );
-        } else {
-          // Keep non-sensitive parameters as-is
-          maskedQueryParameters.set(parameterName, parameterValue);
-        }
-      }
-
-      parsedUrl.search = maskedQueryParameters.toString();
-    }
-
-    return parsedUrl.toString();
+    return `${parsedUrl.origin}${parsedUrl.pathname}`;
   } catch {
-    // If URL parsing fails, return masked version
-    return (
-      url.split("?")[0] + (url.includes("?") ? `?${MASK_PLACEHOLDER}` : "")
-    );
+    // Do not echo an unparseable, potentially sensitive value into logs.
+    return "[invalid-url]";
   }
 }
 
@@ -232,7 +186,7 @@ export async function withTimeout<T>(
       reject(timeoutError);
     }, timeoutMs);
 
-    promise
+    void promise
       .then((resolvedValue) => {
         clearTimeout(timeoutId);
         resolve(resolvedValue);

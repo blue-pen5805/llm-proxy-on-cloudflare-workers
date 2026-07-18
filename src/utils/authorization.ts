@@ -49,6 +49,13 @@ export function stripProxyAuthorizationHeaders(
   const sanitizedHeaders = new Headers(headers);
   for (const key of [...sanitizedHeaders.keys()]) {
     const normalizedKey = key.toLowerCase();
+    // Gateway authentication belongs to the operator-controlled configuration.
+    // Never accept a client-supplied token, even when other request-level
+    // Gateway controls are retained.
+    if (normalizedKey === "cf-aig-authorization") {
+      sanitizedHeaders.delete(key);
+      continue;
+    }
     if (preserveAiGatewayHeaders && normalizedKey.startsWith("cf-aig-")) {
       continue;
     }

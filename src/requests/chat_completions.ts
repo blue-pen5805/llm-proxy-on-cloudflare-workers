@@ -120,6 +120,10 @@ export async function handleChatCompletionsRequest(
 
   // If AI Gateway is enabled and the provider supports it, use AI Gateway
   if (aiGateway && aiGatewayProvider) {
+    const explicitGatewayApiKey =
+      contextApiKeyIndex === undefined
+        ? undefined
+        : providerInstance.getApiKeys()[apiKeyIndex];
     const gatewayRequests = await aiGateway.buildChatCompletionsRequests({
       provider: aiGatewayProvider,
       body: requestInit.body as string,
@@ -129,8 +133,12 @@ export async function handleChatCompletionsRequest(
       },
       headers: requestInit.headers ?? {},
       apiKeys:
-        providerInstance.getAiGatewayApiKeys?.() ??
-        providerInstance.getApiKeys(),
+        contextApiKeyIndex === undefined
+          ? (providerInstance.getAiGatewayApiKeys?.() ??
+            providerInstance.getApiKeys())
+          : explicitGatewayApiKey
+            ? [explicitGatewayApiKey]
+            : [],
     });
     return RequestLogger.withFields(keyLogFields, () =>
       fetchCompatibilityFallback(gatewayRequests, request.signal),

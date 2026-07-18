@@ -15,12 +15,15 @@ may define `apiKeys`, a static `models` array, `chatCompletionPath`, and
 Configuration remains trusted operator input, but schema and runtime validation
 reject non-HTTPS origins, malformed paths, duplicate names, and built-in route
 collisions. At most 16 endpoints are accepted, with per-endpoint limits of 32
-keys and 1,000 static model IDs.
+keys and 1,000 static model IDs. Invalid runtime configuration is not treated as
+an empty endpoint list: after proxy authentication, requests fail with a safe
+HTTP 503 configuration error that does not echo the rejected value.
 
 ## Resolution and routing
 
 The validated name index gives routing, aggregation, and status one consistent
-provider instance. Invalid duplicate or reserved names are not loaded.
+provider instance. Invalid duplicate or reserved names prevent registry
+creation rather than being silently skipped.
 
 Once resolved, the endpoint supports:
 

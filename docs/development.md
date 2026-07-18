@@ -99,6 +99,12 @@ npm run lint
 npm run test
 ```
 
+ESLint uses the TypeScript project service for `src` and `scripts` so
+Promise-returning expressions are checked by
+`@typescript-eslint/no-floating-promises`. Await a Promise when its result is
+part of control flow; otherwise mark intentional fire-and-forget work with
+`void` and handle rejection where applicable.
+
 If the formatting check fails, run `npm run prettier`, review every resulting
 change, and repeat the checks. Run `npm run bench` for performance-sensitive
 changes; benchmarks are diagnostic and must be compared under the same runtime

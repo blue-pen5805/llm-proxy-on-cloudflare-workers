@@ -50,3 +50,9 @@ export class ServiceUnavailableError extends AppError {
     super(message, 503);
   }
 }
+
+export class ConfigurationError extends ServiceUnavailableError {
+  constructor(settingName: string) {
+    super(`Invalid configuration for ${settingName}.`);
+  }
+}

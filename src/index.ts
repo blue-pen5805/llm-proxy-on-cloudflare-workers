@@ -5,9 +5,9 @@ import { authMiddleware } from "./middlewares/auth";
 import { corsMiddleware } from "./middlewares/cors";
 import { errorMiddleware } from "./middlewares/error";
 import { loggingMiddleware } from "./middlewares/logging";
+import { providerRegistryMiddleware } from "./middlewares/provider_registry";
 import { requestMiddleware } from "./middlewares/request";
 import { routerMiddleware } from "./middlewares/router";
-import { createProviderRegistry } from "./providers";
 import { Environments } from "./utils/environments";
 // Cloudflare Durable Objects
 import { KeyRotationManager } from "./utils/key_rotation_manager";
@@ -22,6 +22,7 @@ const middlewareChain = composeMiddleware([
   requestMiddleware,
   apiKeyPathMiddleware,
   authMiddleware,
+  providerRegistryMiddleware,
   aiGatewayMiddleware,
   routerMiddleware,
 ]);
@@ -35,7 +36,6 @@ export default {
           env,
           ctx,
           pathname: "",
-          providers: createProviderRegistry(env),
         };
 
         return middlewareChain(middlewareContext);

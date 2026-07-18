@@ -134,5 +134,5 @@ export async function runCommandWithSecretsCli() {
 
 /* istanbul ignore next -- exercised by the runtime, not module tests */
 if (import.meta.url === `file://${process.argv[1]}`) {
-  runCommandWithSecretsCli();
+  void runCommandWithSecretsCli().catch(console.error);
 }

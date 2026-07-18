@@ -2,6 +2,7 @@ import { SELF } from "cloudflare:test";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   BUILT_IN_PROVIDER_CONSTRUCTORS,
+  createProviderRegistry,
   getAllProviderInstances,
   getProviderByName,
 } from "~/src/providers";
@@ -15,6 +16,7 @@ import { handleUniversalEndpointRequest } from "~/src/requests/universal_endpoin
 import { isRequestAuthorized } from "~/src/utils/authorization";
 import { Config } from "~/src/utils/config";
 import { Environments } from "~/src/utils/environments";
+import { ConfigurationError } from "~/src/utils/error";
 
 vi.mock("~/src/ai_gateway", () => {
   const MockCloudflareAIGateway = vi.fn(function () {
@@ -177,6 +179,25 @@ describe("fetch", () => {
     });
 
     expect(response.status).toBe(401);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  });
+
+  it("returns a safe configuration error for an invalid provider registry", async () => {
+    vi.mocked(createProviderRegistry).mockImplementationOnce(() => {
+      throw new ConfigurationError("CUSTOM_OPENAI_ENDPOINTS");
+    });
+
+    const response = await SELF.fetch("https://example.com/ping", {
+      headers: { Origin: "https://client.example" },
+    });
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error: {
+        message: "Invalid configuration for CUSTOM_OPENAI_ENDPOINTS.",
+        status: 503,
+      },
+    });
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
   });
 

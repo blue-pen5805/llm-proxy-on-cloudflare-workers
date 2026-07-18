@@ -308,5 +308,5 @@ export { runCreateConfigCli };
 // Run the CLI only when this script is executed directly.
 /* istanbul ignore next -- exercised by the runtime, not module tests */
 if (import.meta.url === `file://${process.argv[1]}`) {
-  runCreateConfigCli().catch(console.error);
+  void runCreateConfigCli().catch(console.error);
 }

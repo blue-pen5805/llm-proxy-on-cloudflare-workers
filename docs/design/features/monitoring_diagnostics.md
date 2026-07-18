@@ -32,10 +32,11 @@ appear invalid or unknown.
 
 ## Disclosure controls
 
-Keys of four or more characters reveal only their final three characters;
-shorter values become `***`. The AI Gateway token becomes `***`, but account and
-Gateway identifiers remain visible. Default model, development mode, global
-round-robin state, provider names, and key counts are also exposed.
+Provider credentials are represented only by zero-based slot numbers and
+connectivity status; no key value or suffix is returned. AI Gateway tokens
+become `***`, but account and Gateway identifiers remain visible. Default model,
+development mode, global round-robin state, provider names, and key counts are
+also exposed.
 
 The route passes through normal authentication, except when authentication has
 been disabled by configuration. Operators should not expose it publicly or use
@@ -63,10 +64,10 @@ The following events support operational queries:
 
 `duration_ms` on `request.completed` measures time until response headers are
 available; it does not wait for a streamed response body to finish. Subrequest
-events include their HTTP method, masked URL, status when available, and
-duration. Error events contain only a redacted, length-limited error name and
-message. Request bodies, response bodies, headers, stack traces, query strings
-on inbound requests, and arbitrary thrown objects are not logged.
+events include their HTTP method, query-free upstream URL, status when available,
+and duration. Error events contain only a redacted, length-limited error name and
+message. Request bodies, response bodies, headers, stack traces, query strings,
+fragments, and arbitrary thrown objects are not logged.
 
 `provider.key.selected` reports `provider`, `operation`, zero-based
 `key_index`, `key_count`, `credential_configured`, `selection_policy`, and

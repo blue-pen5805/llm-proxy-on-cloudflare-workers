@@ -14,12 +14,14 @@ roadmap decisions follow the [project principles](../project-principles.md).
 
 ```mermaid
 flowchart LR
-  Client --> Error[Error boundary]
+  Client --> Logging[Completion logging]
+  Logging --> CORS[CORS handling]
+  CORS --> Error[Error boundary]
   Error --> Request[Request parsing]
-  Request --> CORS[CORS handling]
-  CORS --> Key[Key-prefix parsing]
+  Request --> Key[Key-prefix parsing]
   Key --> Auth[Proxy authentication]
-  Auth --> Gateway[AI Gateway selection]
+  Auth --> Registry[Provider registry]
+  Registry --> Gateway[AI Gateway selection]
   Gateway --> Router[Route dispatch]
   Router --> OpenAI[OpenAI-compatible handlers]
   Router --> Pass[Provider pass-through]

@@ -95,9 +95,10 @@ curl https://your-worker.example/openai/v1/responses \
 
 The proxy replaces client authentication headers with the selected upstream
 credential. It also removes cookies, hop-by-hop headers, client/network metadata,
-and credential-like query parameters. Request-level `cf-aig-*` headers are
-forwarded when the selected route uses AI Gateway and removed on direct provider
-requests.
+and credential-like query parameters. Request-level `cf-aig-*` control headers
+are forwarded when the selected route uses AI Gateway and removed on direct
+provider requests. Client `cf-aig-authorization` is always removed; Gateway
+authentication comes only from the operator-configured `CF_AIG_TOKEN`.
 Provider-specific request and response formats remain the caller's
 responsibility. Routes are the keys registered in `src/providers.ts`; configured
 custom endpoint names are added dynamically.
@@ -137,11 +138,12 @@ curl https://your-worker.example/g/production/ai/v1/responses \
 Other methods and paths under `/ai` are rejected rather than forwarded.
 Third-party models use `<provider>/<model>`; Workers AI models use
 `@cf/<author>/<model>`. The Messages route does not support Workers AI.
-Client `cf-aig-*` headers are forwarded, allowing retry, cache, cost, log, and
-metadata settings to override Gateway defaults for that request. A configured
-`CF_AIG_TOKEN`, REST API authorization, and the route-selected Gateway ID are
-applied by the Worker after client header processing and therefore take
-precedence where applicable.
+Client `cf-aig-*` control headers are forwarded, allowing retry, cache, cost,
+log, and metadata settings to override Gateway defaults for that request.
+Client `cf-aig-authorization` is always removed. A configured `CF_AIG_TOKEN`,
+REST API authorization, and the route-selected Gateway ID are applied by the
+Worker after client header processing and therefore take precedence where
+applicable.
 
 ## Explicit key selection
 
@@ -157,6 +159,11 @@ return HTTP 400:
 | `/key/-2/...`  | Random key from index 0 through 2             |
 
 Do not use a key-selection prefix for a provider with no configured keys.
+
+For OpenAI-compatible chat through AI Gateway, an explicit index or range sends
+only the resolved credential and does not fall back to another configured key.
+Without an explicit selection, the Worker may try up to four shuffled keys after
+a network error, HTTP 401/403, or HTTP 429.
 
 ## Status and health
 
