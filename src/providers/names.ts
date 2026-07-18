@@ -18,6 +18,7 @@ export const BUILT_IN_PROVIDER_NAMES = [
   "perplexity-ai",
   "replicate",
   "ollama",
+  "cline",
 ] as const;
 
 export const BUILT_IN_PROVIDER_NAME_SET: ReadonlySet<string> = new Set(

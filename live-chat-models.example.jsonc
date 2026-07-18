@@ -9,6 +9,7 @@
     "azure-openai": null,
     "cerebras": null,
     "cohere": null,
+    "cline": null,
     "deepseek": null,
     "google-ai-studio": null,
     "google-vertex-ai": null,

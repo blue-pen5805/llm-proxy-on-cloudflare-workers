@@ -2,6 +2,7 @@ import { Anthropic } from "./providers/anthropic";
 import { AwsBedrock } from "./providers/aws-bedrock";
 import { AzureOpenAI } from "./providers/azure-openai";
 import { Cerebras } from "./providers/cerebras";
+import { Cline } from "./providers/cline";
 import { Cohere } from "./providers/cohere";
 import { DeepSeek } from "./providers/deepseek";
 import { GoogleAiStudio } from "./providers/google-ai-studio";
@@ -47,6 +48,7 @@ export const BUILT_IN_PROVIDER_CONSTRUCTORS: {
   replicate: Replicate,
   ollama: Ollama,
   // --- Other providers
+  cline: Cline,
 };
 
 export function getProviderByName(

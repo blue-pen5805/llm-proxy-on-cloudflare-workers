@@ -81,6 +81,10 @@ export async function handleChatCompletionsRequest(
   if (providerError) {
     return providerError;
   }
+  const transformResponse = async (
+    responsePromise: Promise<Response>,
+  ): Promise<Response> =>
+    providerInstance.transformChatCompletionsResponse(await responsePromise);
 
   // Get API key apiKeyIndex
   const apiKeyIndex = await selectApiKeyIndex(
@@ -165,11 +169,13 @@ export async function handleChatCompletionsRequest(
           gatewayApiKeys[candidateIndex] ?? configuredApiKeys[candidateIndex],
       ),
     });
-    return fetchCompatibilityFallback(
-      gatewayRequests,
-      request.signal,
-      (attemptIndex) =>
-        recordSelection(gatewayApiKeyIndexes[attemptIndex] ?? 0),
+    return transformResponse(
+      fetchCompatibilityFallback(
+        gatewayRequests,
+        request.signal,
+        (attemptIndex) =>
+          recordSelection(gatewayApiKeyIndexes[attemptIndex] ?? 0),
+      ),
     );
   }
 
@@ -199,9 +205,12 @@ export async function handleChatCompletionsRequest(
         body: init.body,
         headers: init.headers ?? {},
       });
-      return RequestLogger.withFields(
-        { ...keyLogFields, via_ai_gateway: true },
-        () => fetchCompatibilityFallback([[url, gatewayInit]], request.signal),
+      return transformResponse(
+        RequestLogger.withFields(
+          { ...keyLogFields, via_ai_gateway: true },
+          () =>
+            fetchCompatibilityFallback([[url, gatewayInit]], request.signal),
+        ),
       );
     }
   }
@@ -231,21 +240,24 @@ export async function handleChatCompletionsRequest(
       body: requestInit.body,
       headers: requestInit.headers ?? {},
     });
-    return RequestLogger.withFields(
-      { ...keyLogFields, via_ai_gateway: true },
-      () => fetchCompatibilityFallback([[url, gatewayInit]], request.signal),
+    return transformResponse(
+      RequestLogger.withFields({ ...keyLogFields, via_ai_gateway: true }, () =>
+        fetchCompatibilityFallback([[url, gatewayInit]], request.signal),
+      ),
     );
   }
 
   // Request to the provider endpoint
-  return RequestLogger.withFields(keyLogFields, () =>
-    providerInstance.fetch(
-      requestInfo,
-      {
-        ...requestInit,
-        signal: request.signal,
-      },
-      apiKeyIndex,
+  return transformResponse(
+    RequestLogger.withFields(keyLogFields, () =>
+      providerInstance.fetch(
+        requestInfo,
+        {
+          ...requestInit,
+          signal: request.signal,
+        },
+        apiKeyIndex,
+      ),
     ),
   );
 }

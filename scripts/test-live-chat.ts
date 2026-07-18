@@ -61,6 +61,10 @@ export const BUILT_IN_LIVE_CHAT_CONTRACTS = {
     directPath: "/compatibility/v1/chat/completions",
     supportsMaxCompletionTokens: false,
   },
+  cline: {
+    directPath: "/chat/completions",
+    supportsMaxCompletionTokens: true,
+  },
   deepseek: {
     directPath: "/chat/completions",
     supportsMaxCompletionTokens: true,

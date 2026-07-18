@@ -121,6 +121,7 @@ export interface Provider {
   buildChatCompletionsRequest(
     args: ChatCompletionsRequestArguments,
   ): Promise<[string, RequestInit]>;
+  transformChatCompletionsResponse(response: Response): Promise<Response>;
   filterSupportedChatParameters(
     data: Readonly<Record<string, unknown>>,
   ): Record<string, unknown>;
@@ -175,6 +176,10 @@ export interface ProviderDefinition {
     this: Provider,
     args: ChatCompletionsRequestArguments,
   ): Promise<[string, RequestInit]>;
+  transformChatCompletionsResponse?(
+    this: Provider,
+    response: Response,
+  ): Promise<Response>;
   buildModelsRequest?(
     this: Provider,
     apiKeyIndex?: number,
@@ -369,6 +374,12 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
           headers: mergeHeaders(await this.headers(apiKeyIndex), headers),
         },
       ];
+    },
+
+    async transformChatCompletionsResponse(response) {
+      return definition.transformChatCompletionsResponse
+        ? definition.transformChatCompletionsResponse.call(this, response)
+        : response;
     },
 
     filterSupportedChatParameters(data) {

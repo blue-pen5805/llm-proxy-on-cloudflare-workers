@@ -30,6 +30,7 @@ before relying on a specific combination.
 | Amazon Bedrock   | `aws-bedrock`            | `AWS_BEARER_TOKEN_BEDROCK`              |
 | Azure OpenAI     | `azure-openai`           | `AZURE_OPENAI_API_KEY`                  |
 | Cerebras         | `cerebras`               | `CEREBRAS_API_KEY`                      |
+| Cline            | `cline`                  | `CLINE_API_KEY`                         |
 | Cohere           | `cohere`                 | `COHERE_API_KEY`                        |
 | DeepSeek         | `deepseek`               | `DEEPSEEK_API_KEY`                      |
 | Google AI Studio | `google-ai-studio`       | `GEMINI_API_KEY`                        |

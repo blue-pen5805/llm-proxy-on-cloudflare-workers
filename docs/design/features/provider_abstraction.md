@@ -15,8 +15,11 @@ definitions opt into the shared JSON and Bearer-authentication behavior with
 `openAICompatible: true`.
 
 This is an adapter boundary rather than a promise of complete semantic parity.
-Provider adapters can filter chat fields, translate payloads, or declare model
-listing unsupported.
+Provider adapters can filter chat fields, translate payloads, transform chat
+responses, or declare model listing unsupported. Response transformation is an
+explicit opt-in; the default preserves the upstream `Response`. Transformations
+that parse a body must remain bounded and leave streaming, error, and unknown
+responses unchanged.
 
 ## Provider registry
 
@@ -85,7 +88,7 @@ uses an AI Gateway provider endpoint.
 4. Let the adapter filter or translate supported fields and remove the provider
    prefix from the model.
 5. Send directly or construct an AI Gateway request.
-6. Forward the upstream response.
+6. Apply the provider's optional response transformation and forward the result.
 
 The incoming abort signal is attached to the provider or Gateway subrequest so
 client cancellation can stop avoidable work. The Worker enables the

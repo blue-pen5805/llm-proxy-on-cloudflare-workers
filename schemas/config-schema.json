@@ -158,6 +158,22 @@
         }
       ]
     },
+    "CLINE_API_KEY": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "DEEPSEEK_API_KEY": {
       "oneOf": [
         {

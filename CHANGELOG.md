@@ -12,6 +12,7 @@ update is explicitly approved.
 
 ### 2026-07-18
 
+- Added the `cline` provider.
 - Added the `nvidia-nim` provider for NVIDIA's hosted OpenAI-compatible Chat
   Completions, model discovery, and pass-through API with configurable key
   rotation.

@@ -66,6 +66,7 @@ describe("live Chat Completions test script", () => {
       "azure-openai",
       "cerebras",
       "cohere",
+      "cline",
       "deepseek",
       "google-ai-studio",
       "google-vertex-ai",
@@ -86,7 +87,7 @@ describe("live Chat Completions test script", () => {
     });
 
     expect(Object.keys(BUILT_IN_LIVE_CHAT_CONTRACTS)).toEqual(exampleProviders);
-    expect(parseLiveChatConfig(configuredExample)).toHaveLength(17);
+    expect(parseLiveChatConfig(configuredExample)).toHaveLength(18);
 
     for (const providerName of exampleProviders) {
       const ProviderConstructor = BUILT_IN_PROVIDER_CONSTRUCTORS[providerName];

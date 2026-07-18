@@ -73,6 +73,7 @@ enable random selection or global round-robin selection. Setting a key to
 | `google-ai-studio` | `GEMINI_API_KEY`                                  |
 | `anthropic`        | `ANTHROPIC_API_KEY`                               |
 | `cerebras`         | `CEREBRAS_API_KEY`                                |
+| `cline`            | `CLINE_API_KEY`                                   |
 | `cohere`           | `COHERE_API_KEY`                                  |
 | `deepseek`         | `DEEPSEEK_API_KEY`                                |
 | `grok`             | `GROK_API_KEY`                                    |

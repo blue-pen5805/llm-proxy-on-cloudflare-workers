@@ -23,6 +23,9 @@ vi.mock("~/src/utils/secrets");
 describe("handleChatCompletionsRequest", () => {
   const mockProviderClass = {
     buildChatCompletionsRequest: vi.fn(),
+    transformChatCompletionsResponse: vi.fn(
+      async (response: Response) => response,
+    ),
     filterSupportedChatParameters: vi.fn(
       (data: Record<string, unknown>) => data,
     ),
@@ -104,6 +107,9 @@ describe("handleChatCompletionsRequest", () => {
       ),
     ).toBe(false);
     expect(mockProviderClass.fetch).toHaveBeenCalled();
+    expect(
+      mockProviderClass.transformChatCompletionsResponse,
+    ).toHaveBeenCalledOnce();
   });
 
   it("uses an explicit middleware key selection", async () => {
@@ -429,6 +435,9 @@ describe("handleChatCompletionsRequest", () => {
       buildAiGatewayChatCompletionsRequest: vi
         .fn()
         .mockResolvedValue(providerRequest),
+      transformChatCompletionsResponse: vi.fn(
+        async (response: Response) => response,
+      ),
       fetch: vi.fn(),
     };
     vi.mocked(CloudflareAIGateway.isSupportedProvider).mockImplementation(

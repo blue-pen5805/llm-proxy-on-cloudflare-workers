@@ -27,6 +27,8 @@
   "CEREBRAS_API_KEY": null,
   // Cohere: https://dashboard.cohere.com
   "COHERE_API_KEY": null,
+  // Cline: https://app.cline.bot/dashboard
+  "CLINE_API_KEY": null,
   // DeepSeek: https://platform.deepseek.com/
   "DEEPSEEK_API_KEY": null,
   // xAI: https://console.x.ai/

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Anthropic } from "~/src/providers/anthropic/provider";
+import { Cline } from "~/src/providers/cline/provider";
 import { Cohere } from "~/src/providers/cohere/provider";
 import { CustomOpenAI } from "~/src/providers/custom-openai";
 import { GoogleAiStudio } from "~/src/providers/google-ai-studio/provider";
@@ -49,6 +50,10 @@ describe("provider contracts", () => {
       expect(await provider.buildHeadersForPath("/resource")).toEqual({});
       expect(provider.getStaticModels()).toBeUndefined();
       expect(provider.aiGatewayPath("/models")).toBe("/models");
+      const response = new Response("streamed");
+      await expect(
+        provider.transformChatCompletionsResponse(response),
+      ).resolves.toBe(response);
       await expect(
         provider.buildAiGatewayChatCompletionsRequest({
           data: { model: "model-id" },
@@ -223,6 +228,7 @@ describe("provider contracts", () => {
         "/compatibility/v1/chat/completions",
         "/v1/models?page_size=100&endpoint=chat",
       ],
+      [new Cline(), "/chat/completions", "/ai/cline/recommended-models"],
       [
         new GoogleAiStudio(),
         "/v1beta/openai/chat/completions",
