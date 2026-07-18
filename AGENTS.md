@@ -46,10 +46,17 @@ These instructions apply to the entire repository.
 
 ## Finish changes completely
 
-- For every development change, prepend a concise entry describing the latest
-  change to `CHANGELOG.md`. Keep the newest entry at the top of the applicable
-  section, order all entries in reverse chronological order, and include the
-  change date in `YYYY-MM-DD` format.
+- Add `CHANGELOG.md` entries only for changes to application functionality or
+  externally observable runtime behavior. Do not add entries for documentation,
+  contributor guidance, project policy, development process, tests, refactors,
+  or maintenance that has no functional effect.
+- When finishing a work session with changelog-worthy changes, derive the
+  entries from the net difference between the state at the start of the session
+  and the final state. Describe only the resulting functionality or behavior;
+  do not record intermediate revisions, superseded directions, or approaches
+  that were later reverted. Consolidate related work into concise entries,
+  prepend them to the applicable section, order all entries in reverse
+  chronological order, and include the change date in `YYYY-MM-DD` format.
 - After making changes, assess the appropriate `package.json` version using
   semantic versioning based on the scope and compatibility impact. Propose the
   resulting version to the operator, and never update the version number

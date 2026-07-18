@@ -132,11 +132,20 @@ validating the local development server against current provider models.
 
 ## Changelog and package version
 
-For every development change, add a concise entry at the top of the applicable
-section in `CHANGELOG.md`. Include the change date in `YYYY-MM-DD` format and
-keep entries in reverse chronological order; for multiple entries on the same
-date, put the newest entry first. Keep pending changes under `Unreleased` until
-a versioned release is prepared.
+Add `CHANGELOG.md` entries only for changes to application functionality or
+externally observable runtime behavior. Documentation, contributor guidance,
+project policy, development process, tests, refactors, and maintenance with no
+functional effect do not belong in the changelog.
+
+When finishing a work session with changelog-worthy changes, derive the entries
+from the net difference between the state at the start of the session and the
+final state. Describe only the resulting functionality or behavior. Do not
+record intermediate revisions, superseded directions, or approaches that were
+later reverted; consolidate related work into concise entries instead. Add the
+entries at the top of the applicable section, include the change date in
+`YYYY-MM-DD` format, and keep entries in reverse chronological order; for
+multiple entries on the same date, put the newest entry first. Keep pending
+changes under `Unreleased` until a versioned release is prepared.
 
 After completing the change, assess its semantic-versioning impact:
 

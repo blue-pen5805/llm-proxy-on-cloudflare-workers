@@ -1,9 +1,9 @@
 # Changelog
 
-All notable changes to this project are documented in this file. Date entries
-in `YYYY-MM-DD` format and order them in reverse chronological order. Add new
-entries at the top of the relevant dated section; when multiple changes share a
-date, put the newest change first.
+Changes to application functionality and externally observable runtime behavior
+are documented in this file. Date entries in `YYYY-MM-DD` format and order them
+in reverse chronological order. Add new entries at the top of the relevant
+dated section; when multiple changes share a date, put the newest change first.
 
 ## Unreleased
 
@@ -14,11 +14,3 @@ update is explicitly approved.
 
 - Fixed provider request header merging so case variants such as `Content-Type`
   and `content-type` produce one upstream field.
-- Added an opt-in, local-Wrangler-only Chat Completions test harness that uses
-  operator-selected provider models to verify both Direct and OpenAI-compatible
-  proxy routes with real credentials, explicit single-key selection, 100-token
-  completion limits, no client retries, and redacted output.
-- Added repository-wide contributor guidance requiring every change to be
-  dated and recorded in reverse chronological order at the top of this
-  changelog, assessed for its semantic-versioning impact, and explicitly
-  confirmed by the operator before the package version is updated.
