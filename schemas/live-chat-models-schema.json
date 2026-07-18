@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/blue-pen5805/llm-proxy-on-cloudflare-workers/schemas/live-chat-models-schema.json",
+  "title": "Live Chat Completions test models",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["providers"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "providers": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "null" },
+          { "type": "string", "minLength": 1 },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["model"],
+            "properties": {
+              "model": { "type": "string", "minLength": 1 },
+              "directPath": {
+                "type": "string",
+                "pattern": "^/(?!/)[^?#]*$"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -13,6 +13,7 @@
     "cf:logout": "wrangler logout",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:live-chat": "ts-node scripts/test-live-chat.ts",
     "test-watch": "vitest watch",
     "bench": "vitest bench --run",
     "tsc": "tsc --noEmit",

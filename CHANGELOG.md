@@ -12,6 +12,10 @@ update is explicitly approved.
 
 ### 2026-07-18
 
+- Added an opt-in, local-Wrangler-only Chat Completions test harness that uses
+  operator-selected provider models to verify both Direct and OpenAI-compatible
+  proxy routes with real credentials, explicit single-key selection, 100-token
+  completion limits, no client retries, and redacted output.
 - Added repository-wide contributor guidance requiring every change to be
   dated and recorded in reverse chronological order at the top of this
   changelog, assessed for its semantic-versioning impact, and explicitly

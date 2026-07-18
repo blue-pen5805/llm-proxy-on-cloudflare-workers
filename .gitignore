@@ -177,3 +177,7 @@ config.jsonc
 config.*.jsonc
 !config.example.jsonc
 .secrets-temp*.json
+
+# Live provider test model selections (may reveal private deployments/models)
+live-chat-models*.jsonc
+!live-chat-models.example.jsonc

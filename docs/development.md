@@ -125,6 +125,11 @@ case, inspect the final diff for credentials, local configuration, generated
 secret files, and unrelated changes. Report any command that was not run or did
 not pass; do not create repository files solely to store verification output.
 
+Real-provider Chat Completions checks are intentionally excluded from the
+required test suite because they require operator credentials and incur cost.
+Use the separate [live provider testing guide](live-provider-testing.md) when
+validating the local development server against current provider models.
+
 ## Changelog and package version
 
 For every development change, add a concise entry at the top of the applicable
