@@ -222,6 +222,22 @@
         }
       ]
     },
+    "NVIDIA_NIM_API_KEY": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "OPENROUTER_API_KEY": {
       "oneOf": [
         {

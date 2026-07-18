@@ -37,6 +37,7 @@
 | Groq             | `groq`                   | `GROQ_API_KEY`                          |
 | Hugging Face     | `huggingface`            | `HUGGINGFACE_API_KEY`                   |
 | Mistral          | `mistral`                | `MISTRAL_API_KEY`                       |
+| NVIDIA NIM       | `nvidia-nim`             | `NVIDIA_NIM_API_KEY`                    |
 | Ollama           | `ollama`                 | `OLLAMA_API_KEY`                        |
 | OpenAI           | `openai`                 | `OPENAI_API_KEY`                        |
 | OpenRouter       | `openrouter`             | `OPENROUTER_API_KEY`                    |

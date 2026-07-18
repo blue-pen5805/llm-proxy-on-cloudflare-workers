@@ -12,6 +12,7 @@ export const BUILT_IN_PROVIDER_NAMES = [
   "groq",
   "huggingface",
   "mistral",
+  "nvidia-nim",
   "openai",
   "openrouter",
   "perplexity-ai",

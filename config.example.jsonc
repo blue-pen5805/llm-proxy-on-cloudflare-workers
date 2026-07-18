@@ -35,6 +35,8 @@
   "GROQ_API_KEY": null,
   // Mistral: https://console.mistral.ai/
   "MISTRAL_API_KEY": null,
+  // NVIDIA NIM: https://build.nvidia.com/
+  "NVIDIA_NIM_API_KEY": null,
   // OpenRouter: https://openrouter.ai/
   "OPENROUTER_API_KEY": null,
   // HuggingFace: https://huggingface.co/

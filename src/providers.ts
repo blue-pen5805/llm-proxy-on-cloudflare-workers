@@ -10,6 +10,7 @@ import { Grok } from "./providers/grok";
 import { Groq } from "./providers/groq";
 import { HuggingFace } from "./providers/huggingface";
 import { Mistral } from "./providers/mistral";
+import { NvidiaNim } from "./providers/nvidia-nim";
 import { Ollama } from "./providers/ollama";
 import { OpenAI } from "./providers/openai";
 import { OpenRouter } from "./providers/openrouter";
@@ -39,6 +40,7 @@ export const BUILT_IN_PROVIDER_CONSTRUCTORS: {
   groq: Groq,
   huggingface: HuggingFace,
   mistral: Mistral,
+  "nvidia-nim": NvidiaNim,
   openai: OpenAI,
   openrouter: OpenRouter,
   "perplexity-ai": PerplexityAi,

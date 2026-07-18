@@ -12,6 +12,9 @@ update is explicitly approved.
 
 ### 2026-07-18
 
+- Added the `nvidia-nim` provider for NVIDIA's hosted OpenAI-compatible Chat
+  Completions, model discovery, and pass-through API with configurable key
+  rotation.
 - Fixed strict AI Gateway routing for Ollama to preserve the `/v1` prefix in
   chat, model, and pass-through request paths.
 - Fixed strict AI Gateway pass-through to authenticate Google AI Studio's

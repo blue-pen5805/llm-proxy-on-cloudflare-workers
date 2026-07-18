@@ -15,6 +15,7 @@
     "grok": null,
     "groq": null,
     "mistral": null,
+    "nvidia-nim": null,
     "ollama": null,
     "openai": null,
     "openrouter": null,

@@ -85,6 +85,10 @@ export const BUILT_IN_LIVE_CHAT_CONTRACTS = {
     directPath: "/v1/chat/completions",
     supportsMaxCompletionTokens: true,
   },
+  "nvidia-nim": {
+    directPath: "/chat/completions",
+    supportsMaxCompletionTokens: true,
+  },
   ollama: {
     directPath: "/chat/completions",
     supportsMaxCompletionTokens: true,
