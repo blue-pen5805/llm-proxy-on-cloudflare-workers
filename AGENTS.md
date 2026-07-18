@@ -46,6 +46,14 @@ These instructions apply to the entire repository.
 
 ## Finish changes completely
 
+- For every development change, prepend a concise entry describing the latest
+  change to `CHANGELOG.md`. Keep the newest entry at the top of the applicable
+  section, order all entries in reverse chronological order, and include the
+  change date in `YYYY-MM-DD` format.
+- After making changes, assess the appropriate `package.json` version using
+  semantic versioning based on the scope and compatibility impact. Propose the
+  resulting version to the operator, and never update the version number
+  without their explicit confirmation.
 - Do not leave placeholder implementations or `TODO` comments unless the user
   explicitly requests them. Roadmap work belongs in `TODO.md`.
 - Preserve unrelated worktree changes and never include local configuration or

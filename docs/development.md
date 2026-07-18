@@ -125,6 +125,29 @@ case, inspect the final diff for credentials, local configuration, generated
 secret files, and unrelated changes. Report any command that was not run or did
 not pass; do not create repository files solely to store verification output.
 
+## Changelog and package version
+
+For every development change, add a concise entry at the top of the applicable
+section in `CHANGELOG.md`. Include the change date in `YYYY-MM-DD` format and
+keep entries in reverse chronological order; for multiple entries on the same
+date, put the newest entry first. Keep pending changes under `Unreleased` until
+a versioned release is prepared.
+
+After completing the change, assess its semantic-versioning impact:
+
+- `patch` for backward-compatible fixes and maintenance changes
+- `minor` for backward-compatible functionality
+- `major` for incompatible API or behavior changes
+
+Propose the resulting `package.json` version to the operator. Do not change the
+version number without their explicit confirmation. When a version change is
+approved, keep `package.json`, `package-lock.json`, and the version heading in
+`CHANGELOG.md` synchronized.
+
+The next release is currently planned as `1.0.0`. This plan does not authorize
+a version change: keep the package at `0.2.1` until the operator explicitly
+approves the update.
+
 ## Documentation maintenance
 
 - The Japanese README and initial setup guide are maintained separately. Other
