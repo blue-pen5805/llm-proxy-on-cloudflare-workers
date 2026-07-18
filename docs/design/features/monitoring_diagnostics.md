@@ -7,14 +7,17 @@ The Worker exposes two authenticated health routes:
 - `/ping` returns `Pong` without provider subrequests. It is a liveness check
   for routing and Worker execution only.
 - `/status` returns sanitized configuration and runs credential connectivity
-  checks. It is an operator diagnostic, not a low-cost liveness probe.
+  checks. It is an operator diagnostic, not a low-cost liveness probe. Its
+  response is serialized as compact JSON to avoid diagnostic-only whitespace.
 
 ## Status algorithm
 
 The handler constructs every built-in and custom provider instance. For each
 configured credential, it calls the provider's model-list path, either directly
 or through the active AI Gateway. Checks run concurrently with an individual
-five-second timeout.
+five-second timeout. All configured credentials are checked in batches of five;
+the concurrency bound limits simultaneous upstream load without leaving later
+credential slots unexamined solely because of their configuration order.
 
 The status handler shares the model-list Gateway capability decision with the
 normal model aggregation route. A provider that sets

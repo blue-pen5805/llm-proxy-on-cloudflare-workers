@@ -175,12 +175,12 @@ after a network error, HTTP 401/403, or HTTP 429.
 ## Status and health
 
 `/ping` proves only that the Worker can route a request. `/status` additionally
-checks up to 32 configured credentials against provider model-list endpoints,
-five at a time, and returns `valid`, `invalid`, or `unknown`. Additional slots
-remain `unknown`. No key value or suffix is returned, but the response reveals
-configured providers, credential slot counts, default model configuration, and
-AI Gateway identifiers. Keep it authenticated and do not publish its output in
-support tickets without review.
+checks every configured credential against provider model-list endpoints, five
+at a time, and returns `valid`, `invalid`, or `unknown`. No key value or suffix
+is returned, but the response reveals configured providers, credential slot
+counts, default model configuration, and AI Gateway identifiers. Keep it
+authenticated and do not publish its output in support tickets without review.
+The response body uses compact JSON without indentation or line breaks.
 
 Timeouts, unsupported model listing, and non-authentication HTTP failures are
 reported as `unknown`. Authentication failures are `invalid`; unexpected fetch

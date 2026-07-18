@@ -11,7 +11,6 @@ import { resolveAiGatewayModelsProvider } from "./model_gateway";
 
 const CONNECTIVITY_CHECK_TIMEOUT_MS = 5000;
 export const STATUS_CONNECTIVITY_CONCURRENCY = 5;
-export const MAX_STATUS_CONNECTIVITY_CHECKS = 32;
 
 type ConnectivityStatus = "valid" | "invalid" | "unknown";
 
@@ -154,10 +153,7 @@ export async function handleStatusRequest(
     providersStatus[providerName] = providerStatus;
 
     for (let apiKeyIndex = 0; apiKeyIndex < allApiKeys.length; apiKeyIndex++) {
-      if (
-        !providerInstance.modelsPath ||
-        connectivityTasks.length >= MAX_STATUS_CONNECTIVITY_CHECKS
-      ) {
+      if (!providerInstance.modelsPath) {
         continue;
       }
       connectivityTasks.push(async () => {
@@ -190,7 +186,7 @@ export async function handleStatusRequest(
     providers: providersStatus,
   };
 
-  return new Response(JSON.stringify(responseBody, null, 2), {
+  return new Response(JSON.stringify(responseBody), {
     headers: {
       "Content-Type": "application/json",
     },

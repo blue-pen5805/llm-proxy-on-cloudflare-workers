@@ -72,9 +72,9 @@ therefore change if keys are reordered.
 Use health endpoints deliberately:
 
 - `/ping` checks Worker routing without contacting providers.
-- `/status` runs at most 32 model-list checks per invocation, five at a time,
-  and marks additional slots `unknown`. It can still consume provider quota and
-  expose limited configuration metadata.
+- `/status` checks every configured credential against its model-list endpoint,
+  five at a time. Large credential sets can make the response slow, consume
+  provider quota, and expose limited configuration metadata.
 - `/v1/models` is best-effort. Check Worker logs when a provider is absent.
 
 ## Common failures

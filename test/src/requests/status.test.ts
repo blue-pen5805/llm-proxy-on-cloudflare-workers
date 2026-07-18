@@ -6,7 +6,7 @@ import { CustomOpenAI } from "~/src/providers/custom-openai";
 import { ProviderNotSupportedError } from "~/src/providers/provider";
 import {
   handleStatusRequest,
-  MAX_STATUS_CONNECTIVITY_CHECKS,
+  STATUS_CONNECTIVITY_CONCURRENCY,
 } from "~/src/requests/status";
 import { Config } from "~/src/utils/config";
 import { Environments } from "~/src/utils/environments";
@@ -93,7 +93,10 @@ describe("status", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe("application/json");
 
-    const body = (await response.json()) as any;
+    const responseText = await response.text();
+    const body = JSON.parse(responseText) as any;
+    expect(responseText).toBe(JSON.stringify(body));
+    expect(responseText).not.toContain("\n");
     expect(body.config).toEqual({
       DEV: false,
       DEFAULT_MODEL: "gpt-4",
@@ -390,24 +393,27 @@ describe("status", () => {
     expect(Object.keys(body.providers)).toEqual(["first", "second"]);
   });
 
-  it("caps live connectivity fan-out and leaves excess slots unknown", async () => {
+  it("checks every configured credential while limiting concurrency", async () => {
+    const apiKeyCount = 34;
+    let activeChecks = 0;
+    let maximumActiveChecks = 0;
     vi.mocked(Secrets.getAll).mockReturnValue(
-      Array.from(
-        { length: MAX_STATUS_CONNECTIVITY_CHECKS + 2 },
-        (_, index) => `key-${index}`,
-      ),
+      Array.from({ length: apiKeyCount }, (_, index) => `key-${index}`),
     );
-    mockProviderClass.fetch.mockImplementation(
-      async () => new Response(null, { status: 200 }),
-    );
+    mockProviderClass.fetch.mockImplementation(async () => {
+      activeChecks++;
+      maximumActiveChecks = Math.max(maximumActiveChecks, activeChecks);
+      await Promise.resolve();
+      activeChecks--;
+      return new Response(null, { status: 200 });
+    });
 
     const body = await (await handleStatusRequest()).json();
-    expect(mockProviderClass.fetch).toHaveBeenCalledTimes(
-      MAX_STATUS_CONNECTIVITY_CHECKS,
-    );
+    expect(mockProviderClass.fetch).toHaveBeenCalledTimes(apiKeyCount);
+    expect(maximumActiveChecks).toBe(STATUS_CONNECTIVITY_CONCURRENCY);
     expect(body.providers.openai.keys.at(-1)).toEqual({
-      slot: MAX_STATUS_CONNECTIVITY_CHECKS + 1,
-      status: "unknown",
+      slot: apiKeyCount - 1,
+      status: "valid",
     });
   });
 
