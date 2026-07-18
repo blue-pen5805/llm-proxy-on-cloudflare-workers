@@ -43,6 +43,19 @@ describe("CustomOpenAI Provider (Paths)", () => {
     expect(modelsUrl).toBe("/custom/models");
   });
 
+  it("keeps a configured v1 Base URL unchanged for direct requests", async () => {
+    const provider = new CustomOpenAI({
+      name: "direct-v1",
+      baseUrl: "https://api.example.com/root/v1",
+    });
+
+    expect(provider.baseUrl()).toBe("https://api.example.com/root/v1");
+    await expect(provider.buildRequest(provider.modelsPath)).resolves.toEqual([
+      "https://api.example.com/root/v1/models",
+      expect.any(Object),
+    ]);
+  });
+
   it.each([
     "http://example.com",
     "https://user:password@example.com",

@@ -31,6 +31,31 @@ export function customProviderRoute(providerName: string): string {
   return `custom-${customProviderSlug(providerName)}`;
 }
 
+interface CustomProviderUrlParts {
+  baseUrl: string;
+  requestPathPrefix: string;
+}
+
+function customProviderUrlParts(
+  provider: Pick<Provider, "baseUrl">,
+): CustomProviderUrlParts {
+  const baseUrl = new URL(provider.baseUrl());
+  const pathname = baseUrl.pathname.replace(/\/+$/, "");
+  const requestPathPrefix = pathname.endsWith("/v1") ? "/v1" : "";
+  const registeredPathname = requestPathPrefix
+    ? pathname.slice(0, -requestPathPrefix.length)
+    : pathname;
+  baseUrl.pathname = `${registeredPathname}/`;
+  return { baseUrl: baseUrl.href, requestPathPrefix };
+}
+
+/** Return the Base URL stored in an AI Gateway Custom Provider. */
+export function customProviderBaseUrl(
+  provider: Pick<Provider, "baseUrl">,
+): string {
+  return customProviderUrlParts(provider).baseUrl;
+}
+
 export function resolveGatewayProvider(
   providerName: string,
   aiGateway: CloudflareAIGateway | undefined,
@@ -44,16 +69,19 @@ export function resolveGatewayProvider(
 }
 
 /**
- * Custom Providers store provider.baseUrl() as their base URL, so the Gateway
- * request must retain the adapter's fixed pathname prefix.
+ * AI Gateway replaces a trailing /v1 Base URL segment while resolving a Custom
+ * Provider path. Store that segment in the request path for Custom routes only.
  */
 export function gatewayProviderPath(
   providerName: string,
-  provider: Pick<Provider, "aiGatewayPath" | "pathnamePrefix">,
+  provider: Pick<Provider, "aiGatewayPath" | "baseUrl" | "pathnamePrefix">,
   pathname: string,
   gatewayProvider: string,
 ): string {
-  return gatewayProvider === providerName
-    ? (provider.aiGatewayPath?.(pathname) ?? pathname)
-    : `${provider.pathnamePrefix?.() ?? ""}${pathname}`;
+  if (gatewayProvider === providerName) {
+    return provider.aiGatewayPath?.(pathname) ?? pathname;
+  }
+
+  const { requestPathPrefix } = customProviderUrlParts(provider);
+  return `${requestPathPrefix}${provider.pathnamePrefix?.() ?? ""}${pathname}`;
 }

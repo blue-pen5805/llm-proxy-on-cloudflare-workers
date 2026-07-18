@@ -45,6 +45,7 @@ function mockProviderConstructor(instance: unknown) {
 describe("models", () => {
   const mockProviderClass = {
     available: vi.fn(),
+    baseUrl: vi.fn(() => "https://api.example.com"),
     buildModelsRequest: vi.fn(),
     convertModelsToOpenAIFormat: vi.fn(),
     fetch: vi.fn(),

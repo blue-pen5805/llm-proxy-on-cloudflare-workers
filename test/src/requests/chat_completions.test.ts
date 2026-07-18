@@ -22,6 +22,7 @@ vi.mock("~/src/utils/secrets");
 
 describe("handleChatCompletionsRequest", () => {
   const mockProviderClass = {
+    baseUrl: vi.fn(() => "https://api.example.com"),
     buildChatCompletionsRequest: vi.fn(),
     transformChatCompletionsResponse: vi.fn(
       async (response: Response) => response,

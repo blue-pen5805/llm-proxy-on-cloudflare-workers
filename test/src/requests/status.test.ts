@@ -29,6 +29,7 @@ vi.mock("~/src/utils/helpers");
 describe("status", () => {
   const mockProviderClass = {
     apiKeyName: "OPENAI_API_KEY",
+    baseUrl: vi.fn(() => "https://api.example.com"),
     modelsPath: "/models",
     supportsAiGatewayModels: true,
     available: vi.fn(),

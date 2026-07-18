@@ -12,6 +12,8 @@ update is explicitly approved.
 
 ### 2026-07-18
 
+- Fixed strict AI Gateway Custom Provider routing to preserve a trailing `/v1`
+  Base URL segment for Cline and configured custom endpoints.
 - Added the `cline` provider.
 - Added the `nvidia-nim` provider for NVIDIA's hosted OpenAI-compatible Chat
   Completions, model discovery, and pass-through API with configurable key

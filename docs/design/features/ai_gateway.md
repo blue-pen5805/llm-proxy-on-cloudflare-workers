@@ -81,14 +81,22 @@ provider segment of `custom-llm-proxy-<name>`. Names that require slug
 normalization receive a deterministic hash suffix so distinct configured names
 do not silently collapse to the same slug.
 
-The Custom Provider stores the adapter's Base URL. The Worker retains the
-adapter's fixed path prefix in the Gateway request path, so Cloudflare combines
-the two into the same upstream URL that direct routing would have selected.
-For example, Ollama stores `https://ollama.com` and sends `/v1` as part of the
-Gateway path rather than relying on a path segment embedded in the Base URL.
-This provider-specific endpoint preserves native request bodies and supports
-non-standard paths; it does not force the Compatibility Endpoint contract on
-an incompatible operation.
+Cloudflare Custom Provider routing replaces a Base URL's final `/v1` segment
+when it resolves the operation path. Strict mode therefore splits that one
+segment without changing the provider or operator configuration contract: the
+Custom Provider stores the configured Base URL up to `/v1`, with a trailing
+slash, and every Gateway request starts with `/v1`. For example, Cline's adapter
+continues to declare `https://api.cline.bot/api/v1`; deployment stores
+`https://api.cline.bot/api/`, and model discovery sends
+`/v1/ai/cline/recommended-models`. Base URLs that do not end in `/v1` retain
+their complete fixed path, while adapter pathname prefixes such as Ollama's
+`/v1` remain in the Gateway request path. This provider-specific endpoint
+preserves native request bodies and supports non-standard paths; it does not
+force the Compatibility Endpoint contract on an incompatible operation.
+
+This split is exclusive to managed Custom Provider synchronization and routing
+under `ALWAYS_USE_AI_GATEWAY=true`. Direct requests continue to concatenate the
+configured Base URL and operation path without this transformation.
 
 Custom Providers are synchronized by `npm run secrets:deploy` before Worker
 secrets are applied. The helper lists account providers and creates missing

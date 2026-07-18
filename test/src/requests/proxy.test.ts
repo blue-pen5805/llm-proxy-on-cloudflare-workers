@@ -23,6 +23,7 @@ vi.mock("~/src/utils/secrets");
 
 describe("proxy", () => {
   const mockProviderClass = {
+    baseUrl: vi.fn().mockReturnValue("https://api.example.com"),
     endpoint: {
       baseUrl: vi.fn().mockReturnValue("https://api.example.com/test"),
     },

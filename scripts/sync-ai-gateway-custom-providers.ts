@@ -1,4 +1,7 @@
-import { customProviderSlug } from "../src/ai_gateway/custom_provider.ts";
+import {
+  customProviderBaseUrl,
+  customProviderSlug,
+} from "../src/ai_gateway/custom_provider.ts";
 import { CloudflareAIGateway } from "../src/ai_gateway/index.ts";
 import { createProviderRegistry } from "../src/providers.ts";
 import type { Provider } from "../src/providers/provider.ts";
@@ -85,7 +88,7 @@ export function buildCustomProviderTargets(
     // remain omitted from aggregate operations in the meantime.
     let baseUrl: string;
     try {
-      baseUrl = provider.baseUrl().replace(/\/+$/, "");
+      baseUrl = customProviderBaseUrl(provider);
     } catch {
       continue;
     }
@@ -260,7 +263,7 @@ export async function syncAiGatewayCustomProviders(
     }
     if (
       existing?.name === target.name &&
-      existing.base_url.replace(/\/+$/, "") === target.baseUrl &&
+      new URL(existing.base_url).href === target.baseUrl &&
       existing.enable === true
     ) {
       unchanged++;

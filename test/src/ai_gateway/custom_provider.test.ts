@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  customProviderBaseUrl,
   customProviderRoute,
   customProviderSlug,
   gatewayProviderPath,
   resolveGatewayProvider,
 } from "~/src/ai_gateway/custom_provider";
+import { Cline } from "~/src/providers/cline/provider";
 import { Ollama } from "~/src/providers/ollama/provider";
 
 describe("AI Gateway Custom Provider routing", () => {
@@ -43,6 +45,7 @@ describe("AI Gateway Custom Provider routing", () => {
   it("retains fixed provider prefixes only for Custom Provider routes", () => {
     const provider = {
       aiGatewayPath: (path: string) => `/native${path}`,
+      baseUrl: () => "https://api.example.test",
       pathnamePrefix: () => "/v1",
     };
     expect(gatewayProviderPath("openai", provider, "/models", "openai")).toBe(
@@ -68,5 +71,42 @@ describe("AI Gateway Custom Provider routing", () => {
         customProviderRoute("ollama"),
       ),
     ).toBe("/v1/chat/completions");
+  });
+
+  it("moves Cline's trailing v1 into Custom Provider request paths", () => {
+    const provider = new Cline();
+    const gatewayPath = gatewayProviderPath(
+      "cline",
+      provider,
+      provider.modelsPath,
+      customProviderRoute("cline"),
+    );
+
+    expect(customProviderBaseUrl(provider)).toBe("https://api.cline.bot/api/");
+    expect(gatewayPath).toBe("/v1/ai/cline/recommended-models");
+    expect(
+      new URL(gatewayPath.replace(/^\/+/, ""), customProviderBaseUrl(provider))
+        .href,
+    ).toBe("https://api.cline.bot/api/v1/ai/cline/recommended-models");
+  });
+
+  it("moves only a trailing v1 and retains adapter path prefixes", () => {
+    const provider = {
+      aiGatewayPath: (path: string) => path,
+      baseUrl: () => "https://internal.example/fixed/v1//",
+      pathnamePrefix: () => "/openai",
+    };
+
+    expect(customProviderBaseUrl(provider)).toBe(
+      "https://internal.example/fixed/",
+    );
+    expect(
+      gatewayProviderPath(
+        "internal",
+        provider,
+        "/models",
+        customProviderRoute("internal"),
+      ),
+    ).toBe("/v1/openai/models");
   });
 });

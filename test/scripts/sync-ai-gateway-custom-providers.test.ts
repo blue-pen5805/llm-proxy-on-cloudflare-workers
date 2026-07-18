@@ -33,12 +33,17 @@ describe("AI Gateway Custom Provider synchronization", () => {
         {
           name: "LLM Proxy / ollama",
           slug: "llm-proxy-ollama",
-          baseUrl: "https://ollama.com",
+          baseUrl: "https://ollama.com/",
         },
         {
           name: "LLM Proxy / internal",
           slug: "llm-proxy-internal",
-          baseUrl: "https://internal.example/v1",
+          baseUrl: "https://internal.example/",
+        },
+        {
+          name: "LLM Proxy / cline",
+          slug: "llm-proxy-cline",
+          baseUrl: "https://api.cline.bot/api/",
         },
       ]),
     );
@@ -126,9 +131,12 @@ describe("AI Gateway Custom Provider synchronization", () => {
     }
   });
 
-  it("updates a changed managed definition and leaves matches unchanged", async () => {
+  it("updates the managed Base URL after moving its trailing v1", async () => {
     const targets = buildCustomProviderTargets(strictConfig);
-    const [changed, unchanged] = targets;
+    const changed = targets.find(
+      ({ name }) => name === "LLM Proxy / internal",
+    )!;
+    const unchanged = targets.find((target) => target !== changed)!;
     const fetchMock = vi.fn(
       async (_input: RequestInfo | URL, init?: RequestInit) => {
         if (!init?.method) {
@@ -138,7 +146,7 @@ describe("AI Gateway Custom Provider synchronization", () => {
                 id: "changed-id",
                 name: changed.name,
                 slug: changed.slug,
-                base_url: "https://old.example",
+                base_url: "https://internal.example/v1",
                 enable: true,
               },
               {
