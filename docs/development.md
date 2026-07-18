@@ -36,13 +36,20 @@ provider behavior, authentication, or key rotation.
 
 ## Adding or changing configuration
 
+First classify the value as a secret, non-secret setting, or Worker binding.
+This project's local JSONC deployment path registers top-level values as Worker
+secrets, so never place a live value in a tracked file.
+
 Keep the following artifacts synchronized:
 
 1. `schemas/config-schema.json`
 2. `config.example.jsonc` with a non-secret placeholder
 3. configuration access in `src/utils/config.ts` or `src/utils/secrets.ts`
-4. scripts that enumerate fields, when applicable
-5. [Configuration reference](configuration.md)
+4. scripts that enumerate fields, especially `scripts/create-config.ts`
+5. tests for schema parsing, defaults, invalid input, script behavior, and
+   runtime access as applicable
+6. [Configuration reference](configuration.md) and the relevant design document
+   when behavior or architecture changes
 
 After changing the schema, run `npm run cf-typegen`; do not edit
 `worker-configuration.d.ts` manually.
@@ -63,23 +70,53 @@ After changing the schema, run `npm run cf-typegen`; do not edit
 Do not claim OpenAI chat or model-list compatibility merely because pass-through
 works; test each capability independently.
 
+## Updating dependencies
+
+Update one dependency or a tightly related group at a time:
+
+1. Inspect available versions with `npx npm-check-updates`.
+2. Read upstream release and migration notes for the selected packages.
+3. Run `npx npm-check-updates --upgrade PACKAGE_NAME`, then `npm install`.
+4. Review both `package.json` and `package-lock.json` for unrelated updates.
+5. Regenerate and compare Worker bindings with `npm run cf-typegen` when
+   Wrangler, Workers types, or configuration behavior changes.
+6. Run the complete verification workflow below.
+
+Update documentation only when the dependency changes architecture, supported
+runtimes, commands, configuration behavior, or the contributor workflow. If the
+update cannot be made compatible within scope, report the exact failure and
+leave unrelated worktree changes untouched.
+
 ## Required verification
 
-Run the repository checks from the root:
+For code, configuration, or dependency changes, run all repository checks from
+the root:
 
 ```bash
 npm run tsc
-npm run prettier
+npm run prettier-ci
 npm run lint
 npm run test
-npm run bench
 ```
 
-`npm run prettier` modifies files. Review the resulting diff and make sure no
-local configuration or generated secret file was added. For documentation-only
-changes, also verify all relative Markdown links and inspect rendered tables and
-code fences. Benchmarks are diagnostic; compare results under the same runtime
-and machine rather than treating absolute throughput as a correctness gate.
+If the formatting check fails, run `npm run prettier`, review every resulting
+change, and repeat the checks. Run `npm run bench` for performance-sensitive
+changes; benchmarks are diagnostic and must be compared under the same runtime
+and machine.
+
+For documentation-only changes, at minimum:
+
+1. Run Prettier against the changed Markdown files.
+2. Check relative links and referenced repository paths.
+3. Compare commands, routes, configuration names, and behavior with their
+   authoritative implementation files.
+4. Run `git diff --check`.
+
+Run the broader checks when documentation exposes uncertainty about the
+implementation or when formatting changes non-documentation files. In every
+case, inspect the final diff for credentials, local configuration, generated
+secret files, and unrelated changes. Report any command that was not run or did
+not pass; do not create repository files solely to store verification output.
 
 ## Documentation maintenance
 

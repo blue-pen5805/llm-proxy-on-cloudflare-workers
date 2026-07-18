@@ -111,4 +111,5 @@ curl https://your-worker.example/google-ai-studio/v1beta/models/gemini-3.5-flash
 - [Operations and troubleshooting](docs/operations.md)
 - [Development and verification](docs/development.md)
 - [Architecture and design](docs/design/overview.md)
-- [第2巡 敵対的評価](docs/adversarial-review-round-2.md)
+- [Project principles](docs/project-principles.md)
+- [Roadmap candidates](TODO.md)

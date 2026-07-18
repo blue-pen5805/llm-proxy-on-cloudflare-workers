@@ -7,7 +7,8 @@ supports three request styles: OpenAI-compatible chat and model routes,
 provider-specific pass-through routes, and Cloudflare AI Gateway routes.
 
 This documentation describes the current implementation. User-facing commands
-and endpoint examples live in the [documentation index](../index.md).
+and endpoint examples live in the [documentation index](../index.md). Design and
+roadmap decisions follow the [project principles](../project-principles.md).
 
 ## Request flow
 

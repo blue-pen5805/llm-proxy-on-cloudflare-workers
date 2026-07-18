@@ -9,13 +9,14 @@ LLM proxy. Start with the setup guide, then use the task-oriented guides below.
 - [Configuration reference](configuration.md)
 - [HTTP API and routing](api.md)
 - [Operations and troubleshooting](operations.md)
-- [Adversarial security review (日本語)](adversarial-review.md)
-- [Second-pass adversarial review (日本語)](adversarial-review-round-2.md)
 
 ## Contributor guides
 
+- [Project principles](project-principles.md)
+- [Repository instructions for coding agents](../AGENTS.md)
 - [Development and verification](development.md)
 - [Architecture and design](design/overview.md)
+- [Roadmap candidates](../TODO.md)
 
 ## Documentation conventions
 

@@ -114,4 +114,5 @@ and credential slot counts, so keep its output private.
 - [Operations and troubleshooting](docs/operations.md)
 - [Development and verification](docs/development.md)
 - [Architecture and design](docs/design/overview.md)
-- [Second-pass adversarial review](docs/adversarial-review-round-2.md)
+- [Project principles](docs/project-principles.md)
+- [Roadmap candidates](TODO.md)
