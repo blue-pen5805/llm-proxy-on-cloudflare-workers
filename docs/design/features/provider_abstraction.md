@@ -68,6 +68,11 @@ capabilities:
 Pass-through usually needs only a base URL and authentication. The other two
 require adapter methods and tests for the provider's actual formats.
 
+Provider and client headers are merged with the Fetch API `Headers` abstraction
+so field names remain case-insensitive. Provider-controlled authentication and
+content-type values replace matching client values instead of producing multiple
+wire values with different casing.
+
 ## OpenAI-compatible chat flow
 
 1. Parse and validate the JSON body.

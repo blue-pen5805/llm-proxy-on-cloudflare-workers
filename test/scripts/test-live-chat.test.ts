@@ -1,4 +1,5 @@
 import {
+  AI_GATEWAY_COMPATIBILITY_PROVIDERS,
   BUILT_IN_LIVE_CHAT_CONTRACTS,
   MAX_ERROR_DETAIL_BYTES,
   MIN_COMPLETION_TOKENS,
@@ -7,6 +8,7 @@ import {
   runLiveChatTests,
   verifyLocalDevelopmentServer,
 } from "../../scripts/test-live-chat";
+import { CloudflareAIGateway } from "../../src/ai_gateway";
 import { BUILT_IN_PROVIDER_CONSTRUCTORS } from "../../src/providers";
 import { describe, expect, it, vi } from "vitest";
 
@@ -72,6 +74,9 @@ describe("live Chat Completions test script", () => {
           "max_completion_tokens",
         ),
       );
+      expect(AI_GATEWAY_COMPATIBILITY_PROVIDERS.has(providerName)).toBe(
+        CloudflareAIGateway.isSupportedProvider(providerName, true),
+      );
     }
   });
 
@@ -123,7 +128,7 @@ describe("live Chat Completions test script", () => {
     ).toThrow("must be a safe absolute path");
   });
 
-  it("calls direct and compatibility routes with one completion token", async () => {
+  it("calls direct, compatibility, and AI Gateway routes", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(null, {
         status: 200,
@@ -143,14 +148,18 @@ describe("live Chat Completions test script", () => {
     ).resolves.toEqual([
       { provider: "openai", route: "direct", status: 200 },
       { provider: "openai", route: "compatibility", status: 200 },
+      { provider: "openai", route: "ai-gateway", status: 200 },
     ]);
 
-    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher).toHaveBeenCalledTimes(3);
     expect(fetcher.mock.calls[0][0]).toBe(
       "http://127.0.0.1:8787/key/0/g/live%20gateway/openai/chat/completions",
     );
     expect(fetcher.mock.calls[1][0]).toBe(
       "http://127.0.0.1:8787/key/0/g/live%20gateway/v1/chat/completions",
+    );
+    expect(fetcher.mock.calls[2][0]).toBe(
+      "http://127.0.0.1:8787/key/0/g/live%20gateway/chat/completions",
     );
     expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual({
       model: "gpt-test",
@@ -164,6 +173,40 @@ describe("live Chat Completions test script", () => {
       stream: false,
       max_completion_tokens: MIN_COMPLETION_TOKENS,
     });
+    expect(JSON.parse(String(fetcher.mock.calls[2][1]?.body))).toEqual({
+      model: "openai/gpt-test",
+      messages: [{ role: "user", content: "Reply with OK." }],
+      stream: false,
+      max_completion_tokens: MIN_COMPLETION_TOKENS,
+    });
+  });
+
+  it("uses the default Gateway and skips unsupported providers", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    const testCases = parseLiveChatConfig(
+      '{"providers":{"openai":"gpt-test","ollama":"model-test"}}',
+    );
+
+    const results = await runLiveChatTests(testCases, {
+      baseUrl: "http://127.0.0.1:8787",
+      proxyApiKey: "proxy-secret",
+      fetcher,
+    });
+
+    expect(results.map(({ provider, route }) => ({ provider, route }))).toEqual(
+      [
+        { provider: "openai", route: "direct" },
+        { provider: "openai", route: "compatibility" },
+        { provider: "openai", route: "ai-gateway" },
+        { provider: "ollama", route: "direct" },
+        { provider: "ollama", route: "compatibility" },
+      ],
+    );
+    expect(fetcher.mock.calls[2][0]).toBe(
+      "http://127.0.0.1:8787/key/0/g/default/chat/completions",
+    );
   });
 
   it("rejects deployed Worker targets", async () => {
@@ -266,6 +309,9 @@ describe("live Chat Completions test script", () => {
     expect(fetcher.mock.calls[1][0]).toBe(
       "http://127.0.0.1:8787/v1/chat/completions",
     );
+    expect(fetcher.mock.calls[2][0]).toBe(
+      "http://127.0.0.1:8787/g/default/chat/completions",
+    );
   });
 
   it("reports structured HTTP error details with credentials redacted", async () => {
@@ -309,6 +355,13 @@ describe("live Chat Completions test script", () => {
       {
         provider: "openai",
         route: "compatibility",
+        status: 401,
+        error:
+          'HTTP 401 Unauthorized: {"error":{"message":"model not found","type":"invalid_request_error","code":"model_not_found","api_key":"***","authorization":"***"},"proxy":"***","detail":"*** is invalid"}',
+      },
+      {
+        provider: "openai",
+        route: "ai-gateway",
         status: 401,
         error:
           'HTTP 401 Unauthorized: {"error":{"message":"model not found","type":"invalid_request_error","code":"model_not_found","api_key":"***","authorization":"***"},"proxy":"***","detail":"*** is invalid"}',

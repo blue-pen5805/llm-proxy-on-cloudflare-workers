@@ -12,6 +12,8 @@ update is explicitly approved.
 
 ### 2026-07-18
 
+- Fixed provider request header merging so case variants such as `Content-Type`
+  and `content-type` produce one upstream field.
 - Added an opt-in, local-Wrangler-only Chat Completions test harness that uses
   operator-selected provider models to verify both Direct and OpenAI-compatible
   proxy routes with real credentials, explicit single-key selection, 100-token

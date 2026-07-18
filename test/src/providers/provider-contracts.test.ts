@@ -76,22 +76,19 @@ describe("provider contracts", () => {
       expect(await provider.getNextApiKeyIndex()).toBe(1);
       expect(Secrets.getNext).toHaveBeenCalledWith("OPENAI_API_KEY");
 
-      await expect(
-        provider.buildRequest(
-          "/models",
-          { method: "GET", headers: { Accept: "application/json" } },
-          1,
-        ),
-      ).resolves.toEqual([
-        "https://api.example.test/v1/models",
-        {
-          method: "GET",
-          headers: {
-            Accept: "application/json",
-            Authorization: "Bearer key-1",
-          },
-        },
-      ]);
+      const [url, init] = await provider.buildRequest(
+        "/models",
+        { method: "GET", headers: { Accept: "application/json" } },
+        1,
+      );
+      expect(url).toBe("https://api.example.test/v1/models");
+      expect(init.method).toBe("GET");
+      expect(new Headers(init.headers)).toEqual(
+        new Headers({
+          Accept: "application/json",
+          Authorization: "Bearer key-1",
+        }),
+      );
     });
 
     it("does not rotate a single configured credential", async () => {
@@ -130,18 +127,20 @@ describe("provider contracts", () => {
         apiKeyIndex: 1,
       });
       expect(chatPath).toBe("/chat/completions");
-      expect(chatInit).toEqual({
+      expect(chatInit).toMatchObject({
         method: "POST",
         body: JSON.stringify({
           model: "model-id",
           messages: [],
           temperature: 0.5,
         }),
-        headers: {
+      });
+      expect(new Headers(chatInit.headers)).toEqual(
+        new Headers({
           Authorization: "caller-header",
           "X-Provider": "kept",
-        },
-      });
+        }),
+      );
 
       const preparedData = {
         model: "prepared-model",
@@ -412,14 +411,15 @@ describe("provider contracts", () => {
       );
 
       await provider.fetch("/v1beta/models", undefined, 0);
-      expect(fetchMock).toHaveBeenLastCalledWith(
+      const [modelsUrl, modelsInit] = fetchMock.mock.calls.at(-1) ?? [];
+      expect(modelsUrl).toBe(
         "https://generativelanguage.googleapis.com/v1beta/models",
-        {
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": "key-0",
-          },
-        },
+      );
+      expect(new Headers(modelsInit?.headers)).toEqual(
+        new Headers({
+          "Content-Type": "application/json",
+          "x-goog-api-key": "key-0",
+        }),
       );
     });
 

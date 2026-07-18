@@ -18,6 +18,24 @@ export interface BuiltInLiveChatContract {
   supportsMaxCompletionTokens: boolean;
 }
 
+/** Node-compatible snapshot of providers routed through Gateway compatibility. */
+export const AI_GATEWAY_COMPATIBILITY_PROVIDERS: ReadonlySet<string> = new Set([
+  "anthropic",
+  "aws-bedrock",
+  "cerebras",
+  "cohere",
+  "deepseek",
+  "google-ai-studio",
+  "google-vertex-ai",
+  "grok",
+  "groq",
+  "mistral",
+  "openai",
+  "openrouter",
+  "perplexity-ai",
+  "workers-ai",
+]);
+
 /**
  * Node-compatible snapshot of the provider properties needed by this CLI.
  * A Worker-runtime test keeps it synchronized with the provider registry.
@@ -98,7 +116,7 @@ export interface LiveChatTestCase {
 
 export interface LiveChatTestResult {
   provider: string;
-  route: "direct" | "compatibility";
+  route: "direct" | "compatibility" | "ai-gateway";
   status?: number;
   error?: string;
 }
@@ -454,10 +472,17 @@ async function executeRequest(
   route: LiveChatTestResult["route"],
   options: Required<Pick<RunOptions, "timeoutMs" | "fetcher">> & RunOptions,
 ): Promise<LiveChatTestResult> {
-  const isCompatibility = route === "compatibility";
-  const requestPath = isCompatibility
-    ? "/v1/chat/completions"
-    : `/${testCase.provider}${testCase.directPath}`;
+  const usesCompatibilityFormat = route !== "direct";
+  const requestPath =
+    route === "direct"
+      ? `/${testCase.provider}${testCase.directPath}`
+      : route === "ai-gateway"
+        ? "/chat/completions"
+        : "/v1/chat/completions";
+  const gatewayName =
+    route === "ai-gateway"
+      ? (options.gatewayName ?? "default")
+      : options.gatewayName;
   const abortController = new AbortController();
   const timeout = setTimeout(() => abortController.abort(), options.timeoutMs);
 
@@ -465,14 +490,14 @@ async function executeRequest(
     const response = await options.fetcher(
       joinRoute(
         options.baseUrl,
-        options.gatewayName,
+        gatewayName,
         options.keySelection === undefined ? "0" : options.keySelection,
         requestPath,
       ),
       {
         method: "POST",
         headers: createProxyHeaders(options.proxyApiKey),
-        body: JSON.stringify(buildChatBody(testCase, isCompatibility)),
+        body: JSON.stringify(buildChatBody(testCase, usesCompatibilityFormat)),
         signal: abortController.signal,
       },
     );
@@ -555,6 +580,11 @@ export async function runLiveChatTests(
     results.push(
       await executeRequest(testCase, "compatibility", normalizedOptions),
     );
+    if (AI_GATEWAY_COMPATIBILITY_PROVIDERS.has(testCase.provider)) {
+      results.push(
+        await executeRequest(testCase, "ai-gateway", normalizedOptions),
+      );
+    }
   }
   return results;
 }

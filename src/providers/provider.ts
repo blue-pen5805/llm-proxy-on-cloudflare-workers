@@ -178,6 +178,17 @@ export interface ProviderDefinition {
   getStaticModels?(this: Provider): OpenAIModelsListResponseBody | undefined;
 }
 
+function mergeHeaders(
+  baseHeaders: HeadersInit | undefined,
+  overridingHeaders: HeadersInit,
+): Record<string, string> {
+  const headers = new Headers(baseHeaders);
+  new Headers(overridingHeaders).forEach((value, key) => {
+    headers.set(key, value);
+  });
+  return Object.fromEntries(headers.entries());
+}
+
 export type ProviderConstructor<
   Arguments extends unknown[] = [],
   Instance extends Provider = Provider,
@@ -302,10 +313,7 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
     async buildRequestInit(init, apiKeyIndex) {
       return {
         ...init,
-        headers: {
-          ...init?.headers,
-          ...(await this.headers(apiKeyIndex)),
-        },
+        headers: mergeHeaders(init?.headers, await this.headers(apiKeyIndex)),
       };
     },
 
@@ -324,10 +332,7 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
         {
           method: "POST",
           body: JSON.stringify(trimmedData),
-          headers: {
-            ...(await this.headers(apiKeyIndex)),
-            ...headers,
-          },
+          headers: mergeHeaders(await this.headers(apiKeyIndex), headers),
         },
       ];
     },

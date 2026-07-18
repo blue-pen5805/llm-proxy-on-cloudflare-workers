@@ -76,6 +76,34 @@ describe("proxy", () => {
     );
   });
 
+  it("sends one case-insensitive content-type value upstream", async () => {
+    const request = new Request("https://example.com/openai/chat/completions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "gpt-test", messages: [] }),
+    });
+    const provider = new BUILT_IN_PROVIDER_CONSTRUCTORS.openai();
+    const fetchMock = vi.mocked(fetchWithLogging);
+    fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
+
+    await provider.fetch(
+      "/chat/completions",
+      {
+        method: request.method,
+        body: request.body,
+        headers: Object.fromEntries(request.headers.entries()),
+      },
+      0,
+    );
+
+    const init = fetchMock.mock.calls[0][1];
+    const headers = new Headers(init?.headers);
+    expect(headers.get("content-type")).toBe("application/json");
+    expect(
+      [...headers.keys()].filter((key) => key === "content-type"),
+    ).toHaveLength(1);
+  });
+
   it("should handle duplicate path segments correctly", async () => {
     const providerName = "testProvider";
     BUILT_IN_PROVIDER_CONSTRUCTORS[providerName] = vi.fn(function () {

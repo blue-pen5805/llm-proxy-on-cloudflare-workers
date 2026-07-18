@@ -12,12 +12,17 @@ For each selected provider, the script makes two sequential requests:
 2. **Compatibility** uses the proxy's OpenAI-compatible
    `/v1/chat/completions` route with a provider-qualified model.
 
-When `LLM_PROXY_GATEWAY_NAME` is set, both paths use the corresponding
-`/g/<gateway>` prefix. This exercises the AI Gateway provider endpoint for the
-Direct request and the proxy's Compatibility Endpoint selection for providers
-that support it.
+Providers supported by the proxy's AI Gateway Compatibility Endpoint contract
+receive a third **AI Gateway** check at `/g/default/chat/completions`. Providers
+such as Ollama and Azure OpenAI that do not support that Gateway compatibility
+route retain only the first two checks.
 
-Both routes use `/key/0` by default. Besides making the credential choice
+When `LLM_PROXY_GATEWAY_NAME` is set, all applicable paths use the corresponding
+`/g/<gateway>` prefix and the third check uses that Gateway instead of `default`.
+This exercises the AI Gateway provider endpoint for the Direct request and the
+proxy's Compatibility Endpoint selection for supported providers.
+
+All routes use `/key/0` by default. Besides making the credential choice
 repeatable, explicit key selection disables the proxy's compatibility fallback
 to additional credentials, keeping each check to one upstream attempt. Set
 `LLM_PROXY_KEY_SELECTION` to another supported index or range when testing a
@@ -137,7 +142,8 @@ The fixed prompt is short, streaming is disabled, and the completion limit is
 adapter supports it. For providers such as Cohere that accept only the legacy
 field, it sends `max_tokens: 100` instead. Requests run sequentially and the
 script never retries. With the default explicit key selection, a full run makes
-exactly two upstream attempts per configured provider.
+two upstream attempts for providers without Gateway compatibility and three for
+supported providers.
 
 Any HTTP 2xx response passes. Network errors, timeouts, and non-2xx responses
 fail the command. A non-2xx result includes up to 16 KiB of its upstream error
