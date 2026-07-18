@@ -36,6 +36,10 @@ to the final key and chooses randomly from the inclusive range. Open bounds mean
 the first or final key. Explicit selection is request-scoped and does not change
 the Durable Object counter.
 
+The prefix is accepted only for OpenAI-compatible chat, model aggregation, and
+registered provider pass-through. Routes that do not consume a selected
+provider credential reject it with HTTP 400 rather than silently ignoring it.
+
 Callers must not explicitly select keys for a provider with zero keys; modulo
 resolution requires a non-empty key set. Custom endpoints without authentication
 remain usable when no selection prefix is supplied.
@@ -43,8 +47,8 @@ remain usable when no selection prefix is supplied.
 ## Operational implications
 
 - Rotation distributes direct and provider-endpoint requests. With automatic
-  selection, OpenAI-compatible Gateway chat requests additionally try the
-  shuffled configured keys in order until a request succeeds. An explicit
+  selection, OpenAI-compatible Gateway chat tries the selected rotation slot
+  first, then shuffled remaining keys until a request succeeds. An explicit
   index or range resolves one key and disables this fallback.
 - Reordering the configured array changes which credential a stored numeric
   counter refers to.

@@ -16,6 +16,7 @@ import {
   withTimeout,
 } from "../utils/helpers";
 import { RequestLogger } from "../utils/logger";
+import { resolveAiGatewayModelsProvider } from "./model_gateway";
 
 // Timeout for individual provider model fetch operations (milliseconds)
 const PROVIDER_FETCH_TIMEOUT_MS = 5000;
@@ -36,10 +37,12 @@ async function fetchProviderModels(
   aiGateway?: CloudflareAIGateway,
   clientGatewayHeaders?: HeadersInit,
 ): Promise<OpenAIModelsListResponseBody> {
-  if (
-    !provider.available() &&
-    (!aiGateway || provider.supportsAiGatewayModels === false)
-  ) {
+  const aiGatewayProvider = resolveAiGatewayModelsProvider(
+    providerName,
+    provider,
+    aiGateway,
+  );
+  if (!provider.available() && !aiGatewayProvider) {
     return EMPTY_MODELS;
   }
 
@@ -49,10 +52,6 @@ async function fetchProviderModels(
   }
 
   const apiKeyIndex = await selectApiKeyIndex(provider, selection, "first");
-  const aiGatewayProvider =
-    aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)
-      ? providerName
-      : undefined;
   const keyLogFields = recordApiKeySelection({
     provider: providerName,
     operation: "models",
@@ -65,11 +64,7 @@ async function fetchProviderModels(
   const abortController = new AbortController();
 
   let responsePromise: Promise<Response>;
-  if (
-    aiGateway &&
-    aiGatewayProvider &&
-    provider.supportsAiGatewayModels !== false
-  ) {
+  if (aiGateway && aiGatewayProvider) {
     const gatewayHeaders = new Headers(clientGatewayHeaders);
     const providerHeaders = new Headers(await provider.headers(apiKeyIndex));
     providerHeaders.forEach((value, key) => gatewayHeaders.set(key, value));

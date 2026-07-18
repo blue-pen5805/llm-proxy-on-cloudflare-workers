@@ -7,7 +7,11 @@ import {
 } from "../utils/api_key_selection";
 import { stripProxyAuthorizationHeaders } from "../utils/authorization";
 import { Config } from "../utils/config";
-import { parseJsonOrReturnText, readRequestText } from "../utils/helpers";
+import {
+  parseJsonOrReturnText,
+  readRequestText,
+  shuffleArray,
+} from "../utils/helpers";
 import { RequestLogger } from "../utils/logger";
 import { fetchCompatibilityFallback } from "./compatibility_fallback";
 import {
@@ -91,19 +95,24 @@ export async function handleChatCompletionsRequest(
       aiGateway && CloudflareAIGateway.isSupportedProvider(providerName),
     ),
   });
-  const keyLogFields = recordApiKeySelection({
-    provider: providerName,
-    operation: "chat_completions",
-    keyIndex: apiKeyIndex,
-    keyCount: providerInstance.getApiKeys().length,
-    selectionPolicy: determineApiKeySelectionPolicy(
-      contextApiKeyIndex,
-      "rotate",
-    ),
-    viaAiGateway:
-      aiGatewayProvider !== undefined ||
-      Boolean(aiGateway && providerInstance.supportsAiGatewayNativeChat),
-  });
+  const configuredApiKeys = providerInstance.getApiKeys();
+  const gatewayApiKeys =
+    providerInstance.getAiGatewayApiKeys?.() ?? configuredApiKeys;
+  const selectionPolicy = determineApiKeySelectionPolicy(
+    contextApiKeyIndex,
+    "rotate",
+  );
+  const recordSelection = (selectedIndex: number) =>
+    recordApiKeySelection({
+      provider: providerName,
+      operation: "chat_completions",
+      keyIndex: selectedIndex,
+      keyCount: configuredApiKeys.length,
+      selectionPolicy,
+      viaAiGateway:
+        aiGatewayProvider !== undefined ||
+        Boolean(aiGateway && providerInstance.supportsAiGatewayNativeChat),
+    });
 
   // Generate chat completions request
   const supportedRequestBody = providerInstance.filterSupportedChatParameters({
@@ -120,10 +129,17 @@ export async function handleChatCompletionsRequest(
 
   // If AI Gateway is enabled and the provider supports it, use AI Gateway
   if (aiGateway && aiGatewayProvider) {
-    const explicitGatewayApiKey =
-      contextApiKeyIndex === undefined
-        ? undefined
-        : providerInstance.getApiKeys()[apiKeyIndex];
+    const remainingApiKeyIndexes = shuffleArray(
+      configuredApiKeys
+        .map((_apiKey, candidateIndex) => candidateIndex)
+        .filter((candidateIndex) => candidateIndex !== apiKeyIndex),
+    );
+    const gatewayApiKeyIndexes =
+      configuredApiKeys.length === 0
+        ? []
+        : contextApiKeyIndex === undefined
+          ? [apiKeyIndex, ...remainingApiKeyIndexes]
+          : [apiKeyIndex];
     const gatewayRequests = await aiGateway.buildChatCompletionsRequests({
       provider: aiGatewayProvider,
       body: requestInit.body as string,
@@ -132,18 +148,20 @@ export async function handleChatCompletionsRequest(
         [key: string]: unknown;
       },
       headers: requestInit.headers ?? {},
-      apiKeys:
-        contextApiKeyIndex === undefined
-          ? (providerInstance.getAiGatewayApiKeys?.() ??
-            providerInstance.getApiKeys())
-          : explicitGatewayApiKey
-            ? [explicitGatewayApiKey]
-            : [],
+      apiKeys: gatewayApiKeyIndexes.map(
+        (candidateIndex) =>
+          gatewayApiKeys[candidateIndex] ?? configuredApiKeys[candidateIndex],
+      ),
     });
-    return RequestLogger.withFields(keyLogFields, () =>
-      fetchCompatibilityFallback(gatewayRequests, request.signal),
+    return fetchCompatibilityFallback(
+      gatewayRequests,
+      request.signal,
+      (attemptIndex) =>
+        recordSelection(gatewayApiKeyIndexes[attemptIndex] ?? 0),
     );
   }
+
+  const keyLogFields = recordSelection(apiKeyIndex);
 
   // Some Gateway providers (notably Azure OpenAI) require account-specific
   // path segments and are not represented by the Compatibility Endpoint.

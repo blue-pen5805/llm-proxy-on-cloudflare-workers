@@ -114,6 +114,7 @@ describe("stripProxyAuthorizationHeaders", () => {
       "x-api-key": "proxy-secret",
       "x-goog-api-key": "proxy-secret",
       "cf-aig-authorization": "Bearer attacker-token",
+      "cf-aig-byok-alias": "privileged-key",
       "cf-aig-max-attempts": "5",
       "api-key": "attacker-azure-key",
       cookie: "session=private",
@@ -127,6 +128,7 @@ describe("stripProxyAuthorizationHeaders", () => {
     expect(sanitized.has("x-api-key")).toBe(false);
     expect(sanitized.has("x-goog-api-key")).toBe(false);
     expect(sanitized.has("cf-aig-authorization")).toBe(false);
+    expect(sanitized.has("cf-aig-byok-alias")).toBe(false);
     expect(sanitized.has("cf-aig-max-attempts")).toBe(false);
     expect(sanitized.has("api-key")).toBe(false);
     expect(sanitized.has("cookie")).toBe(false);
@@ -139,6 +141,7 @@ describe("stripProxyAuthorizationHeaders", () => {
     const sanitized = stripProxyAuthorizationHeaders(
       {
         "cf-aig-authorization": "Bearer client-gateway-token",
+        "cf-aig-byok-alias": "privileged-key",
         "cf-aig-max-attempts": "3",
         "cf-aig-metadata": '{"tenant":"example"}',
         "cf-connecting-ip": "203.0.113.1",
@@ -148,6 +151,7 @@ describe("stripProxyAuthorizationHeaders", () => {
     );
 
     expect(sanitized.has("cf-aig-authorization")).toBe(false);
+    expect(sanitized.has("cf-aig-byok-alias")).toBe(false);
     expect(sanitized.get("cf-aig-max-attempts")).toBe("3");
     expect(sanitized.get("cf-aig-metadata")).toBe('{"tenant":"example"}');
     expect(sanitized.has("cf-connecting-ip")).toBe(false);

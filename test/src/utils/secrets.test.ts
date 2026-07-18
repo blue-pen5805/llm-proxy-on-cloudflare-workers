@@ -39,6 +39,16 @@ describe("Secrets", () => {
       expect(Secrets.getAll("ANTHROPIC_API_KEY")).toEqual([]);
     });
 
+    it("filters blank strings without changing configured credential values", () => {
+      env.ANTHROPIC_API_KEY = ["", "   ", "\t", " key-with-padding "];
+      env.OPENAI_API_KEY = " \n ";
+
+      expect(Secrets.getAll("ANTHROPIC_API_KEY")).toEqual([
+        " key-with-padding ",
+      ]);
+      expect(Secrets.getAll("OPENAI_API_KEY")).toEqual([]);
+    });
+
     it("shuffles only multi-key arrays when requested", () => {
       vi.mocked(randomInt).mockReturnValue(0 as never);
       const result = Secrets.getAll("GEMINI_API_KEY", true);

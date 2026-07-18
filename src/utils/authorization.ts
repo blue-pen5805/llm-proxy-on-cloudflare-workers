@@ -1,4 +1,5 @@
 import { Config } from "./config";
+import { SENSITIVE_CREDENTIAL_NAMES } from "./sensitive_data";
 import { createHash } from "node:crypto";
 
 export const AUTHORIZATION_KEYS = [
@@ -7,14 +8,7 @@ export const AUTHORIZATION_KEYS = [
   "x-goog-api-key",
 ];
 
-export const AUTHORIZATION_QUERY_PARAMETERS = [
-  "key",
-  "api-key",
-  "api_key",
-  "apikey",
-  "access_token",
-  "token",
-];
+export const AUTHORIZATION_QUERY_PARAMETERS = [...SENSITIVE_CREDENTIAL_NAMES];
 
 const UPSTREAM_CONTROLLED_AUTHORIZATION_HEADERS = new Set([
   ...AUTHORIZATION_KEYS.map((key) => key.toLowerCase()),
@@ -37,6 +31,13 @@ const UPSTREAM_CONTROLLED_AUTHORIZATION_HEADERS = new Set([
   "cf-aig-authorization",
 ]);
 
+const OPERATOR_CONTROLLED_AI_GATEWAY_HEADERS = new Set([
+  "cf-aig-authorization",
+  // This selects one of the provider credentials stored in AI Gateway BYOK.
+  // Treat it as credential policy rather than a request-level tuning control.
+  "cf-aig-byok-alias",
+]);
+
 /**
  * Returns a copy of request headers without credentials, hop-by-hop fields,
  * or request metadata. AI Gateway request controls can be retained explicitly
@@ -49,10 +50,10 @@ export function stripProxyAuthorizationHeaders(
   const sanitizedHeaders = new Headers(headers);
   for (const key of [...sanitizedHeaders.keys()]) {
     const normalizedKey = key.toLowerCase();
-    // Gateway authentication belongs to the operator-controlled configuration.
-    // Never accept a client-supplied token, even when other request-level
-    // Gateway controls are retained.
-    if (normalizedKey === "cf-aig-authorization") {
+    // Gateway authentication and stored-credential selection belong to the
+    // operator-controlled configuration. Never accept either from a client,
+    // even when request-level Gateway tuning controls are retained.
+    if (OPERATOR_CONTROLLED_AI_GATEWAY_HEADERS.has(normalizedKey)) {
       sanitizedHeaders.delete(key);
       continue;
     }

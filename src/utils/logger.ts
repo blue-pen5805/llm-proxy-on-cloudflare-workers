@@ -1,3 +1,4 @@
+import { SENSITIVE_CREDENTIAL_NAME_PATTERN } from "./sensitive_data";
 import { AsyncLocalStorage } from "node:async_hooks";
 
 type LogValue = string | number | boolean | null | undefined;
@@ -13,6 +14,14 @@ interface RequestLogContext {
 const MAX_ERROR_MESSAGE_LENGTH = 500;
 const requestLogContext = new AsyncLocalStorage<RequestLogContext>();
 const scopedLogFields = new AsyncLocalStorage<LogFields>();
+const SENSITIVE_QUERY_VALUE_PATTERN = new RegExp(
+  `([?&](?:${SENSITIVE_CREDENTIAL_NAME_PATTERN})=)[^&#\\s]*`,
+  "gi",
+);
+const SENSITIVE_LABELED_VALUE_PATTERN = new RegExp(
+  `(\\b(?:${SENSITIVE_CREDENTIAL_NAME_PATTERN})\\b\\s*[:=]\\s*)[^\\s,&]+`,
+  "gi",
+);
 
 function omitUndefinedLogFields(
   fields: LogFields,
@@ -28,14 +37,8 @@ function omitUndefinedLogFields(
 export function redactLogText(value: string): string {
   const redacted = value
     .replace(/\bBearer\s+\S+/gi, "Bearer ***")
-    .replace(
-      /([?&](?:api[-_]?key|token|access_token|authorization|password|secret|key)=)[^&#\s]*/gi,
-      "$1***",
-    )
-    .replace(
-      /(\b(?:authorization|api[-_]?key|token|secret|password)\b\s*[:=]\s*)[^\s,&]+/gi,
-      "$1***",
-    );
+    .replace(SENSITIVE_QUERY_VALUE_PATTERN, "$1***")
+    .replace(SENSITIVE_LABELED_VALUE_PATTERN, "$1***");
 
   return redacted.length > MAX_ERROR_MESSAGE_LENGTH
     ? `${redacted.slice(0, MAX_ERROR_MESSAGE_LENGTH)}…`

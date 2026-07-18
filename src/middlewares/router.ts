@@ -17,18 +17,28 @@ export async function handleRouting(
   aiGateway?: CloudflareAIGateway,
 ): Promise<Response> {
   const { request, pathname } = context;
+  const rejectUnsupportedKeySelection = (): void => {
+    if (context.apiKeyIndex !== undefined) {
+      throw new BadRequestError(
+        "API key selection is not supported for this route.",
+      );
+    }
+  };
   // Example: /ping
   //          /status
   //          /g/{AI_GATEWAY_NAME}/status
   if (request.method === "GET" && pathname === "/ping") {
+    rejectUnsupportedKeySelection();
     return new Response("Pong", { status: 200 });
   }
 
   if (request.method === "GET" && pathname === "/status") {
+    rejectUnsupportedKeySelection();
     return await handleStatusRequest(aiGateway, context.providers);
   }
 
   if (aiGateway && /^\/compat(?:$|\/|\?)/.test(pathname)) {
+    rejectUnsupportedKeySelection();
     // Example: /g/{AI_GATEWAY_NAME}/compat/chat/completions
     if (request.method === "POST" && pathname === "/compat/chat/completions") {
       return await handleCompatibilityRequest(request, aiGateway);
@@ -38,6 +48,7 @@ export async function handleRouting(
   }
 
   if (/^\/ai(?:$|\/|\?)/.test(pathname)) {
+    rejectUnsupportedKeySelection();
     if (
       request.method === "POST" &&
       isCloudflareAIGatewayRestApiPath(pathname)
@@ -92,11 +103,17 @@ export async function handleRouting(
     );
   }
 
+  rejectUnsupportedKeySelection();
+
   // Universal Endpoint
   // https://developers.cloudflare.com/ai-gateway/usage/universal/
   // Example: /g/{AI_GATEWAY_NAME}/
   if (aiGateway && request.method === "POST" && pathname === "/") {
-    return await handleUniversalEndpointRequest(request, aiGateway);
+    return await handleUniversalEndpointRequest(
+      request,
+      aiGateway,
+      providerRegistry,
+    );
   }
 
   throw new NotFoundError();

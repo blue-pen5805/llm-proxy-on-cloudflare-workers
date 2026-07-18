@@ -1,5 +1,4 @@
 import { Environments } from "../../utils/environments";
-import { shuffleArray } from "../../utils/helpers";
 import { Secrets } from "../../utils/secrets";
 import {
   defineProvider,
@@ -106,7 +105,7 @@ export const GoogleVertexAi = defineProvider({
   },
 
   getAiGatewayApiKeys(): string[] {
-    return shuffleArray(this.getApiKeys());
+    return this.getApiKeys();
   },
 
   async getNextApiKeyIndex(): Promise<number> {

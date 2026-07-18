@@ -4,7 +4,7 @@ import { handleRouting } from "~/src/middlewares/router";
 import { handleAiGatewayRestRequest } from "~/src/requests/ai_gateway_rest";
 import { handleCompatibilityRequest } from "~/src/requests/compat";
 import { handleProviderProxyRequest } from "~/src/requests/proxy";
-import { NotFoundError } from "~/src/utils/error";
+import { BadRequestError, NotFoundError } from "~/src/utils/error";
 
 // Mock the request handlers
 vi.mock("~/src/requests/chat_completions", () => ({
@@ -98,6 +98,36 @@ describe("handleRouting", () => {
     );
     expect(await response.text()).toBe("universal");
   });
+
+  it.each([
+    ["GET", "/ping", undefined],
+    ["GET", "/status", undefined],
+    ["POST", "/compat/chat/completions", "gateway"],
+    ["POST", "/ai/run", "gateway"],
+    ["POST", "/", "gateway"],
+    ["GET", "/unknown", undefined],
+  ])(
+    "rejects key selection for unsupported route %s %s",
+    async (method, pathname, gateway) => {
+      const selectedRequest = new Request(`http://localhost${pathname}`, {
+        method,
+      });
+      const aiGateway = gateway
+        ? new CloudflareAIGateway("acc", "gate", "key", "rest-key")
+        : undefined;
+
+      await expect(
+        handleRouting(
+          {
+            request: selectedRequest,
+            pathname,
+            apiKeyIndex: 0,
+          } as any,
+          aiGateway,
+        ),
+      ).rejects.toThrow(BadRequestError);
+    },
+  );
 
   it("should route POST /compat/chat/completions with an AI Gateway", async () => {
     const aiGateway = new CloudflareAIGateway("acc", "gate", "key");

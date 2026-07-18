@@ -32,6 +32,11 @@ convenience facades over the registry. Built-in provider lookup and aggregate
 listing keep their existing precedence when a custom endpoint reuses a built-in
 name.
 
+Universal Endpoint steps must pass both Cloudflare's supported-provider check
+and lookup in the request-scoped registry. A provider advertised by Gateway but
+without a local adapter is therefore a client error rather than an undefined
+constructor failure.
+
 Availability is normally determined by whether a provider's configured key
 list is non-empty. Workers AI has additional account configuration, while
 custom endpoints are available by definition. Availability controls model
@@ -44,6 +49,9 @@ without a locally configured provider key when a Gateway context exists. The
 Gateway then injects its stored credential. Adapters can rewrite provider-native
 Gateway paths, opt model listing out of Gateway, or build a native Gateway chat
 request when the Compatibility Endpoint does not support the provider shape.
+Gateway-specific credential representations remain index-aligned with the
+provider's ordinary credential list so explicit and coordinated selection refer
+to the same slot.
 Providers may also declare Gateway as mandatory; direct chat and pass-through
 then fail before any upstream request is attempted. Vertex AI uses this mode;
 its service-account JSON is converted to the Gateway credential header instead

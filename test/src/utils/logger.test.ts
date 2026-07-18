@@ -142,8 +142,10 @@ describe("redactLogText", () => {
   it("redacts sensitive URL and labeled values case-insensitively", () => {
     expect(
       redactLogText(
-        "Authorization: abc, PASSWORD=hunter2&next=true /?access_token=value",
+        "Authorization: abc, AUTH=def, PASSWORD=hunter2, secret=value /?access_token=one&auth=two&next=true",
       ),
-    ).toBe("Authorization: ***, PASSWORD=***&next=true /?access_token=***");
+    ).toBe(
+      "Authorization: ***, AUTH=***, PASSWORD=***, secret=*** /?access_token=***&auth=***&next=true",
+    );
   });
 });

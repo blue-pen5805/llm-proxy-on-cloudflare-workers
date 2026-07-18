@@ -45,10 +45,12 @@ forwarded. Gateway/account path segments are validated and URL-encoded.
 Client-supplied `cf-aig-*` control headers are retained on AI Gateway routes
 because request-level Gateway settings intentionally take precedence over
 Gateway defaults. This allows callers to control logging, cache keys, retries,
-cost, and metadata per request. `cf-aig-authorization` is the exception: it is
-always removed from client input, and only the operator-configured
-`CF_AIG_TOKEN` may supply that credential. The Worker also applies REST
-authorization and the route-selected Gateway ID after sanitization.
+cost, and metadata per request. Credential-policy headers are exceptions:
+`cf-aig-authorization` and `cf-aig-byok-alias` are always removed from client
+input. Only the operator-configured `CF_AIG_TOKEN` may authenticate Gateway, and
+clients cannot select among provider credentials stored in Gateway BYOK. The
+Worker also applies REST authorization and the route-selected Gateway ID after
+sanitization.
 
 ### Provider endpoint
 
@@ -65,10 +67,10 @@ the locally maintained supported set are called directly instead.
 When no local provider key exists, a single request without an upstream
 `Authorization` header is built so AI Gateway BYOK can inject its stored
 credential. When a local credential exists, adapters can transform it before
-the Gateway request is built. Azure OpenAI chat uses the provider-native Gateway path because the
-resource and deployment are URL segments. Vertex AI and Amazon Bedrock use the
-Compatibility Endpoint for OpenAI-formatted chat; Bedrock provider-native paths
-include the configured runtime region.
+the Gateway request is built. Azure OpenAI chat uses the provider-native Gateway
+path because the resource and deployment are URL segments. Vertex AI and Amazon
+Bedrock use the Compatibility Endpoint for OpenAI-formatted chat; Bedrock
+provider-native paths include the configured runtime region.
 
 Vertex AI is Gateway-only and requires `CF_AIG_TOKEN` plus
 `GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON`. The JSON must include `region`; the
@@ -78,13 +80,15 @@ are rejected when either required credential is absent.
 
 ### OpenAI-compatible chat
 
-For providers in the OpenAI-compatible Gateway subset, automatic selection
-shuffles configured keys and creates at most four Compatibility Endpoint
-requests. It tries another credential only after a network error, HTTP 401/403,
-or HTTP 429; deterministic client and provider errors return immediately. An
-explicit `/key/<selection>` resolves one credential and sends exactly one
-request, so fallback cannot override the caller's selection. The model is
-rewritten to `<provider>/<model>` for Gateway's compatibility endpoint.
+For providers in the OpenAI-compatible Gateway subset, automatic selection puts
+the credential selected by random or coordinated rotation first, shuffles the
+remaining keys, and creates at most four Compatibility Endpoint requests. It
+tries another credential only after a network error, HTTP 401/403, or HTTP 429;
+deterministic client and provider errors return immediately. An explicit
+`/key/<selection>` resolves one credential and sends exactly one request, so
+fallback cannot override the caller's selection. Each attempted credential is
+logged with its actual slot. The model is rewritten to `<provider>/<model>` for
+Gateway's compatibility endpoint.
 
 OpenRouter is retained in this subset because the Compatibility Endpoint has
 been verified to accept it in production even though the current provider list
@@ -95,13 +99,15 @@ changes.
 ### Legacy Universal Endpoint and compatibility pass-through
 
 `POST /g/<gateway>/` accepts the repository's Universal Endpoint request shape,
-validates provider names against the supported set, injects selected provider
-headers, and forwards the mapped steps to Gateway's Universal Endpoint. This
-also normalizes each optional endpoint to a bounded, safe relative path. This
-explicit route remains available even though normal OpenAI-compatible chat uses
-the Compatibility Endpoint. `POST /g/<gateway>/compat/chat/completions` forwards
-directly to that fixed Gateway endpoint after stripping proxy credentials. No
-other path under `/compat` is exposed.
+validates provider names against both the Gateway-supported set and the local
+request-scoped Provider Registry, injects selected provider headers, and
+forwards the mapped steps to Gateway's Universal Endpoint. Gateway providers
+without a local adapter fail with HTTP 400. This also normalizes each optional
+endpoint to a bounded, safe relative path. This explicit route remains
+available even though normal OpenAI-compatible chat uses the Compatibility
+Endpoint. `POST /g/<gateway>/compat/chat/completions` forwards directly to that
+fixed Gateway endpoint after stripping proxy credentials. No other path under
+`/compat` is exposed.
 
 ## Maintenance risk
 

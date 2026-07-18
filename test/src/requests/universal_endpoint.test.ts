@@ -1,14 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { BUILT_IN_PROVIDER_CONSTRUCTORS } from "~/src/providers";
 import {
   handleUniversalEndpointRequest,
   MAX_UNIVERSAL_ENDPOINT_STEPS,
 } from "~/src/requests/universal_endpoint";
+import { BadRequestError } from "~/src/utils/error";
 import * as helpers from "~/src/utils/helpers";
 import { Secrets } from "~/src/utils/secrets";
 
 vi.mock("~/src/ai_gateway");
-vi.mock("~/src/providers");
 vi.mock("~/src/utils/helpers");
 vi.mock("~/src/utils/secrets");
 
@@ -21,6 +20,10 @@ describe("handleUniversalEndpointRequest", () => {
   const mockAIGateway = {
     buildUniversalEndpointRequest: vi.fn(),
   };
+  const providerInstances: Record<string, typeof mockProviderClass> = {};
+  const mockProviderRegistry = {
+    get: vi.fn((providerName: string) => providerInstances[providerName]),
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -28,9 +31,10 @@ describe("handleUniversalEndpointRequest", () => {
     vi.mocked(helpers.readJsonRequest).mockImplementation((request) =>
       request.json(),
     );
-    BUILT_IN_PROVIDER_CONSTRUCTORS.openai = vi.fn(function () {
-      return mockProviderClass;
-    });
+    for (const providerName of Object.keys(providerInstances)) {
+      delete providerInstances[providerName];
+    }
+    providerInstances.openai = mockProviderClass;
     mockProviderClass.headers.mockReturnValue({
       "Content-Type": "application/json",
       Authorization: "Bearer sk-test",
@@ -64,7 +68,11 @@ describe("handleUniversalEndpointRequest", () => {
       { method: "POST", body: JSON.stringify([]) },
     ]);
 
-    await handleUniversalEndpointRequest(request, mockAIGateway as any);
+    await handleUniversalEndpointRequest(
+      request,
+      mockAIGateway as any,
+      mockProviderRegistry as any,
+    );
 
     expect(mockAIGateway.buildUniversalEndpointRequest).toHaveBeenCalledWith({
       data: [
@@ -99,9 +107,7 @@ describe("handleUniversalEndpointRequest", () => {
       }),
     };
 
-    BUILT_IN_PROVIDER_CONSTRUCTORS.anthropic = vi.fn(function () {
-      return anthropicProviderClass;
-    });
+    providerInstances.anthropic = anthropicProviderClass;
 
     const requestBody = [
       {
@@ -131,7 +137,11 @@ describe("handleUniversalEndpointRequest", () => {
       { method: "POST", body: JSON.stringify([]) },
     ]);
 
-    await handleUniversalEndpointRequest(request, mockAIGateway as any);
+    await handleUniversalEndpointRequest(
+      request,
+      mockAIGateway as any,
+      mockProviderRegistry as any,
+    );
 
     expect(mockAIGateway.buildUniversalEndpointRequest).toHaveBeenCalledWith({
       data: [
@@ -186,7 +196,11 @@ describe("handleUniversalEndpointRequest", () => {
       { method: "POST", body: JSON.stringify([]) },
     ]);
 
-    await handleUniversalEndpointRequest(request, mockAIGateway as any);
+    await handleUniversalEndpointRequest(
+      request,
+      mockAIGateway as any,
+      mockProviderRegistry as any,
+    );
 
     expect(mockAIGateway.buildUniversalEndpointRequest).toHaveBeenCalledWith({
       data: [
@@ -232,7 +246,11 @@ describe("handleUniversalEndpointRequest", () => {
       { method: "POST", body: JSON.stringify([]) },
     ]);
 
-    await handleUniversalEndpointRequest(request, mockAIGateway as any);
+    await handleUniversalEndpointRequest(
+      request,
+      mockAIGateway as any,
+      mockProviderRegistry as any,
+    );
 
     expect(mockAIGateway.buildUniversalEndpointRequest).toHaveBeenCalledWith({
       data: [
@@ -270,7 +288,11 @@ describe("handleUniversalEndpointRequest", () => {
     });
 
     await expect(
-      handleUniversalEndpointRequest(request, mockAIGateway as any),
+      handleUniversalEndpointRequest(
+        request,
+        mockAIGateway as any,
+        mockProviderRegistry as any,
+      ),
     ).rejects.toThrow("Each Universal Endpoint step requires a provider.");
   });
 
@@ -292,8 +314,33 @@ describe("handleUniversalEndpointRequest", () => {
     });
 
     await expect(
-      handleUniversalEndpointRequest(request, mockAIGateway as any),
+      handleUniversalEndpointRequest(
+        request,
+        mockAIGateway as any,
+        mockProviderRegistry as any,
+      ),
     ).rejects.toThrow("Provider unsupported-provider is not supported.");
+  });
+
+  it("rejects a Gateway provider that has no local adapter", async () => {
+    const request = new Request("https://example.com", {
+      method: "POST",
+      body: JSON.stringify([{ provider: "cartesia", query: {} }]),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const result = handleUniversalEndpointRequest(
+      request,
+      mockAIGateway as any,
+      mockProviderRegistry as any,
+    );
+
+    await expect(result).rejects.toMatchObject({
+      name: BadRequestError.name,
+      message: "Provider cartesia is not supported by this proxy.",
+      status: 400,
+    });
+    expect(mockAIGateway.buildUniversalEndpointRequest).not.toHaveBeenCalled();
   });
 
   it("should remove leading slash from endpoint", async () => {
@@ -319,7 +366,11 @@ describe("handleUniversalEndpointRequest", () => {
       { method: "POST", body: JSON.stringify([]) },
     ]);
 
-    await handleUniversalEndpointRequest(request, mockAIGateway as any);
+    await handleUniversalEndpointRequest(
+      request,
+      mockAIGateway as any,
+      mockProviderRegistry as any,
+    );
 
     expect(mockAIGateway.buildUniversalEndpointRequest).toHaveBeenCalledWith({
       data: [
@@ -355,6 +406,7 @@ describe("handleUniversalEndpointRequest", () => {
       handleUniversalEndpointRequest(
         new Request("https://example.com", { method: "POST" }),
         mockAIGateway as any,
+        mockProviderRegistry as any,
       ),
     ).rejects.toThrow("safe relative path");
     expect(mockAIGateway.buildUniversalEndpointRequest).not.toHaveBeenCalled();
@@ -370,9 +422,7 @@ describe("handleUniversalEndpointRequest", () => {
     };
 
     // Use a supported provider instead of 'custom'
-    BUILT_IN_PROVIDER_CONSTRUCTORS.anthropic = vi.fn(function () {
-      return customProviderClass;
-    });
+    providerInstances.anthropic = customProviderClass;
 
     const requestBody = [
       {
@@ -395,7 +445,11 @@ describe("handleUniversalEndpointRequest", () => {
       { method: "POST", body: JSON.stringify([]) },
     ]);
 
-    await handleUniversalEndpointRequest(request, mockAIGateway as any);
+    await handleUniversalEndpointRequest(
+      request,
+      mockAIGateway as any,
+      mockProviderRegistry as any,
+    );
 
     expect(mockAIGateway.buildUniversalEndpointRequest).toHaveBeenCalledWith({
       data: [
@@ -427,6 +481,7 @@ describe("handleUniversalEndpointRequest", () => {
       handleUniversalEndpointRequest(
         new Request("https://example.com", { method: "POST" }),
         mockAIGateway as any,
+        mockProviderRegistry as any,
       ),
     ).rejects.toThrow(`at most ${MAX_UNIVERSAL_ENDPOINT_STEPS} steps`);
     expect(mockAIGateway.buildUniversalEndpointRequest).not.toHaveBeenCalled();
@@ -448,6 +503,7 @@ describe("handleUniversalEndpointRequest", () => {
       handleUniversalEndpointRequest(
         new Request("https://example.com", { method: "POST" }),
         mockAIGateway as any,
+        mockProviderRegistry as any,
       ),
     ).rejects.toThrow(message);
   });

@@ -16,6 +16,13 @@ configured credential, it calls the provider's model-list path, either directly
 or through the active AI Gateway. Checks run concurrently with an individual
 five-second timeout.
 
+The status handler shares the model-list Gateway capability decision with the
+normal model aggregation route. A provider that sets
+`supportsAiGatewayModels=false` is checked directly even when a Gateway is
+active. If its adapter also declares direct model listing unsupported, the
+credential remains `unknown`; diagnostics do not attempt a known-unsupported
+Gateway route.
+
 Responses are classified as follows:
 
 | Result                               | Status                  |
@@ -73,11 +80,13 @@ fragments, and arbitrary thrown objects are not logged.
 `key_index`, `key_count`, `credential_configured`, `selection_policy`, and
 `via_ai_gateway`. For one-to-one provider requests, a generated
 `provider_request_id` links the selection to its
-`subrequest.completed` or `subrequest.failed` event. Universal Endpoint steps
-share one aggregate subrequest, so their selection events instead include a
-zero-based `step` number. Credential values, partial values, and derived
-fingerprints are never logged. Indexes identify configuration order only and
-can change when keys are reordered.
+`subrequest.completed` or `subrequest.failed` event. Gateway Compatibility
+fallback emits one selection event and one request ID for each credential that
+is actually attempted. Universal Endpoint steps share one aggregate subrequest,
+so their selection events instead include a zero-based `step` number.
+Credential values, partial values, and derived fingerprints are never logged.
+Indexes identify configuration order only and can change when keys are
+reordered.
 
 ## References
 

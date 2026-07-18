@@ -51,9 +51,11 @@ and handler latency, then correlate `subrequest.completed`,
 `subrequest.failed`, or provider-specific failure events using the same request
 ID.
 
-Inbound logs contain the path but exclude the query string. Upstream URLs mask
-recognized credential parameters. Error messages are redacted and truncated;
-headers, payloads, stack traces, and arbitrary thrown objects are not recorded.
+Inbound logs contain the path but exclude the query string. Logged upstream URLs
+contain only scheme, host, and path, with every query value omitted. Error
+messages are redacted using the same credential-name set as query removal and
+are truncated; headers, payloads, stack traces, and arbitrary thrown objects are
+not recorded.
 `request.completed.duration_ms` ends when response headers are returned, so it
 does not measure completion of a streamed response body. Continue to restrict
 log access and retention as operational data can still be sensitive.
@@ -122,6 +124,8 @@ routing](api.md).
 Wrangler, and removes the generated file on exit. Confirm that the source file
 exists and contains valid JSONC. If a previous process was terminated abruptly,
 delete the generated `.dev.vars.develop` file and retry; do not commit it.
+Top-level `null` values are omitted from the local dotenv file; they remain
+deployment deletion instructions only.
 
 ### Key selection behaves unexpectedly
 
@@ -131,6 +135,8 @@ delete the generated `.dev.vars.develop` file and retry; do not commit it.
 - With no explicit prefix, multiple keys are random unless
   `ENABLE_GLOBAL_ROUND_ROBIN=true`.
 - `/v1/models` uses the first key unless a prefix is present.
+- Only chat, models, and registered provider pass-through accept the prefix;
+  health, Gateway REST/legacy, Universal, and unknown routes return HTTP 400.
 
 ## Rollback
 

@@ -165,7 +165,7 @@ export function convertConfigToDevVars(
 
   // Skip $schema field
   for (const [key, value] of Object.entries(config)) {
-    if (key === "$schema") continue;
+    if (key === "$schema" || value === null || value === undefined) continue;
 
     const environmentValue = serializeEnvironmentValue(value);
     outputLines.push(

@@ -30,6 +30,7 @@ describe("status", () => {
   const mockProviderClass = {
     apiKeyName: "OPENAI_API_KEY",
     modelsPath: "/models",
+    supportsAiGatewayModels: true,
     available: vi.fn(),
     getApiKeys: vi.fn(() => Secrets.getAll("OPENAI_API_KEY")),
     buildModelsRequest: vi.fn(),
@@ -74,6 +75,7 @@ describe("status", () => {
     });
 
     mockProviderClass.available.mockReturnValue(true);
+    mockProviderClass.supportsAiGatewayModels = true;
     mockProviderClass.buildModelsRequest.mockReturnValue([
       "/models",
       { method: "GET" },
@@ -318,6 +320,41 @@ describe("status", () => {
       "https://gateway.example/models",
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
+  });
+
+  it("uses direct connectivity when Gateway model discovery is unsupported", async () => {
+    vi.mocked(Secrets.getAll).mockReturnValue(["key"]);
+    mockProviderClass.supportsAiGatewayModels = false;
+    mockProviderClass.fetch.mockResolvedValue(
+      new Response(null, { status: 200 }),
+    );
+    const gateway = {
+      buildProviderEndpointRequest: vi.fn(),
+    } as any;
+
+    const body = await (await handleStatusRequest(gateway)).json();
+
+    expect(body.providers.openai.keys[0].status).toBe("valid");
+    expect(mockProviderClass.fetch).toHaveBeenCalledOnce();
+    expect(gateway.buildProviderEndpointRequest).not.toHaveBeenCalled();
+    expect(fetchWithLogging).not.toHaveBeenCalled();
+  });
+
+  it("reports unknown when neither Gateway nor direct model discovery is supported", async () => {
+    vi.mocked(Secrets.getAll).mockReturnValue(["key"]);
+    mockProviderClass.supportsAiGatewayModels = false;
+    mockProviderClass.buildModelsRequest.mockRejectedValue(
+      new ProviderNotSupportedError("unsupported"),
+    );
+    const gateway = {
+      buildProviderEndpointRequest: vi.fn(),
+    } as any;
+
+    const body = await (await handleStatusRequest(gateway)).json();
+
+    expect(body.providers.openai.keys[0].status).toBe("unknown");
+    expect(gateway.buildProviderEndpointRequest).not.toHaveBeenCalled();
+    expect(fetchWithLogging).not.toHaveBeenCalled();
   });
 
   it("checks different providers concurrently while preserving output order", async () => {

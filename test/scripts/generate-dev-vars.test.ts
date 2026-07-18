@@ -246,13 +246,17 @@ describe("convertConfigToDevVars", () => {
     expect(result).toContain(`FEATURES='["feature1","feature2"]'`);
   });
 
-  it("should handle null values", () => {
+  it("omits null and undefined values", () => {
     const config = {
       OPTIONAL_KEY: null,
+      MISSING_KEY: undefined,
+      PRESENT_KEY: "configured",
     };
     const result = convertConfigToDevVars(config);
 
-    expect(result).toContain("OPTIONAL_KEY=''");
+    expect(result).not.toContain("OPTIONAL_KEY=");
+    expect(result).not.toContain("MISSING_KEY=");
+    expect(result).toContain("PRESENT_KEY='configured'");
   });
 
   it("should add environment-specific header", () => {

@@ -28,11 +28,14 @@ Before chat or pass-through forwarding, the proxy removes every header format it
 accepts for its own authentication, provider credential aliases such as
 `api-key`, hop-by-hop headers, cookies, and client network metadata. On AI
 Gateway routes it retains request-level `cf-aig-*` controls except
-`cf-aig-authorization`; direct provider requests remove all of them. A client can
-therefore override non-credential Gateway request controls, while Gateway
-authentication always comes from operator configuration. The provider adapter
-then adds the selected upstream key. Credential-like query parameters are
-removed during middleware processing; other query parameters are retained.
+`cf-aig-authorization` and `cf-aig-byok-alias`; direct provider requests remove
+all of them. A client can therefore override non-credential Gateway request
+controls, while Gateway authentication and stored BYOK credential selection
+remain operator-controlled. The provider adapter then adds the selected
+upstream key. Credential-like query parameters are removed during middleware
+processing using the same case-insensitive name set used for log redaction;
+this includes API-key variants, `token`, `access_token`, `authorization`,
+`auth`, `password`, and `secret`. Other query parameters are retained.
 
 AI Gateway tokens are added as `cf-aig-authorization`. Provider credentials are
 sent in the upstream authorization headers of Compatibility Endpoint requests,
@@ -47,6 +50,10 @@ bulk`; a top-level `null` is preserved as Wrangler's explicit deletion
 operation. Arrays and custom endpoint objects therefore arrive as JSON strings
 and are parsed by the environment utilities. Before invoking Wrangler, every
 non-null serialized value is checked against Cloudflare's 5 KiB secret limit.
+Local `.dev.vars` generation omits `null` and missing top-level values rather
+than materializing empty bindings. Runtime secret lookup also ignores empty and
+whitespace-only string entries, so they cannot make a provider appear
+configured.
 
 The schema validates shape during editing and critical custom-endpoint
 constraints are checked again at runtime. Configuration files contain live

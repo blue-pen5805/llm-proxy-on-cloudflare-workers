@@ -29,7 +29,9 @@ The order in `src/index.ts` is behaviorally significant:
 8. `aiGatewayMiddleware` selects the default or path-specific Gateway and
    removes a `/g/<name>` prefix.
 9. `routerMiddleware` dispatches health, compatibility, OpenAI-compatible,
-   provider pass-through, and Universal Endpoint requests.
+   provider pass-through, and Universal Endpoint requests. It also rejects an
+   extracted key selection with HTTP 400 when the selected route has no key
+   selection contract.
 
 The preflight short circuit intentionally occurs before authentication. Other
 routes are authenticated before dispatch. Provider handlers remove all headers

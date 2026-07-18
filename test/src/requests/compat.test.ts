@@ -27,6 +27,7 @@ describe("compat", () => {
           "x-api-key": "proxy-api-key",
           "x-goog-api-key": "proxy-api-key",
           "cf-aig-authorization": "Bearer client-gateway-token",
+          "cf-aig-byok-alias": "privileged-key",
           "cf-aig-skip-cache": "true",
           "x-client-header": "preserved",
         },
@@ -54,6 +55,7 @@ describe("compat", () => {
     expect(callArgs.headers["x-api-key"]).toBeUndefined();
     expect(callArgs.headers["x-goog-api-key"]).toBeUndefined();
     expect(callArgs.headers["cf-aig-authorization"]).toBeUndefined();
+    expect(callArgs.headers["cf-aig-byok-alias"]).toBeUndefined();
     expect(callArgs.headers["cf-aig-skip-cache"]).toBe("true");
     expect(callArgs.headers["x-client-header"]).toBe("preserved");
     expect(callArgs.signal).toBe(request.signal);

@@ -64,7 +64,8 @@ After changing the schema, run `npm run cf-typegen`; do not edit
 4. Add contract tests for availability, headers, URL construction, model
    translation, and chat translation as supported.
 5. Update `src/ai_gateway/const.ts` only when current Cloudflare AI Gateway
-   documentation confirms support.
+   documentation or a documented and tested operational compatibility contract
+   confirms support.
 6. Update the provider-abstraction design document when behavior changes.
 
 Do not claim OpenAI chat or model-list compatibility merely because pass-through

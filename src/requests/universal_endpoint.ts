@@ -4,7 +4,7 @@ import {
   CloudflareAIGatewayUniversalEndpointStep,
 } from "../ai_gateway/const";
 import { isCloudflareAIGatewayProvider } from "../ai_gateway/utils";
-import { BUILT_IN_PROVIDER_CONSTRUCTORS } from "../providers";
+import type { ProviderRegistry } from "../providers";
 import { recordApiKeySelection } from "../utils/api_key_selection";
 import { stripProxyAuthorizationHeaders } from "../utils/authorization";
 import { BadRequestError } from "../utils/error";
@@ -107,7 +107,8 @@ function parseUniversalEndpointRequests(
 export async function handleUniversalEndpointRequest(
   request: Request,
   aiGateway: CloudflareAIGateway,
-) {
+  providerRegistry: ProviderRegistry,
+): Promise<Response> {
   const endpointRequests = parseUniversalEndpointRequests(
     await readJsonRequest(request),
   );
@@ -134,9 +135,12 @@ export async function handleUniversalEndpointRequest(
               `Provider ${providerName} is not supported.`,
             );
           }
-          const ProviderConstructor =
-            BUILT_IN_PROVIDER_CONSTRUCTORS[providerName];
-          const providerInstance = new ProviderConstructor();
+          const providerInstance = providerRegistry.get(providerName);
+          if (!providerInstance) {
+            throw new BadRequestError(
+              `Provider ${providerName} is not supported by this proxy.`,
+            );
+          }
           const endpointPath = normalizeUniversalEndpointPath(
             endpointRequest.endpoint ?? providerInstance.chatCompletionPath,
           );

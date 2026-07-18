@@ -9,19 +9,21 @@ const API_KEYS = ["provider-key-0", "provider-key-1", "provider-key-2"];
 function createContext(
   selection?: MiddlewareContext["apiKeyIndex"],
   providerName = "openai",
+  automaticIndex = 0,
 ): MiddlewareContext {
   const provider = createProvider({
     openAICompatible: true,
     baseUrl: "https://api.example.com/v1",
     getApiKeys: () => API_KEYS,
     getAiGatewayApiKeys: () => API_KEYS,
-    getNextApiKeyIndex: async () => 0,
+    getNextApiKeyIndex: async () => automaticIndex,
   });
   const request = new Request("https://proxy.example/v1/chat/completions", {
     method: "POST",
     headers: {
       "content-type": "application/json",
       "cf-aig-authorization": "Bearer client-gateway-token",
+      "cf-aig-byok-alias": "privileged-key",
       "cf-aig-skip-cache": "true",
     },
     body: JSON.stringify({ model: `${providerName}/model`, messages: [] }),
@@ -68,6 +70,9 @@ describe("Gateway chat key selection", () => {
         "cf-aig-authorization",
       ),
     ).toBe("Bearer operator-gateway-token");
+    expect(
+      new Headers(fetchMock.mock.calls[0][1]?.headers).has("cf-aig-byok-alias"),
+    ).toBe(false);
   });
 
   it("uses the result of an explicit range as the only Gateway credential", async () => {
@@ -90,17 +95,24 @@ describe("Gateway chat key selection", () => {
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(new Response("unauthorized", { status: 401 }))
       .mockResolvedValueOnce(new Response("ok"));
-    vi.spyOn(console, "info").mockImplementation(() => {});
+    const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
 
     await handleChatCompletionsRequest(
-      createContext(),
+      createContext(undefined, "openai", 2),
       new CloudflareAIGateway("account", "gateway", "operator-gateway-token"),
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(authorizationHeaders(fetchMock)).toEqual([
-      "Bearer provider-key-0",
-      "Bearer provider-key-1",
+    const attemptedCredentials = authorizationHeaders(fetchMock);
+    expect(attemptedCredentials[0]).toBe("Bearer provider-key-2");
+    expect(attemptedCredentials[1]).toMatch(/^Bearer provider-key-[01]$/);
+
+    const selectionRecords = consoleInfo.mock.calls
+      .map(([record]) => record as Record<string, unknown>)
+      .filter((record) => record.event === "provider.key.selected");
+    expect(selectionRecords.map((record) => record.key_index)).toEqual([
+      2,
+      Number(attemptedCredentials[1].slice(-1)),
     ]);
   });
 

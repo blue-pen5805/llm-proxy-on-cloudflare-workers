@@ -72,7 +72,7 @@ describe("provider contracts", () => {
       expect(provider.available()).toBe(true);
       expect(provider.getApiKeys()).toEqual(["key-0", "key-1"]);
       expect(provider.getAiGatewayApiKeys()).toEqual(["key-0", "key-1"]);
-      expect(Secrets.getAll).toHaveBeenCalledWith("OPENAI_API_KEY", true);
+      expect(Secrets.getAll).toHaveBeenCalledWith("OPENAI_API_KEY");
       expect(await provider.getNextApiKeyIndex()).toBe(1);
       expect(Secrets.getNext).toHaveBeenCalledWith("OPENAI_API_KEY");
 

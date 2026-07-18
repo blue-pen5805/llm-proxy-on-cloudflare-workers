@@ -7,6 +7,7 @@ import { Config } from "../utils/config";
 import { Environments } from "../utils/environments";
 import { fetchWithLogging, withTimeout } from "../utils/helpers";
 import { RequestLogger } from "../utils/logger";
+import { resolveAiGatewayModelsProvider } from "./model_gateway";
 
 const CONNECTIVITY_CHECK_TIMEOUT_MS = 5000;
 export const STATUS_CONNECTIVITY_CONCURRENCY = 5;
@@ -45,10 +46,11 @@ async function checkProviderConnectivity(
   }
 
   const abortController = new AbortController();
-  const aiGatewayProvider =
-    aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)
-      ? providerName
-      : undefined;
+  const aiGatewayProvider = resolveAiGatewayModelsProvider(
+    providerName,
+    providerInstance,
+    aiGateway,
+  );
   const keyLogFields = recordApiKeySelection({
     provider: providerName,
     operation: "connectivity_check",

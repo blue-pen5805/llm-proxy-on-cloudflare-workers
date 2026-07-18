@@ -39,6 +39,12 @@ The middleware records the selection; the provider handler resolves it after it
 knows the number of configured keys. A single index wraps modulo the key count,
 while ranges select randomly from an inclusive bounded interval.
 
+Explicit selection is supported only by OpenAI-compatible chat, model
+aggregation, and registered provider pass-through routes. `/ping`, `/status`,
+AI Gateway REST and compatibility pass-through routes, the Universal Endpoint,
+and unknown routes reject a leading key-selection prefix with HTTP 400. This
+prevents a syntactically valid prefix from being silently ignored.
+
 ## Router matching
 
 Exact OpenAI-compatible routes include both versioned and unversioned aliases.

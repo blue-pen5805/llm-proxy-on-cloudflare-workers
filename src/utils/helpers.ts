@@ -1,6 +1,6 @@
-import { AUTHORIZATION_QUERY_PARAMETERS } from "./authorization";
 import { BadRequestError, PayloadTooLargeError } from "./error";
 import { RequestLogger } from "./logger";
+import { SENSITIVE_CREDENTIAL_NAMES } from "./sensitive_data";
 import { randomInt } from "node:crypto";
 
 export const MAX_BUFFERED_BODY_BYTES = 10 * 1024 * 1024;
@@ -153,11 +153,8 @@ export function interpolateTemplate(
 
 export function removeAuthorizationQueryParameters(pathname: string): string {
   const parsedPath = new URL(pathname, "https://proxy.invalid");
-  const sensitiveNames = new Set(
-    AUTHORIZATION_QUERY_PARAMETERS.map((name) => name.toLowerCase()),
-  );
   for (const parameterName of [...parsedPath.searchParams.keys()]) {
-    if (sensitiveNames.has(parameterName.toLowerCase())) {
+    if (SENSITIVE_CREDENTIAL_NAMES.has(parameterName.toLowerCase())) {
       parsedPath.searchParams.delete(parameterName);
     }
   }

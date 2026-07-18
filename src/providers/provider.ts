@@ -91,6 +91,7 @@ export interface Provider {
 
   available(): boolean;
   getApiKeys(): string[];
+  /** Return Gateway-ready credentials in the same index order as getApiKeys(). */
   getAiGatewayApiKeys(): string[];
   configurationError(): string | undefined;
   getNextApiKeyIndex(): Promise<number>;
@@ -238,7 +239,7 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
       if (definition.getAiGatewayApiKeys) {
         return definition.getAiGatewayApiKeys.call(this);
       }
-      return this.apiKeyName ? Secrets.getAll(this.apiKeyName, true) : [];
+      return this.apiKeyName ? Secrets.getAll(this.apiKeyName) : [];
     },
 
     configurationError() {

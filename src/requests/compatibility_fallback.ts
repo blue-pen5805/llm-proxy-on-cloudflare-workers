@@ -1,4 +1,6 @@
 import { fetchWithLogging } from "../utils/helpers";
+import type { LogFields } from "../utils/logger";
+import { RequestLogger } from "../utils/logger";
 
 export const MAX_COMPATIBILITY_FALLBACK_ATTEMPTS = 4;
 
@@ -9,6 +11,7 @@ function shouldTryAnotherCredential(status: number): boolean {
 export async function fetchCompatibilityFallback(
   requests: [RequestInfo, RequestInit][],
   signal?: AbortSignal,
+  beforeAttempt?: (attemptIndex: number) => LogFields,
 ): Promise<Response> {
   if (requests.length === 0) {
     throw new Error("No AI Gateway compatibility requests were generated.");
@@ -17,19 +20,23 @@ export async function fetchCompatibilityFallback(
   let lastResponse: Response | undefined;
   let lastError: unknown;
 
-  for (const [requestInfo, requestInit] of requests.slice(
-    0,
-    MAX_COMPATIBILITY_FALLBACK_ATTEMPTS,
-  )) {
+  for (const [attemptIndex, [requestInfo, requestInit]] of requests
+    .slice(0, MAX_COMPATIBILITY_FALLBACK_ATTEMPTS)
+    .entries()) {
     if (signal?.aborted) {
       throw signal.reason;
     }
 
     try {
-      const upstreamResponse = await fetchWithLogging(requestInfo, {
-        ...requestInit,
-        signal,
-      });
+      const fetchAttempt = () =>
+        fetchWithLogging(requestInfo, {
+          ...requestInit,
+          signal,
+        });
+      const attemptFields = beforeAttempt?.(attemptIndex);
+      const upstreamResponse = await (attemptFields
+        ? RequestLogger.withFields(attemptFields, fetchAttempt)
+        : fetchAttempt());
       if (upstreamResponse.ok) {
         if (lastResponse?.body) {
           await lastResponse.body.cancel();

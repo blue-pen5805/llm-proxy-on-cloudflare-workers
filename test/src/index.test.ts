@@ -368,6 +368,18 @@ describe("fetch", () => {
     expect(response.status).toBe(404);
   });
 
+  it("returns 400 when key selection prefixes an unsupported route", async () => {
+    const response = await SELF.fetch("https://example.com/key/0/ping");
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        message: "API key selection is not supported for this route.",
+        status: 400,
+      },
+    });
+  });
+
   it("should remove authorization query parameters from pathname", async () => {
     // Mock the proxy function to capture the arguments
     const mockProxy = vi.mocked(handleProviderProxyRequest);

@@ -267,7 +267,7 @@ describe("removeAuthorizationQueryParameters", () => {
 
   it("removes case-variant, encoded, and alternate credential parameters", () => {
     const pathname =
-      "/v1/chat/completions?%6bey=one&API_KEY=two&access_token=three&model=gpt-4";
+      "/v1/chat/completions?%6bey=one&API_KEY=two&access_token=three&Authorization=four&AUTH=five&password=six&%73ecret=seven&model=gpt-4";
     expect(removeAuthorizationQueryParameters(pathname)).toBe(
       "/v1/chat/completions?model=gpt-4",
     );

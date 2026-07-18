@@ -24,9 +24,12 @@ export class Secrets {
 
     let secretValues: string[] = [];
     if (Array.isArray(configuredValue)) {
-      secretValues = [...configuredValue];
+      secretValues = configuredValue.filter(
+        (value): value is string =>
+          typeof value === "string" && value.trim().length > 0,
+      );
     } else if (typeof configuredValue === "string") {
-      secretValues = [configuredValue];
+      secretValues = configuredValue.trim().length > 0 ? [configuredValue] : [];
     }
 
     if (shuffle && secretValues.length > 1) {

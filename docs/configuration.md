@@ -26,6 +26,10 @@ that deployed Worker secret. A setting omitted from the file is left unchanged,
 while empty strings, empty arrays, and empty objects are ignored. Dry-run output
 labels each name as `[set]` or `[delete]` without showing its value.
 
+For local development, `.dev.vars` generation omits top-level `null` and missing
+values because dotenv files cannot express Wrangler's deployed-secret deletion
+operation. Runtime key lookup ignores empty and whitespace-only string entries.
+
 Cloudflare limits each serialized Worker secret to 5 KiB. The deployment script
 checks the UTF-8 byte length before invoking Wrangler and fails without printing
 the value when a setting is too large. Structured settings such as
@@ -45,9 +49,10 @@ commonly retained by intermediaries and access logs. Proxy credentials,
 hop-by-hop fields, Cloudflare/client network metadata, and cookies are removed
 before the upstream request is built. On AI Gateway routes, client `cf-aig-*`
 control headers are retained so each request can override Gateway defaults.
-Client `cf-aig-authorization` is always removed; only the configured
-`CF_AIG_TOKEN` can authenticate the Worker to Gateway. All `cf-aig-*` headers
-are removed from requests sent directly to a provider.
+Client `cf-aig-authorization` and `cf-aig-byok-alias` are always removed; only
+the configured `CF_AIG_TOKEN` can authenticate the Worker to Gateway, and
+clients cannot select a stored BYOK credential. All `cf-aig-*` headers are
+removed from requests sent directly to a provider.
 
 Possession of a proxy credential therefore includes permission to change AI
 Gateway cache, retry, logging, cost, and metadata behavior per request. Restrict
@@ -140,8 +145,10 @@ Universal Endpoint requests.
 | `ENABLE_GLOBAL_ROUND_ROBIN` | boolean        | `false` | Coordinates multi-key selection with the `KEY_ROTATION_MANAGER` Durable Object.   |
 
 When global round-robin is off, multi-key requests use random selection. A
-`/key/<selection>/` path prefix overrides either policy for that request. Model
-listing intentionally uses the first key unless an explicit selection is given.
+`/key/<selection>/` path prefix overrides either policy for chat, model-list,
+and registered provider pass-through requests. Other routes reject the prefix
+with HTTP 400. Model listing intentionally uses the first key unless an explicit
+selection is given.
 
 ## Custom OpenAI-compatible endpoints
 

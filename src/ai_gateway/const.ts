@@ -59,6 +59,8 @@ export type CloudflareAIGatewayRestApiPath =
 export type CloudflareAIGatewayHeaders = {
   /** Authentication Token for the AI Gateway, used to authorize requests. */
   "cf-aig-authorization"?: string;
+  /** Selects a stored AI Gateway BYOK credential by alias. */
+  "cf-aig-byok-alias"?: string;
   /** Header to customize the backoff type for request retries of a request. */
   "cf-aig-backoff"?: string;
   /** Override the default cache key in order to precisely set the cacheability setting for any resource. */

@@ -21,9 +21,10 @@ upstream providers are streamed or forwarded without a proxy-specific envelope.
 | `POST`    | `/g/<gateway>/`                        | Legacy AI Gateway Universal Endpoint              |
 | `POST`    | `/g/<gateway>/compat/chat/completions` | Legacy AI Gateway compatibility pass-through      |
 
-`/chat/completions` and `/models` are aliases of their `/v1` forms. Any normal
-route may be prefixed with `/g/<gateway>` to choose a Gateway for that request,
-and with `/key/<selection>` to select provider credentials. When both are used,
+`/chat/completions` and `/models` are aliases of their `/v1` forms. Supported
+routes may be prefixed with `/g/<gateway>` to choose a Gateway for that request.
+OpenAI-compatible chat, models, and registered provider pass-through routes may
+also use `/key/<selection>` to select provider credentials. When both are used,
 the key prefix comes first: `/key/1/g/team-gateway/v1/models`.
 
 The legacy Universal Endpoint body must be a non-empty JSON array with at most
@@ -95,10 +96,12 @@ curl https://your-worker.example/openai/v1/responses \
 
 The proxy replaces client authentication headers with the selected upstream
 credential. It also removes cookies, hop-by-hop headers, client/network metadata,
-and credential-like query parameters. Request-level `cf-aig-*` control headers
-are forwarded when the selected route uses AI Gateway and removed on direct
-provider requests. Client `cf-aig-authorization` is always removed; Gateway
-authentication comes only from the operator-configured `CF_AIG_TOKEN`.
+and credential-like query parameters, including API-key variants,
+`access_token`, `token`, `authorization`, `auth`, `password`, and `secret`.
+Request-level `cf-aig-*` control headers are forwarded when the selected route
+uses AI Gateway and removed on direct provider requests. Client
+`cf-aig-authorization` and `cf-aig-byok-alias` are always removed; Gateway
+authentication and stored-credential selection remain operator-controlled.
 Provider-specific request and response formats remain the caller's
 responsibility. Routes are the keys registered in `src/providers.ts`; configured
 custom endpoint names are added dynamically.
@@ -140,10 +143,10 @@ Third-party models use `<provider>/<model>`; Workers AI models use
 `@cf/<author>/<model>`. The Messages route does not support Workers AI.
 Client `cf-aig-*` control headers are forwarded, allowing retry, cache, cost,
 log, and metadata settings to override Gateway defaults for that request.
-Client `cf-aig-authorization` is always removed. A configured `CF_AIG_TOKEN`,
-REST API authorization, and the route-selected Gateway ID are applied by the
-Worker after client header processing and therefore take precedence where
-applicable.
+Client `cf-aig-authorization` and `cf-aig-byok-alias` are always removed. A
+configured `CF_AIG_TOKEN`, REST API authorization, and the route-selected
+Gateway ID are applied by the Worker after client header processing and
+therefore take precedence where applicable.
 
 ## Explicit key selection
 
@@ -159,11 +162,15 @@ return HTTP 400:
 | `/key/-2/...`  | Random key from index 0 through 2             |
 
 Do not use a key-selection prefix for a provider with no configured keys.
+The prefix is not supported by `/ping`, `/status`, AI Gateway REST or legacy
+compatibility pass-through routes, the Universal Endpoint, or unknown routes;
+those combinations return HTTP 400 instead of ignoring the selection.
 
 For OpenAI-compatible chat through AI Gateway, an explicit index or range sends
 only the resolved credential and does not fall back to another configured key.
-Without an explicit selection, the Worker may try up to four shuffled keys after
-a network error, HTTP 401/403, or HTTP 429.
+Without an explicit selection, the Worker tries the random or globally rotated
+slot first and may then try shuffled remaining keys, up to four total attempts,
+after a network error, HTTP 401/403, or HTTP 429.
 
 ## Status and health
 

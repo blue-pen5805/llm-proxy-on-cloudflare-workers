@@ -24,6 +24,7 @@ describe("handleAiGatewayRestRequest", () => {
         "x-api-key": "proxy-api-key",
         "x-goog-api-key": "proxy-api-key",
         "cf-aig-authorization": "Bearer client-gateway-token",
+        "cf-aig-byok-alias": "privileged-key",
         "cf-aig-metadata": '{"user":"123"}',
         "x-client-header": "preserved",
       },
@@ -49,6 +50,7 @@ describe("handleAiGatewayRestRequest", () => {
     expect(headers.has("x-api-key")).toBe(false);
     expect(headers.has("x-goog-api-key")).toBe(false);
     expect(headers.has("cf-aig-authorization")).toBe(false);
+    expect(headers.has("cf-aig-byok-alias")).toBe(false);
     expect(headers.get("cf-aig-metadata")).toBe('{"user":"123"}');
     expect(headers.get("x-client-header")).toBe("preserved");
     expect(fetchWithLogging).toHaveBeenCalledWith(
