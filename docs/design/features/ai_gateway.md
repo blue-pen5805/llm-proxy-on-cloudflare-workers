@@ -84,6 +84,8 @@ do not silently collapse to the same slug.
 The Custom Provider stores the adapter's Base URL. The Worker retains the
 adapter's fixed path prefix in the Gateway request path, so Cloudflare combines
 the two into the same upstream URL that direct routing would have selected.
+For example, Ollama stores `https://ollama.com` and sends `/v1` as part of the
+Gateway path rather than relying on a path segment embedded in the Base URL.
 This provider-specific endpoint preserves native request bodies and supports
 non-standard paths; it does not force the Compatibility Endpoint contract on
 an incompatible operation.

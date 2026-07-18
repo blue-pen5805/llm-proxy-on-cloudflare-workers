@@ -7,7 +7,8 @@ export { Ollama } from "./provider";
 https://docs.ollama.com/cloud
 
 ## URLs
-Base URL: https://ollama.com/v1
+Base URL:       https://ollama.com
+Pathname prefix: /v1
 
 ## APIs
 Chat Completions: /chat/completions

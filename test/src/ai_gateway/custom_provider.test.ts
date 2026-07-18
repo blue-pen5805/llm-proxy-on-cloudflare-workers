@@ -5,6 +5,7 @@ import {
   gatewayProviderPath,
   resolveGatewayProvider,
 } from "~/src/ai_gateway/custom_provider";
+import { Ollama } from "~/src/providers/ollama/provider";
 
 describe("AI Gateway Custom Provider routing", () => {
   it("uses the requested managed slug form for simple provider names", () => {
@@ -50,5 +51,17 @@ describe("AI Gateway Custom Provider routing", () => {
         "custom-llm-proxy-ollama",
       ),
     ).toBe("/v1/models");
+  });
+
+  it("retains Ollama's v1 prefix for its Custom Provider route", () => {
+    const provider = new Ollama();
+    expect(
+      gatewayProviderPath(
+        "ollama",
+        provider,
+        provider.chatCompletionPath,
+        customProviderRoute("ollama"),
+      ),
+    ).toBe("/v1/chat/completions");
   });
 });

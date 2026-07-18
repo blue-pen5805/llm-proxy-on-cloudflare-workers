@@ -20,10 +20,17 @@ describe("Ollama Provider", () => {
   });
 
   describe("properties", () => {
-    it("should have correct API key name and base URL", () => {
+    it("should have correct API key name and URL components", () => {
       const provider = new Ollama();
       expect(provider.apiKeyName).toBe("OLLAMA_API_KEY");
-      expect(provider.baseUrl()).toBe("https://ollama.com/v1");
+      expect(provider.baseUrl()).toBe("https://ollama.com");
+      expect(provider.pathnamePrefix()).toBe("/v1");
+    });
+
+    it("should build the direct chat completions URL with the v1 prefix", async () => {
+      const provider = new Ollama();
+      const [url] = await provider.buildRequest(provider.chatCompletionPath);
+      expect(url).toBe("https://ollama.com/v1/chat/completions");
     });
   });
 

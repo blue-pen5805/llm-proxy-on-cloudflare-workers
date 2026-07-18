@@ -33,7 +33,7 @@ describe("AI Gateway Custom Provider synchronization", () => {
         {
           name: "LLM Proxy / ollama",
           slug: "llm-proxy-ollama",
-          baseUrl: "https://ollama.com/v1",
+          baseUrl: "https://ollama.com",
         },
         {
           name: "LLM Proxy / internal",
