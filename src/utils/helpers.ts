@@ -28,19 +28,28 @@ export async function fetchWithLogging(
 
   try {
     const upstreamResponse = await fetch(input, init);
-    RequestLogger.info("subrequest.completed", {
-      method: requestMethod,
-      url: maskedUrl,
-      status: upstreamResponse.status,
-      duration_ms: RequestLogger.durationMs(startedAt),
-    });
+    RequestLogger.info(
+      "subrequest.completed",
+      "Provider subrequest completed",
+      {
+        method: requestMethod,
+        url: maskedUrl,
+        status: upstreamResponse.status,
+        duration_ms: RequestLogger.durationMs(startedAt),
+      },
+    );
     return upstreamResponse;
   } catch (error) {
-    RequestLogger.error("subrequest.failed", error, {
-      method: requestMethod,
-      url: maskedUrl,
-      duration_ms: RequestLogger.durationMs(startedAt),
-    });
+    RequestLogger.error(
+      "subrequest.failed",
+      "Provider subrequest failed",
+      error,
+      {
+        method: requestMethod,
+        url: maskedUrl,
+        duration_ms: RequestLogger.durationMs(startedAt),
+      },
+    );
     throw error;
   }
 }

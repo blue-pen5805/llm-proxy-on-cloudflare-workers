@@ -214,6 +214,9 @@ describe("fetchWithLogging", () => {
       url: "https://example.com/models",
       status: 202,
       duration_ms: expect.any(Number),
+      message: expect.stringMatching(
+        /^Provider subrequest completed: provider=openai, method=POST, url=https:\/\/example\.com\/models, status=202, duration_ms=\d+(?:\.\d+)?$/,
+      ),
     });
 
     vi.restoreAllMocks();
@@ -239,6 +242,9 @@ describe("fetchWithLogging", () => {
       duration_ms: expect.any(Number),
       error_name: "Error",
       error_message: "request failed with token=***",
+      message: expect.stringMatching(
+        /^Provider subrequest failed: method=DELETE, url=https:\/\/example\.com\/models, duration_ms=\d+(?:\.\d+)?, error_name=Error, error_message=request failed with token=\*\*\*$/,
+      ),
     });
 
     vi.restoreAllMocks();

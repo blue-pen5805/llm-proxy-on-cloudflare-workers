@@ -177,16 +177,25 @@ export async function handleModelsRequest(
       const providerName = providerBatch[index][0];
       if (settledRequest.status === "rejected") {
         if (!(settledRequest.reason instanceof ProviderNotSupportedError)) {
-          RequestLogger.error("provider.models.failed", settledRequest.reason, {
-            provider: providerName,
-          });
+          RequestLogger.error(
+            "provider.models.failed",
+            "Provider model discovery failed",
+            settledRequest.reason,
+            {
+              provider: providerName,
+            },
+          );
         }
         continue;
       }
       if (!Array.isArray(settledRequest.value?.data)) {
-        RequestLogger.warn("provider.models.invalid_response", {
-          provider: providerName,
-        });
+        RequestLogger.warn(
+          "provider.models.invalid_response",
+          "Provider model discovery returned an invalid response",
+          {
+            provider: providerName,
+          },
+        );
         continue;
       }
 
@@ -209,9 +218,13 @@ export async function handleModelsRequest(
   }
 
   if (truncated) {
-    RequestLogger.warn("provider.models.aggregate_truncated", {
-      maximum_bytes: MAX_AGGREGATED_MODELS_BYTES,
-    });
+    RequestLogger.warn(
+      "provider.models.aggregate_truncated",
+      "Aggregated model list was truncated",
+      {
+        maximum_bytes: MAX_AGGREGATED_MODELS_BYTES,
+      },
+    );
   }
 
   return new Response(

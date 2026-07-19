@@ -371,6 +371,8 @@ describe("models", () => {
       provider: "openai",
       error_name: "Error",
       error_message: "gateway failed",
+      message:
+        "Provider model discovery failed: provider=openai, error_name=Error, error_message=gateway failed",
     });
   });
 
@@ -406,6 +408,8 @@ describe("models", () => {
       provider: "openai",
       error_name: "Error",
       error_message: "Provider models request failed with HTTP 401.",
+      message:
+        "Provider model discovery failed: provider=openai, error_name=Error, error_message=Provider models request failed with HTTP 401.",
     });
   });
 
@@ -458,6 +462,8 @@ describe("models", () => {
       provider: "error",
       error_name: "Error",
       error_message: "Network error",
+      message:
+        "Provider model discovery failed: provider=error, error_name=Error, error_message=Network error",
     });
 
     consoleSpy.mockRestore();
@@ -527,6 +533,8 @@ describe("models", () => {
       event: "provider.models.invalid_response",
       request_id: null,
       provider: "invalid",
+      message:
+        "Provider model discovery returned an invalid response: provider=invalid",
     });
 
     consoleSpy.mockRestore();
@@ -564,6 +572,8 @@ describe("models", () => {
       event: "provider.models.invalid_response",
       request_id: null,
       provider: "nodata",
+      message:
+        "Provider model discovery returned an invalid response: provider=nodata",
     });
 
     consoleSpy.mockRestore();

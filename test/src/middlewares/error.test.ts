@@ -50,6 +50,8 @@ describe("errorMiddleware", () => {
       request_id: null,
       error_name: "Error",
       error_message: "Something went wrong",
+      message:
+        "Request failed with an unhandled error: error_name=Error, error_message=Something went wrong",
     });
 
     consoleSpy.mockRestore();
@@ -80,6 +82,8 @@ describe("errorMiddleware", () => {
       request_id: null,
       error_name: "NonError",
       error_message: "Non-Error value thrown",
+      message:
+        "Request failed with an unhandled error: error_name=NonError, error_message=Non-Error value thrown",
     });
   });
 });

@@ -118,9 +118,14 @@ async function checkProviderConnectivity(
     ) {
       return "unknown";
     }
-    RequestLogger.error("provider.connectivity.failed", error, {
-      provider: providerName,
-    });
+    RequestLogger.error(
+      "provider.connectivity.failed",
+      "Provider connectivity check failed",
+      error,
+      {
+        provider: providerName,
+      },
+    );
     return "invalid";
   }
 }

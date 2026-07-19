@@ -45,9 +45,13 @@ dotenv values are quoted and escaped to prevent line injection.
 ## Observability
 
 Workers Logs are enabled for every invocation in `wrangler.jsonc`; traces use
-head sampling. Application records are structured JSON and can be filtered by
-their `event` and `request_id` fields. Start with `request.completed` for status
-and handler latency, then correlate `subrequest.completed`,
+head sampling. Every application record has a human-readable `message` for the
+Workers Observability summary and can be filtered by its structured `event` and
+`request_id` fields. Messages repeat the most useful safe structured fields so
+the summary identifies the provider, operation, destination, status, credential
+slot, and duration when those values apply. Start with `request.completed` for
+status and handler latency; it also summarizes the provider or providers
+observed during the request. Then correlate `subrequest.completed`,
 `subrequest.failed`, or provider-specific failure events using the same request
 ID.
 

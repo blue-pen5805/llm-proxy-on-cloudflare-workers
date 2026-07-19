@@ -59,7 +59,11 @@ export function recordApiKeySelection({
     step,
   };
 
-  RequestLogger.info("provider.key.selected", fields);
+  RequestLogger.info(
+    "provider.key.selected",
+    "Provider credential selected",
+    fields,
+  );
   return fields;
 }
 

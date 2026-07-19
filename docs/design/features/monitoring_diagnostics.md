@@ -55,9 +55,16 @@ its output as an unaudited monitoring payload.
 ## Platform observability
 
 `wrangler.jsonc` enables Workers Logs for every invocation and sampled traces.
-Application logs are structured JSON objects with a stable `event` field and a
-`request_id`. The request ID uses Cloudflare's `cf-ray` value when available and
-falls back to a generated UUID.
+Application logs are structured JSON objects with a human-readable `message`, a
+stable `event` field, and a `request_id`. The logger requires every record to
+provide `message` so Cloudflare Workers Observability can populate its summary
+Message column. The message includes the event's most useful safe fields, such
+as provider, operation, HTTP method, query-free destination, status, credential
+slot, selection policy, and duration as applicable. The request ID uses
+Cloudflare's `cf-ray` value when available and falls back to a generated UUID.
+Provider names observed in request-scoped events are carried into
+`request.completed` as `provider` for one destination or a comma-separated
+`providers` summary for multiple destinations.
 
 The following events support operational queries:
 

@@ -18,7 +18,12 @@ describe("loggingMiddleware", () => {
     const expected = new Response("ok", { status: 201 });
 
     const response = await RequestLogger.run(request, () =>
-      loggingMiddleware(context, async () => expected),
+      loggingMiddleware(context, async () => {
+        RequestLogger.info("test.provider", "Test provider", {
+          provider: "openai",
+        });
+        return expected;
+      }),
     );
 
     expect(response).toBe(expected);
@@ -27,8 +32,12 @@ describe("loggingMiddleware", () => {
       request_id: "ray-id",
       method: "POST",
       path: "/path",
+      provider: "openai",
       status: 201,
       duration_ms: expect.any(Number),
+      message: expect.stringMatching(
+        /^Request completed: method=POST, path=\/path, provider=openai, status=201, duration_ms=\d+(?:\.\d+)?$/,
+      ),
     });
     expect(JSON.stringify(consoleInfo.mock.calls)).not.toContain("secret");
   });

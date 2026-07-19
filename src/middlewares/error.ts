@@ -13,7 +13,11 @@ export const errorMiddleware: Middleware = async (context, next) => {
       status = err.status;
       message = err.message;
     } else {
-      RequestLogger.error("request.unhandled_error", err);
+      RequestLogger.error(
+        "request.unhandled_error",
+        "Request failed with an unhandled error",
+        err,
+      );
     }
 
     return new Response(

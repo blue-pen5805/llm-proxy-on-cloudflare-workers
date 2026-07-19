@@ -12,6 +12,9 @@ update is explicitly approved.
 
 ### 2026-07-19
 
+- Added a human-readable `message` with relevant safe event details to every
+  structured application log so Workers Observability summaries identify the
+  provider, destination, result, and other applicable context.
 - Added the Cline, Ollama, and NVIDIA NIM logos when creating or updating their
   managed AI Gateway Custom Providers.
 - Skipped Amazon Bedrock and Azure OpenAI model-discovery requests when their

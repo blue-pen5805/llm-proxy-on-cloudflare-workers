@@ -296,6 +296,8 @@ describe("status", () => {
       provider: "openai",
       error_name: "Error",
       error_message: "network unavailable",
+      message:
+        "Provider connectivity check failed: provider=openai, error_name=Error, error_message=network unavailable",
     });
   });
 
