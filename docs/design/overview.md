@@ -73,6 +73,11 @@ forwarded.
 - [Monitoring and diagnostics](features/monitoring_diagnostics.md)
 - [Request-path performance](features/performance.md)
 
+### Security decisions
+
+- [Security design decisions](security-decisions.md) — intentional behaviors and
+  accepted risks, with rationale and reconsideration conditions.
+
 ## Authoritative implementation points
 
 | Concern                         | Source                       |
