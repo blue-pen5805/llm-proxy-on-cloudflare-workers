@@ -3,6 +3,9 @@
 
   // --- General Authentication ---
   // API Key for llm proxy.
+  // A single string is used verbatim as one key (it may contain commas or
+  // digits). To configure multiple keys, use a JSON array, e.g.
+  //   "PROXY_API_KEY": ["key-one", "key-two"]
   "PROXY_API_KEY": "YOUR-PROXY-API-KEY",
 
   // --- AI Gateway ---
@@ -77,6 +80,9 @@
   ],
 
   // --- Configurations ---
+  // Development-only auth bypass. This is never deployed by the secrets script,
+  // so it only takes effect locally via `npm run dev`; deployed Workers always
+  // run with authentication enabled.
   "DEV": false,
   "DEFAULT_MODEL": null,
   "ENABLE_GLOBAL_ROUND_ROBIN": false

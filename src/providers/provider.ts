@@ -375,7 +375,10 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
         {
           method: "POST",
           body: JSON.stringify(trimmedData),
-          headers: mergeHeaders(await this.headers(apiKeyIndex), headers),
+          // Provider-computed headers win over caller-supplied ones, matching
+          // buildHeadersForPath so credential/routing headers cannot be
+          // overridden from a request on any path.
+          headers: mergeHeaders(headers, await this.headers(apiKeyIndex)),
         },
       ];
     },

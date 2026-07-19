@@ -157,4 +157,17 @@ describe("stripProxyAuthorizationHeaders", () => {
     expect(sanitized.has("cf-connecting-ip")).toBe(false);
     expect(sanitized.has("x-forwarded-for")).toBe(false);
   });
+
+  it("never preserves the client-supplied Gateway cache key", () => {
+    const sanitized = stripProxyAuthorizationHeaders(
+      {
+        "cf-aig-cache-key": "shared-tenant-key",
+        "cf-aig-max-attempts": "3",
+      },
+      { preserveAiGatewayHeaders: true },
+    );
+
+    expect(sanitized.has("cf-aig-cache-key")).toBe(false);
+    expect(sanitized.get("cf-aig-max-attempts")).toBe("3");
+  });
 });

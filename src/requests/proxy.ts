@@ -11,7 +11,7 @@ import {
 } from "../utils/api_key_selection";
 import { stripProxyAuthorizationHeaders } from "../utils/authorization";
 import { NotFoundError } from "../utils/error";
-import { fetchWithLogging } from "../utils/helpers";
+import { assertSafeProxyPath, fetchWithLogging } from "../utils/helpers";
 import { RequestLogger } from "../utils/logger";
 import {
   createProviderConfigurationErrorResponse,
@@ -26,6 +26,9 @@ export async function handleProviderProxyRequest(
 ) {
   const { apiKeyIndex: contextApiKeyIndex } = context;
   const { request } = context;
+  // Reject traversal/scheme smuggling in the client-controlled path before it is
+  // concatenated into the provider or Gateway upstream URL.
+  assertSafeProxyPath(pathname);
   const providerInstance = resolveProvider(context, providerName);
 
   if (!providerInstance) {

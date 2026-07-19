@@ -141,9 +141,10 @@ describe("provider contracts", () => {
           temperature: 0.5,
         }),
       });
+      // Provider-computed headers take precedence over caller-supplied ones.
       expect(new Headers(chatInit.headers)).toEqual(
         new Headers({
-          Authorization: "caller-header",
+          Authorization: "provider-header",
           "X-Provider": "kept",
         }),
       );

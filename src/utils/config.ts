@@ -92,27 +92,48 @@ function isSafeCustomEndpoint(value: unknown): value is CustomOpenAIEndpoint {
 
 export class Config {
   static isDevelopment(): boolean {
+    // DEV is a development-only flag. deploy-secrets never ships it, so a
+    // deployed Worker has no DEV binding and this is always false in
+    // production. It is enabled only locally via `npm run dev`, whose
+    // .dev.vars file carries DEV=true.
     const dev = Environments.get("DEV", false);
     return dev?.trim().toLowerCase() === "true";
   }
 
   static apiKeys(): string[] | undefined {
-    const apiKeys = Environments.get("PROXY_API_KEY");
+    // Read the raw secret without the generic parser so a single key is never
+    // split on commas or coerced from a numeric/JSON-looking string. Multiple
+    // keys are configured explicitly as a JSON array.
+    const rawValue = Environments.get("PROXY_API_KEY", false);
 
-    if (apiKeys === undefined) {
+    if (rawValue === undefined) {
       return undefined;
     }
 
-    if (isStringArray(apiKeys)) {
-      if (apiKeys.length > MAX_PROXY_API_KEYS) return undefined;
-      return apiKeys.map((key) => key.trim()).filter(Boolean);
-    }
-    if (typeof apiKeys === "string") {
-      const normalizedKey = apiKeys.trim();
-      return normalizedKey ? [normalizedKey] : [];
+    const trimmedValue = rawValue.trim();
+
+    if (trimmedValue.startsWith("[")) {
+      let parsedValue: unknown;
+      try {
+        parsedValue = JSON.parse(trimmedValue);
+      } catch {
+        parsedValue = undefined;
+      }
+      // A well-formed JSON array is the only multi-key format. Anything that
+      // parses but is not a string array (or is too long) is a misconfiguration.
+      if (parsedValue !== undefined) {
+        if (
+          !isStringArray(parsedValue) ||
+          parsedValue.length > MAX_PROXY_API_KEYS
+        ) {
+          return undefined;
+        }
+        return parsedValue.map((key) => key.trim()).filter(Boolean);
+      }
+      // Not valid JSON: fall through and treat the value as a single key.
     }
 
-    return undefined;
+    return trimmedValue ? [trimmedValue] : [];
   }
 
   static aiGateway(): {

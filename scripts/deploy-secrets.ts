@@ -33,6 +33,11 @@ export type SecretOperationValue = string | null;
 // Cloudflare limits each Worker environment variable/secret to 5 KiB.
 export const MAX_WORKER_SECRET_BYTES = 5 * 1024;
 
+// Development-only keys are never deployed. DEV enables the authentication
+// bypass and must exist only in local `npm run dev` (.dev.vars); a deployed
+// Worker therefore has no DEV binding and always runs authenticated.
+export const DEVELOPMENT_ONLY_KEYS = new Set(["DEV"]);
+
 /**
  * Get config file path for given environment
  */
@@ -127,9 +132,10 @@ export function filterSecretsForDeployment(
 ): Record<string, SecretOperationValue> {
   const secrets: Record<string, SecretOperationValue> = {};
 
-  // Skip $schema and empty values. Preserve null as an explicit deletion.
+  // Skip $schema, development-only keys, and empty values. Preserve null as an
+  // explicit deletion.
   for (const [key, value] of Object.entries(config)) {
-    if (key === "$schema") continue;
+    if (key === "$schema" || DEVELOPMENT_ONLY_KEYS.has(key)) continue;
 
     const secretValue = serializeSecretValue(value);
     if (secretValue === "") continue;

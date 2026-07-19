@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { BadRequestError, PayloadTooLargeError } from "~/src/utils/error";
 import {
+  assertSafeProxyPath,
   parseJsonOrReturnText,
   getRequestPath,
   shuffleArray,
@@ -288,6 +289,47 @@ describe("removeAuthorizationQueryParameters", () => {
     const pathname = "/v1/chat/completions?&model=gpt-4";
     const result = removeAuthorizationQueryParameters(pathname);
     expect(result).toBe("/v1/chat/completions?model=gpt-4");
+  });
+});
+
+describe("assertSafeProxyPath", () => {
+  it("accepts ordinary provider paths and query strings", () => {
+    expect(() => assertSafeProxyPath("/v1/chat/completions")).not.toThrow();
+    expect(() =>
+      assertSafeProxyPath("/v1beta/models/gemini-1.5:generateContent?alt=sse"),
+    ).not.toThrow();
+    // A dot inside a segment is fine; only whole "." / ".." segments traverse.
+    expect(() => assertSafeProxyPath("/v1.0/models")).not.toThrow();
+  });
+
+  it("rejects parent-directory traversal segments", () => {
+    expect(() => assertSafeProxyPath("/openai/../../secret")).toThrow(
+      BadRequestError,
+    );
+    expect(() => assertSafeProxyPath("/a/./b")).toThrow(BadRequestError);
+  });
+
+  it("rejects percent-encoded dot traversal", () => {
+    expect(() => assertSafeProxyPath("/openai/%2e%2e/secret")).toThrow(
+      BadRequestError,
+    );
+    expect(() => assertSafeProxyPath("/openai/%2E./secret")).toThrow(
+      BadRequestError,
+    );
+  });
+
+  it("rejects backslashes, control characters, and scheme smuggling", () => {
+    expect(() => assertSafeProxyPath("/a\\b")).toThrow(BadRequestError);
+    expect(() => assertSafeProxyPath("/a\tb")).toThrow(BadRequestError);
+    expect(() => assertSafeProxyPath("https://evil.example/x")).toThrow(
+      BadRequestError,
+    );
+  });
+
+  it("ignores traversal that appears only in the query string", () => {
+    expect(() =>
+      assertSafeProxyPath("/v1/models?redirect=../../elsewhere"),
+    ).not.toThrow();
   });
 });
 

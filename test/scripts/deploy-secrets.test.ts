@@ -298,6 +298,16 @@ describe("deploy-secrets", () => {
         API_KEY: "secret-key",
       });
     });
+
+    it("never deploys the development-only DEV flag", () => {
+      const result = filterSecretsForDeployment({
+        API_KEY: "secret-key",
+        DEV: true,
+      });
+
+      expect(result).toEqual({ API_KEY: "secret-key" });
+      expect(result).not.toHaveProperty("DEV");
+    });
   });
 
   describe("serializeSecretsJson", () => {

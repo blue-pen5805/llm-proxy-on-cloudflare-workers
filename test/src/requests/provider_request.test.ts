@@ -24,7 +24,7 @@ describe("provider request configuration", () => {
 
     expect(response?.status).toBe(400);
     expect(await response?.json()).toEqual({
-      error: "openai requires OPENAI_API_KEY.",
+      error: "openai is not configured.",
     });
   });
 

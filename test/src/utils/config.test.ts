@@ -62,13 +62,13 @@ describe("Config", () => {
   });
 
   describe("apiKeys", () => {
-    it("should return array when PROXY_API_KEY is a string", () => {
+    it("reads the raw secret and treats a bare string as one key", () => {
       vi.mocked(Environments.get).mockReturnValue("test-key");
 
       const result = Config.apiKeys();
 
       expect(result).toEqual(["test-key"]);
-      expect(Environments.get).toHaveBeenCalledWith("PROXY_API_KEY");
+      expect(Environments.get).toHaveBeenCalledWith("PROXY_API_KEY", false);
     });
 
     it("returns an empty array when PROXY_API_KEY is blank", () => {
@@ -76,54 +76,46 @@ describe("Config", () => {
       expect(Config.apiKeys()).toEqual([]);
     });
 
-    it("should return array when PROXY_API_KEY is an array", () => {
-      vi.mocked(Environments.get).mockReturnValue(["key1", "key2"]);
+    it("does not split a single key on commas", () => {
+      vi.mocked(Environments.get).mockReturnValue("aB3,x9Kf2,qWer");
+      expect(Config.apiKeys()).toEqual(["aB3,x9Kf2,qWer"]);
+    });
 
-      const result = Config.apiKeys();
+    it("does not coerce a purely numeric key", () => {
+      vi.mocked(Environments.get).mockReturnValue("12345678");
+      expect(Config.apiKeys()).toEqual(["12345678"]);
+    });
 
-      expect(result).toEqual(["key1", "key2"]);
+    it("parses multiple keys only from a JSON array", () => {
+      vi.mocked(Environments.get).mockReturnValue('["key1","key2"]');
+      expect(Config.apiKeys()).toEqual(["key1", "key2"]);
+    });
+
+    it("trims entries and drops blanks inside a JSON array", () => {
+      vi.mocked(Environments.get).mockReturnValue('[" key1 ",""," key2"]');
+      expect(Config.apiKeys()).toEqual(["key1", "key2"]);
+    });
+
+    it("treats an invalid JSON-array-like value as a single key", () => {
+      vi.mocked(Environments.get).mockReturnValue("[not-json");
+      expect(Config.apiKeys()).toEqual(["[not-json"]);
     });
 
     it("should return undefined when PROXY_API_KEY is undefined", () => {
       vi.mocked(Environments.get).mockReturnValue(undefined);
-
-      const result = Config.apiKeys();
-
-      expect(result).toBeUndefined();
-    });
-
-    it("should return undefined when PROXY_API_KEY is not a string or array", () => {
-      vi.mocked(Environments.get).mockReturnValue(123);
-
-      const result = Config.apiKeys();
-
-      expect(result).toBeUndefined();
-    });
-
-    it("should return undefined when PROXY_API_KEY is an object", () => {
-      vi.mocked(Environments.get).mockReturnValue({ key: "value" });
-
-      const result = Config.apiKeys();
-
-      expect(result).toBeUndefined();
-    });
-
-    it("should reject arrays containing non-string keys", () => {
-      vi.mocked(Environments.get).mockReturnValue(["valid", 42]);
       expect(Config.apiKeys()).toBeUndefined();
     });
 
-    it("should return undefined when PROXY_API_KEY is null", () => {
-      vi.mocked(Environments.get).mockReturnValue(undefined);
-
-      const result = Config.apiKeys();
-
-      expect(result).toBeUndefined();
+    it("rejects a JSON array containing non-string keys", () => {
+      vi.mocked(Environments.get).mockReturnValue('["valid",42]');
+      expect(Config.apiKeys()).toBeUndefined();
     });
 
     it("rejects an excessive number of proxy authentication keys", () => {
       vi.mocked(Environments.get).mockReturnValue(
-        Array.from({ length: 65 }, (_, index) => `key-${index}`),
+        JSON.stringify(
+          Array.from({ length: 65 }, (_, index) => `key-${index}`),
+        ),
       );
       expect(Config.apiKeys()).toBeUndefined();
     });

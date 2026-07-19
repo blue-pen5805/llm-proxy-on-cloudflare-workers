@@ -160,6 +160,29 @@ export function interpolateTemplate(
   }, template);
 }
 
+/**
+ * Reject a client-controlled proxy path that could climb above the provider or
+ * Gateway base URL, or smuggle a new scheme, once it is string-concatenated into
+ * the upstream request URL. Only the path portion is validated; the query string
+ * is preserved unchanged. `%2e` is folded to `.` because the URL parser treats
+ * percent-encoded dot segments as traversal.
+ */
+export function assertSafeProxyPath(pathname: string): void {
+  const pathOnly = pathname.split(/[?#]/, 1)[0];
+  if (
+    /[\\\u0000-\u001f\u007f]/.test(pathOnly) ||
+    /^[a-z][a-z\d+.-]*:/i.test(pathOnly)
+  ) {
+    throw new BadRequestError("Invalid proxy request path.");
+  }
+  for (const segment of pathOnly.split("/")) {
+    const decodedSegment = segment.replace(/%2e/gi, ".");
+    if (decodedSegment === "." || decodedSegment === "..") {
+      throw new BadRequestError("Invalid proxy request path.");
+    }
+  }
+}
+
 export function removeAuthorizationQueryParameters(pathname: string): string {
   const parsedPath = new URL(pathname, "https://proxy.invalid");
   for (const parameterName of [...parsedPath.searchParams.keys()]) {

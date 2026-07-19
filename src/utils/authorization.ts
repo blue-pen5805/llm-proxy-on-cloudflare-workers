@@ -36,6 +36,10 @@ const OPERATOR_CONTROLLED_AI_GATEWAY_HEADERS = new Set([
   // This selects one of the provider credentials stored in AI Gateway BYOK.
   // Treat it as credential policy rather than a request-level tuning control.
   "cf-aig-byok-alias",
+  // The cache key partitions Gateway's response cache. Accepting it from a
+  // client lets one caller read or poison another caller's cached responses on
+  // a shared Gateway, so it is operator-controlled and never client-supplied.
+  "cf-aig-cache-key",
 ]);
 
 /**

@@ -3,6 +3,7 @@ import type { MiddlewareContext } from "../middleware";
 import { getProviderByName } from "../providers";
 import type { ProviderBase } from "../providers/provider";
 import { Environments } from "../utils/environments";
+import { RequestLogger } from "../utils/logger";
 
 /** Resolve a provider from the request-scoped registry or the legacy fallback. */
 export function resolveProvider(
@@ -36,7 +37,15 @@ export function createProviderConfigurationErrorResponse(
       provider.requiresProviderCredentials &&
       !provider.available()
     ) {
-      error = `${providerName} requires ${String(provider.apiKeyName)}.`;
+      // Keep the internal credential variable name (e.g. OPENAI_API_KEY) in
+      // operator logs only; the client sees a generic message so the proxy does
+      // not disclose its environment variable names.
+      RequestLogger.warn(
+        "provider.credential.missing",
+        "Provider credential is not configured",
+        { provider: providerName, credential: String(provider.apiKeyName) },
+      );
+      error = `${providerName} is not configured.`;
     }
   }
 

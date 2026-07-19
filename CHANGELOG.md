@@ -12,6 +12,27 @@ update is explicitly approved.
 
 ### 2026-07-19
 
+- Changed `PROXY_API_KEY` parsing so a single string value is always treated as
+  one key (it may now contain commas or digits) and multiple keys must be
+  provided as a JSON array. A single value is no longer split on commas or
+  coerced from a numeric string. This is incompatible with comma-separated
+  multi-key values, which must be converted to a JSON array.
+- Stopped deploying the `DEV` flag as a Worker secret: it is now a local
+  development-only setting, so deployed Workers always run with authentication
+  enabled regardless of any configured `DEV` value.
+- Stopped honoring a client-supplied `cf-aig-cache-key` header so a caller can
+  no longer read from or poison another caller's AI Gateway cached response; the
+  cache key is now operator-controlled.
+- Rejected provider pass-through request paths that contain directory traversal
+  (`..`), backslashes, control characters, or a URL scheme with
+  `400 Bad Request`, preventing them from redirecting the upstream request.
+- Made provider-computed request headers take precedence over caller-supplied
+  headers on the OpenAI-compatible Chat Completions route, matching the
+  pass-through route so request headers cannot override credential or routing
+  headers.
+- Replaced the provider configuration error that named the required environment
+  variable with a generic "<provider> is not configured." message so the proxy
+  no longer discloses its environment-variable names to clients.
 - Added a human-readable `message` with relevant safe event details to every
   structured application log so Workers Observability summaries identify the
   provider, destination, result, and other applicable context.
