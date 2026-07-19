@@ -78,6 +78,9 @@ describe("models", () => {
     vi.mocked(helpers.readResponseJson).mockImplementation((response) =>
       response.json(),
     );
+    vi.mocked(helpers.utf8ByteLength).mockImplementation(
+      (value: string) => new TextEncoder().encode(value).length,
+    );
 
     vi.mocked(helpers.fetchWithLogging).mockImplementation(() =>
       Promise.resolve(new Response(JSON.stringify({ data: [] }))),

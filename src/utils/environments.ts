@@ -3,6 +3,15 @@ import * as process from "node:process";
 
 const requestEnvironment = new AsyncLocalStorage<Env | Partial<Env>>();
 
+// Parsing is a pure function of the raw value, and the JSON attempt throws for
+// every plain-string secret, so results are memoized by value. Values are
+// operator-controlled configuration, but the cache is still bounded.
+const MAX_PARSED_VALUE_CACHE_ENTRIES = 512;
+const parsedValueCache = new Map<
+  string,
+  string | Array<unknown> | object | number | undefined
+>();
+
 /**
  * Utility class for accessing and manipulating environment variables
  * in a type-safe way with parsing capabilities.
@@ -122,17 +131,25 @@ export class Environments {
       return configuredValue;
     }
 
-    // Try to parse as JSON first
-    const jsonValue = this.parseJson(configuredValue);
-    if (jsonValue !== undefined) {
-      return jsonValue;
+    if (parsedValueCache.has(configuredValue)) {
+      return parsedValueCache.get(configuredValue);
     }
 
-    // If JSON parsing fails, try to parse as comma-separated values
-    const separatedTexts = this.parseCommaSeparatedText(configuredValue);
+    // Try to parse as JSON first
+    const jsonValue = this.parseJson(configuredValue);
 
-    // If parsing fails, return the original value
-    return separatedTexts ?? configuredValue;
+    // If JSON parsing fails, try to parse as comma-separated values.
+    // If that also fails, fall back to the original value.
+    const parsedValue =
+      jsonValue !== undefined
+        ? jsonValue
+        : (this.parseCommaSeparatedText(configuredValue) ?? configuredValue);
+
+    if (parsedValueCache.size >= MAX_PARSED_VALUE_CACHE_ENTRIES) {
+      parsedValueCache.clear();
+    }
+    parsedValueCache.set(configuredValue, parsedValue);
+    return parsedValue;
   }
 
   /**

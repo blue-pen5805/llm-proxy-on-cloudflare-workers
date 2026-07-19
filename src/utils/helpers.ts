@@ -148,6 +148,34 @@ export function shuffleArray<T>(array: T[]): T[] {
   return shuffledArray;
 }
 
+/**
+ * Count the UTF-8 bytes of a string without allocating an encoded copy.
+ * Matches TextEncoder output, including 3 bytes for a lone surrogate
+ * (encoded as U+FFFD).
+ */
+export function utf8ByteLength(value: string): number {
+  let bytes = 0;
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    if (code < 0x80) {
+      bytes += 1;
+    } else if (code < 0x800) {
+      bytes += 2;
+    } else if (code >= 0xd800 && code < 0xdc00 && index + 1 < value.length) {
+      const nextCode = value.charCodeAt(index + 1);
+      if (nextCode >= 0xdc00 && nextCode < 0xe000) {
+        bytes += 4;
+        index++;
+      } else {
+        bytes += 3;
+      }
+    } else {
+      bytes += 3;
+    }
+  }
+  return bytes;
+}
+
 export function interpolateTemplate(
   template: string,
   templateValues: Record<string, string>,

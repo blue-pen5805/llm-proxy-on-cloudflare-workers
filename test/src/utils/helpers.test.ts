@@ -12,6 +12,7 @@ import {
   readJsonRequest,
   readRequestText,
   readResponseJson,
+  utf8ByteLength,
   withTimeout,
 } from "~/src/utils/helpers";
 import { RequestLogger } from "~/src/utils/logger";
@@ -108,6 +109,23 @@ describe("shuffleArray", () => {
     const result = shuffleArray(array);
     expect(result).not.toEqual(array); // It's possible to get the same array, but very unlikely
     expect(result.sort()).toEqual(array.sort()); // Ensure all elements are still present
+  });
+});
+
+describe("utf8ByteLength", () => {
+  it.each([
+    ["", "empty string"],
+    ["ascii", "1-byte characters"],
+    ["café", "2-byte characters"],
+    ["こんにちは", "3-byte characters"],
+    ["😀🎉", "4-byte surrogate pairs"],
+    ["a😀あé", "mixed widths"],
+    ["\ud800a", "lone lead surrogate followed by ASCII"],
+    ["\ud800\ue000", "lone lead surrogate followed by a 3-byte character"],
+    ["\ud800", "lone lead surrogate at end of string"],
+    ["\udc00", "lone trail surrogate"],
+  ])("matches TextEncoder byte counts for %j (%s)", (value) => {
+    expect(utf8ByteLength(value)).toBe(new TextEncoder().encode(value).length);
   });
 });
 

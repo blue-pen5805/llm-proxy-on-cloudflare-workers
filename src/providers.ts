@@ -64,9 +64,28 @@ export function getAllProviderInstances(
   return createProviderRegistry(env).all();
 }
 
+// Registries hold no request state (providers read the environment through the
+// request-scoped AsyncLocalStorage on every call), so one registry per custom
+// endpoint configuration is shared across requests. Config.customOpenAIEndpoints
+// memoizes its validated result, keeping the cache key identity stable.
+const customEndpointRegistryCache = new WeakMap<object, ProviderRegistry>();
+let builtInOnlyRegistry: ProviderRegistry | undefined;
+
 export function createProviderRegistry(_environment: Env): ProviderRegistry {
-  return new ProviderRegistry(
-    BUILT_IN_PROVIDER_CONSTRUCTORS,
-    Config.customOpenAIEndpoints() ?? [],
-  );
+  const customEndpoints = Config.customOpenAIEndpoints();
+  if (!customEndpoints) {
+    return (builtInOnlyRegistry ??= new ProviderRegistry(
+      BUILT_IN_PROVIDER_CONSTRUCTORS,
+    ));
+  }
+
+  let registry = customEndpointRegistryCache.get(customEndpoints);
+  if (!registry) {
+    registry = new ProviderRegistry(
+      BUILT_IN_PROVIDER_CONSTRUCTORS,
+      customEndpoints,
+    );
+    customEndpointRegistryCache.set(customEndpoints, registry);
+  }
+  return registry;
 }

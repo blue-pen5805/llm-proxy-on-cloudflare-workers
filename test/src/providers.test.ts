@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  createProviderRegistry,
   getAllProviderInstances,
   getProviderByName,
   ProviderRegistry,
@@ -84,6 +85,25 @@ describe("provider registry", () => {
     });
     expect(registry.match("/internalXv2/v1/models")).toBeUndefined();
     expect(registry.match("/openai")).toBeUndefined();
+    expect(registry.match("openai/v1/models")).toBeUndefined();
+  });
+
+  it("reuses registries across requests with an unchanged configuration", () => {
+    const withoutEndpoints = vi
+      .spyOn(Config, "customOpenAIEndpoints")
+      .mockReturnValue(undefined);
+    expect(createProviderRegistry({} as Env)).toBe(
+      createProviderRegistry({} as Env),
+    );
+    withoutEndpoints.mockRestore();
+
+    const endpoints = [
+      { name: "internal", baseUrl: "https://internal.example" },
+    ];
+    vi.spyOn(Config, "customOpenAIEndpoints").mockReturnValue(endpoints);
+    const registry = createProviderRegistry({} as Env);
+    expect(registry).toBe(createProviderRegistry({} as Env));
+    expect(registry.get("internal")).toBeInstanceOf(CustomOpenAI);
   });
 
   it("rejects custom endpoint names that collide with built-ins", () => {

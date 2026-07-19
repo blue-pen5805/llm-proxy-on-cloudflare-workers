@@ -27,6 +27,7 @@ export class ProviderRegistry {
     CustomOpenAIEndpointConfig
   >;
   private readonly providerNames: readonly string[];
+  private readonly providerNameSet: ReadonlySet<string>;
 
   constructor(
     private readonly builtIns: Readonly<Record<string, ProviderConstructor>>,
@@ -54,6 +55,7 @@ export class ProviderRegistry {
         ...this.customEndpoints.map(({ name }) => name),
       ]),
     ];
+    this.providerNameSet = new Set(this.providerNames);
   }
 
   names(): string[] {
@@ -94,16 +96,23 @@ export class ProviderRegistry {
   }
 
   match(pathname: string): ProviderRoute | undefined {
-    const providerName = this.providerNames.find((name) =>
-      pathname.startsWith(`/${name}/`),
-    );
-    if (!providerName) {
+    // Provider names never contain "/", so the first path segment identifies
+    // the route with one set lookup instead of a scan over every name.
+    if (!pathname.startsWith("/")) {
+      return undefined;
+    }
+    const separatorIndex = pathname.indexOf("/", 1);
+    if (separatorIndex === -1) {
+      return undefined;
+    }
+    const providerName = pathname.slice(1, separatorIndex);
+    if (!this.providerNameSet.has(providerName)) {
       return undefined;
     }
 
     return {
       providerName,
-      pathname: pathname.slice(providerName.length + 1),
+      pathname: pathname.slice(separatorIndex),
     };
   }
 

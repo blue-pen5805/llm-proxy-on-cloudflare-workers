@@ -119,6 +119,13 @@ describe("Config", () => {
       );
       expect(Config.apiKeys()).toBeUndefined();
     });
+
+    it("memoizes parsed keys while the raw value is unchanged", () => {
+      vi.mocked(Environments.get).mockReturnValue('["memo1","memo2"]');
+      const first = Config.apiKeys();
+      expect(first).toEqual(["memo1", "memo2"]);
+      expect(Config.apiKeys()).toBe(first);
+    });
   });
 
   describe("aiGateway", () => {
@@ -254,6 +261,17 @@ describe("Config", () => {
       ];
       vi.mocked(Environments.get).mockReturnValue(endpoints);
       expect(Config.customOpenAIEndpoints()).toBe(endpoints);
+    });
+
+    it("memoizes validated endpoints while the raw value is unchanged", () => {
+      vi.mocked(Environments.get).mockReturnValue(
+        '[{"name":"memoized","baseUrl":"https://memo.example"}]',
+      );
+      const first = Config.customOpenAIEndpoints();
+      expect(first).toEqual([
+        { name: "memoized", baseUrl: "https://memo.example" },
+      ]);
+      expect(Config.customOpenAIEndpoints()).toBe(first);
     });
 
     it.each([

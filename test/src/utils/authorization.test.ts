@@ -21,6 +21,17 @@ describe("isRequestAuthorized", () => {
     expect(isRequestAuthorized(request)).toBe(false);
   });
 
+  it("reuses cached configured-key digests across repeated requests", () => {
+    const request = new Request("https://example.com", {
+      headers: {
+        Authorization: "Bearer valid-key",
+      },
+    });
+
+    expect(isRequestAuthorized(request)).toBe(true);
+    expect(isRequestAuthorized(request)).toBe(true);
+  });
+
   // Test when API key is set and authentication succeeds with Authorization header
   it("should return true when valid Authorization header is provided", () => {
     const request = new Request("https://example.com", {

@@ -14,6 +14,7 @@ import { Environments } from "../utils/environments";
 import {
   fetchWithLogging,
   readResponseJson,
+  utf8ByteLength,
   withTimeout,
 } from "../utils/helpers";
 import { RequestLogger } from "../utils/logger";
@@ -147,8 +148,9 @@ export async function handleModelsRequest(
   const providerEntries = Object.entries(
     context.providers?.all() ?? getAllProviderInstances(Environments.all()),
   );
-  const providerModels: OpenAIModelsListResponseBody["data"] = [];
-  const textEncoder = new TextEncoder();
+  // Models are kept as their serialized JSON so the byte budget and the final
+  // response body reuse one JSON.stringify pass per model.
+  const serializedModels: string[] = [];
   let aggregatedBytes = 0;
   let truncated = false;
 
@@ -203,15 +205,16 @@ export async function handleModelsRequest(
         0,
         MAX_MODELS_PER_PROVIDER,
       )) {
-        const prefixedModel = { id: `${providerName}/${id}`, ...model };
-        const modelBytes = textEncoder.encode(
-          JSON.stringify(prefixedModel),
-        ).length;
+        const serializedModel = JSON.stringify({
+          id: `${providerName}/${id}`,
+          ...model,
+        });
+        const modelBytes = utf8ByteLength(serializedModel);
         if (aggregatedBytes + modelBytes > MAX_AGGREGATED_MODELS_BYTES) {
           truncated = true;
           break;
         }
-        providerModels.push(prefixedModel);
+        serializedModels.push(serializedModel);
         aggregatedBytes += modelBytes;
       }
     }
@@ -228,10 +231,7 @@ export async function handleModelsRequest(
   }
 
   return new Response(
-    JSON.stringify({
-      data: providerModels,
-      object: "list",
-    }),
+    `{"data":[${serializedModels.join(",")}],"object":"list"}`,
     {
       headers: {
         "Content-Type": "application/json",

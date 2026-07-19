@@ -1,8 +1,14 @@
 import { bench, describe } from "vitest";
-import { BUILT_IN_PROVIDER_CONSTRUCTORS } from "~/src/providers";
+import {
+  BUILT_IN_PROVIDER_CONSTRUCTORS,
+  createProviderRegistry,
+} from "~/src/providers";
 import { ProviderBase } from "~/src/providers/provider";
 import { ProviderRegistry } from "~/src/providers/registry";
+import { isRequestAuthorized } from "~/src/utils/authorization";
+import { Environments } from "~/src/utils/environments";
 import { maskSensitiveUrl } from "~/src/utils/helpers";
+import { Secrets } from "~/src/utils/secrets";
 
 const chatBody = JSON.stringify({
   model: "openai/gpt-4o",
@@ -38,5 +44,38 @@ describe("request hot paths", () => {
 
   bench("mask a logged subrequest URL", () => {
     maskSensitiveUrl(loggedUrl);
+  });
+});
+
+const requestEnv = {
+  PROXY_API_KEY: JSON.stringify(
+    Array.from(
+      { length: 16 },
+      (_, index) => `proxy-key-${index}-${"x".repeat(24)}`,
+    ),
+  ),
+  OPENAI_API_KEY: JSON.stringify(
+    Array.from({ length: 8 }, (_, index) => `sk-${index}-${"y".repeat(40)}`),
+  ),
+  CUSTOM_OPENAI_ENDPOINTS: JSON.stringify([
+    { name: "internal.v2", baseUrl: "https://internal.example" },
+  ]),
+} as unknown as Env;
+
+const authorizedRequest = new Request("https://proxy.example/v1/models", {
+  headers: { Authorization: "Bearer proxy-key-15-" + "x".repeat(24) },
+});
+
+describe("per-request setup paths", () => {
+  bench("authenticate a proxied request", () => {
+    Environments.run(requestEnv, () => isRequestAuthorized(authorizedRequest));
+  });
+
+  bench("resolve the provider registry", () => {
+    Environments.run(requestEnv, () => createProviderRegistry(requestEnv));
+  });
+
+  bench("read a rotated provider secret list", () => {
+    Environments.run(requestEnv, () => Secrets.getAll("OPENAI_API_KEY"));
   });
 });

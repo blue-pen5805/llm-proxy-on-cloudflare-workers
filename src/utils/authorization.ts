@@ -80,16 +80,29 @@ function hashApiKey(apiKey: string): Uint8Array {
   return createHash("sha256").update(apiKey).digest();
 }
 
+// Configured keys are stable per deployment and Config.apiKeys() returns a
+// memoized array, so their digests are cached by array identity instead of
+// being recomputed on every request.
+const configuredKeyHashCache = new WeakMap<readonly string[], Uint8Array[]>();
+
+function getConfiguredKeyHashes(configuredKeys: string[]): Uint8Array[] {
+  let configuredHashes = configuredKeyHashCache.get(configuredKeys);
+  if (!configuredHashes) {
+    configuredHashes = configuredKeys.map(hashApiKey);
+    configuredKeyHashCache.set(configuredKeys, configuredHashes);
+  }
+  return configuredHashes;
+}
+
 function matchesApiKey(candidate: string, configuredKeys: string[]): boolean {
   const candidateHash = hashApiKey(candidate);
   let matched = false;
 
   // Compare every configured key so the matching key's position is not exposed
   // through an early return. Hashing also gives timingSafeEqual fixed-size input.
-  for (const configuredKey of configuredKeys) {
+  for (const configuredHash of getConfiguredKeyHashes(configuredKeys)) {
     matched =
-      crypto.subtle.timingSafeEqual(candidateHash, hashApiKey(configuredKey)) ||
-      matched;
+      crypto.subtle.timingSafeEqual(candidateHash, configuredHash) || matched;
   }
 
   return matched;

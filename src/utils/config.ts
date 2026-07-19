@@ -90,6 +90,42 @@ function isSafeCustomEndpoint(value: unknown): value is CustomOpenAIEndpoint {
   );
 }
 
+// Both parsers are pure functions of the raw configured value, so the last
+// result is memoized to keep repeated per-request reads off the JSON parser
+// and the endpoint validator. A single entry suffices because configuration
+// only changes between deployments.
+let cachedProxyApiKeysRaw: string | undefined;
+let cachedProxyApiKeys: string[] | undefined;
+let cachedCustomEndpointsRaw: unknown;
+let cachedCustomEndpoints: CustomOpenAIEndpoint[] | undefined;
+
+function parseProxyApiKeys(rawValue: string): string[] | undefined {
+  const trimmedValue = rawValue.trim();
+
+  if (trimmedValue.startsWith("[")) {
+    let parsedValue: unknown;
+    try {
+      parsedValue = JSON.parse(trimmedValue);
+    } catch {
+      parsedValue = undefined;
+    }
+    // A well-formed JSON array is the only multi-key format. Anything that
+    // parses but is not a string array (or is too long) is a misconfiguration.
+    if (parsedValue !== undefined) {
+      if (
+        !isStringArray(parsedValue) ||
+        parsedValue.length > MAX_PROXY_API_KEYS
+      ) {
+        return undefined;
+      }
+      return parsedValue.map((key) => key.trim()).filter(Boolean);
+    }
+    // Not valid JSON: fall through and treat the value as a single key.
+  }
+
+  return trimmedValue ? [trimmedValue] : [];
+}
+
 export class Config {
   static isDevelopment(): boolean {
     // DEV is a development-only flag. deploy-secrets never ships it, so a
@@ -110,30 +146,11 @@ export class Config {
       return undefined;
     }
 
-    const trimmedValue = rawValue.trim();
-
-    if (trimmedValue.startsWith("[")) {
-      let parsedValue: unknown;
-      try {
-        parsedValue = JSON.parse(trimmedValue);
-      } catch {
-        parsedValue = undefined;
-      }
-      // A well-formed JSON array is the only multi-key format. Anything that
-      // parses but is not a string array (or is too long) is a misconfiguration.
-      if (parsedValue !== undefined) {
-        if (
-          !isStringArray(parsedValue) ||
-          parsedValue.length > MAX_PROXY_API_KEYS
-        ) {
-          return undefined;
-        }
-        return parsedValue.map((key) => key.trim()).filter(Boolean);
-      }
-      // Not valid JSON: fall through and treat the value as a single key.
+    if (rawValue !== cachedProxyApiKeysRaw) {
+      cachedProxyApiKeys = parseProxyApiKeys(rawValue);
+      cachedProxyApiKeysRaw = rawValue;
     }
-
-    return trimmedValue ? [trimmedValue] : [];
+    return cachedProxyApiKeys;
   }
 
   static aiGateway(): {
@@ -184,6 +201,10 @@ export class Config {
       return undefined;
     }
 
+    if (endpoints === cachedCustomEndpointsRaw) {
+      return cachedCustomEndpoints;
+    }
+
     let parsedEndpoints: unknown = endpoints;
     if (typeof endpoints === "string") {
       try {
@@ -206,6 +227,10 @@ export class Config {
     if (new Set(endpointNames).size !== endpointNames.length) {
       throw new ConfigurationError("CUSTOM_OPENAI_ENDPOINTS");
     }
+    // Only validated configurations are memoized; invalid ones keep throwing.
+    // The stable array identity also lets the provider registry be reused.
+    cachedCustomEndpointsRaw = endpoints;
+    cachedCustomEndpoints = validatedEndpoints;
     return validatedEndpoints;
   }
 }

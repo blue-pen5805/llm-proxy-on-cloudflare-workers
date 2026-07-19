@@ -109,6 +109,28 @@ describe("Environments", () => {
       expect(result).toEqual(["a", "b", "c"]);
     });
 
+    test("should memoize parsed values by raw value", () => {
+      const first = Environments.get("COMMA_SEPARATED", true);
+      const second = Environments.get("COMMA_SEPARATED", true);
+      expect(second).toBe(first);
+    });
+
+    test("should keep parsing correctly after the bounded cache clears", () => {
+      for (let index = 0; index < 513; index++) {
+        Environments.setEnv({ TEST_VAR: `value-${index}, extra` } as Env);
+        expect(Environments.get("TEST_VAR", true)).toEqual([
+          `value-${index}`,
+          "extra",
+        ]);
+      }
+      Environments.setEnv(undefined);
+      expect(Environments.get("COMMA_SEPARATED", true)).toEqual([
+        "a",
+        "b",
+        "c",
+      ]);
+    });
+
     test("should return the original value if parsing fails", () => {
       const result = Environments.get("PLAIN_STRING", true);
       expect(result).toBe("plain string");

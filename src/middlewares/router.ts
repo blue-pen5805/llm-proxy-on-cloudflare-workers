@@ -12,6 +12,9 @@ import { handleUniversalEndpointRequest } from "../requests/universal_endpoint";
 import { Environments } from "../utils/environments";
 import { BadRequestError, NotFoundError } from "../utils/error";
 
+const COMPAT_PATH_PATTERN = /^\/compat(?:$|\/|\?)/;
+const AI_PATH_PATTERN = /^\/ai(?:$|\/|\?)/;
+
 export async function handleRouting(
   context: MiddlewareContext,
   aiGateway?: CloudflareAIGateway,
@@ -37,7 +40,7 @@ export async function handleRouting(
     return await handleStatusRequest(aiGateway, context.providers);
   }
 
-  if (aiGateway && /^\/compat(?:$|\/|\?)/.test(pathname)) {
+  if (aiGateway && COMPAT_PATH_PATTERN.test(pathname)) {
     rejectUnsupportedKeySelection();
     // Example: /g/{AI_GATEWAY_NAME}/compat/chat/completions
     if (request.method === "POST" && pathname === "/compat/chat/completions") {
@@ -47,7 +50,7 @@ export async function handleRouting(
     throw new NotFoundError();
   }
 
-  if (/^\/ai(?:$|\/|\?)/.test(pathname)) {
+  if (AI_PATH_PATTERN.test(pathname)) {
     rejectUnsupportedKeySelection();
     if (
       request.method === "POST" &&

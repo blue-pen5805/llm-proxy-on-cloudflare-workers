@@ -67,12 +67,14 @@ const SENSITIVE_LABELED_VALUE_PATTERN = new RegExp(
 function omitUndefinedLogFields(
   fields: LogFields,
 ): Record<string, Exclude<LogValue, undefined>> {
-  return Object.fromEntries(
-    Object.entries(fields).filter(
-      (entry): entry is [string, Exclude<LogValue, undefined>] =>
-        entry[1] !== undefined,
-    ),
-  );
+  const definedFields: Record<string, Exclude<LogValue, undefined>> = {};
+  for (const fieldName of Object.keys(fields)) {
+    const value = fields[fieldName];
+    if (value !== undefined) {
+      definedFields[fieldName] = value;
+    }
+  }
+  return definedFields;
 }
 
 export function redactLogText(value: string): string {
