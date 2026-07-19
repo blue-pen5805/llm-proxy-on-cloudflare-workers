@@ -110,7 +110,10 @@ short-lived Google access token. `CF_AIG_TOKEN` is also required so the Worker
 can authenticate to the Gateway. An array of service-account objects enables
 credential fallback. When AI Gateway BYOK is configured for Bedrock,
 `AWS_BEARER_TOKEN_BEDROCK` may be omitted because Gateway injects the stored
-provider credential.
+provider credential for supported request flows. Model discovery is stricter:
+Bedrock requires both `AWS_BEARER_TOKEN_BEDROCK` and `AWS_BEDROCK_REGION`, while
+Azure OpenAI requires both `AZURE_OPENAI_API_KEY` and
+`AZURE_OPENAI_RESOURCE_NAME`, before `/v1/models` sends a provider request.
 
 An unconfigured static provider is reported as unavailable and omitted from
 model aggregation. Its route name still resolves, so an attempted request will

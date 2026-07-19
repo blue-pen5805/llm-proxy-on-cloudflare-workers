@@ -28,9 +28,18 @@ export const AzureOpenAI = defineProvider({
   },
   openAICompatible: true,
   apiKeyName: "AZURE_OPENAI_API_KEY",
+  requiresProviderCredentialsForModels: true,
   pathnamePrefix: "/openai/v1",
   supportsAiGatewayModels: false,
   supportsAiGatewayNativeChat: true,
+  available() {
+    return (
+      this.getApiKeys().length > 0 &&
+      AZURE_RESOURCE_PATTERN.test(
+        Secrets.get((this as AzureOpenAI).resourceName),
+      )
+    );
+  },
   baseUrl() {
     return `https://${getAzureResourceName(this as AzureOpenAI)}.openai.azure.com`;
   },

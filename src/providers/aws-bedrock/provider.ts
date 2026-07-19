@@ -22,7 +22,14 @@ export const AwsBedrock = defineProvider({
   properties: { regionName: "AWS_BEDROCK_REGION" as keyof Env },
   openAICompatible: true,
   apiKeyName: "AWS_BEARER_TOKEN_BEDROCK",
+  requiresProviderCredentialsForModels: true,
   pathnamePrefix: "/v1",
+  available() {
+    return (
+      this.getApiKeys().length > 0 &&
+      REGION_PATTERN.test(Secrets.get((this as AwsBedrock).regionName))
+    );
+  },
   baseUrl() {
     return `https://bedrock-runtime.${getAwsRegionName(this as AwsBedrock)}.amazonaws.com`;
   },

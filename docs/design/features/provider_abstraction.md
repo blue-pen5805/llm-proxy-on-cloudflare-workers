@@ -52,6 +52,10 @@ without a locally configured provider key when a Gateway context exists. The
 Gateway then injects its stored credential. Adapters can rewrite provider-native
 Gateway paths, opt model listing out of Gateway, or build a native Gateway chat
 request when the Compatibility Endpoint does not support the provider shape.
+Amazon Bedrock and Azure OpenAI opt model discovery out of this exception:
+their model requests are omitted unless all locally required provider
+credentials and routing identifiers are valid. This prevents aggregate model
+discovery from sending predictably unauthenticated requests through Gateway.
 Gateway-specific credential representations remain index-aligned with the
 provider's ordinary credential list so explicit and coordinated selection refer
 to the same slot.

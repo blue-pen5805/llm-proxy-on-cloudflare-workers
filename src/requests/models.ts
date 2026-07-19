@@ -43,7 +43,10 @@ async function fetchProviderModels(
     provider,
     aiGateway,
   );
-  if (!provider.available() && !aiGatewayProvider) {
+  if (
+    !provider.available() &&
+    (!aiGatewayProvider || provider.requiresProviderCredentialsForModels)
+  ) {
     return EMPTY_MODELS;
   }
 

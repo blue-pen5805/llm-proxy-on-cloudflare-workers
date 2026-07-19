@@ -87,6 +87,7 @@ export interface Provider {
   readonly requiresAiGateway: boolean;
   readonly requiresAuthenticatedAiGateway: boolean;
   readonly requiresProviderCredentials: boolean;
+  readonly requiresProviderCredentialsForModels: boolean;
   readonly requiresCustomAiGatewayProvider: boolean;
   readonly CHAT_COMPLETIONS_SUPPORTED_PARAMETERS: (keyof OpenAIChatCompletionsRequestBody)[];
 
@@ -151,6 +152,7 @@ export interface ProviderDefinition {
   requiresAiGateway?: boolean;
   requiresAuthenticatedAiGateway?: boolean;
   requiresProviderCredentials?: boolean;
+  requiresProviderCredentialsForModels?: boolean;
   requiresCustomAiGatewayProvider?: boolean;
   openAICompatible?: boolean;
   chatCompletionSupportedParameters?: readonly (keyof OpenAIChatCompletionsRequestBody)[];
@@ -249,6 +251,8 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
       definition.requiresAuthenticatedAiGateway ?? false,
     requiresProviderCredentials:
       definition.requiresProviderCredentials ?? false,
+    requiresProviderCredentialsForModels:
+      definition.requiresProviderCredentialsForModels ?? false,
     requiresCustomAiGatewayProvider:
       definition.requiresCustomAiGatewayProvider ?? false,
     CHAT_COMPLETIONS_SUPPORTED_PARAMETERS:

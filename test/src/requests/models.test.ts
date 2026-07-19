@@ -260,6 +260,32 @@ describe("models", () => {
     expect(unavailableProviderClass.buildModelsRequest).not.toHaveBeenCalled();
   });
 
+  it("skips AI Gateway model discovery when local provider credentials are required", async () => {
+    const unavailableProviderClass = {
+      ...mockProviderClass,
+      available: vi.fn().mockReturnValue(false),
+      requiresProviderCredentialsForModels: true,
+      buildModelsRequest: vi.fn(),
+    };
+
+    Object.keys(BUILT_IN_PROVIDER_CONSTRUCTORS).forEach((key) => {
+      delete BUILT_IN_PROVIDER_CONSTRUCTORS[key];
+    });
+    BUILT_IN_PROVIDER_CONSTRUCTORS.unavailable = mockProviderConstructor(
+      unavailableProviderClass,
+    );
+
+    const response = await handleModelsRequest({} as any, mockAIGateway as any);
+
+    await expect(response.json()).resolves.toEqual({
+      object: "list",
+      data: [],
+    });
+    expect(unavailableProviderClass.buildModelsRequest).not.toHaveBeenCalled();
+    expect(mockAIGateway.buildProviderEndpointRequest).not.toHaveBeenCalled();
+    expect(helpers.fetchWithLogging).not.toHaveBeenCalled();
+  });
+
   it("should use AI Gateway when available and provider supported", async () => {
     mockAIGateway.buildProviderEndpointRequest.mockReturnValue([
       "https://gateway.ai.cloudflare.com/v1/account/gateway/openai/models",

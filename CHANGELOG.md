@@ -12,6 +12,9 @@ update is explicitly approved.
 
 ### 2026-07-19
 
+- Skipped Amazon Bedrock and Azure OpenAI model-discovery requests when their
+  required local provider credentials or routing identifiers are incomplete,
+  including when AI Gateway routing is forced.
 - Fixed strict AI Gateway Custom Provider routing for both versioned and
   unversioned Base URLs by compensating for Cloudflare's implicit `/v1` path
   rewriting.

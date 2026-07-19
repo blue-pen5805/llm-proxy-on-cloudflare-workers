@@ -88,7 +88,10 @@ partial.
 
 Custom endpoints should define a static `models` list when reliable discovery
 matters. The endpoint uses the first provider key by default to avoid advancing
-key rotation merely for discovery.
+key rotation merely for discovery. Amazon Bedrock and Azure OpenAI are omitted
+without sending an upstream request unless all of their required local
+credentials and routing identifiers are configured, even when
+`ALWAYS_USE_AI_GATEWAY=true`.
 
 ## Provider pass-through
 

@@ -136,11 +136,14 @@ and sends no management API requests during `--dry-run`.
 
 When no local provider key exists, a single request without an upstream
 `Authorization` header is built so AI Gateway BYOK can inject its stored
-credential. When a local credential exists, adapters can transform it before
-the Gateway request is built. Azure OpenAI chat uses the provider-native Gateway
-path because the resource and deployment are URL segments. Vertex AI and Amazon
-Bedrock use the Compatibility Endpoint for OpenAI-formatted chat; Bedrock
-provider-native paths include the configured runtime region.
+credential. Amazon Bedrock and Azure OpenAI model discovery are exceptions:
+the Worker sends no model-list request unless the provider's required local
+credential and routing identifier are both valid. When a local credential
+exists, adapters can transform it before the Gateway request is built. Azure
+OpenAI chat uses the provider-native Gateway path because the resource and
+deployment are URL segments. Vertex AI and Amazon Bedrock use the Compatibility
+Endpoint for OpenAI-formatted chat; Bedrock provider-native paths include the
+configured runtime region.
 
 Vertex AI is Gateway-only and requires `CF_AIG_TOKEN` plus
 `GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON`. The JSON must include `region`; the

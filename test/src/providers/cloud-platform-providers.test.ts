@@ -48,6 +48,8 @@ describe("cloud platform providers", () => {
   it("builds Azure OpenAI v1 direct requests", async () => {
     const provider = new AzureOpenAI();
 
+    expect(provider.available()).toBe(true);
+    expect(provider.requiresProviderCredentialsForModels).toBe(true);
     expect(provider.baseUrl()).toBe(
       "https://example-resource.openai.azure.com",
     );
@@ -95,6 +97,7 @@ describe("cloud platform providers", () => {
     delete values.AZURE_OPENAI_API_VERSION;
     const provider = new AzureOpenAI();
 
+    expect(provider.available()).toBe(false);
     await expect(provider.headers()).resolves.toEqual({
       "Content-Type": "application/json",
     });
@@ -106,6 +109,18 @@ describe("cloud platform providers", () => {
       headers: {},
     });
     expect(path).toContain("api-version=2024-10-21");
+  });
+
+  it("marks Azure OpenAI and Bedrock unavailable without their API credentials", () => {
+    delete values.AZURE_OPENAI_API_KEY;
+    delete values.AWS_BEARER_TOKEN_BEDROCK;
+    try {
+      expect(new AzureOpenAI().available()).toBe(false);
+      expect(new AwsBedrock().available()).toBe(false);
+    } finally {
+      values.AZURE_OPENAI_API_KEY = "azure-key";
+      values.AWS_BEARER_TOKEN_BEDROCK = "bedrock-key";
+    }
   });
 
   it("encodes Vertex service-account JSON for authenticated Gateway use", async () => {
@@ -179,6 +194,8 @@ describe("cloud platform providers", () => {
   it("builds Bedrock Runtime OpenAI-compatible and Gateway paths", async () => {
     const provider = new AwsBedrock();
 
+    expect(provider.available()).toBe(true);
+    expect(provider.requiresProviderCredentialsForModels).toBe(true);
     expect(provider.apiKeyName).toBe("AWS_BEARER_TOKEN_BEDROCK");
     expect(provider.baseUrl()).toBe(
       "https://bedrock-runtime.us-east-1.amazonaws.com",
@@ -196,6 +213,7 @@ describe("cloud platform providers", () => {
   it("silently omits Bedrock model discovery when no region is configured", async () => {
     delete values.AWS_BEDROCK_REGION;
     try {
+      expect(new AwsBedrock().available()).toBe(false);
       await expect(
         new AwsBedrock().buildModelsRequest(),
       ).rejects.toBeInstanceOf(ProviderNotSupportedError);
@@ -245,6 +263,8 @@ describe("cloud platform providers", () => {
     values.AZURE_OPENAI_RESOURCE_NAME = "bad.example/path";
     values.AWS_BEDROCK_REGION = "example.com";
     try {
+      expect(new AzureOpenAI().available()).toBe(false);
+      expect(new AwsBedrock().available()).toBe(false);
       expect(() => new AzureOpenAI().baseUrl()).toThrow(
         "AZURE_OPENAI_RESOURCE_NAME is missing or invalid.",
       );

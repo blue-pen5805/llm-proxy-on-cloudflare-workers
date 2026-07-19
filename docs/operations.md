@@ -97,8 +97,11 @@ Use health endpoints deliberately:
 ### A provider is absent from `/v1/models`
 
 The endpoint omits unavailable, unsupported, timed-out, and malformed provider
-responses. Check `/status` and Worker logs. For a custom endpoint, set `models`
-to a static list if its model endpoint is missing or slow.
+responses. Amazon Bedrock and Azure OpenAI are unavailable for model discovery
+until all of their required local credentials and routing identifiers are
+configured, including with `ALWAYS_USE_AI_GATEWAY=true`. Check `/status` and
+Worker logs. For a custom endpoint, set `models` to a static list if its model
+endpoint is missing or slow.
 
 ### `/g/<name>/...` returns 404 or bypasses Gateway
 
