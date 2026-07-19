@@ -39,10 +39,32 @@ function isNonEmptyString(value: unknown): value is string {
 
 const API_KEY_NAME = "GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON" as const;
 
+const EMPTY_CREDENTIALS: ParsedCredentials = { credentials: [] };
+
+// Parsing and validating the service-account JSON is a pure function of the
+// raw secret, so the last result is memoized. Without this, every credential
+// read re-parses multi-kilobyte key material several times per request.
+let cachedCredentialsRaw: string | undefined;
+let cachedCredentials: ParsedCredentials | undefined;
+
+// The Gateway credential is the base64-encoded service-account JSON; encoding
+// is likewise memoized by the parsed credentials' identity.
+const encodedCredentialCache = new WeakMap<ServiceAccountJson[], string[]>();
+
 function parseServiceAccountCredentials(): ParsedCredentials {
   const serializedCredentials = Environments.get(API_KEY_NAME, false);
-  if (!serializedCredentials?.trim()) return { credentials: [] };
+  if (!serializedCredentials?.trim()) return EMPTY_CREDENTIALS;
 
+  if (serializedCredentials !== cachedCredentialsRaw) {
+    cachedCredentials = computeServiceAccountCredentials(serializedCredentials);
+    cachedCredentialsRaw = serializedCredentials;
+  }
+  return cachedCredentials!;
+}
+
+function computeServiceAccountCredentials(
+  serializedCredentials: string,
+): ParsedCredentials {
   let parsedCredentials: unknown;
   try {
     parsedCredentials = JSON.parse(serializedCredentials);
@@ -99,9 +121,14 @@ export const GoogleVertexAi = defineProvider({
   getApiKeys(): string[] {
     const { credentials, error } = parseServiceAccountCredentials();
     if (error) return [];
-    return credentials.map((credential) =>
-      encodeBase64Utf8(JSON.stringify(credential)),
-    );
+    let encodedCredentials = encodedCredentialCache.get(credentials);
+    if (!encodedCredentials) {
+      encodedCredentials = credentials.map((credential) =>
+        encodeBase64Utf8(JSON.stringify(credential)),
+      );
+      encodedCredentialCache.set(credentials, encodedCredentials);
+    }
+    return encodedCredentials;
   },
 
   getAiGatewayApiKeys(): string[] {

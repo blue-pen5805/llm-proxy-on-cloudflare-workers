@@ -212,6 +212,11 @@ export function assertSafeProxyPath(pathname: string): void {
 }
 
 export function removeAuthorizationQueryParameters(pathname: string): string {
+  // Request paths reaching this point are already URL-normalized, so a path
+  // without a query string has nothing to remove or re-serialize.
+  if (!pathname.includes("?")) {
+    return pathname;
+  }
   const parsedPath = new URL(pathname, "https://proxy.invalid");
   for (const parameterName of [...parsedPath.searchParams.keys()]) {
     if (SENSITIVE_CREDENTIAL_NAMES.has(parameterName.toLowerCase())) {

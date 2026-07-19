@@ -31,6 +31,7 @@ describe("handleChatCompletionsRequest", () => {
       (data: Record<string, unknown>) => data,
     ),
     fetch: vi.fn(),
+    headers: vi.fn(async () => ({ "x-provider-auth": "provider-header" })),
     apiKeyName: "OPENAI_API_KEY",
     getApiKeys: vi.fn().mockReturnValue(["test-key"]),
     getNextApiKeyIndex: vi.fn().mockResolvedValue(0),
@@ -314,13 +315,6 @@ describe("handleChatCompletionsRequest", () => {
       },
     });
 
-    mockProviderClass.buildChatCompletionsRequest.mockReturnValue([
-      "/chat/completions",
-      {
-        method: "POST",
-        body: JSON.stringify({ ...requestBody, model: "gpt-4" }),
-      },
-    ]);
     mockAIGateway.buildChatCompletionsRequests.mockReturnValue([
       [
         "https://gateway.ai.cloudflare.com/v1/account/gateway/compat/chat/completions",
@@ -337,14 +331,18 @@ describe("handleChatCompletionsRequest", () => {
       "openai",
       true,
     );
+    // The Compatibility Endpoint serializes its own body, so the provider
+    // request builder is not invoked; its header merge is reproduced inline.
     expect(
-      mockProviderClass.buildChatCompletionsRequest.mock.calls[0][0].headers.get(
-        "cf-aig-skip-cache",
-      ),
-    ).toBe("true");
+      mockProviderClass.buildChatCompletionsRequest,
+    ).not.toHaveBeenCalled();
+    const gatewayHeaders =
+      mockAIGateway.buildChatCompletionsRequests.mock.calls[0][0].headers;
+    expect(gatewayHeaders["cf-aig-skip-cache"]).toBe("true");
+    expect(gatewayHeaders["x-provider-auth"]).toBe("provider-header");
     expect(mockAIGateway.buildChatCompletionsRequests).toHaveBeenCalledWith({
       provider: "openai",
-      body: JSON.stringify({ ...requestBody, model: "gpt-4" }),
+      body: "",
       parsedBody: { ...requestBody, model: "gpt-4" },
       headers: expect.any(Object),
       apiKeys: ["test-key"],

@@ -4,6 +4,7 @@ import {
   resolveGatewayProvider,
 } from "../ai_gateway/custom_provider";
 import { MiddlewareContext } from "../middleware";
+import { mergeHeaders } from "../providers/provider";
 import {
   determineApiKeySelectionPolicy,
   recordApiKeySelection,
@@ -135,13 +136,6 @@ export async function handleChatCompletionsRequest(
     ...chatRequestBody,
     model,
   });
-  const [requestInfo, requestInit] =
-    await providerInstance.buildChatCompletionsRequest({
-      body: "",
-      preparedData: supportedRequestBody,
-      headers: sanitizedHeaders,
-      apiKeyIndex,
-    });
 
   // If AI Gateway is enabled and the provider supports it, use AI Gateway
   if (aiGateway && aiGatewayProvider) {
@@ -156,14 +150,22 @@ export async function handleChatCompletionsRequest(
         : contextApiKeyIndex === undefined
           ? [apiKeyIndex, ...remainingApiKeyIndexes]
           : [apiKeyIndex];
+    // The Compatibility Endpoint serializes its own request body from the
+    // parsed data, so the provider request builder (whose serialized body
+    // would be discarded) is skipped; only its header merge is reproduced.
+    // Providers reaching this path use the default builder, which layers
+    // provider-computed headers over the sanitized client headers.
     const gatewayRequests = await aiGateway.buildChatCompletionsRequests({
       provider: aiGatewayProvider,
-      body: requestInit.body as string,
+      body: "",
       parsedBody: supportedRequestBody as {
         model: string;
         [key: string]: unknown;
       },
-      headers: requestInit.headers ?? {},
+      headers: mergeHeaders(
+        sanitizedHeaders,
+        await providerInstance.headers(apiKeyIndex),
+      ),
       apiKeys: gatewayApiKeyIndexes.map(
         (candidateIndex) =>
           gatewayApiKeys[candidateIndex] ?? configuredApiKeys[candidateIndex],
@@ -179,6 +181,14 @@ export async function handleChatCompletionsRequest(
       ),
     );
   }
+
+  const [requestInfo, requestInit] =
+    await providerInstance.buildChatCompletionsRequest({
+      body: "",
+      preparedData: supportedRequestBody,
+      headers: sanitizedHeaders,
+      apiKeyIndex,
+    });
 
   const keyLogFields = recordSelection(apiKeyIndex);
 

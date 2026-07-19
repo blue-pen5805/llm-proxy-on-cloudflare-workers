@@ -222,6 +222,13 @@ export class CloudflareAIGateway {
         ? apiKeys.slice(0, MAX_COMPATIBILITY_FALLBACK_ATTEMPTS)
         : [undefined];
 
+    // Only headers differ between credential attempts, so the (potentially
+    // large) body is serialized once and shared.
+    const requestBody = JSON.stringify({
+      ...chatRequestBody,
+      model: `${provider}/${chatRequestBody.model}`,
+    });
+
     return credentials.map((apiKey) => {
       // Overwrite authorization header with the provider's API key
       const newHeaders = new Headers(headers);
@@ -239,10 +246,7 @@ export class CloudflareAIGateway {
 
       return this.buildCompatibilityEndpointRequest({
         headers: headersObject,
-        body: JSON.stringify({
-          ...chatRequestBody,
-          model: `${provider}/${chatRequestBody.model}`,
-        }),
+        body: requestBody,
       });
     });
   }

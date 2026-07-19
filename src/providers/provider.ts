@@ -198,7 +198,7 @@ export interface ProviderDefinition {
   getStaticModels?(this: Provider): OpenAIModelsListResponseBody | undefined;
 }
 
-function mergeHeaders(
+export function mergeHeaders(
   baseHeaders: HeadersInit | undefined,
   overridingHeaders: HeadersInit,
 ): Record<string, string> {

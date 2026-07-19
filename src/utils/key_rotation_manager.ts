@@ -1,5 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
 
+// The counters schema only needs to be ensured once per SQLite storage
+// instance, not on every rotation request.
+const initializedStorages = new WeakSet<SqlStorage>();
+
 /**
  * KeyRotationManager is a Durable Object that maintains a round-robin counter for API keys.
  */
@@ -30,12 +34,15 @@ export class KeyRotationManager extends DurableObject {
     if (length <= 1) return 0;
 
     // Ensure the table exists
-    sql.exec(`
-      CREATE TABLE IF NOT EXISTS counters (
-        key_name TEXT PRIMARY KEY,
-        current_index INTEGER NOT NULL DEFAULT 0
-      )
-    `);
+    if (!initializedStorages.has(sql)) {
+      sql.exec(`
+        CREATE TABLE IF NOT EXISTS counters (
+          key_name TEXT PRIMARY KEY,
+          current_index INTEGER NOT NULL DEFAULT 0
+        )
+      `);
+      initializedStorages.add(sql);
+    }
 
     // Get current index
     const currentIndexQuery = sql.exec(

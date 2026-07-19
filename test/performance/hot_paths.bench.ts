@@ -3,6 +3,7 @@ import {
   BUILT_IN_PROVIDER_CONSTRUCTORS,
   createProviderRegistry,
 } from "~/src/providers";
+import { GoogleVertexAi } from "~/src/providers/google-vertex-ai";
 import { ProviderBase } from "~/src/providers/provider";
 import { ProviderRegistry } from "~/src/providers/registry";
 import { isRequestAuthorized } from "~/src/utils/authorization";
@@ -77,5 +78,24 @@ describe("per-request setup paths", () => {
 
   bench("read a rotated provider secret list", () => {
     Environments.run(requestEnv, () => Secrets.getAll("OPENAI_API_KEY"));
+  });
+});
+
+const vertexEnv = {
+  GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON: JSON.stringify([
+    {
+      type: "service_account",
+      project_id: "bench-project",
+      private_key: `-----BEGIN PRIVATE KEY-----\n${"MIIEvQIBADANBg".repeat(120)}\n-----END PRIVATE KEY-----\n`,
+      client_email: "bench@bench-project.iam.gserviceaccount.com",
+      region: "us-central1",
+    },
+  ]),
+} as unknown as Env;
+const vertexProvider = new GoogleVertexAi();
+
+describe("provider credential paths", () => {
+  bench("read Vertex AI service-account credentials", () => {
+    Environments.run(vertexEnv, () => vertexProvider.getApiKeys());
   });
 });

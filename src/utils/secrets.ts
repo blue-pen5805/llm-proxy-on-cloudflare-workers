@@ -3,6 +3,11 @@ import { Environments } from "./environments";
 import { shuffleArray } from "./helpers";
 import { randomInt } from "node:crypto";
 
+// Filtering is a pure function of the parsed value, and Environments memoizes
+// parsing so multi-key arrays keep a stable identity. Caching by that identity
+// avoids re-filtering on every credential read within a request.
+const filteredSecretArrayCache = new WeakMap<readonly unknown[], string[]>();
+
 /**
  * A utility class for managing and retrieving secrets from environment variables.
  * Provides functionality to access all values for a key or get a single value with optional rotation.
@@ -24,10 +29,16 @@ export class Secrets {
 
     let secretValues: string[] = [];
     if (Array.isArray(configuredValue)) {
-      secretValues = configuredValue.filter(
-        (value): value is string =>
-          typeof value === "string" && value.trim().length > 0,
-      );
+      const cachedValues = filteredSecretArrayCache.get(configuredValue);
+      if (cachedValues) {
+        secretValues = cachedValues;
+      } else {
+        secretValues = configuredValue.filter(
+          (value): value is string =>
+            typeof value === "string" && value.trim().length > 0,
+        );
+        filteredSecretArrayCache.set(configuredValue, secretValues);
+      }
     } else if (typeof configuredValue === "string") {
       secretValues = configuredValue.trim().length > 0 ? [configuredValue] : [];
     }

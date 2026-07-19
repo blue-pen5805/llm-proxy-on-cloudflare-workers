@@ -132,6 +132,29 @@ describe("Cline provider", () => {
     expect(response.headers.has("ETag")).toBe(false);
   });
 
+  it("returns the transformed body even when the original stream refuses to cancel", async () => {
+    const completion = { id: "gen-test", object: "chat.completion" };
+    const cancel = vi.fn().mockRejectedValue(new Error("already locked"));
+    const upstream = {
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      headers: new Headers({ "Content-Type": "application/json" }),
+      body: { cancel },
+      clone: () =>
+        new Response(JSON.stringify({ data: completion, success: true }), {
+          headers: { "Content-Type": "application/json" },
+        }),
+    } as unknown as Response;
+
+    const response = await new Cline().transformChatCompletionsResponse(
+      upstream,
+    );
+
+    expect(cancel).toHaveBeenCalled();
+    await expect(response.json()).resolves.toEqual(completion);
+  });
+
   it("preserves streaming SSE responses without reading or rewriting them", async () => {
     const sse = [
       'data: {"id":"gen-test","object":"chat.completion.chunk","choices":[{"delta":{"role":"assistant"}}]}',

@@ -28,6 +28,7 @@ export class ProviderRegistry {
   >;
   private readonly providerNames: readonly string[];
   private readonly providerNameSet: ReadonlySet<string>;
+  private allInstances?: Record<string, ProviderBase>;
 
   constructor(
     private readonly builtIns: Readonly<Record<string, ProviderConstructor>>,
@@ -83,6 +84,9 @@ export class ProviderRegistry {
   }
 
   all(): Record<string, ProviderBase> {
+    if (this.allInstances) {
+      return this.allInstances;
+    }
     const providerInstances = Object.fromEntries(
       this.providerNames.map((providerName) => [
         providerName,
@@ -92,6 +96,7 @@ export class ProviderRegistry {
     for (const customEndpoint of this.customEndpoints) {
       providerInstances[customEndpoint.name] = this.getCustom(customEndpoint);
     }
+    this.allInstances = providerInstances;
     return providerInstances;
   }
 

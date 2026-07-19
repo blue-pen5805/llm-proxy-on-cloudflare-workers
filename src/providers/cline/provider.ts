@@ -65,6 +65,11 @@ export const Cline = defineProvider({
     }
     if (!isWrappedChatCompletion(body)) return response;
 
+    // The clone's branch was fully read; release the original's buffered tee
+    // instead of holding it until garbage collection. A successful JSON parse
+    // guarantees the body stream exists.
+    await response.body!.cancel().catch(() => undefined);
+
     return new Response(JSON.stringify(body.data), {
       status: response.status,
       statusText: response.statusText,
