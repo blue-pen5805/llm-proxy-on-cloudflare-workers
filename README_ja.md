@@ -12,7 +12,7 @@
 - OpenAI 互換の `POST /v1/chat/completions` と `GET /v1/models`
 - `/openai/v1/responses` などのプロバイダー別パススルールート
 - Cloudflare AI Gateway のプロバイダールートとアカウントレベル REST API
-- 複数のプロバイダーキーからランダム選択、または Durable Objects によるラウンドロビン
+- 複数のプロバイダーキーからランダム選択、またはストライプ方式のラウンドロビン選択
 - `/key/<index-or-range>` によるリクエスト単位のキー指定
 - 設定ファイルで追加できるカスタム OpenAI 互換エンドポイント
 - `/status` による認証済みの設定・プロバイダーキー診断

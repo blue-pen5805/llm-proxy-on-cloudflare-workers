@@ -9,11 +9,7 @@ import { providerRegistryMiddleware } from "./middlewares/provider_registry";
 import { requestMiddleware } from "./middlewares/request";
 import { routerMiddleware } from "./middlewares/router";
 import { Environments } from "./utils/environments";
-// Cloudflare Durable Objects
-import { KeyRotationManager } from "./utils/key_rotation_manager";
 import { RequestLogger } from "./utils/logger";
-
-export { KeyRotationManager };
 
 const middlewareChain = composeMiddleware([
   loggingMiddleware,

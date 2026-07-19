@@ -36,9 +36,10 @@ dotenv values are quoted and escaped to prevent line injection.
   The deployment command validates this before contacting Wrangler.
 - Replace a provider key in the configuration, deploy secrets, verify it, and
   only then revoke the old key at the provider.
-- When changing an array's order with global round-robin enabled, expect the
-  stored index to continue against the new array. It is bounded to the new
-  length, but does not track key identity.
+- When changing an array's order with round-robin enabled, expect each
+  isolate's in-memory rotation counter to continue against the new array. It
+  is bounded to the new length, but does not track key identity; a redeploy
+  restarts rotation from fresh random phases.
 - Treat `CF_AIG_TOKEN`, `CLOUDFLARE_API_TOKEN`, and the entire
   `CUSTOM_OPENAI_ENDPOINTS` value as secrets.
 

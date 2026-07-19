@@ -8,6 +8,15 @@ import { randomInt } from "node:crypto";
 // avoids re-filtering on every credential read within a request.
 const filteredSecretArrayCache = new WeakMap<readonly unknown[], string[]>();
 
+// Striped round-robin state. Each isolate advances a perfect per-identifier
+// rotation that starts at a random phase; isolates are not coordinated, but
+// overlaying many perfect rotations with random phases keeps aggregate key
+// usage near-uniform (deviation bounded by the number of live isolates, not
+// by the request count). This serves the rate-limit-spreading purpose of
+// rotation without any per-request cross-isolate coordination on the
+// critical path.
+const rotationCounters = new Map<string, number>();
+
 /**
  * A utility class for managing and retrieving secrets from environment variables.
  * Provides functionality to access all values for a key or get a single value with optional rotation.
@@ -70,7 +79,7 @@ export class Secrets {
   }
 
   /**
-   * Determines the next index to use for a specified identifier and length, considering global round-robin configuration.
+   * Determines the next index to use for a specified identifier and length, considering round-robin configuration.
    *
    * @param identifier - A unique identifier for the key rotation (e.g., "GEMINI_API_KEY" or a custom endpoint name)
    * @param length - The number of available keys
@@ -84,14 +93,17 @@ export class Secrets {
       return 0;
     }
 
-    const env = Environments.getEnv();
-    if (env && env.KEY_ROTATION_MANAGER && Config.isGlobalRoundRobinEnabled()) {
-      const durableObjectId = env.KEY_ROTATION_MANAGER.idFromName(identifier);
-      const rotationManager = env.KEY_ROTATION_MANAGER.get(durableObjectId);
-      return rotationManager.getNextIndex(identifier, length);
+    if (Config.isGlobalRoundRobinEnabled()) {
+      let currentIndex = rotationCounters.get(identifier) ?? randomInt(length);
+      // Bound a counter stored under a longer key array to the current length.
+      if (currentIndex >= length) {
+        currentIndex = 0;
+      }
+      rotationCounters.set(identifier, (currentIndex + 1) % length);
+      return currentIndex;
     }
 
-    // Default to random if global round-robin is not enabled
+    // Default to random if round-robin is not enabled
     return randomInt(length);
   }
 

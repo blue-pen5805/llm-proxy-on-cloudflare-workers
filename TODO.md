@@ -32,7 +32,7 @@ Design requirements:
 - distinguish terminal authentication failures from transient throttling and
   transport failures;
 - define cooldown, recovery, state expiry, and concurrency behavior;
-- avoid turning a shared Durable Object into an unnecessary request-path
+- avoid adding shared coordination that becomes an unnecessary request-path
   bottleneck;
 - provide diagnostics without exposing credential material or stable derived
   fingerprints.

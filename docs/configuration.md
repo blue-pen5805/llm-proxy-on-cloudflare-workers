@@ -64,7 +64,7 @@ proxy credentials accordingly.
 ## Provider credentials
 
 Each provider key accepts a string, an array of strings, or `null`. Arrays
-enable random selection or global round-robin selection. Setting a key to
+enable random selection or striped round-robin selection. Setting a key to
 `null` deletes the corresponding deployed secret on the next secrets deployment.
 
 | Route name         | Setting                                           |
@@ -171,9 +171,12 @@ it does not contact Cloudflare or expose Base URLs and credentials.
 | Setting                     | Type           | Default | Meaning                                                                           |
 | --------------------------- | -------------- | ------- | --------------------------------------------------------------------------------- |
 | `DEFAULT_MODEL`             | string or null | none    | Provider-qualified model used when a chat request specifies `"model": "default"`. |
-| `ENABLE_GLOBAL_ROUND_ROBIN` | boolean        | `false` | Coordinates multi-key selection with the `KEY_ROTATION_MANAGER` Durable Object.   |
+| `ENABLE_GLOBAL_ROUND_ROBIN` | boolean        | `false` | Rotates multi-key selection sequentially per Worker isolate (striped rotation).   |
 
-When global round-robin is off, multi-key requests use random selection. A
+When round-robin is off, multi-key requests use random selection. When it is
+on, each Worker isolate rotates through the keys in order from a random
+starting phase; isolates are not coordinated, so aggregate usage is
+near-uniform rather than strictly sequential across the deployment. A
 `/key/<selection>/` path prefix overrides either policy for chat, model-list,
 and registered provider pass-through requests. Other routes reject the prefix
 with HTTP 400. Model listing intentionally uses the first key unless an explicit

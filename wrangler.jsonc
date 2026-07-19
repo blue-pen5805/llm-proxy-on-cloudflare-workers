@@ -26,21 +26,26 @@
   },
   // Smart Placement
   // Docs: https://developers.cloudflare.com/workers/configuration/smart-placement/
+  // This Worker is subrequest-dominated (provider fan-out, Gateway fallback
+  // chains) with geographically concentrated upstreams, so placement near the
+  // upstream reduces per-round-trip latency. Cloudflare reverts automatically
+  // if analysis finds placement makes this Worker slower.
   "placement": {
-    "mode": "off"
+    "mode": "smart"
   },
-  "durable_objects": {
-    "bindings": [
-      {
-        "name": "KEY_ROTATION_MANAGER",
-        "class_name": "KeyRotationManager"
-      }
-    ]
-  },
+  // Durable Object migration history. v1.1 deletes the KeyRotationManager
+  // that coordinated global key rotation before rotation became striped and
+  // isolate-local; deletion destroys its stored counters, which are
+  // disposable. The v1.0 tag must remain so existing deployments can apply
+  // the deletion incrementally.
   "migrations": [
     {
       "tag": "v1.0",
       "new_sqlite_classes": ["KeyRotationManager"]
+    },
+    {
+      "tag": "v1.1",
+      "deleted_classes": ["KeyRotationManager"]
     }
   ]
 }

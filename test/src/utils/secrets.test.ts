@@ -87,15 +87,7 @@ describe("Secrets", () => {
       expect(randomInt).not.toHaveBeenCalled();
     });
 
-    it("uses random selection when the Durable Object binding is absent", async () => {
-      vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(true);
-      vi.mocked(Environments.getEnv).mockReturnValue({} as Env);
-      vi.mocked(randomInt).mockReturnValue(2 as never);
-
-      expect(await Secrets.getNext("GEMINI_API_KEY")).toBe(2);
-      expect(randomInt).toHaveBeenCalledWith(3);
-    });
-    it("should return a random apiKeyIndex if global round-robin is disabled", async () => {
+    it("should return a random apiKeyIndex if round-robin is disabled", async () => {
       vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(false);
       vi.mocked(randomInt).mockReturnValue(1 as any);
       const apiKeyIndex = await Secrets.getNext("GEMINI_API_KEY");
@@ -103,24 +95,50 @@ describe("Secrets", () => {
       expect(randomInt).toHaveBeenCalledWith(3);
     });
 
-    it("should use global counter if global round-robin is enabled", async () => {
+    it("rotates sequentially from a random phase when round-robin is enabled", async () => {
       vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(true);
+      vi.mocked(randomInt).mockReturnValue(2 as never);
 
-      const mockGetNextIndex = vi.fn().mockResolvedValue(1); // Return apiKeyIndex 1
-      const mockEnv = {
-        KEY_ROTATION_MANAGER: {
-          idFromName: vi.fn().mockReturnValue("mock-id"),
-          get: vi.fn().mockReturnValue({
-            getNextIndex: mockGetNextIndex,
-          }),
-        },
-      };
+      // The random phase is drawn once per identifier; later calls advance
+      // the isolate-local counter without touching the random source again.
+      expect(await Secrets.getNextIndex("striped-rotation", 3)).toBe(2);
+      expect(randomInt).toHaveBeenCalledTimes(1);
+      expect(await Secrets.getNextIndex("striped-rotation", 3)).toBe(0);
+      expect(await Secrets.getNextIndex("striped-rotation", 3)).toBe(1);
+      expect(await Secrets.getNextIndex("striped-rotation", 3)).toBe(2);
+      expect(randomInt).toHaveBeenCalledTimes(1);
+    });
 
-      vi.mocked(Environments.getEnv).mockReturnValue(mockEnv as any);
+    it("keeps independent rotation counters per identifier", async () => {
+      vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(true);
+      vi.mocked(randomInt).mockReturnValue(0 as never);
 
-      const apiKeyIndex = await Secrets.getNext("GEMINI_API_KEY");
-      expect(apiKeyIndex).toBe(1);
-      expect(mockGetNextIndex).toHaveBeenCalledWith("GEMINI_API_KEY", 3);
+      expect(await Secrets.getNextIndex("striped-first", 2)).toBe(0);
+      expect(await Secrets.getNextIndex("striped-second", 2)).toBe(0);
+      expect(await Secrets.getNextIndex("striped-first", 2)).toBe(1);
+      expect(await Secrets.getNextIndex("striped-second", 2)).toBe(1);
+    });
+
+    it("resets a stored counter that exceeds a shrunken key array", async () => {
+      vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(true);
+      vi.mocked(randomInt).mockReturnValue(4 as never);
+
+      expect(await Secrets.getNextIndex("striped-bounded", 5)).toBe(4);
+      // The stored counter is now 0; advance twice so it holds 2, then
+      // shrink the key array so the stored value is out of range and must
+      // reset to index zero.
+      expect(await Secrets.getNextIndex("striped-bounded", 5)).toBe(0);
+      expect(await Secrets.getNextIndex("striped-bounded", 5)).toBe(1);
+      expect(await Secrets.getNextIndex("striped-bounded", 2)).toBe(0);
+    });
+
+    it("advances rotation through getNext for configured key names", async () => {
+      vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(true);
+      vi.mocked(randomInt).mockReturnValue(0 as never);
+
+      const firstIndex = await Secrets.getNext("GEMINI_API_KEY");
+      const secondIndex = await Secrets.getNext("GEMINI_API_KEY");
+      expect(secondIndex).toBe((firstIndex + 1) % 3);
     });
   });
 

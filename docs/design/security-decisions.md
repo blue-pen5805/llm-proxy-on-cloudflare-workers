@@ -43,7 +43,7 @@ per-provider response-size cap, and a 4 MB aggregate cap. See
 
 **Reconsider if.** These routes are exposed to low-trust clients or provider
 rate limits become a practical concern. A short-lived cache or a per-key rate
-limit (Durable Object or KV) would mitigate it.
+limit would mitigate it.
 
 ## `cf-ray` is used as the log `request_id`
 

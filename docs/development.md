@@ -14,8 +14,7 @@ npm run dev
 ```
 
 The command generates `.dev.vars.develop` for the lifetime of Wrangler and
-removes it on normal exit. Both files are ignored by Git. Durable Objects are
-provided by the local Wrangler runtime.
+removes it on normal exit. Both files are ignored by Git.
 
 ## Project map
 

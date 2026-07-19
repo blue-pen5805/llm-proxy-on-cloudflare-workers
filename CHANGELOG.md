@@ -12,6 +12,18 @@ update is explicitly approved.
 
 ### 2026-07-19
 
+- Changed `ENABLE_GLOBAL_ROUND_ROBIN` key rotation from a coordinated global
+  counter to striped per-isolate rotation: each
+  Worker isolate rotates through the configured keys sequentially from a
+  cryptographically random starting phase. Aggregate key usage stays
+  near-uniform, but strict cross-isolate ordering is no longer guaranteed. This
+  removes the per-request cross-isolate coordination round trip; stored rotation
+  positions are not carried over.
+- Enabled Smart Placement (`placement.mode: "smart"`) so Cloudflare may run the
+  Worker near the upstream provider APIs instead of near the client, reducing
+  per-round-trip latency for provider fan-out and Gateway fallback chains.
+  Response behavior is unchanged; Cloudflare reverts placement automatically if
+  analysis finds it slower.
 - Changed `PROXY_API_KEY` parsing so a single string value is always treated as
   one key (it may now contain commas or digits) and multiple keys must be
   provided as a JSON array. A single value is no longer split on commas or

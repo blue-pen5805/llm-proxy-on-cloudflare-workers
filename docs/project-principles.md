@@ -52,9 +52,8 @@ authenticate, and stream Gateway requests while leaving Gateway policy under
 operator control.
 
 Apply the same rule to the wider Cloudflare platform: use Workers Logs and
-traces for observability, Durable Objects only when cross-isolate coordination
-is required, and deployment-level controls such as Access or WAF for perimeter
-policy. Avoid parallel subsystems with overlapping ownership.
+traces for observability and deployment-level controls such as Access or WAF
+for perimeter policy. Avoid parallel subsystems with overlapping ownership.
 
 ## Make routing and policy operator-controlled
 
@@ -91,15 +90,15 @@ provider failures and return useful partial results when their public contract
 allows it. They must not turn one slow or malformed upstream into unbounded
 Worker resource use.
 
-## Keep state request-scoped and durable state minimal
+## Keep state request-scoped and persistent state minimal
 
 Request-specific environment, routing, logging, provider, and key-selection
 state must remain request-scoped. Do not use mutable module state to communicate
 between requests.
 
-Persist only state that requires cross-request coordination. Durable Objects are
-currently used for coordinated key rotation; adding durable state requires a
-clear consistency requirement, ownership model, and migration plan.
+The proxy currently has no cross-request persistent state. Adding persistent
+state requires a clear consistency requirement, ownership model, and migration
+plan.
 
 ## Make observability structured and content-minimal
 
