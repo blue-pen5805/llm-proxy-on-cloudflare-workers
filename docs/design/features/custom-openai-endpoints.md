@@ -34,9 +34,11 @@ Once resolved, the endpoint supports:
 
 When `ALWAYS_USE_AI_GATEWAY=true`, every upstream operation uses the endpoint's
 managed AI Gateway Custom Provider instead of its direct Base URL. The
-deployment helper moves a trailing `/v1` from the registered Base URL into every
-Gateway request path to avoid Cloudflare replacing that segment during URL
-resolution. Other fixed Base URL path segments remain registered under
+deployment helper retains a final Base URL segment shaped like `/v[^/]+` and
+repeats it in every Gateway request path. For an unversioned Base URL, it
+registers a `/v1` sentinel that Cloudflare consumes during URL resolution. This
+compensates for Custom Provider path rewriting while preserving the endpoint's
+configured upstream URL. The provider remains registered under
 `LLM Proxy / <name>`. When strict mode is disabled, the configured Base URL and
 direct request behavior are unchanged.
 

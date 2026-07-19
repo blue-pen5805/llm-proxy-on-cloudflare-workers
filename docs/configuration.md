@@ -151,13 +151,15 @@ Worker secrets, the command reconciles the necessary account-level Custom
 Providers. Their display names are `LLM Proxy / <name>`. For a simple lowercase
 provider name, Cloudflare stores `llm-proxy-<name>` and the request URL uses
 `custom-llm-proxy-<name>`; normalized names include a deterministic hash
-suffix. If a configured `baseUrl` ends in `/v1`, synchronization removes that
-one segment from the managed Base URL and prefixes every Gateway request path
-with `/v1`; this works around Custom Provider URL resolution without changing
-the operator setting or direct routing when `ALWAYS_USE_AI_GATEWAY=false`.
-Other fixed Base URL segments remain registered. The command updates managed
-Base URLs but neither deletes stale providers nor overwrites an unrelated
-provider that already owns the slug.
+suffix. Cloudflare rewrites version-looking Custom Provider paths. To preserve
+the configured upstream URL, synchronization retains a final Base URL segment
+shaped like `/v[^/]+` and repeats it at the start of every Gateway request path.
+For an unversioned Base URL, synchronization appends a `/v1` sentinel that
+Cloudflare consumes while resolving the request. This transformation does not
+change the operator setting or direct routing when
+`ALWAYS_USE_AI_GATEWAY=false`. The command updates managed Base URLs but neither
+deletes stale providers nor overwrites an unrelated provider that already owns
+the slug.
 `--dry-run` validates prerequisites and reports only the number of definitions;
 it does not contact Cloudflare or expose Base URLs and credentials.
 

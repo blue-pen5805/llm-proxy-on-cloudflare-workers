@@ -63,6 +63,7 @@ describe("AI Gateway Custom Provider routing", () => {
 
   it("retains Ollama's v1 prefix for its Custom Provider route", () => {
     const provider = new Ollama();
+    expect(customProviderBaseUrl(provider)).toBe("https://ollama.com/v1");
     expect(
       gatewayProviderPath(
         "ollama",
@@ -73,7 +74,7 @@ describe("AI Gateway Custom Provider routing", () => {
     ).toBe("/v1/chat/completions");
   });
 
-  it("moves Cline's trailing v1 into Custom Provider request paths", () => {
+  it("retains Cline's trailing v1 and repeats it in request paths", () => {
     const provider = new Cline();
     const gatewayPath = gatewayProviderPath(
       "cline",
@@ -82,23 +83,21 @@ describe("AI Gateway Custom Provider routing", () => {
       customProviderRoute("cline"),
     );
 
-    expect(customProviderBaseUrl(provider)).toBe("https://api.cline.bot/api/");
+    expect(customProviderBaseUrl(provider)).toBe(
+      "https://api.cline.bot/api/v1",
+    );
     expect(gatewayPath).toBe("/v1/ai/cline/recommended-models");
-    expect(
-      new URL(gatewayPath.replace(/^\/+/, ""), customProviderBaseUrl(provider))
-        .href,
-    ).toBe("https://api.cline.bot/api/v1/ai/cline/recommended-models");
   });
 
-  it("moves only a trailing v1 and retains adapter path prefixes", () => {
+  it("supports any trailing version-like segment", () => {
     const provider = {
       aiGatewayPath: (path: string) => path,
-      baseUrl: () => "https://internal.example/fixed/v1//",
+      baseUrl: () => "https://internal.example/fixed/vABCDE//",
       pathnamePrefix: () => "/openai",
     };
 
     expect(customProviderBaseUrl(provider)).toBe(
-      "https://internal.example/fixed/",
+      "https://internal.example/fixed/vABCDE",
     );
     expect(
       gatewayProviderPath(
@@ -107,6 +106,26 @@ describe("AI Gateway Custom Provider routing", () => {
         "/models",
         customProviderRoute("internal"),
       ),
-    ).toBe("/v1/openai/models");
+    ).toBe("/vABCDE/openai/models");
+  });
+
+  it("adds a consumed v1 sentinel for an unversioned Base URL", () => {
+    const provider = {
+      aiGatewayPath: (path: string) => path,
+      baseUrl: () => "https://internal.example/fixed//",
+      pathnamePrefix: () => "/openai",
+    };
+
+    expect(customProviderBaseUrl(provider)).toBe(
+      "https://internal.example/fixed/v1",
+    );
+    expect(
+      gatewayProviderPath(
+        "internal",
+        provider,
+        "/models",
+        customProviderRoute("internal"),
+      ),
+    ).toBe("/openai/models");
   });
 });

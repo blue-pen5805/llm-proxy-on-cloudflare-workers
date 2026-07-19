@@ -115,11 +115,11 @@ responsibility. Routes are the keys registered in `src/providers.ts`; configured
 custom endpoint names are added dynamically.
 
 In strict Gateway mode, pass-through paths for a managed Custom Provider retain
-the adapter's fixed path prefix. A trailing `/v1` in the configured Base URL is
-stored as a `/v1` Gateway request prefix instead, preventing Cloudflare from
-replacing it during Custom Provider URL resolution. This transformation applies
-only to strict Gateway routing; direct pass-through keeps the configured Base
-URL unchanged.
+the adapter's fixed path prefix. A final version-looking Base URL segment is
+repeated at the start of the Gateway request path. An unversioned Base URL is
+registered with a `/v1` sentinel that Cloudflare consumes during Custom Provider
+URL resolution. These transformations apply only to strict Gateway routing;
+direct pass-through keeps the configured Base URL unchanged.
 
 For cloud-platform pass-through, direct routes use the upstream provider path.
 Bedrock paths beginning with `/v1` are automatically prefixed with

@@ -33,17 +33,17 @@ describe("AI Gateway Custom Provider synchronization", () => {
         {
           name: "LLM Proxy / ollama",
           slug: "llm-proxy-ollama",
-          baseUrl: "https://ollama.com/",
+          baseUrl: "https://ollama.com/v1",
         },
         {
           name: "LLM Proxy / internal",
           slug: "llm-proxy-internal",
-          baseUrl: "https://internal.example/",
+          baseUrl: "https://internal.example/v1",
         },
         {
           name: "LLM Proxy / cline",
           slug: "llm-proxy-cline",
-          baseUrl: "https://api.cline.bot/api/",
+          baseUrl: "https://api.cline.bot/api/v1",
         },
       ]),
     );
@@ -131,7 +131,7 @@ describe("AI Gateway Custom Provider synchronization", () => {
     }
   });
 
-  it("updates the managed Base URL after moving its trailing v1", async () => {
+  it("updates a managed Base URL to the version sentinel form", async () => {
     const targets = buildCustomProviderTargets(strictConfig);
     const changed = targets.find(
       ({ name }) => name === "LLM Proxy / internal",
@@ -146,7 +146,7 @@ describe("AI Gateway Custom Provider synchronization", () => {
                 id: "changed-id",
                 name: changed.name,
                 slug: changed.slug,
-                base_url: "https://internal.example/v1",
+                base_url: "https://internal.example/",
                 enable: true,
               },
               {

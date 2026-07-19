@@ -2,6 +2,7 @@ import { CloudflareAIGateway } from ".";
 import type { Provider } from "../providers/provider";
 
 const CUSTOM_PROVIDER_SLUG_PREFIX = "llm-proxy-";
+const CUSTOM_PROVIDER_VERSION_SENTINEL = "v1";
 
 function hashProviderName(providerName: string): string {
   let hash = 0x811c9dc5;
@@ -41,11 +42,11 @@ function customProviderUrlParts(
 ): CustomProviderUrlParts {
   const baseUrl = new URL(provider.baseUrl());
   const pathname = baseUrl.pathname.replace(/\/+$/, "");
-  const requestPathPrefix = pathname.endsWith("/v1") ? "/v1" : "";
-  const registeredPathname = requestPathPrefix
-    ? pathname.slice(0, -requestPathPrefix.length)
-    : pathname;
-  baseUrl.pathname = `${registeredPathname}/`;
+  const versionSegment = pathname.match(/\/(v[^/]+)$/)?.[1];
+  const requestPathPrefix = versionSegment ? `/${versionSegment}` : "";
+  baseUrl.pathname = versionSegment
+    ? pathname
+    : `${pathname}/${CUSTOM_PROVIDER_VERSION_SENTINEL}`;
   return { baseUrl: baseUrl.href, requestPathPrefix };
 }
 
@@ -69,8 +70,8 @@ export function resolveGatewayProvider(
 }
 
 /**
- * AI Gateway replaces a trailing /v1 Base URL segment while resolving a Custom
- * Provider path. Store that segment in the request path for Custom routes only.
+ * Compensate for AI Gateway's version-segment rewriting on Custom routes while
+ * retaining native-provider path conversion for native routes.
  */
 export function gatewayProviderPath(
   providerName: string,

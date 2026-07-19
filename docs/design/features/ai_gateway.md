@@ -81,22 +81,50 @@ provider segment of `custom-llm-proxy-<name>`. Names that require slug
 normalization receive a deterministic hash suffix so distinct configured names
 do not silently collapse to the same slug.
 
-Cloudflare Custom Provider routing replaces a Base URL's final `/v1` segment
-when it resolves the operation path. Strict mode therefore splits that one
-segment without changing the provider or operator configuration contract: the
-Custom Provider stores the configured Base URL up to `/v1`, with a trailing
-slash, and every Gateway request starts with `/v1`. For example, Cline's adapter
-continues to declare `https://api.cline.bot/api/v1`; deployment stores
-`https://api.cline.bot/api/`, and model discovery sends
-`/v1/ai/cline/recommended-models`. Base URLs that do not end in `/v1` retain
-their complete fixed path, while adapter pathname prefixes such as Ollama's
-`/v1` remain in the Gateway request path. This provider-specific endpoint
-preserves native request bodies and supports non-standard paths; it does not
-force the Compatibility Endpoint contract on an incompatible operation.
+Cloudflare Custom Provider routing rewrites version-looking path segments as
+described below. Strict mode compensates without changing the provider or
+operator configuration contract. If the configured Base URL ends in a segment
+shaped like `/v[^/]+`, synchronization retains the complete Base URL and every
+Gateway request repeats that segment first. For example, Cline stores
+`https://api.cline.bot/api/v1`, and model discovery sends
+`/v1/ai/cline/recommended-models`. If the Base URL does not end in such a
+segment, synchronization appends a `/v1` sentinel for Gateway to consume while
+the request retains only the adapter prefix and operation path. Ollama therefore
+stores `https://ollama.com/v1` and sends `/v1/models`, producing the intended
+`https://ollama.com/v1/models` upstream URL.
 
-This split is exclusive to managed Custom Provider synchronization and routing
-under `ALWAYS_USE_AI_GATEWAY=true`. Direct requests continue to concatenate the
-configured Base URL and operation path without this transformation.
+This compensation is exclusive to managed Custom Provider synchronization and
+routing under `ALWAYS_USE_AI_GATEWAY=true`. Direct requests continue to
+concatenate the configured Base URL and operation path without this
+transformation. The provider-specific Gateway endpoint preserves native request
+bodies and supports non-standard paths; it does not force the Compatibility
+Endpoint contract on an incompatible operation.
+
+### Observed Custom Provider path rewriting (2026-07-19)
+
+Cloudflare's [Custom Providers documentation](https://developers.cloudflare.com/ai-gateway/configuration/custom-providers/)
+states that the provider path is appended directly to `base_url`. Live testing
+on 2026-07-19 instead observed the following undocumented behavior. Treat this
+as a platform quirk, not a stable contract, and reverify it when Cloudflare
+changes Custom Provider routing:
+
+| Configured Base URL      | Gateway provider path | Observed upstream URL               |
+| ------------------------ | --------------------- | ----------------------------------- |
+| `https://example.com/v1` | `/models`             | `https://example.com/models`        |
+| `https://example.com`    | `/models`             | `https://example.com/v1/models`     |
+| `https://example.com`    | `/v2/models`          | `https://example.com/v2/models`     |
+| `https://example.com`    | `/vABCDE/models`      | `https://example.com/vABCDE/models` |
+
+The observed trigger is broader than the literal `/v1`: a final Base URL
+segment shaped like `/v[^/]+` is omitted, while a Base URL without such a final
+segment receives an implicit `/v1` before the requested path. Gateway does not
+insert that implicit segment when the requested path itself begins with a
+segment shaped like `/v[^/]+`.
+
+The Worker's managed-provider workaround encodes this observed behavior so the
+resulting upstream URL matches direct routing for both versioned and unversioned
+Base URLs. It must be revisited if Cloudflare changes this undocumented
+rewriting.
 
 Custom Providers are synchronized by `npm run secrets:deploy` before Worker
 secrets are applied. The helper lists account providers and creates missing

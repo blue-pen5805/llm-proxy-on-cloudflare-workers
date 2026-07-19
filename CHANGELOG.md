@@ -10,6 +10,12 @@ dated section; when multiple changes share a date, put the newest change first.
 Planned version: `1.0.0`. The package remains at `0.2.1` until the version
 update is explicitly approved.
 
+### 2026-07-19
+
+- Fixed strict AI Gateway Custom Provider routing for both versioned and
+  unversioned Base URLs by compensating for Cloudflare's implicit `/v1` path
+  rewriting.
+
 ### 2026-07-18
 
 - Fixed strict AI Gateway Custom Provider routing to preserve a trailing `/v1`
