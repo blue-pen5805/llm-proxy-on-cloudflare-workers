@@ -128,11 +128,14 @@ rewriting.
 
 Custom Providers are synchronized by `npm run secrets:deploy` before Worker
 secrets are applied. The helper lists account providers and creates missing
-managed definitions or updates their Base URL, display name, and enabled state.
-It does not store provider credentials in Custom Provider metadata, delete stale
-definitions, or overwrite an existing slug owned by a different display name.
-Synchronization uses `CLOUDFLARE_API_TOKEN` with AI Gateway Write permission
-and sends no management API requests during `--dry-run`.
+managed definitions or updates their Base URL, display name, enabled state, and
+provider logo. Cline, Ollama, and NVIDIA NIM use the Base64-encoded SVG assets
+stored with their adapters; other managed definitions retain Cloudflare's
+generated logo. The helper does not store provider credentials in Custom
+Provider metadata, delete stale definitions, or overwrite an existing slug
+owned by a different display name. Synchronization uses
+`CLOUDFLARE_API_TOKEN` with AI Gateway Write permission and sends no management
+API requests during `--dry-run`.
 
 When no local provider key exists, a single request without an upstream
 `Authorization` header is built so AI Gateway BYOK can inject its stored

@@ -12,6 +12,8 @@ update is explicitly approved.
 
 ### 2026-07-19
 
+- Added the Cline, Ollama, and NVIDIA NIM logos when creating or updating their
+  managed AI Gateway Custom Providers.
 - Skipped Amazon Bedrock and Azure OpenAI model-discovery requests when their
   required local provider credentials or routing identifiers are incomplete,
   including when AI Gateway routing is forced.

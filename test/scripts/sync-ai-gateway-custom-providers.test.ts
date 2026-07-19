@@ -2,7 +2,28 @@ import {
   buildCustomProviderTargets,
   syncAiGatewayCustomProviders,
 } from "../../scripts/sync-ai-gateway-custom-providers";
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const logoSources = vi.hoisted(() => ({
+  cline: '<svg id="cline"/>',
+  "nvidia-nim": '<svg id="nvidia-nim"/>',
+  ollama: '<svg id="ollama"/>',
+}));
+
+vi.mock("node:fs", () => ({
+  readFileSync: vi.fn((path: string | URL, encoding: BufferEncoding) => {
+    const providerName = String(path).includes("nvidia-nim")
+      ? "nvidia-nim"
+      : String(path).includes("cline")
+        ? "cline"
+        : "ollama";
+    const source = logoSources[providerName];
+    return encoding === "base64"
+      ? Buffer.from(source, "utf8").toString("base64")
+      : source;
+  }),
+}));
 
 const strictConfig = {
   ALWAYS_USE_AI_GATEWAY: true,
@@ -28,12 +49,17 @@ describe("AI Gateway Custom Provider synchronization", () => {
   beforeEach(() => vi.restoreAllMocks());
 
   it("plans unsupported built-ins and configured custom endpoints", () => {
+    const ollamaLogo = readFileSync(
+      new URL("../../src/providers/ollama/logo.svg", import.meta.url),
+      "base64",
+    );
     expect(buildCustomProviderTargets(strictConfig)).toEqual(
       expect.arrayContaining([
         {
           name: "LLM Proxy / ollama",
           slug: "llm-proxy-ollama",
           baseUrl: "https://ollama.com/v1",
+          logo: ollamaLogo,
         },
         {
           name: "LLM Proxy / internal",
@@ -44,6 +70,7 @@ describe("AI Gateway Custom Provider synchronization", () => {
           name: "LLM Proxy / cline",
           slug: "llm-proxy-cline",
           baseUrl: "https://api.cline.bot/api/v1",
+          logo: Buffer.from(logoSources.cline, "utf8").toString("base64"),
         },
       ]),
     );
@@ -120,15 +147,34 @@ describe("AI Gateway Custom Provider synchronization", () => {
     expect(result.created).toBe(result.desired);
     const writes = fetchMock.mock.calls.filter(([, init]) => init?.method);
     expect(writes.length).toBe(result.desired);
+    const logosByName = new Map<string, string>();
     for (const [, init] of writes) {
       const body = String(init?.body);
       expect(body).not.toContain("provider-secret");
+      const payload = JSON.parse(body) as { name: string; logo?: string };
+      if (payload.logo) logosByName.set(payload.name, payload.logo);
       expect(init?.headers).toEqual(
         expect.objectContaining({
           Authorization: "Bearer cloudflare-token",
         }),
       );
     }
+    expect([...logosByName.keys()].sort()).toEqual([
+      "LLM Proxy / cline",
+      "LLM Proxy / nvidia-nim",
+      "LLM Proxy / ollama",
+    ]);
+    expect(
+      Buffer.from(
+        logosByName.get("LLM Proxy / nvidia-nim")!,
+        "base64",
+      ).toString("utf8"),
+    ).toBe(
+      readFileSync(
+        new URL("../../src/providers/nvidia-nim/logo.svg", import.meta.url),
+        "utf8",
+      ),
+    );
   });
 
   it("updates a managed Base URL to the version sentinel form", async () => {
@@ -155,6 +201,7 @@ describe("AI Gateway Custom Provider synchronization", () => {
                 slug: unchanged.slug,
                 base_url: unchanged.baseUrl,
                 enable: true,
+                logo: unchanged.logo,
               },
             ],
             { total_count: 2 },
@@ -178,6 +225,46 @@ describe("AI Gateway Custom Provider synchronization", () => {
           String(input).endsWith("/changed-id") && init?.method === "PATCH",
       ),
     ).toBe(true);
+  });
+
+  it("updates a managed provider when its configured logo differs", async () => {
+    const target = buildCustomProviderTargets(strictConfig).find(
+      ({ name }) => name === "LLM Proxy / ollama",
+    )!;
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        if (!init?.method) {
+          return apiResponse(
+            [
+              {
+                id: "ollama-id",
+                name: target.name,
+                slug: target.slug,
+                base_url: target.baseUrl,
+                enable: true,
+                logo: "stale-logo",
+              },
+            ],
+            { total_count: 1 },
+          );
+        }
+        return apiResponse({ id: "ollama-id" });
+      },
+    );
+
+    const result = await syncAiGatewayCustomProviders(
+      strictConfig,
+      false,
+      fetchMock,
+    );
+    expect(result.updated).toBe(1);
+    const update = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input).endsWith("/ollama-id") && init?.method === "PATCH",
+    );
+    expect(JSON.parse(String(update?.[1]?.body))).toEqual(
+      expect.objectContaining({ logo: target.logo }),
+    );
   });
 
   it("fails safely without echoing a Cloudflare response body", async () => {

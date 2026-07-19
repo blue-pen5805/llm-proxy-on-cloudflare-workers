@@ -6,13 +6,36 @@ import { CloudflareAIGateway } from "../src/ai_gateway/index.ts";
 import { createProviderRegistry } from "../src/providers.ts";
 import type { Provider } from "../src/providers/provider.ts";
 import { Environments } from "../src/utils/environments.ts";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 const CLOUDFLARE_API_ORIGIN = "https://api.cloudflare.com/client/v4";
+const CUSTOM_PROVIDER_LOGOS: Readonly<Record<string, string>> = {
+  cline: readFileSync(
+    fileURLToPath(
+      new URL("../src/providers/cline/logo.svg", import.meta.url).href,
+    ),
+    "base64",
+  ),
+  "nvidia-nim": readFileSync(
+    fileURLToPath(
+      new URL("../src/providers/nvidia-nim/logo.svg", import.meta.url).href,
+    ),
+    "base64",
+  ),
+  ollama: readFileSync(
+    fileURLToPath(
+      new URL("../src/providers/ollama/logo.svg", import.meta.url).href,
+    ),
+    "base64",
+  ),
+};
 
 export interface CustomProviderTarget {
   name: string;
   slug: string;
   baseUrl: string;
+  logo?: string;
 }
 
 interface CloudflareCustomProvider {
@@ -21,6 +44,7 @@ interface CloudflareCustomProvider {
   slug: string;
   enable?: boolean;
   base_url: string;
+  logo?: string;
 }
 
 interface CloudflareApiEnvelope<T> {
@@ -97,6 +121,9 @@ export function buildCustomProviderTargets(
       name: `LLM Proxy / ${providerName}`,
       slug: customProviderSlug(providerName),
       baseUrl,
+      ...(CUSTOM_PROVIDER_LOGOS[providerName]
+        ? { logo: CUSTOM_PROVIDER_LOGOS[providerName] }
+        : {}),
     });
   }
 
@@ -186,6 +213,7 @@ async function writeCustomProvider(
         base_url: target.baseUrl,
         enable: true,
         description: "Managed by Cloudflare Workers LLM Proxy.",
+        ...(target.logo ? { logo: target.logo } : {}),
       }),
     },
   );
@@ -264,7 +292,8 @@ export async function syncAiGatewayCustomProviders(
     if (
       existing?.name === target.name &&
       new URL(existing.base_url).href === target.baseUrl &&
-      existing.enable === true
+      existing.enable === true &&
+      (target.logo === undefined || existing.logo === target.logo)
     ) {
       unchanged++;
       continue;
