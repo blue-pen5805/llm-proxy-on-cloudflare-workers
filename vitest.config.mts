@@ -12,6 +12,10 @@ export default defineConfig({
     alias: {
       "~/src": resolve(__dirname, "./src"),
     },
+    // Suppress logger (console.*) output during tests. Tests that need to
+    // assert on log records spy on console directly, so dropping the printed
+    // output here keeps the terminal readable without affecting assertions.
+    onConsoleLog: () => false,
     coverage: {
       provider: "istanbul",
       reporter: ["text", "json-summary"],
