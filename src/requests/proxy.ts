@@ -6,6 +6,7 @@ import {
 import { MiddlewareContext } from "../middleware";
 import {
   determineApiKeySelectionPolicy,
+  recordApiKeyOutcome,
   recordApiKeySelection,
   selectApiKeyIndex,
 } from "../utils/api_key_selection";
@@ -48,7 +49,9 @@ export async function handleProviderProxyRequest(
     providerInstance,
     contextApiKeyIndex,
     "rotate",
+    providerName,
   );
+  const keyCount = providerInstance.getApiKeys().length;
   const aiGatewayProvider = resolveGatewayProvider(
     providerName,
     aiGateway,
@@ -59,7 +62,7 @@ export async function handleProviderProxyRequest(
     provider: providerName,
     operation: "proxy",
     keyIndex: apiKeyIndex,
-    keyCount: providerInstance.getApiKeys().length,
+    keyCount,
     selectionPolicy: determineApiKeySelectionPolicy(
       contextApiKeyIndex,
       "rotate",
@@ -91,13 +94,15 @@ export async function handleProviderProxyRequest(
       body: request.body,
       headers: Object.fromEntries(providerHeaders.entries()),
     });
-    return RequestLogger.withFields(keyLogFields, () =>
+    const response = await RequestLogger.withFields(keyLogFields, () =>
       fetchWithLogging(requestInfo, { ...requestInit, signal: request.signal }),
     );
+    recordApiKeyOutcome(providerName, apiKeyIndex, keyCount, response.status);
+    return response;
   }
 
   // Send request to the provider directly
-  return RequestLogger.withFields(keyLogFields, () =>
+  const response = await RequestLogger.withFields(keyLogFields, () =>
     providerInstance.fetch(
       pathname,
       {
@@ -109,4 +114,6 @@ export async function handleProviderProxyRequest(
       apiKeyIndex,
     ),
   );
+  recordApiKeyOutcome(providerName, apiKeyIndex, keyCount, response.status);
+  return response;
 }

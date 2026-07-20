@@ -3,9 +3,12 @@ import type { MiddlewareContext } from "~/src/middleware";
 import type { ProviderBase } from "~/src/providers/provider";
 import {
   determineApiKeySelectionPolicy,
+  getEligibleApiKeyIndexes,
+  recordApiKeyOutcome,
   recordApiKeySelection,
   selectApiKeyIndex,
 } from "~/src/utils/api_key_selection";
+import { Config } from "~/src/utils/config";
 import { Secrets } from "~/src/utils/secrets";
 
 describe("API key selection logging", () => {
@@ -46,6 +49,86 @@ describe("API key selection logging", () => {
     await expect(selectApiKeyIndex(provider, undefined, "first")).resolves.toBe(
       0,
     );
+  });
+
+  it("skips cooling keys during automatic rotation", async () => {
+    const providerName = "cooldown-skip";
+    const provider = {
+      getApiKeys: vi.fn().mockReturnValue(["first", "second", "third"]),
+      getNextApiKeyIndex: vi.fn().mockResolvedValue(0),
+    } as unknown as ProviderBase;
+    vi.spyOn(Config, "apiKeyCooldownSeconds").mockReturnValue(60);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    recordApiKeyOutcome(providerName, 0, 3, 429);
+    recordApiKeyOutcome(providerName, 1, 3, 403);
+
+    await expect(
+      selectApiKeyIndex(provider, undefined, "rotate", providerName),
+    ).resolves.toBe(2);
+    expect(getEligibleApiKeyIndexes(providerName, 3)).toEqual([2]);
+  });
+
+  it("ignores cooldowns when every key is cooling", async () => {
+    const providerName = "cooldown-all";
+    const provider = {
+      getApiKeys: vi.fn().mockReturnValue(["first", "second"]),
+      getNextApiKeyIndex: vi.fn().mockResolvedValue(1),
+    } as unknown as ProviderBase;
+    vi.spyOn(Config, "apiKeyCooldownSeconds").mockReturnValue(60);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    recordApiKeyOutcome(providerName, 0, 2, 404);
+    recordApiKeyOutcome(providerName, 1, 2, 503);
+
+    await expect(
+      selectApiKeyIndex(provider, undefined, "rotate", providerName),
+    ).resolves.toBe(1);
+    expect(getEligibleApiKeyIndexes(providerName, 2)).toEqual([0, 1]);
+  });
+
+  it("does not cool a single key and clears a cooled slot on success", () => {
+    const providerName = "cooldown-clear";
+    vi.spyOn(Config, "apiKeyCooldownSeconds").mockReturnValue(60);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    recordApiKeyOutcome(providerName, 0, 1, 429);
+    expect(getEligibleApiKeyIndexes(providerName, 1)).toEqual([0]);
+
+    recordApiKeyOutcome(providerName, 0, 2, 403);
+    expect(getEligibleApiKeyIndexes(providerName, 2)).toEqual([1]);
+    recordApiKeyOutcome(providerName, 0, 2, 200);
+    expect(getEligibleApiKeyIndexes(providerName, 2)).toEqual([0, 1]);
+
+    recordApiKeyOutcome("never-cooled", 0, 2, 200);
+    expect(getEligibleApiKeyIndexes("never-cooled", 2)).toEqual([0, 1]);
+  });
+
+  it("removes expired and out-of-range cooldown entries", () => {
+    const expiredProvider = "cooldown-expired";
+    const resizedProvider = "cooldown-resized";
+    vi.spyOn(Config, "apiKeyCooldownSeconds").mockReturnValue(60);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    recordApiKeyOutcome(expiredProvider, 0, 2, 429);
+    expect(
+      getEligibleApiKeyIndexes(expiredProvider, 2, Date.now() + 60_001),
+    ).toEqual([0, 1]);
+
+    recordApiKeyOutcome(resizedProvider, 2, 3, 429);
+    expect(getEligibleApiKeyIndexes(resizedProvider, 2)).toEqual([0, 1]);
+  });
+
+  it("does not cool deterministic client errors or when disabled", () => {
+    const providerName = "cooldown-disabled";
+    const cooldown = vi
+      .spyOn(Config, "apiKeyCooldownSeconds")
+      .mockReturnValue(60);
+    recordApiKeyOutcome(providerName, 0, 2, 400);
+    expect(getEligibleApiKeyIndexes(providerName, 2)).toEqual([0, 1]);
+
+    cooldown.mockReturnValue(0);
+    recordApiKeyOutcome(providerName, 0, 2, 429);
+    expect(getEligibleApiKeyIndexes(providerName, 2)).toEqual([0, 1]);
   });
 
   it("records a safe zero-based key identifier", () => {

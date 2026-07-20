@@ -6,6 +6,8 @@ export const MAX_CUSTOM_OPENAI_ENDPOINTS = 16;
 export const MAX_PROXY_API_KEYS = 64;
 export const DEFAULT_MODELS_CACHE_TTL_SECONDS = 300;
 export const MAX_MODELS_CACHE_TTL_SECONDS = 86400;
+export const DEFAULT_API_KEY_COOLDOWN_SECONDS = 60;
+export const MAX_API_KEY_COOLDOWN_SECONDS = 86400;
 const MAX_CUSTOM_ENDPOINT_KEYS = 32;
 const MAX_CUSTOM_ENDPOINT_MODELS = 1000;
 
@@ -339,6 +341,24 @@ export class Config {
   static isGlobalRoundRobinEnabled(): boolean {
     const enabled = Environments.get("ENABLE_GLOBAL_ROUND_ROBIN", false);
     return enabled === "true";
+  }
+
+  /**
+   * Isolate-local cooldown applied to a provider credential after an upstream
+   * status that indicates the credential or provider is temporarily unusable.
+   * `0` disables cooldowns.
+   */
+  static apiKeyCooldownSeconds(): number {
+    const rawValue = Environments.get("API_KEY_COOLDOWN_SECONDS", false);
+    const trimmedValue = rawValue?.trim();
+    if (trimmedValue === undefined || trimmedValue === "") {
+      return DEFAULT_API_KEY_COOLDOWN_SECONDS;
+    }
+    const seconds = Number(trimmedValue);
+    if (!Number.isInteger(seconds) || seconds < 0) {
+      return DEFAULT_API_KEY_COOLDOWN_SECONDS;
+    }
+    return Math.min(seconds, MAX_API_KEY_COOLDOWN_SECONDS);
   }
 
   static customOpenAIEndpoints():

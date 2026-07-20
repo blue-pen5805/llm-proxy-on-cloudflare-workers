@@ -46,7 +46,7 @@ Provider credentials are represented only by zero-based slot numbers and
 connectivity status; no key value or suffix is returned. AI Gateway tokens
 become `***`, but account and Gateway identifiers remain visible. Default model,
 strict AI Gateway mode, development mode, global round-robin state, provider
-names, and key counts are also exposed.
+API-key cooldown duration, provider names, and key counts are also exposed.
 
 The route passes through normal authentication, except when authentication has
 been disabled by configuration. Operators should not expose it publicly or use
@@ -78,6 +78,7 @@ The following events support operational queries:
 | `provider.models.invalid_response` | A model-list response could not be used    |
 | `provider.connectivity.failed`     | A status connectivity check failed         |
 | `provider.key.selected`            | A credential slot was selected             |
+| `provider.key.cooldown`            | A credential slot entered cooldown         |
 
 `duration_ms` on `request.completed` measures time until response headers are
 available; it does not wait for a streamed response body to finish. Subrequest
@@ -97,6 +98,10 @@ so their selection events instead include a zero-based `step` number.
 Credential values, partial values, and derived fingerprints are never logged.
 Indexes identify configuration order only and can change when keys are
 reordered.
+
+`provider.key.cooldown` reports the provider, zero-based `key_index`,
+`key_count`, upstream `status`, and configured `cooldown_seconds`. It follows
+the same slot-only disclosure policy and never logs credential material.
 
 ## References
 

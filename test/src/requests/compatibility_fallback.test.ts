@@ -38,6 +38,25 @@ describe("fetchCompatibilityFallback", () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
 
+  it("reports each received response with its attempt index", async () => {
+    const afterResponse = vi.fn();
+    const first = new Response("limited", { status: 429 });
+    const second = new Response("second");
+    vi.mocked(helpers.fetchWithLogging)
+      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce(second);
+
+    await fetchCompatibilityFallback(
+      requests,
+      undefined,
+      undefined,
+      afterResponse,
+    );
+
+    expect(afterResponse).toHaveBeenNthCalledWith(1, 0, first);
+    expect(afterResponse).toHaveBeenNthCalledWith(2, 1, second);
+  });
+
   it("tries the next request after a network error", async () => {
     const second = new Response("second");
     vi.mocked(helpers.fetchWithLogging)

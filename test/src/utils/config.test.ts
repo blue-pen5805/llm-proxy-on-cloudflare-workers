@@ -259,6 +259,27 @@ describe("Config", () => {
     });
   });
 
+  describe("apiKeyCooldownSeconds", () => {
+    it.each([
+      [undefined, 60],
+      ["", 60],
+      ["   ", 60],
+      ["0", 0],
+      [" 120 ", 120],
+      ["-1", 60],
+      ["1.5", 60],
+      ["abc", 60],
+      ["100000", 86400],
+    ])("maps %j to %d", (value, expected) => {
+      vi.mocked(Environments.get).mockReturnValue(value);
+      expect(Config.apiKeyCooldownSeconds()).toBe(expected);
+      expect(Environments.get).toHaveBeenCalledWith(
+        "API_KEY_COOLDOWN_SECONDS",
+        false,
+      );
+    });
+  });
+
   describe("customOpenAIEndpoints", () => {
     it("parses JSON strings", () => {
       vi.mocked(Environments.get).mockReturnValue(

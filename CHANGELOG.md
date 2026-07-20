@@ -12,6 +12,12 @@ update is explicitly approved.
 
 ### 2026-07-20
 
+- Added isolate-local per-provider API-key cooldowns for chat and pass-through
+  requests after upstream HTTP 401, 403, 404, 429, or 5xx responses. Automatic
+  rotation skips cooling slots, while single-key providers, all-cooling key
+  sets, and explicit `/key/...` selections remain usable. The new
+  `API_KEY_COOLDOWN_SECONDS` setting defaults to 60 seconds and accepts `0` to
+  disable the behavior.
 - Added operator-defined virtual models via the new `VIRTUAL_MODELS` setting. A
   chat request with `"model": "virtual/<name>"` tries an ordered list of
   `"<provider>/<model>"` candidates in sequence, moving to the next candidate

@@ -52,6 +52,13 @@ const LOG_MESSAGE_FIELDS: Readonly<Record<string, readonly string[]>> = {
     "via_ai_gateway",
     "step",
   ],
+  "provider.key.cooldown": [
+    "provider",
+    "key_index",
+    "key_count",
+    "status",
+    "cooldown_seconds",
+  ],
   "virtual_model.selected": [
     "virtual_model",
     "candidate",

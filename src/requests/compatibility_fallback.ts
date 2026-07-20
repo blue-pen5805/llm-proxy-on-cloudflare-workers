@@ -12,6 +12,7 @@ export async function fetchCompatibilityFallback(
   requests: [RequestInfo, RequestInit][],
   signal?: AbortSignal,
   beforeAttempt?: (attemptIndex: number) => LogFields,
+  afterResponse?: (attemptIndex: number, response: Response) => void,
 ): Promise<Response> {
   if (requests.length === 0) {
     throw new Error("No AI Gateway compatibility requests were generated.");
@@ -37,6 +38,7 @@ export async function fetchCompatibilityFallback(
       const upstreamResponse = await (attemptFields
         ? RequestLogger.withFields(attemptFields, fetchAttempt)
         : fetchAttempt());
+      afterResponse?.(attemptIndex, upstreamResponse);
       if (upstreamResponse.ok) {
         if (lastResponse?.body) {
           await lastResponse.body.cancel();

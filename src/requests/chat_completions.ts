@@ -7,6 +7,8 @@ import { MiddlewareContext } from "../middleware";
 import { mergeHeaders } from "../providers/provider";
 import {
   determineApiKeySelectionPolicy,
+  getEligibleApiKeyIndexes,
+  recordApiKeyOutcome,
   recordApiKeySelection,
   selectApiKeyIndex,
 } from "../utils/api_key_selection";
@@ -138,6 +140,7 @@ async function attemptChatCompletion(
     providerInstance,
     contextApiKeyIndex,
     "rotate",
+    providerName,
   );
   const aiGatewayProvider =
     aiGateway &&
@@ -185,10 +188,14 @@ async function attemptChatCompletion(
 
   // If AI Gateway is enabled and the provider supports it, use AI Gateway
   if (aiGateway && aiGatewayProvider) {
+    const eligibleApiKeyIndexes = getEligibleApiKeyIndexes(
+      providerName,
+      configuredApiKeys.length,
+    );
     const remainingApiKeyIndexes = shuffleArray(
-      configuredApiKeys
-        .map((_apiKey, candidateIndex) => candidateIndex)
-        .filter((candidateIndex) => candidateIndex !== apiKeyIndex),
+      eligibleApiKeyIndexes.filter(
+        (candidateIndex) => candidateIndex !== apiKeyIndex,
+      ),
     );
     const gatewayApiKeyIndexes =
       configuredApiKeys.length === 0
@@ -225,6 +232,13 @@ async function attemptChatCompletion(
           /* istanbul ignore next -- Gateway requests and credential indexes are built one-to-one */
           (attemptIndex) =>
             recordSelection(gatewayApiKeyIndexes[attemptIndex] ?? 0),
+          (attemptIndex, attemptResponse) =>
+            recordApiKeyOutcome(
+              providerName,
+              gatewayApiKeyIndexes[attemptIndex] ?? 0,
+              configuredApiKeys.length,
+              attemptResponse.status,
+            ),
         ),
       ),
     );
@@ -274,6 +288,12 @@ async function attemptChatCompletion(
             ),
         ),
       );
+      recordApiKeyOutcome(
+        providerName,
+        apiKeyIndex,
+        configuredApiKeys.length,
+        response.status,
+      );
       return {
         response,
         retryable: isRetryableCandidateStatus(response.status),
@@ -314,6 +334,12 @@ async function attemptChatCompletion(
         ),
       ),
     );
+    recordApiKeyOutcome(
+      providerName,
+      apiKeyIndex,
+      configuredApiKeys.length,
+      response.status,
+    );
     return { response, retryable: isRetryableCandidateStatus(response.status) };
   }
 
@@ -331,6 +357,12 @@ async function attemptChatCompletion(
         ),
       ),
     ),
+  );
+  recordApiKeyOutcome(
+    providerName,
+    apiKeyIndex,
+    configuredApiKeys.length,
+    response.status,
   );
   return { response, retryable: isRetryableCandidateStatus(response.status) };
 }

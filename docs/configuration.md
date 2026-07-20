@@ -172,6 +172,7 @@ it does not contact Cloudflare or expose Base URLs and credentials.
 | --------------------------- | --------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DEFAULT_MODEL`             | string or null  | none    | Provider-qualified model used when a chat request specifies `"model": "default"`.                                                                   |
 | `ENABLE_GLOBAL_ROUND_ROBIN` | boolean         | `false` | Rotates multi-key selection sequentially per Worker isolate (striped rotation).                                                                     |
+| `API_KEY_COOLDOWN_SECONDS`  | integer or null | `60`    | Seconds to avoid a multi-key credential slot after HTTP 401, 403, 404, 429, or 5xx. `0` disables cooldowns; values above `86400` are clamped.       |
 | `MODELS_CACHE_TTL_SECONDS`  | integer or null | `300`   | TTL of the aggregated `/v1/models` response cache. `0` disables caching; values above `86400` are clamped. Invalid values fall back to the default. |
 | `VIRTUAL_MODELS`            | object or null  | none    | Operator-defined `"virtual/<name>"` model names, each mapped to an ordered list of `"<provider>/<model>"` candidates. See below.                    |
 
@@ -183,6 +184,15 @@ near-uniform rather than strictly sequential across the deployment. A
 and registered provider pass-through requests. Other routes reject the prefix
 with HTTP 400. Model listing intentionally uses the first key unless an explicit
 selection is given.
+
+For chat and provider pass-through requests, an attributable upstream HTTP
+401, 403, 404, 429, or 5xx response puts that provider key slot into an
+isolate-local cooldown. Automatic selection skips cooling slots. A single
+configured key is always used, and if every configured key is cooling the
+normal rotation result is used, so cooldowns never make a configured provider
+unavailable. An explicit `/key/...` selection also takes precedence over the
+cooldown. Cooldown state is intentionally best-effort: it is not coordinated
+between Worker isolates and resets when an isolate is recycled.
 
 ## Custom OpenAI-compatible endpoints
 

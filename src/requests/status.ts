@@ -144,6 +144,7 @@ export async function handleStatusRequest(
       restApiToken: aiGatewayConfig.restApiToken ? "***" : undefined,
     },
     GLOBAL_ROUND_ROBIN: Config.isGlobalRoundRobinEnabled(),
+    API_KEY_COOLDOWN_SECONDS: Config.apiKeyCooldownSeconds(),
   };
 
   const env = Environments.all();

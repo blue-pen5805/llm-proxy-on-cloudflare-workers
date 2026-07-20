@@ -57,6 +57,7 @@ describe("status", () => {
       alwaysUse: false,
     });
     vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(true);
+    vi.mocked(Config.apiKeyCooldownSeconds).mockReturnValue(60);
 
     vi.mocked(Environments.getEnv).mockReturnValue({} as Env);
     vi.mocked(Environments.all).mockReturnValue({} as any);
@@ -110,6 +111,7 @@ describe("status", () => {
         alwaysUse: false,
       },
       GLOBAL_ROUND_ROBIN: true,
+      API_KEY_COOLDOWN_SECONDS: 60,
     });
 
     expect(body.providers.openai).toBeDefined();

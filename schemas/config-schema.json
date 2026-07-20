@@ -414,6 +414,18 @@
         }
       ]
     },
+    "API_KEY_COOLDOWN_SECONDS": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 86400
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "MODELS_CACHE_TTL_SECONDS": {
       "oneOf": [
         {

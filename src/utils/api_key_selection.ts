@@ -1,8 +1,81 @@
 import type { MiddlewareContext } from "../middleware";
 import type { ProviderBase } from "../providers/provider";
+import { Config } from "./config";
 import type { LogFields } from "./logger";
 import { RequestLogger } from "./logger";
 import { Secrets } from "./secrets";
+
+// Cooldowns deliberately share the same isolate-local consistency model as
+// striped rotation. They improve immediate reuse within a warm isolate without
+// adding storage or a coordination round trip to every provider request.
+const apiKeyCooldowns = new Map<string, Map<number, number>>();
+const COOLDOWN_STATUSES = new Set([401, 403, 404, 429]);
+
+function shouldCoolDown(status: number): boolean {
+  return COOLDOWN_STATUSES.has(status) || status >= 500;
+}
+
+/** Return non-cooled slots, or every slot when none are currently eligible. */
+export function getEligibleApiKeyIndexes(
+  provider: string,
+  keyCount: number,
+  now: number = Date.now(),
+): number[] {
+  const allIndexes = Array.from({ length: keyCount }, (_value, index) => index);
+  if (keyCount <= 1) return allIndexes;
+
+  const providerCooldowns = apiKeyCooldowns.get(provider);
+  if (!providerCooldowns) return allIndexes;
+
+  for (const [index, expiresAt] of providerCooldowns) {
+    if (index >= keyCount || expiresAt <= now) providerCooldowns.delete(index);
+  }
+  if (providerCooldowns.size === 0) apiKeyCooldowns.delete(provider);
+
+  const eligible = allIndexes.filter(
+    (index) => (providerCooldowns.get(index) ?? 0) <= now,
+  );
+  return eligible.length > 0 ? eligible : allIndexes;
+}
+
+/** Record an attributable upstream response without reading credential data. */
+export function recordApiKeyOutcome(
+  provider: string,
+  keyIndex: number,
+  keyCount: number,
+  status: number,
+): void {
+  if (keyCount <= 1) return;
+
+  if (status >= 200 && status < 400) {
+    const providerCooldowns = apiKeyCooldowns.get(provider);
+    providerCooldowns?.delete(keyIndex);
+    if (providerCooldowns?.size === 0) apiKeyCooldowns.delete(provider);
+    return;
+  }
+
+  if (!shouldCoolDown(status)) return;
+  const cooldownSeconds = Config.apiKeyCooldownSeconds();
+  if (cooldownSeconds === 0) return;
+
+  let providerCooldowns = apiKeyCooldowns.get(provider);
+  if (!providerCooldowns) {
+    providerCooldowns = new Map();
+    apiKeyCooldowns.set(provider, providerCooldowns);
+  }
+  providerCooldowns.set(keyIndex, Date.now() + cooldownSeconds * 1000);
+  RequestLogger.warn(
+    "provider.key.cooldown",
+    "Provider credential entered cooldown",
+    {
+      provider,
+      key_index: keyIndex,
+      key_count: keyCount,
+      status,
+      cooldown_seconds: cooldownSeconds,
+    },
+  );
+}
 
 export type ApiKeyFallback = "first" | "rotate";
 export type ApiKeySelectionPolicy =
@@ -72,9 +145,26 @@ export async function selectApiKeyIndex(
   provider: ProviderBase,
   selection: MiddlewareContext["apiKeyIndex"],
   fallback: ApiKeyFallback,
+  providerName?: string,
 ): Promise<number> {
+  const keyCount = provider.getApiKeys().length;
   if (selection !== undefined) {
-    return Secrets.resolveApiKeyIndex(selection, provider.getApiKeys().length);
+    return Secrets.resolveApiKeyIndex(selection, keyCount);
   }
-  return fallback === "rotate" ? provider.getNextApiKeyIndex() : 0;
+  if (fallback !== "rotate" || keyCount <= 1) return 0;
+
+  const selectedIndex = await provider.getNextApiKeyIndex();
+  if (!providerName) return selectedIndex;
+  const eligibleIndexes = getEligibleApiKeyIndexes(providerName, keyCount);
+  if (eligibleIndexes.includes(selectedIndex)) return selectedIndex;
+
+  // Preserve the selected rotation phase and move forward to the next healthy
+  // slot. If every key is cooling, getEligibleApiKeyIndexes returned all slots
+  // and the original selection would already have been accepted above.
+  for (let offset = 1; offset < keyCount; offset++) {
+    const candidateIndex = (selectedIndex + offset) % keyCount;
+    if (eligibleIndexes.includes(candidateIndex)) return candidateIndex;
+  }
+  /* istanbul ignore next -- eligible indexes come from the same complete [0, keyCount) range, so the loop must find one */
+  return selectedIndex;
 }

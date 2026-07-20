@@ -102,6 +102,9 @@
   "DEV": false,
   "DEFAULT_MODEL": null,
   "ENABLE_GLOBAL_ROUND_ROBIN": false,
+  // Seconds to avoid an API-key slot after HTTP 401, 403, 404, 429, or 5xx.
+  // Set to 0 to disable cooldowns (default: 60).
+  "API_KEY_COOLDOWN_SECONDS": null,
   // TTL in seconds for the aggregated /models response cache (default: 300).
   // Set to 0 to disable caching.
   "MODELS_CACHE_TTL_SECONDS": null

@@ -41,6 +41,7 @@ describe("proxy", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockProviderClass.fetch.mockResolvedValue(new Response());
     vi.mocked(Secrets.getAll).mockReturnValue(["test-key"]);
     vi.mocked(Secrets.getNext).mockResolvedValue(0);
     vi.mocked(Environments.all).mockReturnValue({} as any);
