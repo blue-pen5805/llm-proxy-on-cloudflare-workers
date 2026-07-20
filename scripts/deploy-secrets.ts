@@ -37,6 +37,16 @@ export const MAX_WORKER_SECRET_BYTES = 5 * 1024;
 // bypass and must exist only in local `npm run dev` (.dev.vars); a deployed
 // Worker therefore has no DEV binding and always runs authenticated.
 export const DEVELOPMENT_ONLY_KEYS = new Set(["DEV"]);
+export const DEPRECATED_CONFIG_KEYS = new Set(["ENABLE_GLOBAL_ROUND_ROBIN"]);
+
+function deprecatedConfigWarnings(config: Record<string, unknown>): string[] {
+  return [...DEPRECATED_CONFIG_KEYS]
+    .filter((key) => Object.prototype.hasOwnProperty.call(config, key))
+    .map(
+      (key) =>
+        `⚠️  WARNING: ${key} is deprecated and ignored; multi-key rotation is always enabled. Remove it from the configuration file.`,
+    );
+}
 
 /**
  * Get config file path for given environment
@@ -132,10 +142,15 @@ export function filterSecretsForDeployment(
 ): Record<string, SecretOperationValue> {
   const secrets: Record<string, SecretOperationValue> = {};
 
-  // Skip $schema, development-only keys, and empty values. Preserve null as an
-  // explicit deletion.
+  // Skip metadata, local-only settings, deprecated compatibility inputs, and
+  // empty values. Preserve null as an explicit deletion.
   for (const [key, value] of Object.entries(config)) {
-    if (key === "$schema" || DEVELOPMENT_ONLY_KEYS.has(key)) continue;
+    if (
+      key === "$schema" ||
+      DEVELOPMENT_ONLY_KEYS.has(key) ||
+      DEPRECATED_CONFIG_KEYS.has(key)
+    )
+      continue;
 
     const secretValue = serializeSecretValue(value);
     if (secretValue === "") continue;
@@ -245,6 +260,7 @@ export function deploySecrets(
   try {
     const configFileContent = fileSystem.readFileSync(configPath, "utf8");
     const parsedConfig = parseJsonc(configFileContent);
+    const warnings = deprecatedConfigWarnings(parsedConfig);
 
     const deployableSecrets = filterSecretsForDeployment(parsedConfig);
     const secretCount = Object.keys(deployableSecrets).length;
@@ -252,11 +268,14 @@ export function deploySecrets(
     if (secretCount === 0) {
       return {
         success: true,
-        messages: [`⚠️  No secret operations found in ${configFileName}`],
+        messages: [
+          ...warnings,
+          `⚠️  No secret operations found in ${configFileName}`,
+        ],
       };
     }
 
-    const messages: string[] = [];
+    const messages: string[] = [...warnings];
     messages.push(
       `📋 Found ${secretCount} secrets to deploy from ${configFileName}:`,
     );

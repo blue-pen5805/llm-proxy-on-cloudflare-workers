@@ -308,6 +308,16 @@ describe("deploy-secrets", () => {
       expect(result).toEqual({ API_KEY: "secret-key" });
       expect(result).not.toHaveProperty("DEV");
     });
+
+    it("never deploys the deprecated round-robin setting", () => {
+      const result = filterSecretsForDeployment({
+        API_KEY: "secret-key",
+        ENABLE_GLOBAL_ROUND_ROBIN: false,
+      });
+
+      expect(result).toEqual({ API_KEY: "secret-key" });
+      expect(result).not.toHaveProperty("ENABLE_GLOBAL_ROUND_ROBIN");
+    });
   });
 
   describe("serializeSecretsJson", () => {
@@ -358,6 +368,44 @@ describe("deploy-secrets", () => {
 
       expect(result.success).toBe(true);
       expect(result.messages[0]).toContain("No secret operations found");
+    });
+
+    it("warns and succeeds when only the deprecated setting remains", () => {
+      const mockFs = createMockFsOps({
+        "/root/config.jsonc": '{"ENABLE_GLOBAL_ROUND_ROBIN":false}',
+      });
+
+      const result = deploySecrets("/root", undefined, true, mockFs);
+
+      expect(result.success).toBe(true);
+      expect(result.messages).toEqual([
+        expect.stringContaining(
+          "WARNING: ENABLE_GLOBAL_ROUND_ROBIN is deprecated and ignored",
+        ),
+        expect.stringContaining("No secret operations found"),
+      ]);
+      expect(execFileSync).not.toHaveBeenCalled();
+    });
+
+    it("warns and excludes the deprecated setting from deployment", () => {
+      const mockFs = createMockFsOps({
+        "/root/config.jsonc": JSON.stringify({
+          ENABLE_GLOBAL_ROUND_ROBIN: true,
+          API_KEY: "secret-value",
+        }),
+      });
+
+      const result = deploySecrets("/root", undefined, true, mockFs);
+
+      expect(result.success).toBe(true);
+      expect(result.messages[0]).toContain(
+        "WARNING: ENABLE_GLOBAL_ROUND_ROBIN is deprecated and ignored",
+      );
+      expect(result.messages).toContain("   - API_KEY: [set]");
+      expect(result.messages.join("\n")).not.toContain(
+        "ENABLE_GLOBAL_ROUND_ROBIN: [set]",
+      );
+      expect(result.messages.join("\n")).not.toContain("secret-value");
     });
 
     it("should include null values as redacted delete operations", () => {

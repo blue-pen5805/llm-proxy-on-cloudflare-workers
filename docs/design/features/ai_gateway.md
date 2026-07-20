@@ -157,7 +157,7 @@ are rejected when either required credential is absent.
 ### OpenAI-compatible chat
 
 For providers in the OpenAI-compatible Gateway subset, automatic selection puts
-the credential selected by random or coordinated rotation first, shuffles the
+the credential selected by striped per-isolate rotation first, shuffles the
 remaining keys, and creates at most four Compatibility Endpoint requests. It
 tries another credential only after a network error, HTTP 401/403, or HTTP 429;
 deterministic client and provider errors return immediately. An explicit

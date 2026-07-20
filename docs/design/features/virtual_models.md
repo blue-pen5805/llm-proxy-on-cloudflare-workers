@@ -50,9 +50,8 @@ Each candidate is resolved and executed through the existing single-model path
 (`attemptChatCompletion`), unchanged from a plain `"<provider>/<model>"`
 request: the same provider resolution, AI Gateway routing decision, header
 sanitization, and per-provider key rotation apply. Without an explicit key path,
-each candidate attempt selects a configured key using the normal policy:
-cryptographically random selection by default, or striped per-isolate rotation
-when `ENABLE_GLOBAL_ROUND_ROBIN=true`. An explicit `/key/<index>/...` selection
+each candidate attempt selects a configured key using striped per-isolate
+round-robin. An explicit `/key/<index>/...` selection
 uses that index for every attempt (modulo each provider's key count), while an
 explicit range is resolved randomly within that range for every attempt. Both
 forms override the automatic rotation policy. A virtual model is therefore

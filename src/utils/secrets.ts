@@ -1,4 +1,3 @@
-import { Config } from "./config";
 import { Environments } from "./environments";
 import { shuffleArray } from "./helpers";
 import { randomInt } from "node:crypto";
@@ -79,7 +78,7 @@ export class Secrets {
   }
 
   /**
-   * Determines the next index to use for a specified identifier and length, considering round-robin configuration.
+   * Determines the next striped round-robin index for an identifier and length.
    *
    * @param identifier - A unique identifier for the key rotation (e.g., "GEMINI_API_KEY" or a custom endpoint name)
    * @param length - The number of available keys
@@ -93,22 +92,17 @@ export class Secrets {
       return 0;
     }
 
-    if (Config.isGlobalRoundRobinEnabled()) {
-      let currentIndex = rotationCounters.get(identifier) ?? randomInt(length);
-      // Bound a counter stored under a longer key array to the current length.
-      if (currentIndex >= length) {
-        currentIndex = 0;
-      }
-      rotationCounters.set(identifier, (currentIndex + 1) % length);
-      return currentIndex;
+    let currentIndex = rotationCounters.get(identifier) ?? randomInt(length);
+    // Bound a counter stored under a longer key array to the current length.
+    if (currentIndex >= length) {
+      currentIndex = 0;
     }
-
-    // Default to random if round-robin is not enabled
-    return randomInt(length);
+    rotationCounters.set(identifier, (currentIndex + 1) % length);
+    return currentIndex;
   }
 
   /**
-   * Determines the next index to use for a specified key name, considering global round-robin configuration.
+   * Determines the next striped round-robin index for a configured key name.
    *
    * @param keyName - The name of the environment variable
    * @returns A Promise that resolves to the next index (0 to length - 1)

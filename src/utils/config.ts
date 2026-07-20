@@ -338,11 +338,6 @@ export class Config {
     return Math.min(ttl, MAX_MODELS_CACHE_TTL_SECONDS);
   }
 
-  static isGlobalRoundRobinEnabled(): boolean {
-    const enabled = Environments.get("ENABLE_GLOBAL_ROUND_ROBIN", false);
-    return enabled === "true";
-  }
-
   /**
    * Isolate-local cooldown applied to a provider credential after an upstream
    * status that indicates the credential or provider is temporarily unusable.

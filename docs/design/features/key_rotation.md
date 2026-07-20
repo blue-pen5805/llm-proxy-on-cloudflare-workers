@@ -5,10 +5,8 @@
 Provider keys are normalized to arrays. Selection follows this precedence:
 
 1. An explicit `/key/<selection>` path prefix.
-2. Striped round-robin when `ENABLE_GLOBAL_ROUND_ROBIN=true` and the provider
-   has multiple keys.
-3. Cryptographically secure random selection for multiple keys.
-4. Index zero for zero or one key.
+2. Striped round-robin when the provider has multiple keys.
+3. Index zero for zero or one key.
 
 For automatic chat and provider pass-through selection, currently cooling key
 slots are removed before the selected rotation phase is resolved. Explicit
@@ -95,5 +93,3 @@ remain usable when no selection prefix is supplied.
 - Strict cross-isolate ordering is intentionally not guaranteed; the
   distribution guarantee is statistical near-uniformity of aggregate key
   usage.
-- Random fallback preserves availability when rotation is disabled, but it
-  provides no ordering guarantee.

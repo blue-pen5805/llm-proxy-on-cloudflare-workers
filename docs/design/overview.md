@@ -36,7 +36,7 @@ flowchart LR
 
 The Worker stores the active `Env` in request-scoped `AsyncLocalStorage` so
 configuration helpers do not depend on mutable module-level request state.
-Multi-key rotation is either random or striped per-isolate round-robin.
+Multi-key rotation uses striped per-isolate round-robin.
 Provider and proxy credentials are kept separate when requests are
 forwarded.
 

@@ -12,6 +12,10 @@ update is explicitly approved.
 
 ### 2026-07-20
 
+- Removed `ENABLE_GLOBAL_ROUND_ROBIN`; automatic multi-key selection now always
+  uses striped per-isolate round-robin from a cryptographically random starting
+  phase. Explicit `/key/...` selection and the first-key model-discovery policy
+  are unchanged.
 - Added isolate-local per-provider API-key cooldowns for chat and pass-through
   requests after upstream HTTP 401, 403, 404, 429, or 5xx responses. Automatic
   rotation skips cooling slots, while single-key providers, all-cooling key
@@ -38,13 +42,6 @@ update is explicitly approved.
 
 ### 2026-07-19
 
-- Changed `ENABLE_GLOBAL_ROUND_ROBIN` key rotation from a coordinated global
-  counter to striped per-isolate rotation: each
-  Worker isolate rotates through the configured keys sequentially from a
-  cryptographically random starting phase. Aggregate key usage stays
-  near-uniform, but strict cross-isolate ordering is no longer guaranteed. This
-  removes the per-request cross-isolate coordination round trip; stored rotation
-  positions are not carried over.
 - Enabled Smart Placement (`placement.mode: "smart"`) so Cloudflare may run the
   Worker near the upstream provider APIs instead of near the client, reducing
   per-round-trip latency for provider fan-out and Gateway fallback chains.

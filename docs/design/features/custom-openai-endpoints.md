@@ -45,7 +45,8 @@ direct request behavior are unchanged.
 ## Authentication and rotation
 
 Keys are optional. When present, the adapter adds Bearer authentication and uses
-the same explicit/random/round-robin selection policy as built-in providers.
+the same explicit or striped per-isolate round-robin selection policy as
+built-in providers.
 Its rotation identifier is the endpoint name. An unauthenticated
 custom endpoint is considered available, which is necessary for internal or
 public upstreams but places responsibility for origin access control on the

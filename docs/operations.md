@@ -155,13 +155,18 @@ delete the generated `.dev.vars.develop` file and retry; do not commit it.
 Top-level `null` values are omitted from the local dotenv file; they remain
 deployment deletion instructions only.
 
+`npm run secrets:deploy` tolerates the removed
+`ENABLE_GLOBAL_ROUND_ROBIN` property during migration. It prints a warning and
+does not send that property to Wrangler; multi-key rotation remains enabled
+regardless of the obsolete value. Remove the property from the source
+configuration after seeing the warning.
+
 ### Key selection behaves unexpectedly
 
 - Indices are zero-based.
 - A single index wraps modulo the number of configured keys.
 - Ranges choose randomly and are inclusive.
-- With no explicit prefix, multiple keys are random unless
-  `ENABLE_GLOBAL_ROUND_ROBIN=true`.
+- With no explicit prefix, multiple keys use striped per-isolate round-robin.
 - `/v1/models` uses the first key unless a prefix is present.
 - Only chat, models, and registered provider pass-through accept the prefix;
   health, Gateway REST/legacy, Universal, and unknown routes return HTTP 400.

@@ -1,6 +1,5 @@
 import { randomInt } from "node:crypto";
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { Config } from "~/src/utils/config";
 import { Environments } from "~/src/utils/environments";
 import { Secrets } from "~/src/utils/secrets";
 
@@ -8,7 +7,6 @@ vi.mock("node:crypto", () => ({
   randomInt: vi.fn(),
 }));
 vi.mock("~/src/utils/environments");
-vi.mock("~/src/utils/config");
 
 describe("Secrets", () => {
   let env: { [key: string]: string | string[] };
@@ -23,8 +21,6 @@ describe("Secrets", () => {
     vi.mocked(Environments.get).mockImplementation((keyName) => {
       return env[keyName];
     });
-
-    vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(false);
   });
 
   describe("getAll", () => {
@@ -87,16 +83,7 @@ describe("Secrets", () => {
       expect(randomInt).not.toHaveBeenCalled();
     });
 
-    it("should return a random apiKeyIndex if round-robin is disabled", async () => {
-      vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(false);
-      vi.mocked(randomInt).mockReturnValue(1 as any);
-      const apiKeyIndex = await Secrets.getNext("GEMINI_API_KEY");
-      expect(apiKeyIndex).toBe(1);
-      expect(randomInt).toHaveBeenCalledWith(3);
-    });
-
-    it("rotates sequentially from a random phase when round-robin is enabled", async () => {
-      vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(true);
+    it("rotates sequentially from a random phase", async () => {
       vi.mocked(randomInt).mockReturnValue(2 as never);
 
       // The random phase is drawn once per identifier; later calls advance
@@ -110,7 +97,6 @@ describe("Secrets", () => {
     });
 
     it("keeps independent rotation counters per identifier", async () => {
-      vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(true);
       vi.mocked(randomInt).mockReturnValue(0 as never);
 
       expect(await Secrets.getNextIndex("striped-first", 2)).toBe(0);
@@ -120,7 +106,6 @@ describe("Secrets", () => {
     });
 
     it("resets a stored counter that exceeds a shrunken key array", async () => {
-      vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(true);
       vi.mocked(randomInt).mockReturnValue(4 as never);
 
       expect(await Secrets.getNextIndex("striped-bounded", 5)).toBe(4);
@@ -133,7 +118,6 @@ describe("Secrets", () => {
     });
 
     it("advances rotation through getNext for configured key names", async () => {
-      vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(true);
       vi.mocked(randomInt).mockReturnValue(0 as never);
 
       const firstIndex = await Secrets.getNext("GEMINI_API_KEY");

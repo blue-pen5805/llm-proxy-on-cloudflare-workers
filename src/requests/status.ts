@@ -143,7 +143,6 @@ export async function handleStatusRequest(
       token: aiGatewayConfig.token ? "***" : undefined,
       restApiToken: aiGatewayConfig.restApiToken ? "***" : undefined,
     },
-    GLOBAL_ROUND_ROBIN: Config.isGlobalRoundRobinEnabled(),
     API_KEY_COOLDOWN_SECONDS: Config.apiKeyCooldownSeconds(),
   };
 

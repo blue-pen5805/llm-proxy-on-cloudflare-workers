@@ -223,21 +223,6 @@ describe("Config", () => {
     });
   });
 
-  describe("isGlobalRoundRobinEnabled", () => {
-    it.each([
-      ["true", true],
-      ["false", false],
-      [undefined, false],
-    ])("maps %s to %s", (value, expected) => {
-      vi.mocked(Environments.get).mockReturnValue(value);
-      expect(Config.isGlobalRoundRobinEnabled()).toBe(expected);
-      expect(Environments.get).toHaveBeenCalledWith(
-        "ENABLE_GLOBAL_ROUND_ROBIN",
-        false,
-      );
-    });
-  });
-
   describe("modelsCacheTtlSeconds", () => {
     it.each([
       [undefined, 300],

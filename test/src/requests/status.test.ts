@@ -56,7 +56,6 @@ describe("status", () => {
       restApiToken: "rest-tok-123",
       alwaysUse: false,
     });
-    vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(true);
     vi.mocked(Config.apiKeyCooldownSeconds).mockReturnValue(60);
 
     vi.mocked(Environments.getEnv).mockReturnValue({} as Env);
@@ -110,7 +109,6 @@ describe("status", () => {
         restApiToken: "***",
         alwaysUse: false,
       },
-      GLOBAL_ROUND_ROBIN: true,
       API_KEY_COOLDOWN_SECONDS: 60,
     });
 

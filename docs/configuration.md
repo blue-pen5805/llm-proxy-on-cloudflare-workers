@@ -63,9 +63,9 @@ proxy credentials accordingly.
 
 ## Provider credentials
 
-Each provider key accepts a string, an array of strings, or `null`. Arrays
-enable random selection or striped round-robin selection. Setting a key to
-`null` deletes the corresponding deployed secret on the next secrets deployment.
+Each provider key accepts a string, an array of strings, or `null`. Arrays use
+striped per-isolate round-robin selection. Setting a key to `null` deletes the
+corresponding deployed secret on the next secrets deployment.
 
 | Route name         | Setting                                           |
 | ------------------ | ------------------------------------------------- |
@@ -168,22 +168,25 @@ it does not contact Cloudflare or expose Base URLs and credentials.
 
 ## Routing and key selection
 
-| Setting                     | Type            | Default | Meaning                                                                                                                                             |
-| --------------------------- | --------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DEFAULT_MODEL`             | string or null  | none    | Provider-qualified model used when a chat request specifies `"model": "default"`.                                                                   |
-| `ENABLE_GLOBAL_ROUND_ROBIN` | boolean         | `false` | Rotates multi-key selection sequentially per Worker isolate (striped rotation).                                                                     |
-| `API_KEY_COOLDOWN_SECONDS`  | integer or null | `60`    | Seconds to avoid a multi-key credential slot after HTTP 401, 403, 404, 429, or 5xx. `0` disables cooldowns; values above `86400` are clamped.       |
-| `MODELS_CACHE_TTL_SECONDS`  | integer or null | `300`   | TTL of the aggregated `/v1/models` response cache. `0` disables caching; values above `86400` are clamped. Invalid values fall back to the default. |
-| `VIRTUAL_MODELS`            | object or null  | none    | Operator-defined `"virtual/<name>"` model names, each mapped to an ordered list of `"<provider>/<model>"` candidates. See below.                    |
+| Setting                    | Type            | Default | Meaning                                                                                                                                             |
+| -------------------------- | --------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DEFAULT_MODEL`            | string or null  | none    | Provider-qualified model used when a chat request specifies `"model": "default"`.                                                                   |
+| `API_KEY_COOLDOWN_SECONDS` | integer or null | `60`    | Seconds to avoid a multi-key credential slot after HTTP 401, 403, 404, 429, or 5xx. `0` disables cooldowns; values above `86400` are clamped.       |
+| `MODELS_CACHE_TTL_SECONDS` | integer or null | `300`   | TTL of the aggregated `/v1/models` response cache. `0` disables caching; values above `86400` are clamped. Invalid values fall back to the default. |
+| `VIRTUAL_MODELS`           | object or null  | none    | Operator-defined `"virtual/<name>"` model names, each mapped to an ordered list of `"<provider>/<model>"` candidates. See below.                    |
 
-When round-robin is off, multi-key requests use random selection. When it is
-on, each Worker isolate rotates through the keys in order from a random
-starting phase; isolates are not coordinated, so aggregate usage is
-near-uniform rather than strictly sequential across the deployment. A
-`/key/<selection>/` path prefix overrides either policy for chat, model-list,
+Each Worker isolate rotates through multiple keys in order from a random
+starting phase. Isolates are not coordinated, so aggregate usage is near-uniform
+rather than strictly sequential across the deployment. A `/key/<selection>/`
+path prefix overrides automatic selection for chat, model-list,
 and registered provider pass-through requests. Other routes reject the prefix
 with HTTP 400. Model listing intentionally uses the first key unless an explicit
 selection is given.
+
+`ENABLE_GLOBAL_ROUND_ROBIN` is no longer a configuration setting. For migration,
+`npm run secrets:deploy` accepts a configuration file that still contains it,
+prints a warning, and omits it from the secret operations. Remove the obsolete
+property; its value has no effect.
 
 For chat and provider pass-through requests, an attributable upstream HTTP
 401, 403, 404, 429, or 5xx response puts that provider key slot into an
@@ -270,12 +273,11 @@ limit how long the client may consume a valid streaming response.
 
 Every attempt reuses that candidate's normal request path (direct, AI Gateway,
 or Custom Provider) and existing per-provider key policy. With no `/key/...`
-prefix, configured keys are selected independently for each attempt: random by
-default, or striped per-isolate round-robin when
-`ENABLE_GLOBAL_ROUND_ROBIN=true`. An explicit key index or range overrides that
-automatic policy for all attempts; a fixed index stays fixed (modulo each
-provider's key count), while a range is resolved randomly again on every
-attempt. A virtual model is never a shortcut around provider configuration. The
+prefix, configured keys use striped per-isolate round-robin. An explicit key
+index or range overrides that automatic policy for all attempts. A fixed
+numeric index stays fixed modulo each provider's key count, while a range is
+resolved randomly again on every attempt. A virtual model is never a shortcut
+around provider configuration. The
 response body is passed through unmodified from whichever candidate is returned,
 so the client sees that upstream's own `model` field rather than a proxy-invented
 one.
