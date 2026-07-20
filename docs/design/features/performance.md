@@ -29,6 +29,34 @@ serialized aggregate model entries at 4 MiB. A truncated response includes
 provider responses from accumulating beyond the Worker's 128 MB isolate limit.
 Non-successful upstream responses are not parsed as provider model payloads.
 
+## Model aggregate caching
+
+`GET /v1/models` fans out to every configured provider, which makes it the
+most expensive read-only route. Successful complete aggregates are stored in
+the Workers Cache API (a dedicated cache named `llm-proxy-models`) for
+`MODELS_CACHE_TTL_SECONDS` (default 300 seconds, `0` disables), so repeated
+listings within the TTL cost one cache read instead of a provider fan-out.
+Served responses carry `X-Proxy-Models-Cache: HIT` or `MISS` for
+observability; bypassed responses carry no cache header.
+
+The cache key is built exclusively from operator-validated values — AI Gateway
+account and gateway ids (charset-checked at construction), the `alwaysUse`
+mode, and the parsed `/key/...` selection — so clients cannot create arbitrary
+cache partitions or poison another scope. Requests that carry `cf-aig-*`
+Gateway tuning headers or `Cache-Control: no-store` bypass the cache entirely;
+`Cache-Control: no-cache` skips the read but refreshes the entry. Aggregates
+with a failed provider or a truncated result are served but never stored, so a
+transient upstream outage cannot pin a degraded list for the full TTL. The
+stored copy's `Cache-Control` header only encodes the internal TTL and is
+stripped before the response is served, keeping responses issued under
+`Authorization` out of shared HTTP caches. Cache writes ride
+`ctx.waitUntil`, keeping the store off the response's critical path.
+
+The Cache API is per-datacenter: each Cloudflare location warms its own entry,
+and a configuration change (for example adding a provider key) can serve a
+stale list from an already-primed datacenter for up to the TTL. The short
+default TTL bounds that staleness without a global purge mechanism.
+
 ## Provider route index
 
 `ProviderRegistry` snapshots built-in and custom provider names when the

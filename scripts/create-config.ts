@@ -21,6 +21,7 @@ const IGNORED_FIELDS = [
   "DEV",
   "DEFAULT_MODEL",
   "ENABLE_GLOBAL_ROUND_ROBIN",
+  "MODELS_CACHE_TTL_SECONDS",
 ];
 
 // Configuration: Fields that require at least one to be set

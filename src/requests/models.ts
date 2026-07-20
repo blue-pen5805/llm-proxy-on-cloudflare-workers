@@ -10,6 +10,7 @@ import {
   selectApiKeyIndex,
 } from "../utils/api_key_selection";
 import { stripProxyAuthorizationHeaders } from "../utils/authorization";
+import { Config } from "../utils/config";
 import { Environments } from "../utils/environments";
 import {
   fetchWithLogging,
@@ -27,10 +28,37 @@ export const MAX_PROVIDER_MODELS_RESPONSE_BYTES = 1024 * 1024;
 export const MAX_MODELS_PER_PROVIDER = 1000;
 export const MAX_AGGREGATED_MODELS_BYTES = 4 * 1024 * 1024;
 
+export const MODELS_CACHE_NAME = "llm-proxy-models";
+
 const EMPTY_MODELS: OpenAIModelsListResponseBody = {
   object: "list",
   data: [],
 };
+
+/**
+ * Cache key for the aggregated models response. Built exclusively from
+ * operator-validated values: account and gateway ids are charset-checked at
+ * construction, and key selections are integers parsed by the `/key/...`
+ * middleware. Clients cannot inject arbitrary partitions into the key.
+ */
+function buildModelsCacheKey(
+  apiKeySelection: MiddlewareContext["apiKeyIndex"],
+  aiGateway?: CloudflareAIGateway,
+): Request {
+  const gatewayScope = aiGateway
+    ? `${aiGateway.accountId}/${aiGateway.gatewayId}/${aiGateway.alwaysUse ? "always" : "auto"}`
+    : "direct";
+  const keyScope =
+    apiKeySelection === undefined
+      ? "default"
+      : typeof apiKeySelection === "number"
+        ? `index-${apiKeySelection}`
+        : `range-${apiKeySelection.start ?? ""}-${apiKeySelection.end ?? ""}`;
+  return new Request(
+    `https://models-cache.llm-proxy.internal/${gatewayScope}/${keyScope}`,
+    { method: "GET" },
+  );
+}
 
 async function fetchProviderModels(
   providerName: string,
@@ -145,6 +173,39 @@ export async function handleModelsRequest(
         ),
       )
     : undefined;
+  // The provider fan-out is expensive (one upstream request per provider), so
+  // successful aggregates are cached briefly. Requests carrying per-request
+  // Gateway tuning (`cf-aig-*`) or `Cache-Control: no-store` bypass the cache
+  // entirely; `Cache-Control: no-cache` skips the read but refreshes the entry.
+  const cacheTtlSeconds = Config.modelsCacheTtlSeconds();
+  const requestCacheControl =
+    context.request?.headers.get("Cache-Control")?.toLowerCase() ?? "";
+  const hasClientGatewayTuning =
+    clientGatewayHeaders !== undefined &&
+    Object.keys(clientGatewayHeaders).length > 0;
+  const cacheEnabled =
+    cacheTtlSeconds > 0 &&
+    !hasClientGatewayTuning &&
+    !requestCacheControl.includes("no-store");
+  let modelsCache: { cache: Cache; key: Request } | undefined;
+  if (cacheEnabled) {
+    modelsCache = {
+      cache: await caches.open(MODELS_CACHE_NAME),
+      key: buildModelsCacheKey(context.apiKeyIndex, aiGateway),
+    };
+    if (!requestCacheControl.includes("no-cache")) {
+      const cachedResponse = await modelsCache.cache.match(modelsCache.key);
+      if (cachedResponse) {
+        const cachedHeaders = new Headers(cachedResponse.headers);
+        // The stored Cache-Control only encodes the internal TTL; it must not
+        // let a response served under Authorization enter shared HTTP caches.
+        cachedHeaders.delete("Cache-Control");
+        cachedHeaders.set("X-Proxy-Models-Cache", "HIT");
+        return new Response(cachedResponse.body, { headers: cachedHeaders });
+      }
+    }
+  }
+
   const providerEntries = Object.entries(
     context.providers?.all() ?? getAllProviderInstances(Environments.all()),
   );
@@ -153,6 +214,7 @@ export async function handleModelsRequest(
   const serializedModels: string[] = [];
   let aggregatedBytes = 0;
   let truncated = false;
+  let providerFailed = false;
 
   for (
     let batchStart = 0;
@@ -179,6 +241,7 @@ export async function handleModelsRequest(
       const providerName = providerBatch[index][0];
       if (settledRequest.status === "rejected") {
         if (!(settledRequest.reason instanceof ProviderNotSupportedError)) {
+          providerFailed = true;
           RequestLogger.error(
             "provider.models.failed",
             "Provider model discovery failed",
@@ -191,6 +254,7 @@ export async function handleModelsRequest(
         continue;
       }
       if (!Array.isArray(settledRequest.value?.data)) {
+        providerFailed = true;
         RequestLogger.warn(
           "provider.models.invalid_response",
           "Provider model discovery returned an invalid response",
@@ -230,13 +294,37 @@ export async function handleModelsRequest(
     );
   }
 
-  return new Response(
-    `{"data":[${serializedModels.join(",")}],"object":"list"}`,
-    {
-      headers: {
-        "Content-Type": "application/json",
-        ...(truncated ? { "X-Proxy-Models-Truncated": "true" } : {}),
-      },
-    },
-  );
+  const responseBody = `{"data":[${serializedModels.join(",")}],"object":"list"}`;
+  const responseHeaders: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(truncated ? { "X-Proxy-Models-Truncated": "true" } : {}),
+  };
+
+  if (modelsCache === undefined) {
+    return new Response(responseBody, { headers: responseHeaders });
+  }
+
+  // Degraded aggregates (a failed provider or a truncated list) are served but
+  // never cached, so a transient upstream outage cannot pin an incomplete
+  // model list for the full TTL.
+  if (!providerFailed && !truncated) {
+    const cachePutPromise = modelsCache.cache.put(
+      modelsCache.key,
+      new Response(responseBody, {
+        headers: {
+          ...responseHeaders,
+          "Cache-Control": `public, max-age=${cacheTtlSeconds}`,
+        },
+      }),
+    );
+    if (context.ctx !== undefined) {
+      context.ctx.waitUntil(cachePutPromise);
+    } else {
+      await cachePutPromise;
+    }
+  }
+
+  return new Response(responseBody, {
+    headers: { ...responseHeaders, "X-Proxy-Models-Cache": "MISS" },
+  });
 }

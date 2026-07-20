@@ -168,10 +168,11 @@ it does not contact Cloudflare or expose Base URLs and credentials.
 
 ## Routing and key selection
 
-| Setting                     | Type           | Default | Meaning                                                                           |
-| --------------------------- | -------------- | ------- | --------------------------------------------------------------------------------- |
-| `DEFAULT_MODEL`             | string or null | none    | Provider-qualified model used when a chat request specifies `"model": "default"`. |
-| `ENABLE_GLOBAL_ROUND_ROBIN` | boolean        | `false` | Rotates multi-key selection sequentially per Worker isolate (striped rotation).   |
+| Setting                     | Type            | Default | Meaning                                                                                                                                             |
+| --------------------------- | --------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DEFAULT_MODEL`             | string or null  | none    | Provider-qualified model used when a chat request specifies `"model": "default"`.                                                                   |
+| `ENABLE_GLOBAL_ROUND_ROBIN` | boolean         | `false` | Rotates multi-key selection sequentially per Worker isolate (striped rotation).                                                                     |
+| `MODELS_CACHE_TTL_SECONDS`  | integer or null | `300`   | TTL of the aggregated `/v1/models` response cache. `0` disables caching; values above `86400` are clamped. Invalid values fall back to the default. |
 
 When round-robin is off, multi-key requests use random selection. When it is
 on, each Worker isolate rotates through the keys in order from a random

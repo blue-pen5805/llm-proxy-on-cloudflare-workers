@@ -4,6 +4,8 @@ import { ConfigurationError } from "./error";
 
 export const MAX_CUSTOM_OPENAI_ENDPOINTS = 16;
 export const MAX_PROXY_API_KEYS = 64;
+export const DEFAULT_MODELS_CACHE_TTL_SECONDS = 300;
+export const MAX_MODELS_CACHE_TTL_SECONDS = 86400;
 const MAX_CUSTOM_ENDPOINT_KEYS = 32;
 const MAX_CUSTOM_ENDPOINT_MODELS = 1000;
 
@@ -180,6 +182,24 @@ export class Config {
     const defaultModel = Environments.get("DEFAULT_MODEL", false);
 
     return defaultModel;
+  }
+
+  /**
+   * TTL for the aggregated `/models` response cache, in seconds.
+   * `0` disables caching. Misconfigured values fall back to the default so a
+   * typo never turns the diagnostic fan-out into an uncached hot path.
+   */
+  static modelsCacheTtlSeconds(): number {
+    const rawValue = Environments.get("MODELS_CACHE_TTL_SECONDS", false);
+    const trimmedValue = rawValue?.trim();
+    if (trimmedValue === undefined || trimmedValue === "") {
+      return DEFAULT_MODELS_CACHE_TTL_SECONDS;
+    }
+    const ttl = Number(trimmedValue);
+    if (!Number.isInteger(ttl) || ttl < 0) {
+      return DEFAULT_MODELS_CACHE_TTL_SECONDS;
+    }
+    return Math.min(ttl, MAX_MODELS_CACHE_TTL_SECONDS);
   }
 
   static isGlobalRoundRobinEnabled(): boolean {

@@ -414,6 +414,18 @@
         }
       ]
     },
+    "MODELS_CACHE_TTL_SECONDS": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 86400
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "CUSTOM_OPENAI_ENDPOINTS": {
       "type": "array",
       "maxItems": 16,

@@ -86,6 +86,16 @@ Non-successful upstream responses are discarded before provider-specific model
 conversion. Failures are logged and omitted, so a successful response may be
 partial.
 
+Successful complete aggregates are cached for `MODELS_CACHE_TTL_SECONDS`
+(default 300, `0` disables) per gateway and key selection, and served with
+`X-Proxy-Models-Cache: HIT` or `MISS`. Partial or truncated aggregates are
+served but never cached. `Cache-Control: no-cache` on the request skips the
+cached copy and refreshes it; `Cache-Control: no-store` or any `cf-aig-*`
+request header bypasses the cache entirely, and bypassed responses carry no
+cache header. The cache is per Cloudflare datacenter, so a configuration
+change can serve a stale list from an already-primed datacenter for up to the
+TTL.
+
 Custom endpoints should define a static `models` list when reliable discovery
 matters. The endpoint uses the first provider key by default to avoid advancing
 key rotation merely for discovery. Amazon Bedrock and Azure OpenAI are omitted

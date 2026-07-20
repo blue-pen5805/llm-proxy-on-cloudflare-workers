@@ -238,6 +238,27 @@ describe("Config", () => {
     });
   });
 
+  describe("modelsCacheTtlSeconds", () => {
+    it.each([
+      [undefined, 300],
+      ["", 300],
+      ["   ", 300],
+      ["0", 0],
+      [" 120 ", 120],
+      ["-1", 300],
+      ["1.5", 300],
+      ["abc", 300],
+      ["100000", 86400],
+    ])("maps %j to %d", (value, expected) => {
+      vi.mocked(Environments.get).mockReturnValue(value);
+      expect(Config.modelsCacheTtlSeconds()).toBe(expected);
+      expect(Environments.get).toHaveBeenCalledWith(
+        "MODELS_CACHE_TTL_SECONDS",
+        false,
+      );
+    });
+  });
+
   describe("customOpenAIEndpoints", () => {
     it("parses JSON strings", () => {
       vi.mocked(Environments.get).mockReturnValue(

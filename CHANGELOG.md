@@ -10,6 +10,16 @@ dated section; when multiple changes share a date, put the newest change first.
 Planned version: `1.0.0`. The package remains at `0.2.1` until the version
 update is explicitly approved.
 
+### 2026-07-20
+
+- Added a short-lived per-datacenter cache for the aggregated `GET /v1/models`
+  response, configurable via the new `MODELS_CACHE_TTL_SECONDS` setting
+  (default 300 seconds, `0` disables). Cached and freshly aggregated responses
+  now carry `X-Proxy-Models-Cache: HIT`/`MISS`. Entries are scoped by AI
+  Gateway identity and `/key/...` selection; requests with `cf-aig-*` headers
+  or `Cache-Control: no-store` bypass the cache, `Cache-Control: no-cache`
+  refreshes it, and partial or truncated aggregates are never stored.
+
 ### 2026-07-19
 
 - Changed `ENABLE_GLOBAL_ROUND_ROBIN` key rotation from a coordinated global

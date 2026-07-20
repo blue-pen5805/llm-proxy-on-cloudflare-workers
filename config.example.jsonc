@@ -85,5 +85,8 @@
   // run with authentication enabled.
   "DEV": false,
   "DEFAULT_MODEL": null,
-  "ENABLE_GLOBAL_ROUND_ROBIN": false
+  "ENABLE_GLOBAL_ROUND_ROBIN": false,
+  // TTL in seconds for the aggregated /models response cache (default: 300).
+  // Set to 0 to disable caching.
+  "MODELS_CACHE_TTL_SECONDS": null
 }

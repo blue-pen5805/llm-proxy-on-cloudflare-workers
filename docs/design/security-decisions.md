@@ -39,11 +39,15 @@ guarantees, and both require a valid `PROXY_API_KEY`. The blast radius is bounde
 in code: batched concurrency (`MODEL_PROVIDER_CONCURRENCY` and
 `STATUS_CONNECTIVITY_CONCURRENCY`, both 5), a 5-second per-provider timeout, a
 per-provider response-size cap, and a 4 MB aggregate cap. See
-`src/requests/models.ts` and `src/requests/status.ts`.
+`src/requests/models.ts` and `src/requests/status.ts`. For `/models`, the
+short-lived response cache (`MODELS_CACHE_TTL_SECONDS`, default 300 seconds)
+additionally absorbs repeated listings, though a client can still force a
+fan-out with `Cache-Control: no-store`/`no-cache` or a `cf-aig-*` header.
 
 **Reconsider if.** These routes are exposed to low-trust clients or provider
-rate limits become a practical concern. A short-lived cache or a per-key rate
-limit would mitigate it.
+rate limits become a practical concern. A per-key rate limit, or ignoring
+client cache-bypass directives on `/models`, would mitigate it; `/status` has
+no cache.
 
 ## `cf-ray` is used as the log `request_id`
 

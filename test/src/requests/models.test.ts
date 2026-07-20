@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
 import { BUILT_IN_PROVIDER_CONSTRUCTORS } from "~/src/providers";
 import { getAllProviderInstances, getProviderByName } from "~/src/providers";
@@ -8,6 +8,7 @@ import {
   MAX_AGGREGATED_MODELS_BYTES,
   MAX_MODELS_PER_PROVIDER,
 } from "~/src/requests/models";
+import { Environments } from "~/src/utils/environments";
 import * as helpers from "~/src/utils/helpers";
 import { Secrets } from "~/src/utils/secrets";
 
@@ -61,6 +62,12 @@ describe("models", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+
+    // Response caching is exercised by the dedicated "models cache" suite;
+    // every other test runs against a disabled cache.
+    Environments.setEnv({
+      MODELS_CACHE_TTL_SECONDS: "0",
+    } as unknown as Env);
 
     // Clear the built-in provider constructor map.
     Object.keys(BUILT_IN_PROVIDER_CONSTRUCTORS).forEach((key) => {
@@ -136,6 +143,10 @@ describe("models", () => {
     mockProviderClass.fetch.mockImplementation(() =>
       Promise.resolve(new Response(JSON.stringify({ data: [] }))),
     );
+  });
+
+  afterEach(() => {
+    Environments.setEnv(undefined);
   });
 
   it("should return models from all available providers", async () => {
@@ -749,6 +760,249 @@ describe("models", () => {
     await expect(truncatedResponse.json()).resolves.toEqual({
       object: "list",
       data: [],
+    });
+  });
+
+  describe("models cache", () => {
+    // Each test uses a distinct key selection or gateway id so cache entries
+    // can never leak between tests.
+    beforeEach(() => {
+      Environments.setEnv({
+        MODELS_CACHE_TTL_SECONDS: "60",
+      } as unknown as Env);
+    });
+
+    it("stores successful aggregates and serves subsequent requests from the cache", async () => {
+      const waitUntil = vi.fn();
+      const context = { ctx: { waitUntil }, apiKeyIndex: 11 } as any;
+
+      const missResponse = await handleModelsRequest(context);
+      expect(missResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
+      expect(waitUntil).toHaveBeenCalledOnce();
+      await waitUntil.mock.calls[0][0];
+      const upstreamCalls = mockProviderClass.fetch.mock.calls.length;
+
+      const hitResponse = await handleModelsRequest(context);
+      expect(hitResponse.headers.get("X-Proxy-Models-Cache")).toBe("HIT");
+      expect(hitResponse.headers.get("Cache-Control")).toBeNull();
+      expect(hitResponse.headers.get("Content-Type")).toBe("application/json");
+      expect(mockProviderClass.fetch.mock.calls.length).toBe(upstreamCalls);
+      await expect(hitResponse.json()).resolves.toEqual(
+        await missResponse.json(),
+      );
+    });
+
+    it("awaits the cache write when no execution context is available", async () => {
+      const context = { apiKeyIndex: 12 } as any;
+
+      const missResponse = await handleModelsRequest(context);
+      expect(missResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
+
+      const hitResponse = await handleModelsRequest(context);
+      expect(hitResponse.headers.get("X-Proxy-Models-Cache")).toBe("HIT");
+    });
+
+    it("bypasses the cache when the client sends Cache-Control: no-store", async () => {
+      const bypassResponse = await handleModelsRequest({
+        apiKeyIndex: 13,
+        request: new Request("https://example.com/models", {
+          headers: { "Cache-Control": "no-store" },
+        }),
+      } as any);
+      expect(bypassResponse.headers.get("X-Proxy-Models-Cache")).toBeNull();
+
+      // Nothing was stored, so a cache-enabled request still misses.
+      const missResponse = await handleModelsRequest({
+        apiKeyIndex: 13,
+      } as any);
+      expect(missResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
+    });
+
+    it("refreshes the cache when the client sends Cache-Control: no-cache", async () => {
+      const primeResponse = await handleModelsRequest({
+        apiKeyIndex: 14,
+      } as any);
+      expect(primeResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
+
+      mockProviderClass.convertModelsToOpenAIFormat.mockReturnValue({
+        object: "list",
+        data: [
+          { id: "fresh-model", object: "model", created: 1, owned_by: "test" },
+        ],
+      });
+      const refreshResponse = await handleModelsRequest({
+        apiKeyIndex: 14,
+        request: new Request("https://example.com/models", {
+          headers: { "Cache-Control": "no-cache" },
+        }),
+      } as any);
+      expect(refreshResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
+
+      const hitResponse = await handleModelsRequest({ apiKeyIndex: 14 } as any);
+      expect(hitResponse.headers.get("X-Proxy-Models-Cache")).toBe("HIT");
+      const body = (await hitResponse.json()) as ModelsResponse;
+      expect(body.data.map((model) => model.id)).toEqual([
+        "openai/fresh-model",
+        "anthropic/fresh-model",
+      ]);
+    });
+
+    it("scopes cache entries by gateway identity", async () => {
+      const buildProviderEndpointRequest = vi
+        .fn()
+        .mockReturnValue([
+          "https://gateway.ai.cloudflare.com/v1/acc/gw/openai/models",
+          { method: "GET", headers: {} },
+        ]);
+      const gateway = (gatewayId: string, alwaysUse: boolean) =>
+        ({
+          accountId: "acc",
+          gatewayId,
+          alwaysUse,
+          buildProviderEndpointRequest,
+        }) as any;
+
+      const missResponse = await handleModelsRequest(
+        { request: new Request("https://example.com/g/gw-a/models") } as any,
+        gateway("gw-a", false),
+      );
+      expect(missResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
+
+      const hitResponse = await handleModelsRequest(
+        {} as any,
+        gateway("gw-a", false),
+      );
+      expect(hitResponse.headers.get("X-Proxy-Models-Cache")).toBe("HIT");
+
+      const otherGatewayResponse = await handleModelsRequest(
+        {} as any,
+        gateway("gw-b", false),
+      );
+      expect(otherGatewayResponse.headers.get("X-Proxy-Models-Cache")).toBe(
+        "MISS",
+      );
+
+      const alwaysUseResponse = await handleModelsRequest(
+        {} as any,
+        gateway("gw-a", true),
+      );
+      expect(alwaysUseResponse.headers.get("X-Proxy-Models-Cache")).toBe(
+        "MISS",
+      );
+    });
+
+    it("scopes cache entries by key selection", async () => {
+      const missResponse = await handleModelsRequest({
+        apiKeyIndex: { start: 1 },
+      } as any);
+      expect(missResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
+
+      const hitResponse = await handleModelsRequest({
+        apiKeyIndex: { start: 1 },
+      } as any);
+      expect(hitResponse.headers.get("X-Proxy-Models-Cache")).toBe("HIT");
+
+      const rangeResponse = await handleModelsRequest({
+        apiKeyIndex: { start: 1, end: 2 },
+      } as any);
+      expect(rangeResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
+
+      const endOnlyResponse = await handleModelsRequest({
+        apiKeyIndex: { end: 2 },
+      } as any);
+      expect(endOnlyResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
+    });
+
+    it("bypasses the cache when client Gateway tuning headers are present", async () => {
+      const buildProviderEndpointRequest = vi
+        .fn()
+        .mockReturnValue([
+          "https://gateway.ai.cloudflare.com/v1/acc/gw/openai/models",
+          { method: "GET", headers: {} },
+        ]);
+      const aiGateway = {
+        accountId: "acc",
+        gatewayId: "gw-tuning",
+        alwaysUse: false,
+        buildProviderEndpointRequest,
+      } as any;
+
+      const bypassResponse = await handleModelsRequest(
+        {
+          request: new Request("https://example.com/g/gw-tuning/models", {
+            headers: { "cf-aig-metadata": '{"caller":"test"}' },
+          }),
+        } as any,
+        aiGateway,
+      );
+      expect(bypassResponse.headers.get("X-Proxy-Models-Cache")).toBeNull();
+
+      const missResponse = await handleModelsRequest({} as any, aiGateway);
+      expect(missResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
+    });
+
+    it("does not cache aggregates with a failed provider", async () => {
+      const errorProviderClass = {
+        ...mockProviderClass,
+        fetch: vi.fn().mockRejectedValue(new Error("Network error")),
+      };
+      Object.keys(BUILT_IN_PROVIDER_CONSTRUCTORS).forEach((key) => {
+        delete BUILT_IN_PROVIDER_CONSTRUCTORS[key];
+      });
+      BUILT_IN_PROVIDER_CONSTRUCTORS.openai =
+        mockProviderConstructor(mockProviderClass);
+      BUILT_IN_PROVIDER_CONSTRUCTORS.error =
+        mockProviderConstructor(errorProviderClass);
+      vi.spyOn(console, "error").mockImplementation(() => {});
+
+      const missResponse = await handleModelsRequest({
+        apiKeyIndex: 31,
+      } as any);
+      expect(missResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
+
+      const uncachedResponse = await handleModelsRequest({
+        apiKeyIndex: 31,
+      } as any);
+      expect(uncachedResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
+    });
+
+    it("does not cache truncated aggregates", async () => {
+      Object.keys(BUILT_IN_PROVIDER_CONSTRUCTORS).forEach((key) => {
+        delete BUILT_IN_PROVIDER_CONSTRUCTORS[key];
+      });
+      const oversizedProvider = {
+        ...mockProviderClass,
+        convertModelsToOpenAIFormat: vi.fn().mockReturnValue({
+          object: "list",
+          data: [
+            {
+              id: "oversized",
+              object: "model",
+              created: 0,
+              owned_by: "test",
+              _: "x".repeat(MAX_AGGREGATED_MODELS_BYTES + 1),
+            },
+          ],
+        }),
+      };
+      BUILT_IN_PROVIDER_CONSTRUCTORS.test =
+        mockProviderConstructor(oversizedProvider);
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const truncatedResponse = await handleModelsRequest({
+        apiKeyIndex: 32,
+      } as any);
+      expect(truncatedResponse.headers.get("X-Proxy-Models-Truncated")).toBe(
+        "true",
+      );
+      expect(truncatedResponse.headers.get("X-Proxy-Models-Cache")).toBe(
+        "MISS",
+      );
+
+      const uncachedResponse = await handleModelsRequest({
+        apiKeyIndex: 32,
+      } as any);
+      expect(uncachedResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
     });
   });
 });
