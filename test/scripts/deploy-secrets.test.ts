@@ -1,6 +1,7 @@
 import {
   deploySecrets,
   executeWranglerSecretBulk,
+  listExistingSecretNames,
   filterSecretsForDeployment,
   MAX_WORKER_SECRET_BYTES,
   serializeSecretsJson,
@@ -528,6 +529,173 @@ describe("deploy-secrets", () => {
       expect(deploySecrets("/root", undefined, true, mockFs).messages).toEqual([
         "❌ Error processing config.jsonc: unreadable",
       ]);
+    });
+
+    describe("deletion of non-existent secrets (non-dry-run)", () => {
+      // Route the shared execFileSync mock: `secret list` returns the given
+      // JSON; `secret bulk` is a no-op whose payload we inspect via writeFileSync.
+      const routeWrangler = (listOutput: string | (() => never)) => {
+        vi.mocked(execFileSync).mockImplementation(
+          (_cmd, args?: readonly string[]) => {
+            if (args?.includes("list")) {
+              if (typeof listOutput === "function") return listOutput();
+              return listOutput;
+            }
+            return "";
+          },
+        );
+      };
+
+      beforeEach(() => {
+        vi.spyOn(console, "log").mockImplementation(() => undefined);
+      });
+
+      it("skips deletions for secrets that are not currently set", () => {
+        routeWrangler('[{"name":"API_KEY","type":"secret_text"}]');
+        const mockFs = createMockFsOps({
+          "/root/config.jsonc": '{"OLD_KEY":null,"API_KEY":"val"}',
+        });
+
+        const result = deploySecrets("/root", undefined, false, mockFs);
+
+        expect(result.success).toBe(true);
+        expect(result.messages).toContain(
+          "⏭️  Skipping deletion of 1 secret(s) not currently set: OLD_KEY",
+        );
+        expect(result.messages).toContain("   - API_KEY: [set]");
+        expect(result.messages.join("\n")).not.toContain("OLD_KEY: [delete]");
+
+        // OLD_KEY must be absent from the payload handed to `secret bulk`.
+        const bulkPayload = vi.mocked(fs.writeFileSync).mock
+          .calls[0][1] as string;
+        expect(JSON.parse(bulkPayload)).toEqual({ API_KEY: "val" });
+      });
+
+      it("keeps deletions for secrets that currently exist", () => {
+        routeWrangler('[{"name":"OLD_KEY","type":"secret_text"}]');
+        const mockFs = createMockFsOps({
+          "/root/config.jsonc": '{"OLD_KEY":null}',
+        });
+
+        const result = deploySecrets("/root", undefined, false, mockFs);
+
+        expect(result.success).toBe(true);
+        expect(result.messages).toContain("   - OLD_KEY: [delete]");
+        expect(result.messages.join("\n")).not.toContain("Skipping deletion");
+
+        const bulkPayload = vi.mocked(fs.writeFileSync).mock
+          .calls[0][1] as string;
+        expect(JSON.parse(bulkPayload)).toEqual({ OLD_KEY: null });
+      });
+
+      it("deploys nothing when every deletion targets an absent secret", () => {
+        routeWrangler("[]");
+        const mockFs = createMockFsOps({
+          "/root/config.jsonc": '{"OLD_KEY":null}',
+        });
+
+        const result = deploySecrets("/root", undefined, false, mockFs);
+
+        expect(result.success).toBe(true);
+        expect(result.messages).toContain(
+          "✅ Nothing to deploy — all requested deletions target secrets that are not set.",
+        );
+        // Only `secret list` runs; `secret bulk` is never invoked.
+        expect(fs.writeFileSync).not.toHaveBeenCalled();
+        expect(execFileSync).toHaveBeenCalledTimes(1);
+      });
+
+      it("falls back to sending deletions when existing secrets can't be listed", () => {
+        routeWrangler(() => {
+          throw new Error("worker not found");
+        });
+        const mockFs = createMockFsOps({
+          "/root/config.jsonc": '{"OLD_KEY":null}',
+        });
+
+        const result = deploySecrets("/root", undefined, false, mockFs);
+
+        expect(result.success).toBe(true);
+        expect(result.messages).toContain("   - OLD_KEY: [delete]");
+        expect(result.messages.join("\n")).not.toContain("Skipping deletion");
+
+        const bulkPayload = vi.mocked(fs.writeFileSync).mock
+          .calls[0][1] as string;
+        expect(JSON.parse(bulkPayload)).toEqual({ OLD_KEY: null });
+      });
+
+      it("does not query existing secrets on a dry run", () => {
+        routeWrangler("[]");
+        const mockFs = createMockFsOps({
+          "/root/config.jsonc": '{"OLD_KEY":null}',
+        });
+
+        const result = deploySecrets("/root", undefined, true, mockFs);
+
+        expect(result.success).toBe(true);
+        expect(result.messages).toContain("   - OLD_KEY: [delete]");
+        expect(execFileSync).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe("listExistingSecretNames", () => {
+    it("returns the set of configured secret names", () => {
+      vi.mocked(execFileSync).mockReturnValue(
+        '[{"name":"A","type":"secret_text"},{"name":"B","type":"secret_text"}]',
+      );
+
+      const names = listExistingSecretNames();
+
+      expect(names).toEqual(new Set(["A", "B"]));
+      expect(execFileSync).toHaveBeenCalledWith(
+        "wrangler",
+        ["secret", "list", "--format", "json"],
+        { encoding: "utf8" },
+      );
+    });
+
+    it("passes the environment through to Wrangler", () => {
+      vi.mocked(execFileSync).mockReturnValue("[]");
+
+      expect(listExistingSecretNames("prod")).toEqual(new Set());
+      expect(execFileSync).toHaveBeenCalledWith(
+        "wrangler",
+        ["secret", "list", "--format", "json", "--env", "prod"],
+        { encoding: "utf8" },
+      );
+    });
+
+    it("tolerates surrounding output around the JSON array", () => {
+      vi.mocked(execFileSync).mockReturnValue('⛅️ wrangler\n[{"name":"A"}]\n');
+
+      expect(listExistingSecretNames()).toEqual(new Set(["A"]));
+    });
+
+    it("ignores malformed entries", () => {
+      vi.mocked(execFileSync).mockReturnValue('[{"name":"A"},{},{"name":1}]');
+
+      expect(listExistingSecretNames()).toEqual(new Set(["A"]));
+    });
+
+    it("returns null when the output is not a JSON array", () => {
+      vi.mocked(execFileSync).mockReturnValue('{"name":"A"}');
+
+      expect(listExistingSecretNames()).toBeNull();
+    });
+
+    it("returns null when parsing fails", () => {
+      vi.mocked(execFileSync).mockReturnValue("[not json]");
+
+      expect(listExistingSecretNames()).toBeNull();
+    });
+
+    it("returns null when Wrangler exits with an error", () => {
+      vi.mocked(execFileSync).mockImplementation(() => {
+        throw new Error("no worker");
+      });
+
+      expect(listExistingSecretNames()).toBeNull();
     });
   });
 

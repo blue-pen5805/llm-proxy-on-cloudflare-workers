@@ -231,6 +231,51 @@ export function executeWranglerSecretBulk(
 }
 
 /**
+ * List the names of secrets currently configured on the Worker.
+ *
+ * Returns `null` when the set of existing secrets can't be determined (for
+ * example the Worker doesn't exist yet, or Wrangler emitted non-JSON output).
+ * Callers treat `null` as "unknown" and fall back to their previous behaviour
+ * rather than blocking a deploy.
+ */
+export function listExistingSecretNames(
+  environmentName?: string,
+): Set<string> | null {
+  const wranglerArguments = ["secret", "list", "--format", "json"];
+  if (environmentName) wranglerArguments.push("--env", environmentName);
+
+  try {
+    // Capture stdout (default "pipe") instead of inheriting, so the JSON is
+    // available to parse and Wrangler's own listing isn't echoed to the user.
+    const output = execFileSync("wrangler", wranglerArguments, {
+      encoding: "utf8",
+    });
+
+    // Isolate the JSON array in case Wrangler prints anything alongside it.
+    const start = output.indexOf("[");
+    const end = output.lastIndexOf("]");
+    if (start === -1 || end === -1 || end < start) return null;
+
+    const parsed: unknown = JSON.parse(output.slice(start, end + 1));
+    if (!Array.isArray(parsed)) return null;
+
+    const names = new Set<string>();
+    for (const entry of parsed) {
+      if (
+        entry &&
+        typeof entry === "object" &&
+        typeof (entry as { name?: unknown }).name === "string"
+      ) {
+        names.add((entry as { name: string }).name);
+      }
+    }
+    return names;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Deploy secrets based on configuration
  */
 export function deploySecrets(
@@ -263,9 +308,8 @@ export function deploySecrets(
     const warnings = deprecatedConfigWarnings(parsedConfig);
 
     const deployableSecrets = filterSecretsForDeployment(parsedConfig);
-    const secretCount = Object.keys(deployableSecrets).length;
 
-    if (secretCount === 0) {
+    if (Object.keys(deployableSecrets).length === 0) {
       return {
         success: true,
         messages: [
@@ -276,6 +320,45 @@ export function deploySecrets(
     }
 
     const messages: string[] = [...warnings];
+
+    // Resolve deletions against the Worker's current secrets so Wrangler only
+    // reports keys it actually removed. Without this, `secret bulk` prints a
+    // "deleted" line for every null entry, even ones that were never set. Dry
+    // runs stay offline, so they still preview every requested deletion.
+    if (!isDryRun) {
+      const deleteKeys = Object.keys(deployableSecrets).filter(
+        (key) => deployableSecrets[key] === null,
+      );
+      if (deleteKeys.length > 0) {
+        const existingSecretNames = listExistingSecretNames(environmentName);
+        if (existingSecretNames) {
+          const skippedDeletions = deleteKeys.filter(
+            (key) => !existingSecretNames.has(key),
+          );
+          for (const key of skippedDeletions) {
+            delete deployableSecrets[key];
+          }
+          if (skippedDeletions.length > 0) {
+            messages.push(
+              `⏭️  Skipping deletion of ${skippedDeletions.length} secret(s) not currently set: ${skippedDeletions.join(", ")}`,
+            );
+          }
+        }
+      }
+    }
+
+    const secretCount = Object.keys(deployableSecrets).length;
+
+    if (secretCount === 0) {
+      messages.push(
+        "✅ Nothing to deploy — all requested deletions target secrets that are not set.",
+      );
+      return {
+        success: true,
+        messages,
+      };
+    }
+
     messages.push(
       `📋 Found ${secretCount} secrets to deploy from ${configFileName}:`,
     );
