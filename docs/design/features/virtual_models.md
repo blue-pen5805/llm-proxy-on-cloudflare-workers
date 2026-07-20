@@ -12,8 +12,11 @@ operator-defined virtual model rather than automatic cross-provider retry.
 
 ## Configuration model
 
-`VIRTUAL_MODELS` maps a reserved `"virtual/<name>"` model name to an ordered
-candidate array. A candidate is either a bare `"<provider>/<model>"` string,
+`VIRTUAL_MODELS` maps a virtual model name to an ordered
+candidate array. `"virtual/<name>"` is the recommended convention, but the key
+may be any safe identifier matching `[A-Za-z0-9._~/-]{1,128}`; it is compared
+verbatim against the requested `model`. A candidate is either a bare
+`"<provider>/<model>"` string,
 which is attempted once, or an object with `model` and optional `retries` and
 `timeout` settings. `retries` is the number of additional attempts against that
 candidate after its first retryable failure, defaults to `0`, and is limited to
@@ -21,13 +24,18 @@ candidate after its first retryable failure, defaults to `0`, and is limited to
 headers to an integer from `1` through `300000`; omitting it leaves that wait
 unbounded except for client cancellation and platform limits.
 
-The `virtual` segment is a pseudo-provider namespace: it never resolves through
-the provider registry, so it cannot collide with a built-in provider or a
-`CUSTOM_OPENAI_ENDPOINTS` name. At most 100 virtual models are accepted, each
-with 1 to 16 candidates. A candidate cannot itself name the `virtual` namespace,
-so a virtual model can never chain into another virtual model — resolution is
-always one flat lookup followed by a bounded, linear sequence of at most 96
-candidate attempts.
+Real providers take precedence over virtual model keys, so a key never shadows a
+built-in provider or a `CUSTOM_OPENAI_ENDPOINTS` name: a request resolves as a
+virtual model only when its `model` does not name a real provider. The `virtual`
+prefix is convenient precisely because no real provider is named `virtual`, but a
+key that does collide with a real provider (for example `"openai/gpt-4o-mini"`)
+is simply never reached rather than overriding it. At most 100 virtual models are
+accepted, each with 1 to 16 candidates. A candidate cannot itself name the
+`virtual` namespace, so a virtual model can never chain into another virtual
+model — and because candidates are executed through the plain single-model path
+(never the virtual lookup), no key, whatever its prefix, can chain either.
+Resolution is always one flat lookup followed by a bounded, linear sequence of at
+most 96 candidate attempts.
 
 Configuration remains trusted operator input, matching `CUSTOM_OPENAI_ENDPOINTS`:
 schema and runtime validation reject malformed names, empty or oversized
@@ -40,11 +48,13 @@ rejected value (`src/utils/config.ts`, `Config.virtualModels()`).
 ## Resolution and routing
 
 Model resolution in `handleChatCompletionsRequest`
-(`src/requests/chat_completions.ts`) checks for the `virtual/` prefix before
-splitting the request model into a provider and model name. A matching virtual
-model looks up its candidate list; an undefined virtual model name returns the
-same HTTP 400 `"Invalid provider."` response as an unknown provider, so a typo
-in a virtual model name is indistinguishable from a typo in a provider name.
+(`src/requests/chat_completions.ts`) first splits the request model on `/` and
+tries to resolve the leading segment as a real provider. Only when that fails
+does it consult the virtual model map, so real providers always win. A matching
+virtual model looks up its candidate list; a model that names neither a real
+provider nor a configured virtual model returns the same HTTP 400
+`"Invalid provider."` response as an unknown provider, so a typo in a virtual
+model name is indistinguishable from a typo in a provider name.
 
 Each candidate is resolved and executed through the existing single-model path
 (`attemptChatCompletion`), unchanged from a plain `"<provider>/<model>"`
@@ -57,6 +67,18 @@ explicit range is resolved randomly within that range for every attempt. Both
 forms override the automatic rotation policy. A virtual model is therefore
 never a way to bypass a provider's own configuration or credential requirements
 — a misconfigured candidate fails exactly as it would if requested directly.
+
+## Model discovery
+
+`handleModelsRequest` (`src/requests/models.ts`) seeds the aggregated list with
+the configured virtual models before the provider fan-out, so each is emitted at
+the front of `data` as `{ id: "<key>", object: "model", created: 0, owned_by:
+"virtual" }` ahead of the provider-discovered entries. They are bounded (at most
+`MAX_VIRTUAL_MODELS`) and only count against the aggregate byte budget rather
+than being subject to provider truncation, so a configured virtual model is
+always advertised. Discovery reuses the same `Config.virtualModels()` accessor as
+routing, so a malformed `VIRTUAL_MODELS` fails `/models` closed with the same
+HTTP 503 as a chat request rather than silently dropping the entries.
 
 ## Retry policy
 

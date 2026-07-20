@@ -441,6 +441,16 @@ describe("Config", () => {
       });
     });
 
+    it("accepts arbitrary keys outside the virtual/ convention", () => {
+      vi.mocked(Environments.get).mockReturnValue(
+        '{"group/fast":["openai/gpt-4o-mini"],"my-alias":["groq/llama-3.3-70b"]}',
+      );
+      expect(Config.virtualModels()).toEqual({
+        "group/fast": [{ model: "openai/gpt-4o-mini", retries: 0 }],
+        "my-alias": [{ model: "groq/llama-3.3-70b", retries: 0 }],
+      });
+    });
+
     it("memoizes validated routes while the raw value is unchanged", () => {
       vi.mocked(Environments.get).mockReturnValue(
         '{"virtual/memo":["openai/gpt-4o-mini"]}',
@@ -464,8 +474,9 @@ describe("Config", () => {
       ["not-json"],
       [42],
       [["virtual/fast-tier"]],
-      [{ "not-virtual/fast-tier": ["openai/gpt-4o-mini"] }],
-      [{ "virtual/": ["openai/gpt-4o-mini"] }],
+      [{ "": ["openai/gpt-4o-mini"] }],
+      [{ "virtual/fast tier": ["openai/gpt-4o-mini"] }],
+      [{ [`virtual/${"a".repeat(129)}`]: ["openai/gpt-4o-mini"] }],
       [{ "virtual/fast-tier": [] }],
       [{ "virtual/fast-tier": "openai/gpt-4o-mini" }],
       [{ "virtual/fast-tier": ["openai/gpt-4o-mini", 42] }],

@@ -773,5 +773,49 @@ describe("handleChatCompletionsRequest", () => {
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({ error: "Invalid provider." });
     });
+
+    it("resolves a virtual model keyed outside the virtual/ convention", async () => {
+      vi.mocked(Config.virtualModels).mockReturnValue({
+        "group/fast": [{ model: "openai/gpt-4", retries: 0 }],
+      });
+      mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
+        "/chat/completions",
+        { method: "POST", body: "{}" },
+      ]);
+      mockProviderClass.fetch.mockResolvedValue(
+        new Response("ok", { status: 200 }),
+      );
+
+      const response = await handleChatCompletionsRequest({
+        request: buildRequest("group/fast"),
+      } as any);
+
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe("ok");
+      expect(mockProviderClass.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("prefers a real provider over a colliding virtual model key", async () => {
+      // "openai" is a real provider, so the virtual key is shadowed and its
+      // candidate (the unknown "groq" provider) is never reached.
+      vi.mocked(Config.virtualModels).mockReturnValue({
+        "openai/gpt-4": [{ model: "groq/other", retries: 0 }],
+      });
+      mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
+        "/chat/completions",
+        { method: "POST", body: "{}" },
+      ]);
+      mockProviderClass.fetch.mockResolvedValue(
+        new Response("ok", { status: 200 }),
+      );
+
+      const response = await handleChatCompletionsRequest({
+        request: buildRequest("openai/gpt-4"),
+      } as any);
+
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe("ok");
+      expect(Config.virtualModels).not.toHaveBeenCalled();
+    });
   });
 });

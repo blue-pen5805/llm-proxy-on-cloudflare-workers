@@ -13,7 +13,7 @@ import {
   selectApiKeyIndex,
 } from "../utils/api_key_selection";
 import { stripProxyAuthorizationHeaders } from "../utils/authorization";
-import { Config, VIRTUAL_MODEL_PROVIDER_NAME } from "../utils/config";
+import { Config } from "../utils/config";
 import {
   parseJsonOrReturnText,
   readRequestText,
@@ -67,25 +67,28 @@ export async function handleChatCompletionsRequest(
     return invalidRequestResponse("Invalid request.");
   }
 
-  // A model of "virtual/<name>" never names a real provider: it looks up an
-  // operator-configured ordered candidate list and tries each in turn.
-  if (requestedModel.startsWith(`${VIRTUAL_MODEL_PROVIDER_NAME}/`)) {
+  // Real providers and Custom OpenAI endpoints take precedence: only when the
+  // requested model does not name one do we consult the operator-defined
+  // virtual model map, whose keys are then tried as an ordered candidate list.
+  // "virtual/<name>" is the recommended convention for these keys (no real
+  // provider is named "virtual"), but any configured key resolves here.
+  const [providerName] = requestedModel.split("/");
+  if (!resolveProvider(context, providerName)) {
     const candidates = Config.virtualModels()?.[requestedModel];
-    if (!candidates) {
-      return invalidRequestResponse("Invalid provider.");
+    if (candidates) {
+      return await runVirtualModelChain(
+        requestedModel,
+        candidates,
+        (candidateModel, timeout) =>
+          attemptChatCompletion(
+            context,
+            aiGateway,
+            chatRequestBody,
+            candidateModel,
+            timeout,
+          ),
+      );
     }
-    return await runVirtualModelChain(
-      requestedModel,
-      candidates,
-      (candidateModel, timeout) =>
-        attemptChatCompletion(
-          context,
-          aiGateway,
-          chatRequestBody,
-          candidateModel,
-          timeout,
-        ),
-    );
   }
 
   const { response } = await attemptChatCompletion(

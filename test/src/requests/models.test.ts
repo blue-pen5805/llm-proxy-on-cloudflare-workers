@@ -176,6 +176,48 @@ describe("models", () => {
     expect(Secrets.getNext).not.toHaveBeenCalled();
   });
 
+  it("lists configured virtual models at the front of the response", async () => {
+    Environments.setEnv({
+      MODELS_CACHE_TTL_SECONDS: "0",
+      VIRTUAL_MODELS: JSON.stringify({
+        "virtual/fast-tier": ["openai/gpt-4"],
+        "group/blend": ["anthropic/claude"],
+      }),
+    } as unknown as Env);
+
+    const response = await handleModelsRequest({} as any);
+    const body = (await response.json()) as ModelsResponse;
+
+    expect(body.data.slice(0, 2)).toEqual([
+      {
+        id: "virtual/fast-tier",
+        object: "model",
+        created: 0,
+        owned_by: "virtual",
+      },
+      {
+        id: "group/blend",
+        object: "model",
+        created: 0,
+        owned_by: "virtual",
+      },
+    ]);
+    // Provider models still follow the virtual ones.
+    expect(body.data.map((model) => model.id)).toEqual([
+      "virtual/fast-tier",
+      "group/blend",
+      "openai/gpt-4",
+      "anthropic/gpt-4",
+    ]);
+  });
+
+  it("omits virtual models when none are configured", async () => {
+    const response = await handleModelsRequest({} as any);
+    const body = (await response.json()) as ModelsResponse;
+
+    expect(body.data.every((model) => model.owned_by !== "virtual")).toBe(true);
+  });
+
   it("should include response parsing in the provider timeout", async () => {
     Object.keys(BUILT_IN_PROVIDER_CONSTRUCTORS).forEach((key) => {
       delete BUILT_IN_PROVIDER_CONSTRUCTORS[key];

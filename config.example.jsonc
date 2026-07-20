@@ -80,11 +80,13 @@
   ],
 
   // --- Virtual models ---
-  // Maps a reserved "virtual/<name>" model name to an ordered list of
-  // candidates. A bare string is attempted once. Use an object to retry that
-  // candidate up to 5 additional times before advancing. Retryable outcomes
-  // are 401/403/429/5xx responses and network errors. At most 100 virtual
-  // models and 16 candidates each are accepted.
+  // Maps a model name to an ordered list of candidates. "virtual/<name>" is the
+  // recommended convention, but any key works; real providers always take
+  // precedence, so a key that collides with one is never reached. A bare string
+  // is attempted once. Use an object to retry that candidate up to 5 additional
+  // times before advancing. Retryable outcomes are 401/403/429/5xx responses and
+  // network errors. At most 100 virtual models and 16 candidates each are
+  // accepted.
   "VIRTUAL_MODELS": null,
   // "VIRTUAL_MODELS": {
   //   "virtual/fast-tier": [

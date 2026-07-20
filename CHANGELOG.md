@@ -23,15 +23,20 @@ update is explicitly approved.
   `API_KEY_COOLDOWN_SECONDS` setting defaults to 60 seconds and accepts `0` to
   disable the behavior.
 - Added operator-defined virtual models via the new `VIRTUAL_MODELS` setting. A
-  chat request with `"model": "virtual/<name>"` tries an ordered list of
+  chat request whose `model` matches a configured key tries an ordered list of
   `"<provider>/<model>"` candidates in sequence, moving to the next candidate
   only after a retryable failure (HTTP 401, 403, 429, any 5xx, or a network
   error) and returning the first non-retryable response as-is. Candidates may
   configure up to five additional attempts before failover and a bounded
-  response-header timeout in milliseconds. At most 100 virtual models are
-  accepted, each with 1 to 16 candidates; malformed configuration fails
-  authenticated requests with HTTP 503, matching
-  `CUSTOM_OPENAI_ENDPOINTS`. See `docs/design/features/virtual_models.md`.
+  response-header timeout in milliseconds. Keys are `"virtual/<name>"` by
+  convention but may be any string matching `[A-Za-z0-9._~/-]{1,128}`; real
+  providers and Custom OpenAI endpoints always take precedence, so a key that
+  collides with one is shadowed and never reached. Configured virtual models are
+  also advertised at the front of the `GET /v1/models` list with
+  `owned_by: "virtual"`. At most 100 virtual models are accepted, each with 1 to
+  16 candidates; malformed configuration fails authenticated requests with
+  HTTP 503, matching `CUSTOM_OPENAI_ENDPOINTS`. See
+  `docs/design/features/virtual_models.md`.
 - Added a short-lived per-datacenter cache for the aggregated `GET /v1/models`
   response, configurable via the new `MODELS_CACHE_TTL_SECONDS` setting
   (default 300 seconds, `0` disables). Cached and freshly aggregated responses

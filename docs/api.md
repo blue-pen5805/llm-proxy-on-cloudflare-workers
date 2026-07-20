@@ -62,8 +62,10 @@ upstream model, so model IDs containing `/` are supported. `model: "default"`
 uses `DEFAULT_MODEL`. Invalid JSON, a missing model, an unknown provider, or a
 missing default returns HTTP 400.
 
-`model: "virtual/<name>"` selects an operator-defined
-[virtual model](design/features/virtual_models.md) instead of a real provider:
+A `model` that does not name a real provider but matches a key in
+`VIRTUAL_MODELS` selects an operator-defined
+[virtual model](design/features/virtual_models.md) (`"virtual/<name>"` is the
+recommended convention, but any key works; real providers take precedence):
 candidates from `VIRTUAL_MODELS` are tried in order, and the first non-retryable
 response (or the last candidate's response) is returned as-is. A candidate can
 be a bare model string or an object with `model`, `retries`, and `timeout`;
@@ -89,7 +91,10 @@ omitted from `/v1/models`.
 ## Models
 
 `GET /v1/models` queries configured providers and prefixes each returned ID
-with its route name. Providers are queried five at a time and
+with its route name. When `VIRTUAL_MODELS` is configured, every virtual model is
+listed first — ahead of the provider models — with `owned_by: "virtual"`, so
+clients discover them at the front of the list. Providers are queried five at a
+time and
 each has a five-second timeout and 1 MiB response limit. At most 1,000 models
 per provider and 4 MiB of serialized model entries are retained. A bounded
 aggregate includes `X-Proxy-Models-Truncated: true` when it is truncated.

@@ -490,7 +490,7 @@
           "type": "object",
           "maxProperties": 100,
           "propertyNames": {
-            "pattern": "^virtual/[A-Za-z0-9._~-]{1,128}$"
+            "pattern": "^[A-Za-z0-9._~/-]{1,128}$"
           },
           "additionalProperties": {
             "type": "array",

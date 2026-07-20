@@ -173,7 +173,7 @@ it does not contact Cloudflare or expose Base URLs and credentials.
 | `DEFAULT_MODEL`            | string or null  | none    | Provider-qualified model used when a chat request specifies `"model": "default"`.                                                                   |
 | `API_KEY_COOLDOWN_SECONDS` | integer or null | `60`    | Seconds to avoid a multi-key credential slot after HTTP 401, 403, 404, 429, or 5xx. `0` disables cooldowns; values above `86400` are clamped.       |
 | `MODELS_CACHE_TTL_SECONDS` | integer or null | `300`   | TTL of the aggregated `/v1/models` response cache. `0` disables caching; values above `86400` are clamped. Invalid values fall back to the default. |
-| `VIRTUAL_MODELS`           | object or null  | none    | Operator-defined `"virtual/<name>"` model names, each mapped to an ordered list of `"<provider>/<model>"` candidates. See below.                    |
+| `VIRTUAL_MODELS`           | object or null  | none    | Operator-defined model names (`"virtual/<name>"` by convention, any key allowed), each mapped to an ordered list of `"<provider>/<model>"` candidates. Real providers take precedence. See below. |
 
 Each Worker isolate rotates through multiple keys in order from a random
 starting phase. Isolates are not coordinated, so aggregate usage is near-uniform
@@ -236,9 +236,11 @@ custom endpoints are configured.
 
 ## Virtual models
 
-`VIRTUAL_MODELS` maps a reserved `"virtual/<name>"` model name to an ordered
-candidate array. A bare `"<provider>/<model>"` string is attempted once. To
-configure retries or a response-header timeout, use an object:
+`VIRTUAL_MODELS` maps a virtual model name to an ordered candidate array.
+`"virtual/<name>"` is the recommended convention, but any key works — the name
+is matched verbatim against the requested `model`. A bare `"<provider>/<model>"`
+string is attempted once. To configure retries or a response-header timeout, use
+an object:
 
 ```jsonc
 {
@@ -283,8 +285,17 @@ so the client sees that upstream's own `model` field rather than a proxy-invente
 one.
 
 At most 100 virtual models are accepted, each with 1 to 16 candidates. A name
-must match `virtual/[A-Za-z0-9._~-]+`, and a candidate cannot itself name the
-`virtual` namespace, so virtual models cannot chain into other virtual models.
+must match `[A-Za-z0-9._~/-]{1,128}` — `"virtual/<name>"` is only a convention,
+not a requirement. Real providers and Custom OpenAI endpoints always take
+precedence: a request is resolved as a virtual model only when its `model` does
+not name a real provider, so a key that collides with one (for example
+`"openai/gpt-4o-mini"`) is simply shadowed and never reached. A candidate cannot
+itself name the `virtual` namespace, so virtual models cannot chain into other
+virtual models.
+Configured virtual models are advertised by `GET /v1/models`: each one is listed
+at the front of the aggregated model list (ahead of the provider-discovered
+models) with `owned_by: "virtual"`.
+
 Malformed configuration fails authenticated requests with HTTP 503, the same as
 `CUSTOM_OPENAI_ENDPOINTS`. Missing or explicit `null` configuration means no
 virtual models exist; requesting an undefined name returns the same HTTP 400

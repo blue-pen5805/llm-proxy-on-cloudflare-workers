@@ -11,18 +11,22 @@ export const MAX_API_KEY_COOLDOWN_SECONDS = 86400;
 const MAX_CUSTOM_ENDPOINT_KEYS = 32;
 const MAX_CUSTOM_ENDPOINT_MODELS = 1000;
 
-// The reserved pseudo-provider namespace for operator-defined virtual models.
-// A request model of "virtual/<name>" never resolves to a real provider or
-// Custom OpenAI endpoint; it looks up an ordered list of candidate models
-// instead. Reserving one flat, non-recursive namespace keeps the resolution
-// bounded and observable rather than allowing virtual models that reference
-// other virtual models.
+// The recommended namespace for operator-defined virtual models. "virtual/" is
+// only a convention: a virtual model may be keyed by any safe identifier. What
+// makes a key resolve as a virtual model is that it does *not* name a real
+// provider or Custom OpenAI endpoint — those always take precedence — so a key
+// that collides with a real provider is simply shadowed by it. Candidates may
+// not name the reserved "virtual/" namespace, keeping resolution bounded and
+// observable rather than allowing virtual models that reference one another.
 export const VIRTUAL_MODEL_PROVIDER_NAME = "virtual";
 export const MAX_VIRTUAL_MODELS = 100;
 export const MAX_VIRTUAL_MODEL_CANDIDATES = 16;
 export const MAX_VIRTUAL_MODEL_CANDIDATE_RETRIES = 5;
 export const MAX_VIRTUAL_MODEL_CANDIDATE_TIMEOUT = 300_000;
-const VIRTUAL_MODEL_NAME_PATTERN = /^virtual\/[A-Za-z0-9._~-]{1,128}$/;
+// A virtual model key is matched verbatim against the requested model, so any
+// non-empty string of safe URL/model characters is allowed; "virtual/<name>"
+// is the recommended form but not required.
+const VIRTUAL_MODEL_NAME_PATTERN = /^[A-Za-z0-9._~/-]{1,128}$/;
 
 function isStringArray(value: unknown): value is string[] {
   return (
@@ -405,8 +409,9 @@ export class Config {
 
   /**
    * Operator-defined virtual models, keyed by the full request model name
-   * (e.g. "virtual/fast-tier") and valued by an ordered list of
-   * "<provider>/<model>" candidates to try in sequence. `undefined` means no
+   * (e.g. "virtual/fast-tier", but any safe key works) and valued by an ordered
+   * list of "<provider>/<model>" candidates to try in sequence. Real providers
+   * take precedence over these keys at request time. `undefined` means no
    * virtual models are configured; a malformed value fails closed with
    * ConfigurationError rather than silently disabling the feature.
    */

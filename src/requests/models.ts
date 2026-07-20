@@ -10,7 +10,7 @@ import {
   selectApiKeyIndex,
 } from "../utils/api_key_selection";
 import { stripProxyAuthorizationHeaders } from "../utils/authorization";
-import { Config } from "../utils/config";
+import { Config, VIRTUAL_MODEL_PROVIDER_NAME } from "../utils/config";
 import { Environments } from "../utils/environments";
 import {
   fetchWithLogging,
@@ -215,6 +215,25 @@ export async function handleModelsRequest(
   let aggregatedBytes = 0;
   let truncated = false;
   let providerFailed = false;
+
+  // Operator-defined virtual models are advertised at the front of the list so
+  // clients discover them ahead of provider models. They are bounded (at most
+  // MAX_VIRTUAL_MODELS) and cheap, so they are always included; only their bytes
+  // are counted against the aggregate budget. A malformed VIRTUAL_MODELS value
+  // fails closed here exactly as it does on a chat request.
+  const virtualModels = Config.virtualModels();
+  if (virtualModels) {
+    for (const virtualModelId of Object.keys(virtualModels)) {
+      const serializedModel = JSON.stringify({
+        id: virtualModelId,
+        object: "model",
+        created: 0,
+        owned_by: VIRTUAL_MODEL_PROVIDER_NAME,
+      });
+      serializedModels.push(serializedModel);
+      aggregatedBytes += utf8ByteLength(serializedModel);
+    }
+  }
 
   for (
     let batchStart = 0;
