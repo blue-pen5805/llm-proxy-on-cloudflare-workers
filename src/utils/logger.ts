@@ -52,6 +52,20 @@ const LOG_MESSAGE_FIELDS: Readonly<Record<string, readonly string[]>> = {
     "via_ai_gateway",
     "step",
   ],
+  "virtual_model.selected": [
+    "virtual_model",
+    "candidate",
+    "attempt",
+    "status",
+    "timeout_ms",
+  ],
+  "virtual_model.retry": [
+    "virtual_model",
+    "candidate",
+    "attempt",
+    "status",
+    "timeout_ms",
+  ],
 };
 const requestLogContext = new AsyncLocalStorage<RequestLogContext>();
 const scopedLogFields = new AsyncLocalStorage<LogFields>();

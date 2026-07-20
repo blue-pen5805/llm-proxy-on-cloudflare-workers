@@ -66,6 +66,7 @@ forwarded.
 - [Provider abstraction](features/provider_abstraction.md)
 - [Custom OpenAI-compatible endpoints](features/custom-openai-endpoints.md)
 - [Key rotation](features/key_rotation.md)
+- [Virtual models](features/virtual_models.md)
 
 ### Cloudflare integration and diagnostics
 

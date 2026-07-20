@@ -396,4 +396,136 @@ describe("Config", () => {
       expect(() => Config.customOpenAIEndpoints()).toThrow(ConfigurationError);
     });
   });
+
+  describe("virtualModels", () => {
+    it("parses JSON strings", () => {
+      vi.mocked(Environments.get).mockReturnValue(
+        '{"virtual/fast-tier":["groq/llama-3.3-70b","openai/gpt-4o-mini"]}',
+      );
+      expect(Config.virtualModels()).toEqual({
+        "virtual/fast-tier": [
+          { model: "groq/llama-3.3-70b", retries: 0 },
+          { model: "openai/gpt-4o-mini", retries: 0 },
+        ],
+      });
+      expect(Environments.get).toHaveBeenCalledWith("VIRTUAL_MODELS", false);
+    });
+
+    it("normalizes object candidates and optional settings", () => {
+      const routes = {
+        "virtual/fast-tier": [
+          {
+            model: "groq/llama-3.3-70b",
+            retries: 2,
+            timeout: 5000,
+          },
+          { model: "openai/gpt-4o-mini" },
+        ],
+      };
+      vi.mocked(Environments.get).mockReturnValue(routes as never);
+      expect(Config.virtualModels()).toEqual({
+        "virtual/fast-tier": [
+          {
+            model: "groq/llama-3.3-70b",
+            retries: 2,
+            timeout: 5000,
+          },
+          { model: "openai/gpt-4o-mini", retries: 0 },
+        ],
+      });
+    });
+
+    it("memoizes validated routes while the raw value is unchanged", () => {
+      vi.mocked(Environments.get).mockReturnValue(
+        '{"virtual/memo":["openai/gpt-4o-mini"]}',
+      );
+      const first = Config.virtualModels();
+      expect(first).toEqual({
+        "virtual/memo": [{ model: "openai/gpt-4o-mini", retries: 0 }],
+      });
+      expect(Config.virtualModels()).toBe(first);
+    });
+
+    it.each([undefined, null])(
+      "treats absent virtual model configuration %s as unconfigured",
+      (value) => {
+        vi.mocked(Environments.get).mockReturnValue(value as never);
+        expect(Config.virtualModels()).toBeUndefined();
+      },
+    );
+
+    it.each([
+      ["not-json"],
+      [42],
+      [["virtual/fast-tier"]],
+      [{ "not-virtual/fast-tier": ["openai/gpt-4o-mini"] }],
+      [{ "virtual/": ["openai/gpt-4o-mini"] }],
+      [{ "virtual/fast-tier": [] }],
+      [{ "virtual/fast-tier": "openai/gpt-4o-mini" }],
+      [{ "virtual/fast-tier": ["openai/gpt-4o-mini", 42] }],
+      [{ "virtual/fast-tier": ["not-a-provider-pair"] }],
+      [{ "virtual/fast-tier": ["/gpt-4o-mini"] }],
+      [{ "virtual/fast-tier": ["openai/"] }],
+      [{ "virtual/fast-tier": ["virtual/other-route"] }],
+      [{ "virtual/fast-tier": [{}] }],
+      [{ "virtual/fast-tier": [{ model: "openai/gpt", unknown: true }] }],
+      [{ "virtual/fast-tier": [{ model: "virtual/other-route" }] }],
+      [{ "virtual/fast-tier": [{ model: "openai/gpt", retries: -1 }] }],
+      [{ "virtual/fast-tier": [{ model: "openai/gpt", retries: 1.5 }] }],
+      [{ "virtual/fast-tier": [{ model: "openai/gpt", retries: 6 }] }],
+      [{ "virtual/fast-tier": [{ model: "openai/gpt", timeout: 0 }] }],
+      [{ "virtual/fast-tier": [{ model: "openai/gpt", timeout: 1.5 }] }],
+      [{ "virtual/fast-tier": [{ model: "openai/gpt", timeout: 300_001 }] }],
+      [{ "virtual/fast-tier": [{ model: "openai/gpt", timeout: "5000" }] }],
+      [
+        {
+          "virtual/fast-tier": Array.from(
+            { length: 17 },
+            (_, index) => `openai/model-${index}`,
+          ),
+        },
+      ],
+      [
+        Object.fromEntries(
+          Array.from({ length: 101 }, (_, index) => [
+            `virtual/route-${index}`,
+            ["openai/gpt-4o-mini"],
+          ]),
+        ),
+      ],
+    ])("rejects unsafe virtual model configuration %j", (value) => {
+      vi.mocked(Environments.get).mockReturnValue(value as never);
+      expect(() => Config.virtualModels()).toThrow(ConfigurationError);
+      expect(() => Config.virtualModels()).toThrow(
+        "Invalid configuration for VIRTUAL_MODELS.",
+      );
+    });
+
+    it("accepts the maximum number of routes and candidates", () => {
+      vi.mocked(Environments.get).mockReturnValue(
+        Object.fromEntries(
+          Array.from({ length: 100 }, (_, index) => [
+            `virtual/route-${index}`,
+            Array.from({ length: 16 }, (_, i) =>
+              i === 0
+                ? {
+                    model: `openai/model-${i}`,
+                    retries: 5,
+                    timeout: 300_000,
+                  }
+                : `openai/model-${i}`,
+            ),
+          ]),
+        ) as never,
+      );
+      const virtualModels = Config.virtualModels()!;
+      expect(Object.keys(virtualModels)).toHaveLength(100);
+      expect(virtualModels["virtual/route-0"]).toHaveLength(16);
+      expect(virtualModels["virtual/route-0"]?.[0]).toEqual({
+        model: "openai/model-0",
+        retries: 5,
+        timeout: 300_000,
+      });
+    });
+  });
 });

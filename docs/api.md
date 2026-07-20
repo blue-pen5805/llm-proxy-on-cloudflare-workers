@@ -62,6 +62,17 @@ upstream model, so model IDs containing `/` are supported. `model: "default"`
 uses `DEFAULT_MODEL`. Invalid JSON, a missing model, an unknown provider, or a
 missing default returns HTTP 400.
 
+`model: "virtual/<name>"` selects an operator-defined
+[virtual model](design/features/virtual_models.md) instead of a real provider:
+candidates from `VIRTUAL_MODELS` are tried in order, and the first non-retryable
+response (or the last candidate's response) is returned as-is. A candidate can
+be a bare model string or an object with `model`, `retries`, and `timeout`;
+`retries` adds up to five attempts before advancing, while `timeout` limits the
+wait for response headers in milliseconds. Each attempt applies the normal
+random, round-robin, or explicit key-selection policy. An undefined virtual
+model name returns the same HTTP 400 `"Invalid provider."` as an unknown
+provider.
+
 The adapters retain only parameters supported by each upstream API. Translation
 is therefore OpenAI-compatible at the endpoint level, not a guarantee that every
 OpenAI field or provider feature has identical semantics.

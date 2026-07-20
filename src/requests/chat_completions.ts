@@ -11,7 +11,7 @@ import {
   selectApiKeyIndex,
 } from "../utils/api_key_selection";
 import { stripProxyAuthorizationHeaders } from "../utils/authorization";
-import { Config } from "../utils/config";
+import { Config, VIRTUAL_MODEL_PROVIDER_NAME } from "../utils/config";
 import {
   parseJsonOrReturnText,
   readRequestText,
@@ -23,12 +23,25 @@ import {
   createProviderConfigurationErrorResponse,
   resolveProvider,
 } from "./provider_request";
+import {
+  ChatCompletionAttemptResult,
+  fetchWithCandidateTimeout,
+  isRetryableCandidateStatus,
+  runVirtualModelChain,
+} from "./virtual_model";
+
+function invalidRequestResponse(message: string, status = 400): Response {
+  return new Response(JSON.stringify({ error: message }), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
 
 export async function handleChatCompletionsRequest(
   context: MiddlewareContext,
   aiGateway: CloudflareAIGateway | undefined = undefined,
 ) {
-  const { request, apiKeyIndex: contextApiKeyIndex } = context;
+  const { request } = context;
   // Validate Request Data Structure
   const parsedRequestBody = parseJsonOrReturnText(
     await readRequestText(request),
@@ -38,15 +51,9 @@ export async function handleChatCompletionsRequest(
     parsedRequestBody === null ||
     typeof (parsedRequestBody as Record<string, unknown>).model !== "string"
   ) {
-    return new Response(
-      JSON.stringify({
-        error: "Invalid request.",
-      }),
-      { status: 400, headers: { "Content-Type": "application/json" } },
-    );
+    return invalidRequestResponse("Invalid request.");
   }
 
-  // Split model into provider and model name
   const chatRequestBody = parsedRequestBody as Record<string, unknown> & {
     model: string;
   };
@@ -55,23 +62,62 @@ export async function handleChatCompletionsRequest(
       ? Config.defaultModel()
       : chatRequestBody.model;
   if (!requestedModel) {
-    return new Response(JSON.stringify({ error: "Invalid request." }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
+    return invalidRequestResponse("Invalid request.");
   }
+
+  // A model of "virtual/<name>" never names a real provider: it looks up an
+  // operator-configured ordered candidate list and tries each in turn.
+  if (requestedModel.startsWith(`${VIRTUAL_MODEL_PROVIDER_NAME}/`)) {
+    const candidates = Config.virtualModels()?.[requestedModel];
+    if (!candidates) {
+      return invalidRequestResponse("Invalid provider.");
+    }
+    return await runVirtualModelChain(
+      requestedModel,
+      candidates,
+      (candidateModel, timeout) =>
+        attemptChatCompletion(
+          context,
+          aiGateway,
+          chatRequestBody,
+          candidateModel,
+          timeout,
+        ),
+    );
+  }
+
+  const { response } = await attemptChatCompletion(
+    context,
+    aiGateway,
+    chatRequestBody,
+    requestedModel,
+  );
+  return response;
+}
+
+async function attemptChatCompletion(
+  context: MiddlewareContext,
+  aiGateway: CloudflareAIGateway | undefined,
+  chatRequestBody: Record<string, unknown> & { model: string },
+  requestedModel: string,
+  timeout?: number,
+): Promise<ChatCompletionAttemptResult> {
+  const { request, apiKeyIndex: contextApiKeyIndex } = context;
+  const fetchWithTimeout = (
+    fetchAttempt: (signal: AbortSignal) => Promise<Response>,
+  ) => fetchWithCandidateTimeout(request.signal, timeout, fetchAttempt);
+
+  // Split model into provider and model name
   const [providerName, ...modelParts] = requestedModel.split("/");
   const model = modelParts.join("/");
 
   // Validate provider name
   const providerInstance = resolveProvider(context, providerName);
   if (!providerInstance) {
-    return new Response(
-      JSON.stringify({
-        error: "Invalid provider.",
-      }),
-      { status: 400, headers: { "Content-Type": "application/json" } },
-    );
+    return {
+      response: invalidRequestResponse("Invalid provider."),
+      retryable: true,
+    };
   }
 
   const providerError = createProviderConfigurationErrorResponse(
@@ -80,7 +126,7 @@ export async function handleChatCompletionsRequest(
     aiGateway,
   );
   if (providerError) {
-    return providerError;
+    return { response: providerError, retryable: true };
   }
   const transformResponse = async (
     responsePromise: Promise<Response>,
@@ -171,15 +217,18 @@ export async function handleChatCompletionsRequest(
           gatewayApiKeys[candidateIndex] ?? configuredApiKeys[candidateIndex],
       ),
     });
-    return transformResponse(
-      fetchCompatibilityFallback(
-        gatewayRequests,
-        request.signal,
-        /* istanbul ignore next -- Gateway requests and credential indexes are built one-to-one */
-        (attemptIndex) =>
-          recordSelection(gatewayApiKeyIndexes[attemptIndex] ?? 0),
+    const response = await transformResponse(
+      fetchWithTimeout((signal) =>
+        fetchCompatibilityFallback(
+          gatewayRequests,
+          signal,
+          /* istanbul ignore next -- Gateway requests and credential indexes are built one-to-one */
+          (attemptIndex) =>
+            recordSelection(gatewayApiKeyIndexes[attemptIndex] ?? 0),
+        ),
       ),
     );
+    return { response, retryable: isRetryableCandidateStatus(response.status) };
   }
 
   const [requestInfo, requestInit] =
@@ -216,13 +265,19 @@ export async function handleChatCompletionsRequest(
         body: init.body,
         headers: init.headers ?? {},
       });
-      return transformResponse(
+      const response = await transformResponse(
         RequestLogger.withFields(
           { ...keyLogFields, via_ai_gateway: true },
           () =>
-            fetchCompatibilityFallback([[url, gatewayInit]], request.signal),
+            fetchWithTimeout((signal) =>
+              fetchCompatibilityFallback([[url, gatewayInit]], signal),
+            ),
         ),
       );
+      return {
+        response,
+        retryable: isRetryableCandidateStatus(response.status),
+      };
     }
   }
 
@@ -252,24 +307,30 @@ export async function handleChatCompletionsRequest(
       // Provider request builders always normalize headers before returning.
       headers: requestInit.headers!,
     });
-    return transformResponse(
+    const response = await transformResponse(
       RequestLogger.withFields({ ...keyLogFields, via_ai_gateway: true }, () =>
-        fetchCompatibilityFallback([[url, gatewayInit]], request.signal),
+        fetchWithTimeout((signal) =>
+          fetchCompatibilityFallback([[url, gatewayInit]], signal),
+        ),
       ),
     );
+    return { response, retryable: isRetryableCandidateStatus(response.status) };
   }
 
   // Request to the provider endpoint
-  return transformResponse(
+  const response = await transformResponse(
     RequestLogger.withFields(keyLogFields, () =>
-      providerInstance.fetch(
-        requestInfo,
-        {
-          ...requestInit,
-          signal: request.signal,
-        },
-        apiKeyIndex,
+      fetchWithTimeout((signal) =>
+        providerInstance.fetch(
+          requestInfo,
+          {
+            ...requestInit,
+            signal,
+          },
+          apiKeyIndex,
+        ),
       ),
     ),
   );
+  return { response, retryable: isRetryableCandidateStatus(response.status) };
 }

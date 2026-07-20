@@ -79,6 +79,22 @@
     // }
   ],
 
+  // --- Virtual models ---
+  // Maps a reserved "virtual/<name>" model name to an ordered list of
+  // candidates. A bare string is attempted once. Use an object to retry that
+  // candidate up to 5 additional times before advancing. Retryable outcomes
+  // are 401/403/429/5xx responses and network errors. At most 100 virtual
+  // models and 16 candidates each are accepted.
+  "VIRTUAL_MODELS": null,
+  // "VIRTUAL_MODELS": {
+  //   "virtual/fast-tier": [
+  //     // timeout is milliseconds and covers waiting for response headers.
+  //     { "model": "groq/llama-3.3-70b-versatile", "retries": 2, "timeout": 5000 },
+  //     "cerebras/llama-3.3-70b",
+  //     "openai/gpt-4o-mini"
+  //   ]
+  // },
+
   // --- Configurations ---
   // Development-only auth bypass. This is never deployed by the secrets script,
   // so it only takes effect locally via `npm run dev`; deployed Workers always

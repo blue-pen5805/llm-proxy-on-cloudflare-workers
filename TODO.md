@@ -5,21 +5,6 @@ are not commitments and have no implied order. Before implementation, each item
 requires a design document that resolves the open questions below and explains
 how the proposal follows the [project principles](docs/project-principles.md).
 
-## Cross-provider failover
-
-Allow an operator to configure an ordered or policy-driven set of provider/model
-targets for a logical model.
-
-Design requirements:
-
-- make fallback explicit in configuration; never silently substitute a provider
-  with materially different semantics;
-- define eligible failure classes, retry budgets, and behavior after response
-  headers or stream data have been emitted;
-- account for non-idempotent requests and duplicated upstream work;
-- define request and response compatibility requirements between candidates;
-- expose each attempt and final selection through structured observability.
-
 ## Health-aware credential traffic management
 
 Extend key selection beyond random and coordinated round-robin so it can react

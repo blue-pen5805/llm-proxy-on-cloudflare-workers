@@ -9,6 +9,19 @@ export const MAX_MODELS_CACHE_TTL_SECONDS = 86400;
 const MAX_CUSTOM_ENDPOINT_KEYS = 32;
 const MAX_CUSTOM_ENDPOINT_MODELS = 1000;
 
+// The reserved pseudo-provider namespace for operator-defined virtual models.
+// A request model of "virtual/<name>" never resolves to a real provider or
+// Custom OpenAI endpoint; it looks up an ordered list of candidate models
+// instead. Reserving one flat, non-recursive namespace keeps the resolution
+// bounded and observable rather than allowing virtual models that reference
+// other virtual models.
+export const VIRTUAL_MODEL_PROVIDER_NAME = "virtual";
+export const MAX_VIRTUAL_MODELS = 100;
+export const MAX_VIRTUAL_MODEL_CANDIDATES = 16;
+export const MAX_VIRTUAL_MODEL_CANDIDATE_RETRIES = 5;
+export const MAX_VIRTUAL_MODEL_CANDIDATE_TIMEOUT = 300_000;
+const VIRTUAL_MODEL_NAME_PATTERN = /^virtual\/[A-Za-z0-9._~-]{1,128}$/;
+
 function isStringArray(value: unknown): value is string[] {
   return (
     Array.isArray(value) && value.every((item) => typeof item === "string")
@@ -26,6 +39,125 @@ interface CustomOpenAIEndpoint {
 
 function isOptionalStringArray(value: unknown): value is string[] | undefined {
   return value === undefined || isStringArray(value);
+}
+
+/**
+ * One resolved candidate of a virtual model. `retries` is the number of extra
+ * attempts against this same candidate (after the first) before moving on to
+ * the next candidate; `0` means a single attempt. Bare-string candidates
+ * normalize to `retries: 0`.
+ */
+export interface VirtualModelCandidate {
+  model: string;
+  retries: number;
+  /** Maximum time in milliseconds to wait for response headers. */
+  timeout?: number;
+}
+
+export type VirtualModels = Readonly<
+  Record<string, readonly VirtualModelCandidate[]>
+>;
+
+/** A candidate model must be a non-empty "<provider>/<model>" pair that does
+ * not itself name the virtual namespace, so a virtual model can never chain
+ * into another virtual model. */
+function isValidCandidateModel(model: unknown): model is string {
+  if (typeof model !== "string") return false;
+  const separatorIndex = model.indexOf("/");
+  if (separatorIndex <= 0 || separatorIndex === model.length - 1) {
+    return false;
+  }
+  return model.slice(0, separatorIndex) !== VIRTUAL_MODEL_PROVIDER_NAME;
+}
+
+/**
+ * Validate and normalize one candidate entry. A candidate is either a bare
+ * "<provider>/<model>" string or an object `{ model, retries?, timeout? }`.
+ * `timeout` is measured in milliseconds. Returns the normalized candidate, or
+ * `undefined` when the entry is malformed.
+ */
+function parseVirtualModelCandidate(
+  value: unknown,
+): VirtualModelCandidate | undefined {
+  if (typeof value === "string") {
+    return isValidCandidateModel(value)
+      ? { model: value, retries: 0 }
+      : undefined;
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const candidate = value as Record<string, unknown>;
+  const allowedProperties = new Set(["model", "retries", "timeout"]);
+  if (
+    Object.keys(candidate).some((key) => !allowedProperties.has(key)) ||
+    !isValidCandidateModel(candidate.model)
+  ) {
+    return undefined;
+  }
+  const retries = candidate.retries ?? 0;
+  if (
+    typeof retries !== "number" ||
+    !Number.isInteger(retries) ||
+    retries < 0 ||
+    retries > MAX_VIRTUAL_MODEL_CANDIDATE_RETRIES
+  ) {
+    return undefined;
+  }
+  const timeout = candidate.timeout;
+  if (
+    timeout !== undefined &&
+    (typeof timeout !== "number" ||
+      !Number.isInteger(timeout) ||
+      timeout < 1 ||
+      timeout > MAX_VIRTUAL_MODEL_CANDIDATE_TIMEOUT)
+  ) {
+    return undefined;
+  }
+  return {
+    model: candidate.model,
+    retries,
+    ...(timeout === undefined ? {} : { timeout }),
+  };
+}
+
+/**
+ * Validate and normalize the whole map. Returns the normalized virtual models,
+ * or `undefined` when any part is malformed so the caller can fail closed.
+ */
+function parseVirtualModels(value: unknown): VirtualModels | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const rawMap = value as Record<string, unknown>;
+  const virtualModelNames = Object.keys(rawMap);
+  if (virtualModelNames.length > MAX_VIRTUAL_MODELS) {
+    return undefined;
+  }
+  const normalized: Record<string, VirtualModelCandidate[]> = {};
+  for (const virtualModelName of virtualModelNames) {
+    if (!VIRTUAL_MODEL_NAME_PATTERN.test(virtualModelName)) {
+      return undefined;
+    }
+    const rawCandidates = rawMap[virtualModelName];
+    if (
+      !Array.isArray(rawCandidates) ||
+      rawCandidates.length === 0 ||
+      rawCandidates.length > MAX_VIRTUAL_MODEL_CANDIDATES
+    ) {
+      return undefined;
+    }
+    const candidates: VirtualModelCandidate[] = [];
+    for (const rawCandidate of rawCandidates) {
+      const candidate = parseVirtualModelCandidate(rawCandidate);
+      if (!candidate) {
+        return undefined;
+      }
+      candidates.push(candidate);
+    }
+    normalized[virtualModelName] = candidates;
+  }
+  return normalized;
 }
 
 function isSafeCustomEndpoint(value: unknown): value is CustomOpenAIEndpoint {
@@ -100,6 +232,8 @@ let cachedProxyApiKeysRaw: string | undefined;
 let cachedProxyApiKeys: string[] | undefined;
 let cachedCustomEndpointsRaw: unknown;
 let cachedCustomEndpoints: CustomOpenAIEndpoint[] | undefined;
+let cachedVirtualModelsRaw: unknown;
+let cachedVirtualModels: VirtualModels | undefined;
 
 function parseProxyApiKeys(rawValue: string): string[] | undefined {
   const trimmedValue = rawValue.trim();
@@ -252,5 +386,43 @@ export class Config {
     cachedCustomEndpointsRaw = endpoints;
     cachedCustomEndpoints = validatedEndpoints;
     return validatedEndpoints;
+  }
+
+  /**
+   * Operator-defined virtual models, keyed by the full request model name
+   * (e.g. "virtual/fast-tier") and valued by an ordered list of
+   * "<provider>/<model>" candidates to try in sequence. `undefined` means no
+   * virtual models are configured; a malformed value fails closed with
+   * ConfigurationError rather than silently disabling the feature.
+   */
+  static virtualModels(): VirtualModels | undefined {
+    const rawValue = Environments.get("VIRTUAL_MODELS", false);
+
+    if (rawValue === undefined || rawValue === null) {
+      return undefined;
+    }
+
+    if (rawValue === cachedVirtualModelsRaw) {
+      return cachedVirtualModels;
+    }
+
+    let parsedValue: unknown = rawValue;
+    if (typeof rawValue === "string") {
+      try {
+        parsedValue = JSON.parse(rawValue) as unknown;
+      } catch {
+        throw new ConfigurationError("VIRTUAL_MODELS");
+      }
+    }
+
+    const virtualModels = parseVirtualModels(parsedValue);
+    if (!virtualModels) {
+      throw new ConfigurationError("VIRTUAL_MODELS");
+    }
+
+    // Only a validated configuration is memoized; invalid ones keep throwing.
+    cachedVirtualModelsRaw = rawValue;
+    cachedVirtualModels = virtualModels;
+    return cachedVirtualModels;
   }
 }

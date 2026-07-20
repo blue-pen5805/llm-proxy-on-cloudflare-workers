@@ -62,6 +62,8 @@ describe("handleChatCompletionsRequest", () => {
     vi.mocked(Config.defaultModel).mockReturnValue("openai/gpt-4");
     vi.mocked(Secrets.getAll).mockReturnValue(["test-key"]);
     vi.mocked(Secrets.getNext).mockResolvedValue(0);
+    mockProviderClass.getApiKeys.mockReturnValue(["test-key"]);
+    mockProviderClass.getNextApiKeyIndex.mockResolvedValue(0);
 
     vi.mocked(getProviderByName).mockImplementation((name) => {
       const ProviderClass = BUILT_IN_PROVIDER_CONSTRUCTORS[name];
@@ -588,6 +590,188 @@ describe("handleChatCompletionsRequest", () => {
       preparedData: { ...requestBody, model: "gpt-4/turbo" },
       headers: expect.any(Headers),
       apiKeyIndex: 0,
+    });
+  });
+
+  describe("virtual models", () => {
+    function buildRequest(model: string) {
+      return new Request("https://example.com/chat/completions", {
+        method: "POST",
+        body: JSON.stringify({
+          model,
+          messages: [{ role: "user", content: "Hello" }],
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    it("returns the first candidate's response when it succeeds", async () => {
+      vi.mocked(Config.virtualModels).mockReturnValue({
+        "virtual/fast-tier": [
+          { model: "openai/gpt-4", retries: 0 },
+          { model: "openai/gpt-3.5", retries: 0 },
+        ],
+      });
+      mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
+        "/chat/completions",
+        { method: "POST", body: "{}" },
+      ]);
+      mockProviderClass.fetch.mockResolvedValue(
+        new Response("ok", { status: 200 }),
+      );
+
+      const response = await handleChatCompletionsRequest({
+        request: buildRequest("virtual/fast-tier"),
+      } as any);
+
+      expect(await response.text()).toBe("ok");
+      expect(mockProviderClass.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("applies a candidate timeout signal to the upstream fetch", async () => {
+      vi.mocked(Config.virtualModels).mockReturnValue({
+        "virtual/fast-tier": [
+          { model: "openai/gpt-4", retries: 0, timeout: 5000 },
+        ],
+      });
+      mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
+        "/chat/completions",
+        { method: "POST", body: "{}" },
+      ]);
+      mockProviderClass.fetch.mockResolvedValue(new Response("ok"));
+      const request = buildRequest("virtual/fast-tier");
+
+      const response = await handleChatCompletionsRequest({ request } as any);
+
+      const fetchSignal = mockProviderClass.fetch.mock.calls[0]?.[1]?.signal;
+      expect(await response.text()).toBe("ok");
+      expect(fetchSignal).toBeInstanceOf(AbortSignal);
+      expect(fetchSignal).not.toBe(request.signal);
+      expect(fetchSignal?.aborted).toBe(false);
+    });
+
+    it("fails over to the next candidate on a retryable status", async () => {
+      vi.mocked(Config.virtualModels).mockReturnValue({
+        "virtual/fast-tier": [
+          { model: "openai/gpt-4", retries: 0 },
+          { model: "openai/gpt-3.5", retries: 0 },
+        ],
+      });
+      mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
+        "/chat/completions",
+        { method: "POST", body: "{}" },
+      ]);
+      mockProviderClass.fetch
+        .mockResolvedValueOnce(new Response("rate limited", { status: 429 }))
+        .mockResolvedValueOnce(new Response("ok", { status: 200 }));
+
+      const response = await handleChatCompletionsRequest({
+        request: buildRequest("virtual/fast-tier"),
+      } as any);
+
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe("ok");
+      expect(mockProviderClass.fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it("selects a provider key again for each configured retry", async () => {
+      vi.mocked(Config.virtualModels).mockReturnValue({
+        "virtual/fast-tier": [{ model: "openai/gpt-4", retries: 1 }],
+      });
+      mockProviderClass.getApiKeys.mockReturnValue(["key-0", "key-1"]);
+      mockProviderClass.getNextApiKeyIndex
+        .mockResolvedValueOnce(0)
+        .mockResolvedValueOnce(1);
+      mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
+        "/chat/completions",
+        { method: "POST", body: "{}" },
+      ]);
+      mockProviderClass.fetch
+        .mockResolvedValueOnce(new Response("rate limited", { status: 429 }))
+        .mockResolvedValueOnce(new Response("ok", { status: 200 }));
+
+      const response = await handleChatCompletionsRequest({
+        request: buildRequest("virtual/fast-tier"),
+      } as any);
+
+      expect(await response.text()).toBe("ok");
+      expect(mockProviderClass.getNextApiKeyIndex).toHaveBeenCalledTimes(2);
+      expect(
+        mockProviderClass.buildChatCompletionsRequest.mock.calls.map(
+          ([options]) => options.apiKeyIndex,
+        ),
+      ).toEqual([0, 1]);
+    });
+
+    it("does not fail over on a non-retryable client error", async () => {
+      vi.mocked(Config.virtualModels).mockReturnValue({
+        "virtual/fast-tier": [
+          { model: "openai/gpt-4", retries: 0 },
+          { model: "openai/gpt-3.5", retries: 0 },
+        ],
+      });
+      mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
+        "/chat/completions",
+        { method: "POST", body: "{}" },
+      ]);
+      mockProviderClass.fetch.mockResolvedValue(
+        new Response("bad request", { status: 400 }),
+      );
+
+      const response = await handleChatCompletionsRequest({
+        request: buildRequest("virtual/fast-tier"),
+      } as any);
+
+      expect(response.status).toBe(400);
+      expect(mockProviderClass.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns the last candidate's response once every candidate fails", async () => {
+      vi.mocked(Config.virtualModels).mockReturnValue({
+        "virtual/fast-tier": [
+          { model: "openai/gpt-4", retries: 0 },
+          { model: "openai/gpt-3.5", retries: 0 },
+        ],
+      });
+      mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
+        "/chat/completions",
+        { method: "POST", body: "{}" },
+      ]);
+      mockProviderClass.fetch.mockResolvedValue(
+        new Response("unavailable", { status: 503 }),
+      );
+
+      const response = await handleChatCompletionsRequest({
+        request: buildRequest("virtual/fast-tier"),
+      } as any);
+
+      expect(response.status).toBe(503);
+      expect(mockProviderClass.fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it("returns 400 for an unknown virtual model", async () => {
+      vi.mocked(Config.virtualModels).mockReturnValue({
+        "virtual/fast-tier": [{ model: "openai/gpt-4", retries: 0 }],
+      });
+
+      const response = await handleChatCompletionsRequest({
+        request: buildRequest("virtual/unknown-route"),
+      } as any);
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: "Invalid provider." });
+      expect(mockProviderClass.fetch).not.toHaveBeenCalled();
+    });
+
+    it("returns 400 when no virtual models are configured", async () => {
+      vi.mocked(Config.virtualModels).mockReturnValue(undefined);
+
+      const response = await handleChatCompletionsRequest({
+        request: buildRequest("virtual/fast-tier"),
+      } as any);
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: "Invalid provider." });
     });
   });
 });

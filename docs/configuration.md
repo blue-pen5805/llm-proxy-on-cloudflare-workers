@@ -173,6 +173,7 @@ it does not contact Cloudflare or expose Base URLs and credentials.
 | `DEFAULT_MODEL`             | string or null  | none    | Provider-qualified model used when a chat request specifies `"model": "default"`.                                                                   |
 | `ENABLE_GLOBAL_ROUND_ROBIN` | boolean         | `false` | Rotates multi-key selection sequentially per Worker isolate (striped rotation).                                                                     |
 | `MODELS_CACHE_TTL_SECONDS`  | integer or null | `300`   | TTL of the aggregated `/v1/models` response cache. `0` disables caching; values above `86400` are clamped. Invalid values fall back to the default. |
+| `VIRTUAL_MODELS`            | object or null  | none    | Operator-defined `"virtual/<name>"` model names, each mapped to an ordered list of `"<provider>/<model>"` candidates. See below.                    |
 
 When round-robin is off, multi-key requests use random selection. When it is
 on, each Worker isolate rotates through the keys in order from a random
@@ -219,6 +220,65 @@ built-in route collisions cause authenticated requests to fail with HTTP 503.
 The public error identifies `CUSTOM_OPENAI_ENDPOINTS` as invalid without
 including its contents. Missing or explicit `null` configuration still means no
 custom endpoints are configured.
+
+## Virtual models
+
+`VIRTUAL_MODELS` maps a reserved `"virtual/<name>"` model name to an ordered
+candidate array. A bare `"<provider>/<model>"` string is attempted once. To
+configure retries or a response-header timeout, use an object:
+
+```jsonc
+{
+  "VIRTUAL_MODELS": {
+    "virtual/fast-tier": [
+      // timeout is milliseconds.
+      {
+        "model": "groq/llama-3.3-70b-versatile",
+        "retries": 2,
+        "timeout": 5000,
+      },
+      "cerebras/llama-3.3-70b",
+      "openai/gpt-4o-mini",
+    ],
+  },
+}
+```
+
+A chat request with `"model": "virtual/fast-tier"` tries each candidate in
+order. `retries` counts additional attempts after the first, defaults to `0`,
+and accepts integers from `0` through `5`. The chain retries the same candidate,
+then moves to the next candidate, only after a retryable failure — HTTP 401,
+403, 429, any 5xx, or a network error. Any other response (including an
+ordinary 4xx) is returned immediately, since retrying the same request would
+not fix a client error.
+
+`timeout` is the maximum number of milliseconds to wait for response headers
+from each attempt. It accepts integers from `1` through `300000`; omit it for no
+candidate-specific timeout. Expiration aborts the upstream fetch and is treated
+as a retryable failure. The timer is cleared once headers arrive, so it does not
+limit how long the client may consume a valid streaming response.
+
+Every attempt reuses that candidate's normal request path (direct, AI Gateway,
+or Custom Provider) and existing per-provider key policy. With no `/key/...`
+prefix, configured keys are selected independently for each attempt: random by
+default, or striped per-isolate round-robin when
+`ENABLE_GLOBAL_ROUND_ROBIN=true`. An explicit key index or range overrides that
+automatic policy for all attempts; a fixed index stays fixed (modulo each
+provider's key count), while a range is resolved randomly again on every
+attempt. A virtual model is never a shortcut around provider configuration. The
+response body is passed through unmodified from whichever candidate is returned,
+so the client sees that upstream's own `model` field rather than a proxy-invented
+one.
+
+At most 100 virtual models are accepted, each with 1 to 16 candidates. A name
+must match `virtual/[A-Za-z0-9._~-]+`, and a candidate cannot itself name the
+`virtual` namespace, so virtual models cannot chain into other virtual models.
+Malformed configuration fails authenticated requests with HTTP 503, the same as
+`CUSTOM_OPENAI_ENDPOINTS`. Missing or explicit `null` configuration means no
+virtual models exist; requesting an undefined name returns the same HTTP 400
+`"Invalid provider."` as an unknown provider. See
+[Virtual models design](design/features/virtual_models.md) for the retry
+policy and design rationale.
 
 ## Applying changes
 
