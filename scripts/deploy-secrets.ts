@@ -256,8 +256,9 @@ export function listExistingSecretNames(
     const end = output.lastIndexOf("]");
     if (start === -1 || end === -1 || end < start) return null;
 
-    const parsed: unknown = JSON.parse(output.slice(start, end + 1));
-    if (!Array.isArray(parsed)) return null;
+    // The slice starts with "[" and ends with "]", so any value JSON.parse
+    // accepts here is an array; malformed output throws and is handled below.
+    const parsed = JSON.parse(output.slice(start, end + 1)) as unknown[];
 
     const names = new Set<string>();
     for (const entry of parsed) {
