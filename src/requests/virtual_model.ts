@@ -59,11 +59,11 @@ export async function fetchWithCandidateTimeout(
  * instead of being read, matching fetchCompatibilityFallback's handling of
  * losing attempts within a single provider.
  */
-export async function runVirtualModelChain(
+export async function runVirtualModelChainAttempt(
   virtualModel: string,
   candidates: readonly VirtualModelCandidate[],
   attempt: ChatCompletionAttempt,
-): Promise<Response> {
+): Promise<ChatCompletionAttemptResult> {
   const attempts = candidates.flatMap((candidate) =>
     Array<VirtualModelCandidate>(candidate.retries + 1).fill(candidate),
   );
@@ -88,7 +88,7 @@ export async function runVirtualModelChain(
             timeout_ms: candidate.timeout,
           },
         );
-        return response;
+        return { response, retryable };
       }
 
       RequestLogger.warn(
@@ -121,4 +121,13 @@ export async function runVirtualModelChain(
   }
 
   throw new Error("Virtual model requires at least one candidate.");
+}
+
+export async function runVirtualModelChain(
+  virtualModel: string,
+  candidates: readonly VirtualModelCandidate[],
+  attempt: ChatCompletionAttempt,
+): Promise<Response> {
+  return (await runVirtualModelChainAttempt(virtualModel, candidates, attempt))
+    .response;
 }

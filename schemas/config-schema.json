@@ -521,7 +521,7 @@
               "oneOf": [
                 {
                   "type": "string",
-                  "pattern": "^(?!virtual/)[^/]+/.+$"
+                  "pattern": "^[^/]+/.+$"
                 },
                 {
                   "type": "object",
@@ -529,7 +529,7 @@
                   "properties": {
                     "model": {
                       "type": "string",
-                      "pattern": "^(?!virtual/)[^/]+/.+$"
+                      "pattern": "^[^/]+/.+$"
                     },
                     "retries": {
                       "type": "integer",

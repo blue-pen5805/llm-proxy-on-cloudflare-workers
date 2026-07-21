@@ -1,4 +1,11 @@
 #!/usr/bin/env node
+import { BUILT_IN_PROVIDER_NAME_SET } from "../src/providers/names.ts";
+import {
+  exceedsVirtualModelAttemptLimit,
+  hasVirtualModelCycle,
+  MAX_VIRTUAL_MODEL_EXPANDED_ATTEMPTS,
+  parseVirtualModels,
+} from "../src/utils/virtual_models.ts";
 import { syncAiGatewayCustomProviders } from "./sync-ai-gateway-custom-providers.ts";
 import {
   getErrorMessage,
@@ -38,6 +45,37 @@ export const MAX_WORKER_SECRET_BYTES = 5 * 1024;
 // Worker therefore has no DEV binding and always runs authenticated.
 export const DEVELOPMENT_ONLY_KEYS = new Set(["DEV"]);
 export const DEPRECATED_CONFIG_KEYS = new Set(["ENABLE_GLOBAL_ROUND_ROBIN"]);
+
+function validateVirtualModelGraph(config: Record<string, unknown>): void {
+  const rawVirtualModels = config.VIRTUAL_MODELS;
+  if (rawVirtualModels === undefined || rawVirtualModels === null) return;
+
+  const virtualModels = parseVirtualModels(rawVirtualModels);
+  if (!virtualModels) {
+    throw new Error("VIRTUAL_MODELS is invalid.");
+  }
+  const customProviderNames = Array.isArray(config.CUSTOM_OPENAI_ENDPOINTS)
+    ? config.CUSTOM_OPENAI_ENDPOINTS.flatMap((endpoint) =>
+        typeof endpoint === "object" &&
+        endpoint !== null &&
+        typeof (endpoint as { name?: unknown }).name === "string"
+          ? [(endpoint as { name: string }).name]
+          : [],
+      )
+    : [];
+  const realProviderNames = new Set([
+    ...BUILT_IN_PROVIDER_NAME_SET,
+    ...customProviderNames,
+  ]);
+  if (hasVirtualModelCycle(virtualModels, realProviderNames)) {
+    throw new Error("VIRTUAL_MODELS contains a circular reference.");
+  }
+  if (exceedsVirtualModelAttemptLimit(virtualModels, realProviderNames)) {
+    throw new Error(
+      `VIRTUAL_MODELS exceeds the ${MAX_VIRTUAL_MODEL_EXPANDED_ATTEMPTS}-attempt expansion limit.`,
+    );
+  }
+}
 
 function deprecatedConfigWarnings(config: Record<string, unknown>): string[] {
   return [...DEPRECATED_CONFIG_KEYS]
@@ -307,6 +345,8 @@ export function deploySecrets(
     const configFileContent = fileSystem.readFileSync(configPath, "utf8");
     const parsedConfig = parseJsonc(configFileContent);
     const warnings = deprecatedConfigWarnings(parsedConfig);
+
+    validateVirtualModelGraph(parsedConfig);
 
     const deployableSecrets = filterSecretsForDeployment(parsedConfig);
 

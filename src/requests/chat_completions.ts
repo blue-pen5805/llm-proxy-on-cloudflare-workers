@@ -14,7 +14,8 @@ import {
   selectApiKeyIndex,
 } from "../utils/api_key_selection";
 import { stripProxyAuthorizationHeaders } from "../utils/authorization";
-import { Config } from "../utils/config";
+import { Config, type VirtualModels } from "../utils/config";
+import { ConfigurationError } from "../utils/error";
 import {
   parseJsonOrReturnText,
   readRequestText,
@@ -30,7 +31,7 @@ import {
   ChatCompletionAttemptResult,
   fetchWithCandidateTimeout,
   isRetryableCandidateStatus,
-  runVirtualModelChain,
+  runVirtualModelChainAttempt,
 } from "./virtual_model";
 
 function invalidRequestResponse(message: string, status = 400): Response {
@@ -75,20 +76,19 @@ export async function handleChatCompletionsRequest(
   // provider is named "virtual"), but any configured key resolves here.
   const [providerSelector] = requestedModel.split("/");
   if (!resolveProvider(context, providerSelector)) {
-    const candidates = Config.virtualModels()?.[requestedModel];
+    const virtualModels = Config.virtualModels();
+    const candidates = virtualModels?.[requestedModel];
     if (candidates) {
-      return await runVirtualModelChain(
-        requestedModel,
-        candidates,
-        (candidateModel, timeout) =>
-          attemptChatCompletion(
-            context,
-            aiGateway,
-            chatRequestBody,
-            candidateModel,
-            timeout,
-          ),
-      );
+      return (
+        await attemptResolvedChatCompletion(
+          context,
+          aiGateway,
+          chatRequestBody,
+          requestedModel,
+          virtualModels,
+          new Set(),
+        )
+      ).response;
     }
   }
 
@@ -99,6 +99,59 @@ export async function handleChatCompletionsRequest(
     requestedModel,
   );
   return response;
+}
+
+async function attemptResolvedChatCompletion(
+  context: MiddlewareContext,
+  aiGateway: CloudflareAIGateway | undefined,
+  chatRequestBody: Record<string, unknown> & { model: string },
+  requestedModel: string,
+  virtualModels: VirtualModels,
+  resolving: ReadonlySet<string>,
+  inheritedTimeout?: number,
+): Promise<ChatCompletionAttemptResult> {
+  const [providerSelector] = requestedModel.split("/");
+  if (resolveProvider(context, providerSelector)) {
+    return attemptChatCompletion(
+      context,
+      aiGateway,
+      chatRequestBody,
+      requestedModel,
+      inheritedTimeout,
+    );
+  }
+
+  const candidates = virtualModels[requestedModel];
+  if (!candidates) {
+    return attemptChatCompletion(
+      context,
+      aiGateway,
+      chatRequestBody,
+      requestedModel,
+      inheritedTimeout,
+    );
+  }
+  // Config validation rejects cycles before this point. Keep a request-local
+  // guard as defense in depth for configuration installed outside the
+  // repository deployment helper.
+  if (resolving.has(requestedModel)) {
+    throw new ConfigurationError("VIRTUAL_MODELS");
+  }
+  const nextResolving = new Set(resolving).add(requestedModel);
+  return runVirtualModelChainAttempt(
+    requestedModel,
+    candidates,
+    (candidateModel, timeout) =>
+      attemptResolvedChatCompletion(
+        context,
+        aiGateway,
+        chatRequestBody,
+        candidateModel,
+        virtualModels,
+        nextResolving,
+        timeout ?? inheritedTimeout,
+      ),
+  );
 }
 
 async function attemptChatCompletion(

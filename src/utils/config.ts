@@ -2,6 +2,29 @@ import { BUILT_IN_PROVIDER_NAME_SET } from "../providers/names";
 import { Environments } from "./environments";
 import { ConfigurationError } from "./error";
 import { PROVIDER_PROFILE_PATTERN, type ProfiledSecret } from "./secrets";
+import {
+  exceedsVirtualModelAttemptLimit,
+  hasVirtualModelCycle,
+  MAX_VIRTUAL_MODEL_CANDIDATES,
+  MAX_VIRTUAL_MODEL_CANDIDATE_RETRIES,
+  MAX_VIRTUAL_MODEL_CANDIDATE_TIMEOUT,
+  MAX_VIRTUAL_MODEL_EXPANDED_ATTEMPTS,
+  MAX_VIRTUAL_MODELS,
+  parseVirtualModels,
+  VIRTUAL_MODEL_PROVIDER_NAME,
+  type VirtualModelCandidate,
+  type VirtualModels,
+} from "./virtual_models";
+
+export {
+  MAX_VIRTUAL_MODEL_CANDIDATES,
+  MAX_VIRTUAL_MODEL_CANDIDATE_RETRIES,
+  MAX_VIRTUAL_MODEL_CANDIDATE_TIMEOUT,
+  MAX_VIRTUAL_MODEL_EXPANDED_ATTEMPTS,
+  MAX_VIRTUAL_MODELS,
+  VIRTUAL_MODEL_PROVIDER_NAME,
+};
+export type { VirtualModelCandidate, VirtualModels };
 
 export const MAX_CUSTOM_OPENAI_ENDPOINTS = 16;
 export const MAX_PROXY_API_KEYS = 64;
@@ -18,17 +41,8 @@ const MAX_CUSTOM_ENDPOINT_MODELS = 1000;
 // makes a key resolve as a virtual model is that it does *not* name a real
 // provider or Custom OpenAI endpoint — those always take precedence — so a key
 // that collides with a real provider is simply shadowed by it. Candidates may
-// not name the reserved "virtual/" namespace, keeping resolution bounded and
-// observable rather than allowing virtual models that reference one another.
-export const VIRTUAL_MODEL_PROVIDER_NAME = "virtual";
-export const MAX_VIRTUAL_MODELS = 100;
-export const MAX_VIRTUAL_MODEL_CANDIDATES = 16;
-export const MAX_VIRTUAL_MODEL_CANDIDATE_RETRIES = 5;
-export const MAX_VIRTUAL_MODEL_CANDIDATE_TIMEOUT = 300_000;
-// A virtual model key is matched verbatim against the requested model, so any
-// non-empty string of safe URL/model characters is allowed; "virtual/<name>"
-// is the recommended form but not required.
-const VIRTUAL_MODEL_NAME_PATTERN = /^[A-Za-z0-9._~/-]{1,128}$/;
+// reference other virtual models; graph validation keeps those references
+// acyclic and bounds their expanded attempt count.
 
 function isStringArray(value: unknown): value is string[] {
   return (
@@ -68,125 +82,6 @@ function isValidProfiledSecret(value: unknown): value is ProfiledSecret {
         PROVIDER_PROFILE_PATTERN.test(profile) && isValidKeys(keys),
     )
   );
-}
-
-/**
- * One resolved candidate of a virtual model. `retries` is the number of extra
- * attempts against this same candidate (after the first) before moving on to
- * the next candidate; `0` means a single attempt. Bare-string candidates
- * normalize to `retries: 0`.
- */
-export interface VirtualModelCandidate {
-  model: string;
-  retries: number;
-  /** Maximum time in milliseconds to wait for response headers. */
-  timeout?: number;
-}
-
-export type VirtualModels = Readonly<
-  Record<string, readonly VirtualModelCandidate[]>
->;
-
-/** A candidate model must be a non-empty "<provider>/<model>" pair that does
- * not itself name the virtual namespace, so a virtual model can never chain
- * into another virtual model. */
-function isValidCandidateModel(model: unknown): model is string {
-  if (typeof model !== "string") return false;
-  const separatorIndex = model.indexOf("/");
-  if (separatorIndex <= 0 || separatorIndex === model.length - 1) {
-    return false;
-  }
-  return model.slice(0, separatorIndex) !== VIRTUAL_MODEL_PROVIDER_NAME;
-}
-
-/**
- * Validate and normalize one candidate entry. A candidate is either a bare
- * "<provider>/<model>" string or an object `{ model, retries?, timeout? }`.
- * `timeout` is measured in milliseconds. Returns the normalized candidate, or
- * `undefined` when the entry is malformed.
- */
-function parseVirtualModelCandidate(
-  value: unknown,
-): VirtualModelCandidate | undefined {
-  if (typeof value === "string") {
-    return isValidCandidateModel(value)
-      ? { model: value, retries: 0 }
-      : undefined;
-  }
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return undefined;
-  }
-  const candidate = value as Record<string, unknown>;
-  const allowedProperties = new Set(["model", "retries", "timeout"]);
-  if (
-    Object.keys(candidate).some((key) => !allowedProperties.has(key)) ||
-    !isValidCandidateModel(candidate.model)
-  ) {
-    return undefined;
-  }
-  const retries = candidate.retries ?? 0;
-  if (
-    typeof retries !== "number" ||
-    !Number.isInteger(retries) ||
-    retries < 0 ||
-    retries > MAX_VIRTUAL_MODEL_CANDIDATE_RETRIES
-  ) {
-    return undefined;
-  }
-  const timeout = candidate.timeout;
-  if (
-    timeout !== undefined &&
-    (typeof timeout !== "number" ||
-      !Number.isInteger(timeout) ||
-      timeout < 1 ||
-      timeout > MAX_VIRTUAL_MODEL_CANDIDATE_TIMEOUT)
-  ) {
-    return undefined;
-  }
-  return {
-    model: candidate.model,
-    retries,
-    ...(timeout === undefined ? {} : { timeout }),
-  };
-}
-
-/**
- * Validate and normalize the whole map. Returns the normalized virtual models,
- * or `undefined` when any part is malformed so the caller can fail closed.
- */
-function parseVirtualModels(value: unknown): VirtualModels | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return undefined;
-  }
-  const rawMap = value as Record<string, unknown>;
-  const virtualModelNames = Object.keys(rawMap);
-  if (virtualModelNames.length > MAX_VIRTUAL_MODELS) {
-    return undefined;
-  }
-  const normalized: Record<string, VirtualModelCandidate[]> = {};
-  for (const virtualModelName of virtualModelNames) {
-    if (!VIRTUAL_MODEL_NAME_PATTERN.test(virtualModelName)) {
-      return undefined;
-    }
-    const rawCandidates = rawMap[virtualModelName];
-    if (
-      !Array.isArray(rawCandidates) ||
-      rawCandidates.length === 0 ||
-      rawCandidates.length > MAX_VIRTUAL_MODEL_CANDIDATES
-    ) {
-      return undefined;
-    }
-    const candidates: VirtualModelCandidate[] = [];
-    for (const rawCandidate of rawCandidates) {
-      const candidate = parseVirtualModelCandidate(rawCandidate);
-      if (!candidate) {
-        return undefined;
-      }
-      candidates.push(candidate);
-    }
-    normalized[virtualModelName] = candidates;
-  }
-  return normalized;
 }
 
 function isSafeCustomEndpoint(value: unknown): value is CustomOpenAIEndpoint {
@@ -259,6 +154,28 @@ let cachedCustomEndpointsRaw: unknown;
 let cachedCustomEndpoints: CustomOpenAIEndpoint[] | undefined;
 let cachedVirtualModelsRaw: unknown;
 let cachedVirtualModels: VirtualModels | undefined;
+
+function configuredCustomProviderNames(): Set<string> {
+  const rawValue = Environments.get("CUSTOM_OPENAI_ENDPOINTS", false);
+  let value: unknown = rawValue;
+  if (typeof rawValue === "string") {
+    try {
+      value = JSON.parse(rawValue) as unknown;
+    } catch {
+      return new Set();
+    }
+  }
+  if (!Array.isArray(value)) return new Set();
+  return new Set(
+    value.flatMap((endpoint) =>
+      typeof endpoint === "object" &&
+      endpoint !== null &&
+      typeof (endpoint as { name?: unknown }).name === "string"
+        ? [(endpoint as { name: string }).name]
+        : [],
+    ),
+  );
+}
 
 function parseProxyApiKeys(rawValue: string): string[] | undefined {
   const trimmedValue = rawValue.trim();
@@ -455,7 +372,17 @@ export class Config {
     }
 
     const virtualModels = parseVirtualModels(parsedValue);
-    if (!virtualModels) {
+    const realProviderNames = new Set([
+      ...BUILT_IN_PROVIDER_NAME_SET,
+      ...configuredCustomProviderNames(),
+    ]);
+    if (
+      !virtualModels ||
+      hasVirtualModelCycle(virtualModels, realProviderNames)
+    ) {
+      throw new ConfigurationError("VIRTUAL_MODELS");
+    }
+    if (exceedsVirtualModelAttemptLimit(virtualModels, realProviderNames)) {
       throw new ConfigurationError("VIRTUAL_MODELS");
     }
 

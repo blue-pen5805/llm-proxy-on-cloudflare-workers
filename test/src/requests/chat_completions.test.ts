@@ -648,6 +648,47 @@ describe("handleChatCompletionsRequest", () => {
       expect(mockProviderClass.fetch).toHaveBeenCalledTimes(1);
     });
 
+    it("resolves a virtual model candidate through another virtual model", async () => {
+      vi.mocked(Config.virtualModels).mockReturnValue({
+        "virtual/front": [
+          { model: "virtual/fallback", retries: 0, timeout: 5000 },
+        ],
+        "virtual/fallback": [
+          { model: "missing/model", retries: 0 },
+          { model: "openai/gpt-4", retries: 0 },
+        ],
+      });
+      mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
+        "/chat/completions",
+        { method: "POST", body: "{}" },
+      ]);
+      mockProviderClass.fetch.mockResolvedValue(new Response("nested ok"));
+
+      const response = await handleChatCompletionsRequest({
+        request: buildRequest("virtual/front"),
+      } as any);
+
+      expect(await response.text()).toBe("nested ok");
+      expect(mockProviderClass.fetch).toHaveBeenCalledOnce();
+      expect(mockProviderClass.fetch.mock.calls[0]?.[1]?.signal).toBeInstanceOf(
+        AbortSignal,
+      );
+    });
+
+    it("defensively rejects a cycle that bypassed configuration validation", async () => {
+      vi.mocked(Config.virtualModels).mockReturnValue({
+        "virtual/one": [{ model: "virtual/two", retries: 0 }],
+        "virtual/two": [{ model: "virtual/one", retries: 0 }],
+      });
+
+      await expect(
+        handleChatCompletionsRequest({
+          request: buildRequest("virtual/one"),
+        } as any),
+      ).rejects.toThrow("Invalid configuration for VIRTUAL_MODELS.");
+      expect(mockProviderClass.fetch).not.toHaveBeenCalled();
+    });
+
     it("applies a candidate timeout signal to the upstream fetch", async () => {
       vi.mocked(Config.virtualModels).mockReturnValue({
         "virtual/fast-tier": [

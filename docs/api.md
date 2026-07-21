@@ -77,7 +77,10 @@ response (or the last candidate's response) is returned as-is. A candidate can
 be a bare model string or an object with `model`, `retries`, and `timeout`;
 `retries` adds up to five attempts before advancing, while `timeout` limits the
 wait for response headers in milliseconds. Each attempt applies the normal
-striped per-isolate round-robin or explicit key-selection policy. An undefined
+striped per-isolate round-robin or explicit key-selection policy. A candidate
+may reference another configured virtual model; references are recursive and
+must form an acyclic graph whose expanded chain stays within 96 concrete
+provider attempts. An undefined
 virtual model name returns the same HTTP 400 `"Invalid provider."` as an
 unknown provider.
 

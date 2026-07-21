@@ -344,6 +344,118 @@ describe("deploy-secrets", () => {
       expect(result.messages[0]).toContain("config.jsonc not found");
     });
 
+    it("accepts an acyclic virtual-model reference graph during dry-run", () => {
+      const mockFs = createMockFsOps({
+        "/root/config.jsonc": JSON.stringify({
+          VIRTUAL_MODELS: {
+            "virtual/front": ["virtual/fallback"],
+            "virtual/fallback": ["openai/gpt-4o-mini"],
+          },
+        }),
+      });
+
+      const result = deploySecrets("/root", undefined, true, mockFs);
+
+      expect(result.success).toBe(true);
+      expect(result.messages).toContain("   - VIRTUAL_MODELS: [set]");
+    });
+
+    it("honors custom-provider precedence while checking graph edges", () => {
+      const mockFs = createMockFsOps({
+        "/root/config.jsonc": JSON.stringify({
+          CUSTOM_OPENAI_ENDPOINTS: [
+            null,
+            "invalid",
+            {},
+            { name: 42 },
+            { name: "custom" },
+          ],
+          VIRTUAL_MODELS: { "custom/model": ["custom/model"] },
+        }),
+      });
+
+      const result = deploySecrets("/root", undefined, true, mockFs);
+
+      expect(result.success).toBe(true);
+      expect(result.messages).toContain("   - VIRTUAL_MODELS: [set]");
+    });
+
+    it("rejects malformed virtual models before deployment", () => {
+      const mockFs = createMockFsOps({
+        "/root/config.jsonc": '{"VIRTUAL_MODELS":{"virtual/route":[]}}',
+      });
+
+      expect(deploySecrets("/root", undefined, true, mockFs)).toEqual({
+        success: false,
+        messages: [
+          "❌ Error processing config.jsonc: VIRTUAL_MODELS is invalid.",
+        ],
+      });
+      expect(execFileSync).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      {
+        "virtual/self": ["virtual/self"],
+      },
+      {
+        "virtual/one": ["virtual/two"],
+        "virtual/two": [{ model: "virtual/three", retries: 1 }],
+        "virtual/three": ["virtual/one"],
+      },
+    ])("rejects a virtual-model cycle before deployment: %j", (models) => {
+      const mockFs = createMockFsOps({
+        "/root/config.jsonc": JSON.stringify({ VIRTUAL_MODELS: models }),
+      });
+
+      const result = deploySecrets("/root", undefined, true, mockFs);
+
+      expect(result).toEqual({
+        success: false,
+        messages: [
+          "❌ Error processing config.jsonc: VIRTUAL_MODELS contains a circular reference.",
+        ],
+      });
+      expect(execFileSync).not.toHaveBeenCalled();
+    });
+
+    it("rejects a cycle before a real deployment invokes Wrangler", () => {
+      const mockFs = createMockFsOps({
+        "/root/config.jsonc": JSON.stringify({
+          VIRTUAL_MODELS: { "virtual/self": ["virtual/self"] },
+        }),
+      });
+
+      const result = deploySecrets("/root", undefined, false, mockFs);
+
+      expect(result.success).toBe(false);
+      expect(result.messages[0]).toContain("circular reference");
+      expect(execFileSync).not.toHaveBeenCalled();
+      expect(fs.writeFileSync).not.toHaveBeenCalled();
+    });
+
+    it("rejects a nested graph above the expanded attempt limit", () => {
+      const mockFs = createMockFsOps({
+        "/root/config.jsonc": JSON.stringify({
+          VIRTUAL_MODELS: {
+            "virtual/leaf": Array.from({ length: 16 }, (_, index) => ({
+              model: `openai/model-${index}`,
+              retries: 5,
+            })),
+            "virtual/root": ["virtual/leaf", "virtual/leaf"],
+          },
+        }),
+      });
+
+      const result = deploySecrets("/root", undefined, true, mockFs);
+
+      expect(result.success).toBe(false);
+      expect(result.messages).toEqual([
+        "❌ Error processing config.jsonc: VIRTUAL_MODELS exceeds the 96-attempt expansion limit.",
+      ]);
+      expect(execFileSync).not.toHaveBeenCalled();
+    });
+
     it("uses the default dry-run value", () => {
       const mockFs = createMockFsOps({
         "/root/config.jsonc": '{"KEY":"value"}',

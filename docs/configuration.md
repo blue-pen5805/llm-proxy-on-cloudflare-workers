@@ -294,8 +294,9 @@ an object:
         "timeout": 5000,
       },
       "cerebras/llama-3.3-70b",
-      "openai/gpt-4o-mini",
+      "virtual/reliable-tier",
     ],
+    "virtual/reliable-tier": ["openai/gpt-4o-mini"],
   },
 }
 ```
@@ -325,14 +326,23 @@ response body is passed through unmodified from whichever candidate is returned,
 so the client sees that upstream's own `model` field rather than a proxy-invented
 one.
 
+Candidates may reference another configured virtual model. References are
+resolved recursively, while real providers and Custom OpenAI endpoints retain
+precedence at every level. A referenced candidate's `retries` repeats the whole
+nested chain; its `timeout` is inherited by concrete candidates that do not set
+their own timeout.
+
 At most 100 virtual models are accepted, each with 1 to 16 candidates. A name
 must match `[A-Za-z0-9._~/-]{1,128}` — `"virtual/<name>"` is only a convention,
 not a requirement. Real providers and Custom OpenAI endpoints always take
 precedence: a request is resolved as a virtual model only when its `model` does
 not name a real provider, so a key that collides with one (for example
-`"openai/gpt-4o-mini"`) is simply shadowed and never reached. A candidate cannot
-itself name the `virtual` namespace, so virtual models cannot chain into other
-virtual models.
+`"openai/gpt-4o-mini"`) is simply shadowed and never reached. The reference graph
+must not contain a direct or indirect cycle, and each model's expanded
+worst-case chain is limited to 96 concrete provider attempts. Both
+`npm run secrets:deploy -- --dry-run` and a real secrets deployment reject
+cycles or oversized expansions before Wrangler is invoked. Runtime validation
+repeats these checks for configuration installed by another path.
 Configured virtual models are advertised by `GET /v1/models`: each one is listed
 at the front of the aggregated model list (ahead of the provider-discovered
 models) with `owned_by: "virtual"`.

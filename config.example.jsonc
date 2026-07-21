@@ -95,14 +95,18 @@
   // precedence, so a key that collides with one is never reached. A bare string
   // is attempted once. Use an object to retry that candidate up to 5 additional
   // times before advancing. Retryable outcomes are 401/403/429/5xx responses and
-  // network errors. At most 100 virtual models and 16 candidates each are
-  // accepted.
+  // network errors. A candidate may reference another virtual model; references
+  // must be acyclic. At most 100 virtual models, 16 candidates per model, and
+  // 96 expanded provider attempts per model are accepted.
   "VIRTUAL_MODELS": null,
   // "VIRTUAL_MODELS": {
   //   "virtual/fast-tier": [
   //     // timeout is milliseconds and covers waiting for response headers.
   //     { "model": "groq/llama-3.3-70b-versatile", "retries": 2, "timeout": 5000 },
   //     "cerebras/llama-3.3-70b",
+  //     "virtual/reliable-tier"
+  //   ],
+  //   "virtual/reliable-tier": [
   //     "openai/gpt-4o-mini"
   //   ]
   // },

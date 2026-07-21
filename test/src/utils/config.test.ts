@@ -510,10 +510,8 @@ describe("Config", () => {
       [{ "virtual/fast-tier": ["not-a-provider-pair"] }],
       [{ "virtual/fast-tier": ["/gpt-4o-mini"] }],
       [{ "virtual/fast-tier": ["openai/"] }],
-      [{ "virtual/fast-tier": ["virtual/other-route"] }],
       [{ "virtual/fast-tier": [{}] }],
       [{ "virtual/fast-tier": [{ model: "openai/gpt", unknown: true }] }],
-      [{ "virtual/fast-tier": [{ model: "virtual/other-route" }] }],
       [{ "virtual/fast-tier": [{ model: "openai/gpt", retries: -1 }] }],
       [{ "virtual/fast-tier": [{ model: "openai/gpt", retries: 1.5 }] }],
       [{ "virtual/fast-tier": [{ model: "openai/gpt", retries: 6 }] }],
@@ -540,6 +538,73 @@ describe("Config", () => {
     ])("rejects unsafe virtual model configuration %j", (value) => {
       vi.mocked(Environments.get).mockReturnValue(value as never);
       expect(() => Config.virtualModels()).toThrow(ConfigurationError);
+      expect(() => Config.virtualModels()).toThrow(
+        "Invalid configuration for VIRTUAL_MODELS.",
+      );
+    });
+
+    it("accepts references to another virtual model", () => {
+      vi.mocked(Environments.get).mockReturnValue({
+        "virtual/front": ["virtual/fallback"],
+        "virtual/fallback": ["openai/gpt-4o-mini"],
+      } as never);
+
+      expect(Config.virtualModels()).toEqual({
+        "virtual/front": [{ model: "virtual/fallback", retries: 0 }],
+        "virtual/fallback": [{ model: "openai/gpt-4o-mini", retries: 0 }],
+      });
+    });
+
+    it.each([
+      {
+        "virtual/self": ["virtual/self"],
+      },
+      {
+        "virtual/one": ["virtual/two"],
+        "virtual/two": ["virtual/three"],
+        "virtual/three": ["virtual/one"],
+      },
+    ])("rejects circular virtual model references: %j", (value) => {
+      vi.mocked(Environments.get).mockReturnValue(value as never);
+
+      expect(() => Config.virtualModels()).toThrow(
+        "Invalid configuration for VIRTUAL_MODELS.",
+      );
+    });
+
+    it("does not treat a provider-shadowed virtual key as a graph edge", () => {
+      vi.mocked(Environments.get).mockImplementation((name) =>
+        name === "VIRTUAL_MODELS"
+          ? ({ "custom/model": ["custom/model"] } as never)
+          : ([{ name: "custom" }] as never),
+      );
+
+      expect(Config.virtualModels()).toEqual({
+        "custom/model": [{ model: "custom/model", retries: 0 }],
+      });
+    });
+
+    it("ignores malformed custom endpoint JSON while validating the graph", () => {
+      vi.mocked(Environments.get).mockImplementation((name) =>
+        name === "VIRTUAL_MODELS"
+          ? ({ "virtual/route": ["openai/model"] } as never)
+          : ("not-json" as never),
+      );
+
+      expect(Config.virtualModels()).toEqual({
+        "virtual/route": [{ model: "openai/model", retries: 0 }],
+      });
+    });
+
+    it("rejects a nested graph above the expanded attempt limit", () => {
+      vi.mocked(Environments.get).mockReturnValue({
+        "virtual/leaf": Array.from({ length: 16 }, (_, index) => ({
+          model: `openai/model-${index}`,
+          retries: 5,
+        })),
+        "virtual/root": ["virtual/leaf", "virtual/leaf"],
+      } as never);
+
       expect(() => Config.virtualModels()).toThrow(
         "Invalid configuration for VIRTUAL_MODELS.",
       );

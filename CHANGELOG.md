@@ -12,6 +12,11 @@ update is explicitly approved.
 
 ### 2026-07-21
 
+- Allowed virtual models to reference other virtual models recursively. Secret
+  deployment dry-runs and real deployments now reject direct or indirect
+  reference cycles before invoking Wrangler, and runtime validation repeats the
+  check for configurations installed through other paths. Expanded nested
+  chains remain bounded to 96 concrete provider attempts.
 - Added named credential profiles for built-in and Custom OpenAI providers.
   Existing scalar and array credentials remain the `default` profile, while
   `<provider>:<profile>` selects an independent key pool for chat,

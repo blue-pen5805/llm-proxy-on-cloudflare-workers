@@ -8,7 +8,8 @@
    `wrangler.jsonc`.
 3. Preview settings with `npm run secrets:deploy -- --dry-run [--env <env>]`.
    Values, prefixes, and lengths are redacted; each operation is shown as
-   `[set]` or `[delete]`.
+   `[set]` or `[delete]`. The preview also rejects circular virtual-model
+   references and expansions above the bounded attempt limit.
 4. Run `npm run tsc`, `npm run lint`, and `npm test`.
 5. Deploy code with `npm run deploy` (or `npm run deploy -- --env <env>` for a
    declared Wrangler environment).

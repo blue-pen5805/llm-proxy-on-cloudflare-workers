@@ -30,12 +30,19 @@ virtual model only when its `model` does not name a real provider. The `virtual`
 prefix is convenient precisely because no real provider is named `virtual`, but a
 key that does collide with a real provider (for example `"openai/gpt-4o-mini"`)
 is simply never reached rather than overriding it. At most 100 virtual models are
-accepted, each with 1 to 16 candidates. A candidate cannot itself name the
-`virtual` namespace, so a virtual model can never chain into another virtual
-model — and because candidates are executed through the plain single-model path
-(never the virtual lookup), no key, whatever its prefix, can chain either.
-Resolution is always one flat lookup followed by a bounded, linear sequence of at
-most 96 candidate attempts.
+accepted, each with 1 to 16 candidates. A candidate may name another configured
+virtual model, including keys outside the recommended `virtual/` namespace.
+References are followed only when the candidate does not resolve as a real
+provider, so provider precedence applies at every level.
+
+The resulting reference graph must be acyclic. `npm run secrets:deploy`,
+including `--dry-run`, checks the graph before invoking Wrangler and rejects
+direct and indirect cycles. Runtime validation repeats the check for
+configuration installed outside that helper. Validation also computes the
+worst-case number of concrete provider attempts after references and retries
+are expanded. Every virtual model must remain within 96 attempts, preserving
+the previous single-chain bound instead of allowing nested retries to multiply
+without limit.
 
 Configuration remains trusted operator input, matching `CUSTOM_OPENAI_ENDPOINTS`:
 schema and runtime validation reject malformed names, empty or oversized
@@ -56,10 +63,12 @@ provider nor a configured virtual model returns the same HTTP 400
 `"Invalid provider."` response as an unknown provider, so a typo in a virtual
 model name is indistinguishable from a typo in a provider name.
 
-Each candidate is resolved and executed through the existing single-model path
-(`attemptChatCompletion`), unchanged from a plain `"<provider>/<model>"`
-request: the same provider resolution, AI Gateway routing decision, header
-sanitization, and per-provider key rotation apply. Without an explicit key path,
+Each candidate is resolved recursively. A candidate that names another virtual
+model runs that model's ordered chain; otherwise it uses the existing
+single-model path (`attemptChatCompletion`), unchanged from a plain
+`"<provider>/<model>"` request. The same provider resolution, AI Gateway routing
+decision, header sanitization, and per-provider key rotation apply. Without an
+explicit key path,
 each candidate attempt selects a configured key using striped per-isolate
 round-robin. An explicit `/key/<index>/...` selection
 uses that index for every attempt (modulo each provider's key count), while an
@@ -82,9 +91,11 @@ HTTP 503 as a chat request rather than silently dropping the entries.
 
 ## Retry policy
 
-`runVirtualModelChain` (`src/requests/virtual_model.ts`) tries candidates in
-order. For an object candidate it retries the same model up to its configured
-`retries` count before moving on. It stops at the first outcome that is not
+`runVirtualModelChainAttempt` (`src/requests/virtual_model.ts`) tries candidates
+in order. For an object candidate it retries the same model up to its configured
+`retries` count before moving on. For a virtual-model reference, one attempt is
+one complete execution of the referenced chain, so a retry restarts that chain.
+It stops at the first outcome that is not
 retryable, or once the final attempt of the last candidate has run. An outcome
 is retryable when:
 
@@ -107,7 +118,10 @@ body is cancelled rather than read or returned, the same discipline
 `fetchCompatibilityFallback` (`src/requests/compatibility_fallback.ts`) already
 applies to per-credential retries within one provider.
 
-The timeout controller is cleared as soon as the upstream fetch returns
+For a virtual-model reference, `timeout` becomes the default response-header
+timeout for concrete attempts below that reference. A more specific timeout on
+a nested candidate overrides the inherited value. The timeout controller is
+cleared as soon as the upstream fetch returns
 response headers. It therefore bounds a stalled initial response without
 aborting a valid streaming body after headers have arrived. The original client
 request signal is combined with the timeout signal, so client cancellation
