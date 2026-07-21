@@ -98,6 +98,69 @@ describe("handleUniversalEndpointRequest", () => {
     );
   });
 
+  it("uses a named provider profile while emitting the base Gateway provider", async () => {
+    providerInstances["openai:paid"] = {
+      ...mockProviderClass,
+      apiKeyName: "OPENAI_API_KEY",
+      headers: vi.fn().mockResolvedValue({ Authorization: "Bearer paid-key" }),
+    } as never;
+    mockAIGateway.buildUniversalEndpointRequest.mockReturnValue([
+      "https://gateway.example",
+      { method: "POST" },
+    ]);
+    const request = new Request("https://example.com", {
+      method: "POST",
+      body: JSON.stringify([
+        { provider: "openai:paid", query: { model: "gpt-4o" } },
+      ]),
+    });
+
+    await handleUniversalEndpointRequest(
+      request,
+      mockAIGateway as any,
+      mockProviderRegistry as any,
+    );
+
+    expect(mockProviderRegistry.get).toHaveBeenCalledWith("openai:paid");
+    expect(Secrets.getNext).toHaveBeenCalledWith("OPENAI_API_KEY", "paid");
+    expect(Secrets.getAll).toHaveBeenCalledWith(
+      "OPENAI_API_KEY",
+      false,
+      "paid",
+    );
+    expect(mockAIGateway.buildUniversalEndpointRequest).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ provider: "openai" })],
+    });
+  });
+
+  it("uses provider-native profile rotation and key access when available", async () => {
+    const profiledProvider = {
+      ...mockProviderClass,
+      getNextApiKeyIndex: vi.fn().mockResolvedValue(1),
+      getApiKeys: vi.fn().mockReturnValue(["paid-one", "paid-two"]),
+      headers: vi.fn().mockResolvedValue({ Authorization: "Bearer paid-two" }),
+    };
+    providerInstances["openai:paid"] = profiledProvider as never;
+    mockAIGateway.buildUniversalEndpointRequest.mockReturnValue([
+      "https://gateway.example",
+      { method: "POST" },
+    ]);
+
+    await handleUniversalEndpointRequest(
+      new Request("https://example.com", {
+        method: "POST",
+        body: JSON.stringify([
+          { provider: "openai:paid", query: { model: "gpt-4o" } },
+        ]),
+      }),
+      mockAIGateway as any,
+      mockProviderRegistry as any,
+    );
+
+    expect(profiledProvider.getNextApiKeyIndex).toHaveBeenCalledOnce();
+    expect(profiledProvider.getApiKeys).toHaveBeenCalledOnce();
+  });
+
   it("should handle multiple provider requests", async () => {
     const anthropicProviderClass = {
       chatCompletionPath: "/v1/messages",
@@ -320,6 +383,23 @@ describe("handleUniversalEndpointRequest", () => {
         mockProviderRegistry as any,
       ),
     ).rejects.toThrow("Provider unsupported-provider is not supported.");
+  });
+
+  it("rejects a malformed provider profile selector", async () => {
+    const request = new Request("https://example.com", {
+      method: "POST",
+      body: JSON.stringify([
+        { provider: "openai:bad/profile", query: { model: "gpt-4o" } },
+      ]),
+    });
+
+    await expect(
+      handleUniversalEndpointRequest(
+        request,
+        mockAIGateway as any,
+        mockProviderRegistry as any,
+      ),
+    ).rejects.toThrow("Provider openai:bad/profile is not supported.");
   });
 
   it("rejects a Gateway provider that has no local adapter", async () => {

@@ -11,7 +11,11 @@ export const Anthropic = defineProvider({
   chatCompletionPath: "/v1/chat/completions",
   modelsPath: "/v1/models",
   async headers(apiKeyIndex): Promise<HeadersInit> {
-    const apiKey = Secrets.get("ANTHROPIC_API_KEY", apiKeyIndex);
+    const apiKey = Secrets.get(
+      "ANTHROPIC_API_KEY",
+      apiKeyIndex,
+      this.credentialProfile,
+    );
     return {
       "Content-Type": "application/json",
       "x-api-key": `${apiKey}`,

@@ -92,6 +92,7 @@ interface ApiKeySelectionLogOptions {
   keyCount: number;
   selectionPolicy: ApiKeySelectionPolicy;
   viaAiGateway: boolean;
+  credentialProfile?: string;
   providerRequestId?: string;
   step?: number;
 }
@@ -116,6 +117,7 @@ export function recordApiKeySelection({
   keyCount,
   selectionPolicy,
   viaAiGateway,
+  credentialProfile,
   providerRequestId = crypto.randomUUID(),
   step,
 }: ApiKeySelectionLogOptions): LogFields {
@@ -123,6 +125,9 @@ export function recordApiKeySelection({
   const fields: LogFields = {
     provider_request_id: providerRequestId,
     provider,
+    ...(credentialProfile && credentialProfile !== "default"
+      ? { credential_profile: credentialProfile }
+      : {}),
     operation,
     key_index: hasKey ? keyIndex : null,
     key_count: keyCount,

@@ -63,9 +63,10 @@ proxy credentials accordingly.
 
 ## Provider credentials
 
-Each provider key accepts a string, an array of strings, or `null`. Arrays use
-striped per-isolate round-robin selection. Setting a key to `null` deletes the
-corresponding deployed secret on the next secrets deployment.
+Each provider key accepts a string, an array of strings, a profile object, or
+`null`. Arrays use striped per-isolate round-robin selection. Setting a key to
+`null` deletes the corresponding deployed secret on the next secrets
+deployment.
 
 | Route name         | Setting                                           |
 | ------------------ | ------------------------------------------------- |
@@ -114,6 +115,46 @@ provider credential for supported request flows. Model discovery is stricter:
 Bedrock requires both `AWS_BEARER_TOKEN_BEDROCK` and `AWS_BEDROCK_REGION`, while
 Azure OpenAI requires both `AZURE_OPENAI_API_KEY` and
 `AZURE_OPENAI_RESOURCE_NAME`, before `/v1/models` sends a provider request.
+
+### Provider credential profiles
+
+A profile object groups independent key pools under names containing 1–64
+letters, digits, `.`, `_`, `~`, or `-`. Up to 32 profiles and 32 keys per
+profile are accepted. A single unprofiled key selects the `default` profile:
+
+```jsonc
+"OPENAI_API_KEY": "sk-..."
+```
+
+An unprofiled key array also selects `default` and enables rotation:
+
+```jsonc
+"OPENAI_API_KEY": ["YOUR-OPENAI-KEY-1", "YOUR-OPENAI-KEY-2"]
+```
+
+Use a profile map when separate key pools are needed:
+
+```jsonc
+"OPENAI_API_KEY": {
+  "default": ["YOUR-DEFAULT-OPENAI-KEY-1", "YOUR-DEFAULT-OPENAI-KEY-2"],
+  "second": ["YOUR-SECOND-OPENAI-KEY"]
+}
+```
+
+A string or array selects `default`, while a profile map provides `default` and
+any additional named pools. All three forms are supported configuration
+choices. Select another profile with `openai:second/gpt-5.6-sol` in Chat Completions,
+`/openai:second/<path>` for pass-through, or `"provider": "openai:second"` in a
+Universal Endpoint step. Explicit `/key/...` selection applies within the
+selected profile. Rotation and cooldown state are independent between profiles.
+
+`GET /v1/models` and `/status` include one entry per configured profile. Default
+model IDs keep `<provider>/<model>`; named profiles use
+`<provider>:<profile>/<model>`. Auxiliary routing settings such as Azure
+resource name, Bedrock region, Workers AI account ID, and Vertex `region` remain
+provider-wide. Vertex profiles map names to service-account objects or arrays;
+Custom OpenAI endpoint `apiKeys` accepts the same string, array, or profile-map
+forms.
 
 An unconfigured static provider is reported as unavailable and omitted from
 model aggregation. Its route name still resolves, so an attempted request will

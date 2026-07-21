@@ -16,6 +16,26 @@ const filteredSecretArrayCache = new WeakMap<readonly unknown[], string[]>();
 // critical path.
 const rotationCounters = new Map<string, number>();
 
+export const DEFAULT_PROVIDER_PROFILE = "default";
+export const PROVIDER_PROFILE_PATTERN = /^[A-Za-z0-9._~-]{1,64}$/;
+
+export type ProfiledSecret =
+  string | string[] | Readonly<Record<string, string | string[]>>;
+
+function filterSecretValues(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    const cachedValues = filteredSecretArrayCache.get(value);
+    if (cachedValues) return cachedValues;
+    const secretValues = value.filter(
+      (item): item is string =>
+        typeof item === "string" && item.trim().length > 0,
+    );
+    filteredSecretArrayCache.set(value, secretValues);
+    return secretValues;
+  }
+  return typeof value === "string" && value.trim().length > 0 ? [value] : [];
+}
+
 /**
  * A utility class for managing and retrieving secrets from environment variables.
  * Provides functionality to access all values for a key or get a single value with optional rotation.
@@ -28,34 +48,53 @@ export class Secrets {
    * @param shuffle - Whether to shuffle the array of values (default: false)
    * @returns An array of string values, or an empty array if the key doesn't exist
    */
-  static getAll(keyName: keyof Env, shuffle: boolean = false): string[] {
+  static getAll(
+    keyName: keyof Env,
+    shuffle: boolean = false,
+    profile: string = DEFAULT_PROVIDER_PROFILE,
+  ): string[] {
     const configuredValue = Environments.get(keyName);
 
     if (configuredValue === undefined) {
       return [];
     }
 
-    let secretValues: string[] = [];
-    if (Array.isArray(configuredValue)) {
-      const cachedValues = filteredSecretArrayCache.get(configuredValue);
-      if (cachedValues) {
-        secretValues = cachedValues;
-      } else {
-        secretValues = configuredValue.filter(
-          (value): value is string =>
-            typeof value === "string" && value.trim().length > 0,
-        );
-        filteredSecretArrayCache.set(configuredValue, secretValues);
-      }
-    } else if (typeof configuredValue === "string") {
-      secretValues = configuredValue.trim().length > 0 ? [configuredValue] : [];
-    }
+    const selectedValue =
+      typeof configuredValue === "object" &&
+      configuredValue !== null &&
+      !Array.isArray(configuredValue)
+        ? (configuredValue as Record<string, unknown>)[profile]
+        : profile === DEFAULT_PROVIDER_PROFILE
+          ? configuredValue
+          : undefined;
+    const secretValues = filterSecretValues(selectedValue);
 
     if (shuffle && secretValues.length > 1) {
       return shuffleArray(secretValues);
     }
 
     return secretValues;
+  }
+
+  /** Returns configured profile names; unprofiled values expose `default`. */
+  static getProfiles(keyName: keyof Env): string[] {
+    const configuredValue = Environments.get(keyName);
+    if (
+      typeof configuredValue === "object" &&
+      configuredValue !== null &&
+      !Array.isArray(configuredValue)
+    ) {
+      return Object.entries(configuredValue)
+        .filter(
+          ([profile, value]) =>
+            PROVIDER_PROFILE_PATTERN.test(profile) &&
+            filterSecretValues(value).length > 0,
+        )
+        .map(([profile]) => profile);
+    }
+    return filterSecretValues(configuredValue).length > 0
+      ? [DEFAULT_PROVIDER_PROFILE]
+      : [];
   }
 
   /**
@@ -65,8 +104,12 @@ export class Secrets {
    * @param apiKeyIndex - The apiKeyIndex of the value to retrieve (default: 0)
    * @returns A single string value for the specified key and apiKeyIndex
    */
-  static get(keyName: keyof Env, apiKeyIndex: number = 0): string {
-    const allKeys = this.getAll(keyName);
+  static get(
+    keyName: keyof Env,
+    apiKeyIndex: number = 0,
+    profile: string = DEFAULT_PROVIDER_PROFILE,
+  ): string {
+    const allKeys = this.getAll(keyName, false, profile);
     if (
       allKeys.length === 0 ||
       !Number.isSafeInteger(apiKeyIndex) ||
@@ -107,9 +150,16 @@ export class Secrets {
    * @param keyName - The name of the environment variable
    * @returns A Promise that resolves to the next index (0 to length - 1)
    */
-  static async getNext(keyName: keyof Env): Promise<number> {
-    const length = this.getAll(keyName).length;
-    return this.getNextIndex(keyName, length);
+  static async getNext(
+    keyName: keyof Env,
+    profile: string = DEFAULT_PROVIDER_PROFILE,
+  ): Promise<number> {
+    const length = this.getAll(keyName, false, profile).length;
+    const identifier =
+      profile === DEFAULT_PROVIDER_PROFILE
+        ? String(keyName)
+        : `${String(keyName)}:${profile}`;
+    return this.getNextIndex(identifier, length);
   }
 
   /**

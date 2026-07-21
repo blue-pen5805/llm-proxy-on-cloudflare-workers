@@ -168,6 +168,8 @@ configuration after seeing the warning.
 - Ranges choose randomly and are inclusive.
 - With no explicit prefix, multiple keys use striped per-isolate round-robin.
 - `/v1/models` uses the first key unless a prefix is present.
+- A `provider:profile` selector limits rotation, cooldowns, and explicit key
+  indices to that profile; omitting the suffix selects `default`.
 - Only chat, models, and registered provider pass-through accept the prefix;
   health, Gateway REST/legacy, Universal, and unknown routes return HTTP 400.
 

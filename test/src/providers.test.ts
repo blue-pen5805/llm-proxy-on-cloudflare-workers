@@ -88,6 +88,33 @@ describe("provider registry", () => {
     expect(registry.match("openai/v1/models")).toBeUndefined();
   });
 
+  it("resolves and enumerates named credential profiles", () => {
+    const registry = new ProviderRegistry(BUILT_IN_PROVIDER_CONSTRUCTORS, [
+      {
+        name: "internal",
+        baseUrl: "https://internal.example",
+        apiKeys: {
+          default: ["default-key"],
+          paid: ["paid-one", "paid-two"],
+        },
+      },
+    ]);
+
+    expect(registry.get("internal")?.getApiKeys()).toEqual(["default-key"]);
+    expect(registry.get("internal:default")).toBe(registry.get("internal"));
+    expect(registry.get("internal:paid")?.getApiKeys()).toEqual([
+      "paid-one",
+      "paid-two",
+    ]);
+    expect(registry.get("internal:missing")).toBeUndefined();
+    expect(registry.get("internal:bad/profile")).toBeUndefined();
+    expect(registry.match("/internal:paid/v1/models")).toEqual({
+      providerName: "internal:paid",
+      pathname: "/v1/models",
+    });
+    expect(Object.keys(registry.all())).toContain("internal:paid");
+  });
+
   it("reuses registries across requests with an unchanged configuration", () => {
     const withoutEndpoints = vi
       .spyOn(Config, "customOpenAIEndpoints")

@@ -16,6 +16,7 @@ import {
   OpenAICompatibleProvider,
   ProviderBase,
   ProviderNotSupportedError,
+  withProviderProfile,
 } from "~/src/providers/provider";
 import { Replicate } from "~/src/providers/replicate/provider";
 import { WorkersAi } from "~/src/providers/workers_ai/provider";
@@ -27,6 +28,7 @@ describe("provider contracts", () => {
       name === "CLOUDFLARE_ACCOUNT_ID" ? "account-id" : `key-${index ?? 0}`,
     );
     vi.spyOn(Secrets, "getAll").mockReturnValue(["key-0", "key-1"]);
+    vi.spyOn(Secrets, "getProfiles").mockReturnValue(["default", "paid"]);
     vi.spyOn(Secrets, "getNext").mockResolvedValue(1);
     vi.spyOn(Secrets, "getNextIndex").mockResolvedValue(1);
   });
@@ -41,6 +43,7 @@ describe("provider contracts", () => {
 
       expect(provider.available()).toBe(false);
       expect(provider.getApiKeys()).toEqual([]);
+      expect(provider.getCredentialProfiles()).toEqual([]);
       expect(provider.getAiGatewayApiKeys()).toEqual([]);
       expect(provider.configurationError()).toBeUndefined();
       expect(await provider.getNextApiKeyIndex()).toBe(0);
@@ -95,6 +98,24 @@ describe("provider contracts", () => {
           Authorization: "Bearer key-1",
         }),
       );
+    });
+
+    it("uses named credential profiles for keys, Gateway keys, and rotation", async () => {
+      const provider = withProviderProfile(
+        createProvider({ apiKeyName: "OPENAI_API_KEY" }),
+        "paid",
+      );
+
+      expect(provider.getApiKeys()).toEqual(["key-0", "key-1"]);
+      expect(provider.getAiGatewayApiKeys()).toEqual(["key-0", "key-1"]);
+      expect(provider.getCredentialProfiles()).toEqual(["default", "paid"]);
+      await expect(provider.getNextApiKeyIndex()).resolves.toBe(1);
+      expect(Secrets.getAll).toHaveBeenCalledWith(
+        "OPENAI_API_KEY",
+        false,
+        "paid",
+      );
+      expect(Secrets.getNext).toHaveBeenCalledWith("OPENAI_API_KEY", "paid");
     });
 
     it("does not rotate a single configured credential", async () => {
@@ -576,6 +597,29 @@ describe("provider contracts", () => {
       expect(await scalarKey.getNextApiKeyIndex()).toBe(0);
       expect(scalarKey.getStaticModels()).toBeUndefined();
       expect(Secrets.getNextIndex).not.toHaveBeenCalled();
+
+      expect(withProviderProfile(scalarKey, "paid").getApiKeys()).toEqual([]);
+    });
+
+    it("selects and rotates named custom endpoint profiles", async () => {
+      const baseProvider = new CustomOpenAI({
+        name: "custom-profiled",
+        baseUrl: "https://custom.example",
+        apiKeys: {
+          default: "default-key",
+          paid: ["paid-one", "paid-two"],
+          "bad/profile": "ignored",
+        },
+      });
+      const paidProvider = withProviderProfile(baseProvider, "paid");
+
+      expect(baseProvider.getCredentialProfiles()).toEqual(["default", "paid"]);
+      expect(paidProvider.getApiKeys()).toEqual(["paid-one", "paid-two"]);
+      await expect(paidProvider.getNextApiKeyIndex()).resolves.toBe(1);
+      expect(Secrets.getNextIndex).toHaveBeenCalledWith(
+        "custom-profiled:paid",
+        2,
+      );
     });
   });
 });

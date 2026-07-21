@@ -3,6 +3,7 @@ import { gatewayProviderPath } from "../ai_gateway/custom_provider";
 import { MiddlewareContext } from "../middleware";
 import { getAllProviderInstances } from "../providers";
 import { OpenAIModelsListResponseBody } from "../providers/openai/types";
+import { parseProviderSelector } from "../providers/profile";
 import { ProviderBase, ProviderNotSupportedError } from "../providers/provider";
 import {
   determineApiKeySelectionPolicy,
@@ -61,12 +62,16 @@ function buildModelsCacheKey(
 }
 
 async function fetchProviderModels(
-  providerName: string,
+  providerSelector: string,
   provider: ProviderBase,
   selection: MiddlewareContext["apiKeyIndex"],
   aiGateway?: CloudflareAIGateway,
   clientGatewayHeaders?: HeadersInit,
 ): Promise<OpenAIModelsListResponseBody> {
+  const parsedSelector = parseProviderSelector(providerSelector);
+  /* istanbul ignore next -- registry entries always use valid selectors */
+  if (!parsedSelector) return EMPTY_MODELS;
+  const { providerName, profile } = parsedSelector;
   const aiGatewayProvider = resolveAiGatewayModelsProvider(
     providerName,
     provider,
@@ -87,6 +92,7 @@ async function fetchProviderModels(
   const apiKeyIndex = await selectApiKeyIndex(provider, selection, "first");
   const keyLogFields = recordApiKeySelection({
     provider: providerName,
+    credentialProfile: profile,
     operation: "models",
     keyIndex: apiKeyIndex,
     keyCount: provider.getApiKeys().length,

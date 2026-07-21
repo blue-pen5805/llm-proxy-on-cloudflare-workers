@@ -116,6 +116,26 @@ describe("handleChatCompletionsRequest", () => {
     ).toHaveBeenCalledOnce();
   });
 
+  it("routes a named credential profile without forwarding it in the model", async () => {
+    const request = new Request("https://example.com/chat/completions", {
+      method: "POST",
+      body: JSON.stringify({ model: "ollama:paid/gpt-oss-120b", messages: [] }),
+    });
+    mockProviderClass.buildChatCompletionsRequest.mockReturnValue([
+      "/chat/completions",
+      { method: "POST" },
+    ]);
+    mockProviderClass.fetch.mockResolvedValue(new Response());
+    const providers = { get: vi.fn(() => mockProviderClass) };
+
+    await handleChatCompletionsRequest({ request, providers } as any);
+
+    expect(providers.get).toHaveBeenCalledWith("ollama:paid");
+    expect(
+      mockProviderClass.filterSupportedChatParameters,
+    ).toHaveBeenCalledWith(expect.objectContaining({ model: "gpt-oss-120b" }));
+  });
+
   it("uses an explicit middleware key selection", async () => {
     const requestBody = {
       model: "openai/gpt-4",

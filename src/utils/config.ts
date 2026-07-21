@@ -1,6 +1,7 @@
 import { BUILT_IN_PROVIDER_NAME_SET } from "../providers/names";
 import { Environments } from "./environments";
 import { ConfigurationError } from "./error";
+import { PROVIDER_PROFILE_PATTERN, type ProfiledSecret } from "./secrets";
 
 export const MAX_CUSTOM_OPENAI_ENDPOINTS = 16;
 export const MAX_PROXY_API_KEYS = 64;
@@ -9,6 +10,7 @@ export const MAX_MODELS_CACHE_TTL_SECONDS = 86400;
 export const DEFAULT_API_KEY_COOLDOWN_SECONDS = 60;
 export const MAX_API_KEY_COOLDOWN_SECONDS = 86400;
 const MAX_CUSTOM_ENDPOINT_KEYS = 32;
+const MAX_PROVIDER_PROFILES = 32;
 const MAX_CUSTOM_ENDPOINT_MODELS = 1000;
 
 // The recommended namespace for operator-defined virtual models. "virtual/" is
@@ -37,7 +39,7 @@ function isStringArray(value: unknown): value is string[] {
 interface CustomOpenAIEndpoint {
   name: string;
   baseUrl: string;
-  apiKeys?: string | string[];
+  apiKeys?: ProfiledSecret;
   models?: string[];
   chatCompletionPath?: string;
   modelsPath?: string;
@@ -45,6 +47,27 @@ interface CustomOpenAIEndpoint {
 
 function isOptionalStringArray(value: unknown): value is string[] | undefined {
   return value === undefined || isStringArray(value);
+}
+
+function isValidProfiledSecret(value: unknown): value is ProfiledSecret {
+  const isValidKeys = (candidate: unknown): candidate is string | string[] =>
+    (typeof candidate === "string" && candidate.trim() !== "") ||
+    (isStringArray(candidate) &&
+      candidate.length <= MAX_CUSTOM_ENDPOINT_KEYS &&
+      candidate.every((key) => key.trim() !== ""));
+  if (isValidKeys(value)) return true;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const profiles = Object.entries(value);
+  return (
+    profiles.length > 0 &&
+    profiles.length <= MAX_PROVIDER_PROFILES &&
+    profiles.every(
+      ([profile, keys]) =>
+        PROVIDER_PROFILE_PATTERN.test(profile) && isValidKeys(keys),
+    )
+  );
 }
 
 /**
@@ -212,11 +235,7 @@ function isSafeCustomEndpoint(value: unknown): value is CustomOpenAIEndpoint {
       path.startsWith("/") &&
       !path.startsWith("//"));
   const validApiKeys =
-    endpoint.apiKeys === undefined ||
-    (typeof endpoint.apiKeys === "string" && endpoint.apiKeys.trim() !== "") ||
-    (isStringArray(endpoint.apiKeys) &&
-      endpoint.apiKeys.length <= MAX_CUSTOM_ENDPOINT_KEYS &&
-      endpoint.apiKeys.every((key) => key.trim() !== ""));
+    endpoint.apiKeys === undefined || isValidProfiledSecret(endpoint.apiKeys);
   const validModels =
     isOptionalStringArray(endpoint.models) &&
     (endpoint.models === undefined ||
@@ -364,7 +383,7 @@ export class Config {
     | {
         name: string;
         baseUrl: string;
-        apiKeys?: string | string[];
+        apiKeys?: ProfiledSecret;
         models?: string[];
       }[]
     | undefined {

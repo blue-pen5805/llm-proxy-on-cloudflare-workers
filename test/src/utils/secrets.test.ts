@@ -9,7 +9,7 @@ vi.mock("node:crypto", () => ({
 vi.mock("~/src/utils/environments");
 
 describe("Secrets", () => {
-  let env: { [key: string]: string | string[] };
+  let env: { [key: string]: unknown };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -54,6 +54,31 @@ describe("Secrets", () => {
       );
       expect(Secrets.getAll("OPENAI_API_KEY", true)).toEqual(["openai-key"]);
     });
+
+    it("selects named profiles while treating legacy values as default", () => {
+      env.OLLAMA_API_KEY = {
+        default: ["default-one", "", "default-two"],
+        paid: ["paid-one", "paid-two"],
+        empty: ["  "],
+        "bad/profile": ["ignored"],
+      };
+
+      expect(Secrets.getAll("OLLAMA_API_KEY")).toEqual([
+        "default-one",
+        "default-two",
+      ]);
+      expect(Secrets.getAll("OLLAMA_API_KEY", false, "paid")).toEqual([
+        "paid-one",
+        "paid-two",
+      ]);
+      expect(Secrets.getAll("OPENAI_API_KEY", false, "paid")).toEqual([]);
+      expect(Secrets.getProfiles("OLLAMA_API_KEY")).toEqual([
+        "default",
+        "paid",
+      ]);
+      expect(Secrets.getProfiles("OPENAI_API_KEY")).toEqual(["default"]);
+      expect(Secrets.getProfiles("ANTHROPIC_API_KEY")).toEqual([]);
+    });
   });
 
   describe("get", () => {
@@ -73,6 +98,11 @@ describe("Secrets", () => {
 
     it("returns an empty string when no keys exist", () => {
       expect(Secrets.get("ANTHROPIC_API_KEY")).toBe("");
+    });
+
+    it("gets a key from a named profile", () => {
+      env.OLLAMA_API_KEY = { paid: ["paid-one", "paid-two"] };
+      expect(Secrets.get("OLLAMA_API_KEY", 1, "paid")).toBe("paid-two");
     });
   });
 
@@ -123,6 +153,18 @@ describe("Secrets", () => {
       const firstIndex = await Secrets.getNext("GEMINI_API_KEY");
       const secondIndex = await Secrets.getNext("GEMINI_API_KEY");
       expect(secondIndex).toBe((firstIndex + 1) % 3);
+    });
+
+    it("maintains independent rotation for named profiles", async () => {
+      env.OLLAMA_API_KEY = {
+        default: ["default-one", "default-two"],
+        paid: ["paid-one", "paid-two"],
+      };
+      vi.mocked(randomInt).mockReturnValue(0 as never);
+
+      expect(await Secrets.getNext("OLLAMA_API_KEY", "paid")).toBe(0);
+      expect(await Secrets.getNext("OLLAMA_API_KEY", "paid")).toBe(1);
+      expect(await Secrets.getNext("OLLAMA_API_KEY")).toBe(0);
     });
   });
 

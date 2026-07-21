@@ -125,6 +125,25 @@ describe("status", () => {
     });
   });
 
+  it("reports named profiles under their selector", async () => {
+    const profiledProvider = {
+      ...mockProviderClass,
+      available: vi.fn().mockReturnValue(true),
+      getApiKeys: vi.fn().mockReturnValue(["paid-key"]),
+      fetch: vi.fn().mockResolvedValue(new Response(null, { status: 200 })),
+    };
+
+    const response = await handleStatusRequest(undefined, {
+      all: () => ({ "openai:paid": profiledProvider }),
+    } as any);
+    const body = (await response.json()) as any;
+
+    expect(body.providers["openai:paid"]).toEqual({
+      available: true,
+      keys: [{ slot: 0, status: "valid" }],
+    });
+  });
+
   it("should handle invalid API keys", async () => {
     vi.mocked(Secrets.getAll).mockReturnValue(["invalid-key"]);
     mockProviderClass.fetch.mockResolvedValue(

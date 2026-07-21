@@ -1,6 +1,10 @@
 import { Environments } from "../../utils/environments";
 import { Secrets } from "../../utils/secrets";
 import {
+  DEFAULT_PROVIDER_PROFILE,
+  PROVIDER_PROFILE_PATTERN,
+} from "../../utils/secrets";
+import {
   defineProvider,
   ProviderNotSupportedError,
   type Provider,
@@ -45,25 +49,34 @@ const EMPTY_CREDENTIALS: ParsedCredentials = { credentials: [] };
 // raw secret, so the last result is memoized. Without this, every credential
 // read re-parses multi-kilobyte key material several times per request.
 let cachedCredentialsRaw: string | undefined;
-let cachedCredentials: ParsedCredentials | undefined;
+let cachedCredentialsByProfile = new Map<string, ParsedCredentials>();
 
 // The Gateway credential is the base64-encoded service-account JSON; encoding
 // is likewise memoized by the parsed credentials' identity.
 const encodedCredentialCache = new WeakMap<ServiceAccountJson[], string[]>();
 
-function parseServiceAccountCredentials(): ParsedCredentials {
+function parseServiceAccountCredentials(profile: string): ParsedCredentials {
   const serializedCredentials = Environments.get(API_KEY_NAME, false);
   if (!serializedCredentials?.trim()) return EMPTY_CREDENTIALS;
 
   if (serializedCredentials !== cachedCredentialsRaw) {
-    cachedCredentials = computeServiceAccountCredentials(serializedCredentials);
+    cachedCredentialsByProfile = new Map();
     cachedCredentialsRaw = serializedCredentials;
   }
-  return cachedCredentials!;
+  let credentials = cachedCredentialsByProfile.get(profile);
+  if (!credentials) {
+    credentials = computeServiceAccountCredentials(
+      serializedCredentials,
+      profile,
+    );
+    cachedCredentialsByProfile.set(profile, credentials);
+  }
+  return credentials;
 }
 
 function computeServiceAccountCredentials(
   serializedCredentials: string,
+  profile: string,
 ): ParsedCredentials {
   let parsedCredentials: unknown;
   try {
@@ -75,9 +88,24 @@ function computeServiceAccountCredentials(
     };
   }
 
-  const credentialCandidates = Array.isArray(parsedCredentials)
-    ? parsedCredentials
-    : [parsedCredentials];
+  const isUnprofiledCredential =
+    typeof parsedCredentials === "object" &&
+    parsedCredentials !== null &&
+    !Array.isArray(parsedCredentials) &&
+    (parsedCredentials as Record<string, unknown>).type === "service_account";
+  const selectedCredentials =
+    isUnprofiledCredential || Array.isArray(parsedCredentials)
+      ? profile === DEFAULT_PROVIDER_PROFILE
+        ? parsedCredentials
+        : undefined
+      : typeof parsedCredentials === "object" && parsedCredentials !== null
+        ? (parsedCredentials as Record<string, unknown>)[profile]
+        : parsedCredentials;
+  const credentialCandidates = Array.isArray(selectedCredentials)
+    ? selectedCredentials
+    : selectedCredentials === undefined
+      ? []
+      : [selectedCredentials];
   if (credentialCandidates.length === 0) return { credentials: [] };
 
   const credentials: ServiceAccountJson[] = [];
@@ -119,7 +147,9 @@ export const GoogleVertexAi = defineProvider({
   requiresProviderCredentials: true,
   modelsPath: "",
   getApiKeys(): string[] {
-    const { credentials, error } = parseServiceAccountCredentials();
+    const { credentials, error } = parseServiceAccountCredentials(
+      this.credentialProfile,
+    );
     if (error) return [];
     let encodedCredentials = encodedCredentialCache.get(credentials);
     if (!encodedCredentials) {
@@ -131,16 +161,42 @@ export const GoogleVertexAi = defineProvider({
     return encodedCredentials;
   },
 
+  getCredentialProfiles(): string[] {
+    const serializedCredentials = Environments.get(API_KEY_NAME, false);
+    if (!serializedCredentials?.trim()) return [];
+    try {
+      const parsed = JSON.parse(serializedCredentials) as unknown;
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        !Array.isArray(parsed) &&
+        (parsed as Record<string, unknown>).type !== "service_account"
+      ) {
+        return Object.keys(parsed).filter((profile) =>
+          PROVIDER_PROFILE_PATTERN.test(profile),
+        );
+      }
+    } catch {
+      return [];
+    }
+    return [DEFAULT_PROVIDER_PROFILE];
+  },
+
   getAiGatewayApiKeys(): string[] {
     return this.getApiKeys();
   },
 
   async getNextApiKeyIndex(): Promise<number> {
-    return Secrets.getNextIndex(API_KEY_NAME, this.getApiKeys().length);
+    return Secrets.getNextIndex(
+      this.credentialProfile === DEFAULT_PROVIDER_PROFILE
+        ? API_KEY_NAME
+        : `${API_KEY_NAME}:${this.credentialProfile}`,
+      this.getApiKeys().length,
+    );
   },
 
   configurationError(): string | undefined {
-    return parseServiceAccountCredentials().error;
+    return parseServiceAccountCredentials(this.credentialProfile).error;
   },
 
   async buildModelsRequest(): Promise<[string, RequestInit]> {

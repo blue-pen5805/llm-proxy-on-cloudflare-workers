@@ -13,6 +13,7 @@ APIs on [Cloudflare Workers](https://developers.cloudflare.com/workers/).
 - Provider pass-through routes such as `/openai/v1/responses`
 - Cloudflare AI Gateway provider routes and account-level REST API
 - Multiple provider keys with striped per-isolate round-robin selection
+- Named provider credential profiles selected as `provider:profile`
 - Per-request key selection with `/key/<index-or-range>`
 - Custom OpenAI-compatible endpoints defined in configuration
 - Authenticated status and provider credential diagnostics at `/status`
@@ -20,7 +21,7 @@ APIs on [Cloudflare Workers](https://developers.cloudflare.com/workers/).
 ## Supported providers
 
 The route name is also the prefix used in model IDs, for example
-`openai/gpt-5.4`. Provider adapters differ in chat translation, model discovery,
+`openai/gpt-5.6-sol`. Provider adapters differ in chat translation, model discovery,
 direct access, and AI Gateway support; see [HTTP API and routing](docs/api.md)
 before relying on a specific combination.
 
@@ -84,7 +85,7 @@ curl https://your-worker.example/v1/chat/completions \
   --header "Authorization: Bearer $PROXY_API_KEY" \
   --header "Content-Type: application/json" \
   --data '{
-    "model": "openai/gpt-5.4",
+    "model": "openai/gpt-5.6-sol",
     "messages": [{"role": "user", "content": "Hello"}]
   }'
 ```
@@ -107,6 +108,11 @@ select a Gateway other than the configured or implicit `default` Gateway.
 `GET /v1/models` returns a best-effort aggregate of configured providers.
 `GET /status` checks configured credentials but exposes configuration metadata
 and credential slot counts, so keep its output private.
+
+Provider credential settings may also map profile names to key arrays. The
+unqualified route uses `default`; for example, configure an OpenAI `second`
+profile and request `openai:second/gpt-5.6-sol`. See the
+[configuration reference](docs/configuration.md#provider-credential-profiles).
 
 ## Documentation
 

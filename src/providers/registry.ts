@@ -1,6 +1,10 @@
 import { CustomOpenAI } from "../providers/custom-openai";
 import type { CustomOpenAIEndpointConfig } from "../providers/custom-openai";
-import { ProviderBase } from "../providers/provider";
+import {
+  formatProviderSelector,
+  parseProviderSelector,
+} from "../providers/profile";
+import { ProviderBase, withProviderProfile } from "../providers/provider";
 
 export type ProviderConstructor = new () => ProviderBase;
 
@@ -17,6 +21,7 @@ export interface ProviderRoute {
  */
 export class ProviderRegistry {
   private readonly builtInInstances = new Map<string, ProviderBase>();
+  private readonly profiledInstances = new Map<string, ProviderBase>();
   private readonly customInstances = new Map<
     CustomOpenAIEndpointConfig,
     CustomOpenAI
@@ -28,7 +33,6 @@ export class ProviderRegistry {
   >;
   private readonly providerNames: readonly string[];
   private readonly providerNameSet: ReadonlySet<string>;
-  private allInstances?: Record<string, ProviderBase>;
 
   constructor(
     private readonly builtIns: Readonly<Record<string, ProviderConstructor>>,
@@ -63,40 +67,49 @@ export class ProviderRegistry {
     return [...this.providerNames];
   }
 
-  get(providerName: string): ProviderBase | undefined {
+  get(providerSelector: string): ProviderBase | undefined {
+    const parsedSelector = parseProviderSelector(providerSelector);
+    if (!parsedSelector) return undefined;
+    const { providerName, profile } = parsedSelector;
     const existingProvider = this.builtInInstances.get(providerName);
-    if (existingProvider) {
-      return existingProvider;
-    }
-
     const BuiltInProvider = this.builtIns[providerName];
     const customEndpoint = this.firstCustomEndpointByName.get(providerName);
-    const providerInstance = BuiltInProvider
-      ? new BuiltInProvider()
-      : customEndpoint
-        ? this.getCustom(customEndpoint)
-        : undefined;
+    const baseProvider =
+      existingProvider ??
+      (BuiltInProvider
+        ? new BuiltInProvider()
+        : customEndpoint
+          ? this.getCustom(customEndpoint)
+          : undefined);
 
-    if (providerInstance && BuiltInProvider) {
-      this.builtInInstances.set(providerName, providerInstance);
+    if (baseProvider && BuiltInProvider && !existingProvider) {
+      this.builtInInstances.set(providerName, baseProvider);
     }
+    if (!baseProvider) return undefined;
+    if (
+      profile !== "default" &&
+      !baseProvider.getCredentialProfiles().includes(profile)
+    ) {
+      return undefined;
+    }
+    const existingProfiledProvider =
+      this.profiledInstances.get(providerSelector);
+    if (existingProfiledProvider) return existingProfiledProvider;
+    const providerInstance = withProviderProfile(baseProvider, profile);
+    this.profiledInstances.set(providerSelector, providerInstance);
     return providerInstance;
   }
 
   all(): Record<string, ProviderBase> {
-    if (this.allInstances) {
-      return this.allInstances;
+    const providerInstances: Record<string, ProviderBase> = {};
+    for (const providerName of this.providerNames) {
+      const defaultProvider = this.get(providerName)!;
+      providerInstances[providerName] = defaultProvider;
+      for (const profile of defaultProvider.getCredentialProfiles()) {
+        const selector = formatProviderSelector(providerName, profile);
+        providerInstances[selector] = this.get(selector)!;
+      }
     }
-    const providerInstances = Object.fromEntries(
-      this.providerNames.map((providerName) => [
-        providerName,
-        this.get(providerName)!,
-      ]),
-    );
-    for (const customEndpoint of this.customEndpoints) {
-      providerInstances[customEndpoint.name] = this.getCustom(customEndpoint);
-    }
-    this.allInstances = providerInstances;
     return providerInstances;
   }
 
@@ -110,13 +123,17 @@ export class ProviderRegistry {
     if (separatorIndex === -1) {
       return undefined;
     }
-    const providerName = pathname.slice(1, separatorIndex);
-    if (!this.providerNameSet.has(providerName)) {
+    const providerSelector = pathname.slice(1, separatorIndex);
+    const parsedSelector = parseProviderSelector(providerSelector);
+    if (
+      !parsedSelector ||
+      !this.providerNameSet.has(parsedSelector.providerName)
+    ) {
       return undefined;
     }
 
     return {
-      providerName,
+      providerName: providerSelector,
       pathname: pathname.slice(separatorIndex),
     };
   }

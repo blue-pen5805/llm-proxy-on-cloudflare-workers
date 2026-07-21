@@ -4,6 +4,7 @@ import {
   resolveGatewayProvider,
 } from "../ai_gateway/custom_provider";
 import { MiddlewareContext } from "../middleware";
+import { parseProviderSelector } from "../providers/profile";
 import {
   determineApiKeySelectionPolicy,
   recordApiKeyOutcome,
@@ -21,23 +22,27 @@ import {
 
 export async function handleProviderProxyRequest(
   context: MiddlewareContext,
-  providerName: string,
+  providerSelector: string,
   pathname: string,
   aiGateway: CloudflareAIGateway | undefined = undefined,
 ) {
   const { apiKeyIndex: contextApiKeyIndex } = context;
   const { request } = context;
+  const parsedSelector = parseProviderSelector(providerSelector);
+  /* istanbul ignore next -- registry matches only validated selectors */
+  if (!parsedSelector) throw new NotFoundError();
+  const { providerName, profile } = parsedSelector;
   // Reject traversal/scheme smuggling in the client-controlled path before it is
   // concatenated into the provider or Gateway upstream URL.
   assertSafeProxyPath(pathname);
-  const providerInstance = resolveProvider(context, providerName);
+  const providerInstance = resolveProvider(context, providerSelector);
 
   if (!providerInstance) {
     throw new NotFoundError();
   }
 
   const providerError = createProviderConfigurationErrorResponse(
-    providerName,
+    providerSelector,
     providerInstance,
     aiGateway,
   );
@@ -49,7 +54,7 @@ export async function handleProviderProxyRequest(
     providerInstance,
     contextApiKeyIndex,
     "rotate",
-    providerName,
+    providerSelector,
   );
   const keyCount = providerInstance.getApiKeys().length;
   const aiGatewayProvider = resolveGatewayProvider(
@@ -60,6 +65,7 @@ export async function handleProviderProxyRequest(
   );
   const keyLogFields = recordApiKeySelection({
     provider: providerName,
+    credentialProfile: profile,
     operation: "proxy",
     keyIndex: apiKeyIndex,
     keyCount,
@@ -97,7 +103,12 @@ export async function handleProviderProxyRequest(
     const response = await RequestLogger.withFields(keyLogFields, () =>
       fetchWithLogging(requestInfo, { ...requestInit, signal: request.signal }),
     );
-    recordApiKeyOutcome(providerName, apiKeyIndex, keyCount, response.status);
+    recordApiKeyOutcome(
+      providerSelector,
+      apiKeyIndex,
+      keyCount,
+      response.status,
+    );
     return response;
   }
 
@@ -114,6 +125,6 @@ export async function handleProviderProxyRequest(
       apiKeyIndex,
     ),
   );
-  recordApiKeyOutcome(providerName, apiKeyIndex, keyCount, response.status);
+  recordApiKeyOutcome(providerSelector, apiKeyIndex, keyCount, response.status);
   return response;
 }

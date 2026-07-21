@@ -14,8 +14,7 @@ export const WorkersAi = defineProvider({
   available() {
     const { accountIdName } = this as WorkersAi;
     return (
-      Secrets.getAll("CLOUDFLARE_API_KEY").length > 0 &&
-      Secrets.getAll(accountIdName).length > 0
+      this.getApiKeys().length > 0 && Secrets.getAll(accountIdName).length > 0
     );
   },
 
@@ -34,7 +33,11 @@ export const WorkersAi = defineProvider({
   },
 
   async headers(apiKeyIndex): Promise<HeadersInit> {
-    const apiKey = Secrets.get("CLOUDFLARE_API_KEY", apiKeyIndex);
+    const apiKey = Secrets.get(
+      "CLOUDFLARE_API_KEY",
+      apiKeyIndex,
+      this.credentialProfile,
+    );
     return {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,

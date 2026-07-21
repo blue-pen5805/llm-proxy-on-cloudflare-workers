@@ -392,6 +392,33 @@ describe("Config", () => {
       expect(Config.customOpenAIEndpoints()).toHaveLength(1);
     });
 
+    it("accepts profiled custom endpoint keys", () => {
+      const endpoints = [
+        {
+          name: "local",
+          baseUrl: "https://example.com",
+          apiKeys: { default: "key", paid: ["paid-1", "paid-2"] },
+        },
+      ];
+      vi.mocked(Environments.get).mockReturnValue(endpoints);
+      expect(Config.customOpenAIEndpoints()).toBe(endpoints);
+    });
+
+    it.each([
+      {},
+      { paid: 42 },
+      { "bad/profile": "key" },
+      { paid: [""] },
+      Object.fromEntries(
+        Array.from({ length: 33 }, (_, index) => [`profile-${index}`, "key"]),
+      ),
+    ])("rejects invalid custom endpoint key profiles: %j", (apiKeys) => {
+      vi.mocked(Environments.get).mockReturnValue([
+        { name: "local", baseUrl: "https://example.com", apiKeys },
+      ] as never);
+      expect(() => Config.customOpenAIEndpoints()).toThrow(ConfigurationError);
+    });
+
     it("rejects more than sixteen custom endpoints", () => {
       vi.mocked(Environments.get).mockReturnValue(
         Array.from({ length: 17 }, (_, index) => ({

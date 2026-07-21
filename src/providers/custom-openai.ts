@@ -1,11 +1,16 @@
-import { Secrets } from "../utils/secrets";
+import {
+  DEFAULT_PROVIDER_PROFILE,
+  PROVIDER_PROFILE_PATTERN,
+  type ProfiledSecret,
+  Secrets,
+} from "../utils/secrets";
 import { OpenAIModelsListResponseBody } from "./openai/types";
 import { defineProvider, Provider, ProviderConstructor } from "./provider";
 
 export interface CustomOpenAIEndpointConfig {
   name: string;
   baseUrl: string;
-  apiKeys?: string | string[];
+  apiKeys?: ProfiledSecret;
   models?: string[];
   chatCompletionPath?: string;
   modelsPath?: string;
@@ -50,7 +55,12 @@ export const CustomOpenAI = defineProvider<[CustomOpenAIEndpointConfig]>(
         const apiKeys = this.getApiKeys();
         return apiKeys.length <= 1
           ? 0
-          : Secrets.getNextIndex(config.name, apiKeys.length);
+          : Secrets.getNextIndex(
+              this.credentialProfile === DEFAULT_PROVIDER_PROFILE
+                ? config.name
+                : `${config.name}:${this.credentialProfile}`,
+              apiKeys.length,
+            );
       },
 
       async headers(apiKeyIndex): Promise<HeadersInit> {
@@ -82,9 +92,24 @@ export const CustomOpenAI = defineProvider<[CustomOpenAIEndpointConfig]>(
 
       getApiKeys(): string[] {
         if (!config.apiKeys) return [];
-        return Array.isArray(config.apiKeys)
-          ? config.apiKeys
-          : [config.apiKeys];
+        const selected =
+          typeof config.apiKeys === "object" && !Array.isArray(config.apiKeys)
+            ? config.apiKeys[this.credentialProfile]
+            : this.credentialProfile === DEFAULT_PROVIDER_PROFILE
+              ? config.apiKeys
+              : undefined;
+        if (!selected) return [];
+        return Array.isArray(selected) ? selected : [selected];
+      },
+
+      getCredentialProfiles(): string[] {
+        if (!config.apiKeys) return [];
+        return typeof config.apiKeys === "object" &&
+          !Array.isArray(config.apiKeys)
+          ? Object.keys(config.apiKeys).filter((profile) =>
+              PROVIDER_PROFILE_PATTERN.test(profile),
+            )
+          : [DEFAULT_PROVIDER_PROFILE];
       },
     };
   },

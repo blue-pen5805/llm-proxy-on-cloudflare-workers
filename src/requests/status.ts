@@ -2,6 +2,7 @@ import { CloudflareAIGateway } from "../ai_gateway";
 import { gatewayProviderPath } from "../ai_gateway/custom_provider";
 import { getAllProviderInstances } from "../providers";
 import type { ProviderRegistry } from "../providers";
+import { parseProviderSelector } from "../providers/profile";
 import { ProviderBase, ProviderNotSupportedError } from "../providers/provider";
 import { recordApiKeySelection } from "../utils/api_key_selection";
 import { Config } from "../utils/config";
@@ -36,11 +37,15 @@ function classifyConnectivity(response: Response): ConnectivityStatus {
  */
 async function checkProviderConnectivity(
   providerInstance: ProviderBase,
-  providerName: string,
+  providerSelector: string,
   apiKeyIndex: number,
   keyCount: number,
   aiGateway?: CloudflareAIGateway,
 ): Promise<ConnectivityStatus> {
+  const parsedSelector = parseProviderSelector(providerSelector);
+  /* istanbul ignore next -- registry entries always use valid selectors */
+  if (!parsedSelector) return "unknown";
+  const { providerName, profile } = parsedSelector;
   /* istanbul ignore next -- callers exclude providers without a models route */
   if (!providerInstance.modelsPath) {
     return "unknown";
@@ -54,6 +59,7 @@ async function checkProviderConnectivity(
   );
   const keyLogFields = recordApiKeySelection({
     provider: providerName,
+    credentialProfile: profile,
     operation: "connectivity_check",
     keyIndex: apiKeyIndex,
     keyCount,

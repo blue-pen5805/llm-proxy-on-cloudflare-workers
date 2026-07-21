@@ -89,6 +89,7 @@
             "type": "string"
           }
         },
+        { "$ref": "#/definitions/providerCredentialProfiles" },
         {
           "type": "null"
         }
@@ -105,6 +106,7 @@
             "type": "string"
           }
         },
+        { "$ref": "#/definitions/providerCredentialProfiles" },
         {
           "type": "null"
         }
@@ -121,6 +123,7 @@
             "type": "string"
           }
         },
+        { "$ref": "#/definitions/providerCredentialProfiles" },
         {
           "type": "null"
         }
@@ -137,6 +140,7 @@
             "type": "string"
           }
         },
+        { "$ref": "#/definitions/providerCredentialProfiles" },
         {
           "type": "null"
         }
@@ -153,6 +157,7 @@
             "type": "string"
           }
         },
+        { "$ref": "#/definitions/providerCredentialProfiles" },
         {
           "type": "null"
         }
@@ -169,6 +174,7 @@
             "type": "string"
           }
         },
+        { "$ref": "#/definitions/providerCredentialProfiles" },
         {
           "type": "null"
         }
@@ -185,6 +191,7 @@
             "type": "string"
           }
         },
+        { "$ref": "#/definitions/providerCredentialProfiles" },
         {
           "type": "null"
         }
@@ -201,6 +208,7 @@
             "type": "string"
           }
         },
+        { "$ref": "#/definitions/providerCredentialProfiles" },
         {
           "type": "null"
         }
@@ -217,6 +225,7 @@
             "type": "string"
           }
         },
+        { "$ref": "#/definitions/providerCredentialProfiles" },
         {
           "type": "null"
         }
@@ -233,6 +242,7 @@
             "type": "string"
           }
         },
+        { "$ref": "#/definitions/providerCredentialProfiles" },
         {
           "type": "null"
         }
@@ -249,6 +259,7 @@
             "type": "string"
           }
         },
+        { "$ref": "#/definitions/providerCredentialProfiles" },
         {
           "type": "null"
         }
@@ -265,6 +276,7 @@
             "type": "string"
           }
         },
+        { "$ref": "#/definitions/providerCredentialProfiles" },
         {
           "type": "null"
         }
@@ -281,6 +293,7 @@
             "type": "string"
           }
         },
+        { "$ref": "#/definitions/providerCredentialProfiles" },
         {
           "type": "null"
         }
@@ -297,6 +310,7 @@
             "type": "string"
           }
         },
+        { "$ref": "#/definitions/providerCredentialProfiles" },
         {
           "type": "null"
         }
@@ -313,6 +327,7 @@
             "type": "string"
           }
         },
+        { "$ref": "#/definitions/providerCredentialProfiles" },
         {
           "type": "null"
         }
@@ -329,6 +344,7 @@
             "type": "string"
           }
         },
+        { "$ref": "#/definitions/providerCredentialProfiles" },
         {
           "type": "null"
         }
@@ -345,6 +361,7 @@
             "type": "string"
           }
         },
+        { "$ref": "#/definitions/providerCredentialProfiles" },
         {
           "type": "null"
         }
@@ -354,6 +371,7 @@
       "oneOf": [
         { "type": "string" },
         { "type": "array", "items": { "type": "string" } },
+        { "$ref": "#/definitions/providerCredentialProfiles" },
         { "type": "null" }
       ]
     },
@@ -370,6 +388,7 @@
           "type": "array",
           "items": { "$ref": "#/definitions/googleVertexServiceAccount" }
         },
+        { "$ref": "#/definitions/googleVertexCredentialProfiles" },
         { "type": "null" }
       ]
     },
@@ -377,6 +396,7 @@
       "oneOf": [
         { "type": "string" },
         { "type": "array", "items": { "type": "string" } },
+        { "$ref": "#/definitions/providerCredentialProfiles" },
         { "type": "null" }
       ]
     },
@@ -459,7 +479,8 @@
                   "type": "string",
                   "minLength": 1
                 }
-              }
+              },
+              { "$ref": "#/definitions/providerCredentialProfiles" }
             ]
           },
           "models": {
@@ -562,6 +583,42 @@
     }
   ],
   "definitions": {
+    "providerCredentialProfiles": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 32,
+      "propertyNames": {
+        "pattern": "^[A-Za-z0-9._~-]{1,64}$"
+      },
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "string", "minLength": 1 },
+          {
+            "type": "array",
+            "maxItems": 32,
+            "items": { "type": "string", "minLength": 1 }
+          }
+        ]
+      }
+    },
+    "googleVertexCredentialProfiles": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 32,
+      "propertyNames": {
+        "pattern": "^[A-Za-z0-9._~-]{1,64}$"
+      },
+      "additionalProperties": {
+        "oneOf": [
+          { "$ref": "#/definitions/googleVertexServiceAccount" },
+          {
+            "type": "array",
+            "maxItems": 32,
+            "items": { "$ref": "#/definitions/googleVertexServiceAccount" }
+          }
+        ]
+      }
+    },
     "googleVertexServiceAccount": {
       "type": "object",
       "required": [

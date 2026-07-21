@@ -19,8 +19,9 @@ applies.
 ## Striped isolate-local rotation
 
 Each rotation identifier maps to an in-memory counter scoped to the Worker
-isolate. Static providers use their environment variable name; custom endpoints
-use their configured endpoint name. The first selection in an isolate draws a
+isolate. Static providers use their environment variable name and profile;
+custom endpoints use their configured endpoint name and profile. The default
+profile retains the established unsuffixed identifier. The first selection in an isolate draws a
 cryptographically random starting phase; subsequent selections advance the
 counter modulo the key count.
 
@@ -46,7 +47,8 @@ configured by `API_KEY_COOLDOWN_SECONDS`, defaults to 60 seconds, is capped at
 86,400 seconds, and can be disabled with `0`. A successful response clears any
 cooldown for the selected slot early.
 
-Cooldown state is keyed only by provider route name and zero-based slot; it
+Cooldown state is keyed only by provider selector (including a named profile)
+and zero-based slot; it
 never stores credential values or derived credential identifiers. Like striped
 rotation, it is best-effort state scoped to a warm isolate. This avoids adding
 persistent cross-request storage and a coordination round trip to the request

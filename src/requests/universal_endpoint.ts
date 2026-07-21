@@ -5,6 +5,7 @@ import {
 } from "../ai_gateway/const";
 import { isCloudflareAIGatewayProvider } from "../ai_gateway/utils";
 import type { ProviderRegistry } from "../providers";
+import { parseProviderSelector } from "../providers/profile";
 import { recordApiKeySelection } from "../utils/api_key_selection";
 import { stripProxyAuthorizationHeaders } from "../utils/authorization";
 import { BadRequestError } from "../utils/error";
@@ -126,17 +127,24 @@ export async function handleUniversalEndpointRequest(
           endpointRequest,
           stepIndex,
         ): Promise<CloudflareAIGatewayUniversalEndpointStep> => {
-          const providerName = endpointRequest.provider;
+          const providerSelector = endpointRequest.provider;
           /* istanbul ignore next -- request validation requires provider on every step */
-          if (!providerName) {
+          if (!providerSelector) {
             throw new BadRequestError(`Provider not specified.`);
           }
+          const parsedSelector = parseProviderSelector(providerSelector);
+          if (!parsedSelector) {
+            throw new BadRequestError(
+              `Provider ${providerSelector} is not supported.`,
+            );
+          }
+          const { providerName, profile } = parsedSelector;
           if (isCloudflareAIGatewayProvider(providerName) === false) {
             throw new BadRequestError(
               `Provider ${providerName} is not supported.`,
             );
           }
-          const providerInstance = providerRegistry.get(providerName);
+          const providerInstance = providerRegistry.get(providerSelector);
           if (!providerInstance) {
             throw new BadRequestError(
               `Provider ${providerName} is not supported by this proxy.`,
@@ -145,13 +153,29 @@ export async function handleUniversalEndpointRequest(
           const endpointPath = normalizeUniversalEndpointPath(
             endpointRequest.endpoint ?? providerInstance.chatCompletionPath,
           );
-          const apiKeyName = providerInstance.apiKeyName as keyof Env;
-          const apiKeyIndex = await Secrets.getNext(apiKeyName);
+          const apiKeyIndex = providerInstance.getNextApiKeyIndex
+            ? await providerInstance.getNextApiKeyIndex()
+            : profile === "default"
+              ? await Secrets.getNext(providerInstance.apiKeyName as keyof Env)
+              : await Secrets.getNext(
+                  providerInstance.apiKeyName as keyof Env,
+                  profile,
+                );
+          const apiKeys = providerInstance.getApiKeys
+            ? providerInstance.getApiKeys()
+            : profile === "default"
+              ? Secrets.getAll(providerInstance.apiKeyName as keyof Env)
+              : Secrets.getAll(
+                  providerInstance.apiKeyName as keyof Env,
+                  false,
+                  profile,
+                );
           recordApiKeySelection({
             provider: providerName,
+            credentialProfile: profile,
             operation: "universal_endpoint",
             keyIndex: apiKeyIndex,
-            keyCount: Secrets.getAll(apiKeyName).length,
+            keyCount: apiKeys.length,
             selectionPolicy: "automatic_rotation",
             viaAiGateway: true,
             step: stepIndex,

@@ -13,7 +13,7 @@ upstream providers are streamed or forwarded without a proxy-specific envelope.
 | `GET`     | `/status`                              | Configuration and provider credential diagnostics |
 | `POST`    | `/v1/chat/completions`                 | OpenAI-compatible chat translation                |
 | `GET`     | `/v1/models`                           | Best-effort aggregate model list                  |
-| any       | `/<provider>/<path>`                   | Provider pass-through                             |
+| any       | `/<provider>[:<profile>]/<path>`       | Provider pass-through                             |
 | `POST`    | `/g/<gateway>/ai/run`                  | AI Gateway REST API: Workers AI native format     |
 | `POST`    | `/g/<gateway>/ai/v1/chat/completions`  | AI Gateway REST API: Chat Completions             |
 | `POST`    | `/g/<gateway>/ai/v1/responses`         | AI Gateway REST API: Responses                    |
@@ -62,6 +62,12 @@ upstream model, so model IDs containing `/` are supported. `model: "default"`
 uses `DEFAULT_MODEL`. Invalid JSON, a missing model, an unknown provider, or a
 missing default returns HTTP 400.
 
+Append `:<profile>` to select a named provider credential pool, for example
+`openai:second/gpt-5.6-sol`. Omitting it selects `default`, preserving existing
+model IDs. The same selector works in pass-through paths and as the Universal
+Endpoint `provider` value. A missing or malformed named profile is rejected as
+an unknown provider selector.
+
 A `model` that does not name a real provider but matches a key in
 `VIRTUAL_MODELS` selects an operator-defined
 [virtual model](design/features/virtual_models.md) (`"virtual/<name>"` is the
@@ -91,7 +97,8 @@ omitted from `/v1/models`.
 ## Models
 
 `GET /v1/models` queries configured providers and prefixes each returned ID
-with its route name. When `VIRTUAL_MODELS` is configured, every virtual model is
+with its route selector. Default-profile IDs remain `<provider>/<model>` and
+named-profile IDs use `<provider>:<profile>/<model>`. When `VIRTUAL_MODELS` is configured, every virtual model is
 listed first — ahead of the provider models — with `owned_by: "virtual"`, so
 clients discover them at the front of the list. Providers are queried five at a
 time and
@@ -179,7 +186,7 @@ Gateway is configured, use the explicit `/g/<gateway>/ai/...` form.
 curl https://your-worker.example/g/production/ai/v1/responses \
   --header "Authorization: Bearer $PROXY_API_KEY" \
   --header "Content-Type: application/json" \
-  --data '{"model":"openai/gpt-5.4","input":"Hello"}'
+  --data '{"model":"openai/gpt-5.6-sol","input":"Hello"}'
 ```
 
 Other methods and paths under `/ai` are rejected rather than forwarded.

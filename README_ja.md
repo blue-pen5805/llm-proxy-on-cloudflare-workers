@@ -13,13 +13,14 @@
 - `/openai/v1/responses` などのプロバイダー別パススルールート
 - Cloudflare AI Gateway のプロバイダールートとアカウントレベル REST API
 - 複数のプロバイダーキーからランダム選択、またはストライプ方式のラウンドロビン選択
+- `provider:profile` で選択できる名前付きプロバイダー認証情報プロファイル
 - `/key/<index-or-range>` によるリクエスト単位のキー指定
 - 設定ファイルで追加できるカスタム OpenAI 互換エンドポイント
 - `/status` による認証済みの設定・プロバイダーキー診断
 
 ## 対応プロバイダー
 
-ルート名は `openai/gpt-5.4` のようにモデル ID の接頭辞にも使います。チャット変換、
+ルート名は `openai/gpt-5.6-sol` のようにモデル ID の接頭辞にも使います。チャット変換、
 モデル一覧、直接接続、AI Gateway の対応範囲はプロバイダーごとに異なります。利用する
 組み合わせの詳細は [HTTP API and routing](docs/api.md) を参照してください。
 
@@ -81,7 +82,7 @@ curl https://your-worker.example/v1/chat/completions \
   --header "Authorization: Bearer $PROXY_API_KEY" \
   --header "Content-Type: application/json" \
   --data '{
-    "model": "openai/gpt-5.4",
+    "model": "openai/gpt-5.6-sol",
     "messages": [{"role": "user", "content": "Hello"}]
   }'
 ```
@@ -104,6 +105,11 @@ curl https://your-worker.example/google-ai-studio/v1beta/models/gemini-3.5-flash
 `GET /v1/models` は、設定済みプロバイダーのモデル一覧をベストエフォートで集約します。
 `GET /status` は認証情報を検査しますが、設定メタデータと認証情報スロット数を含むため、
 出力を公開しないでください。
+
+プロバイダー認証情報の設定では、プロファイル名ごとのキー配列も指定できます。指定を
+省略したルートは `default` を使います。たとえば OpenAI の `second` プロファイルは
+`openai:second/gpt-5.6-sol` で選択できます。詳細は
+[Configuration reference](docs/configuration.md#provider-credential-profiles) を参照してください。
 
 ## ドキュメント
 

@@ -44,7 +44,11 @@ export const AzureOpenAI = defineProvider({
     return `https://${getAzureResourceName(this as AzureOpenAI)}.openai.azure.com`;
   },
   async headers(apiKeyIndex?: number): Promise<HeadersInit> {
-    const apiKey = Secrets.get("AZURE_OPENAI_API_KEY", apiKeyIndex);
+    const apiKey = Secrets.get(
+      "AZURE_OPENAI_API_KEY",
+      apiKeyIndex,
+      this.credentialProfile,
+    );
     return apiKey
       ? { "Content-Type": "application/json", "api-key": apiKey }
       : { "Content-Type": "application/json" };

@@ -674,6 +674,31 @@ describe("models", () => {
     expect(body.data[1].id).toBe("openai/gpt-3.5-turbo");
   });
 
+  it("prefixes models with a named profile selector", async () => {
+    const profiledProvider = {
+      ...mockProviderClass,
+      available: vi.fn().mockReturnValue(true),
+      getStaticModels: vi.fn().mockReturnValue({
+        object: "list",
+        data: [
+          {
+            id: "gpt-oss-120b",
+            object: "model",
+            created: 0,
+            owned_by: "ollama",
+          },
+        ],
+      }),
+    };
+
+    const response = await handleModelsRequest({
+      providers: { all: () => ({ "ollama:paid": profiledProvider }) },
+    } as any);
+    const body = (await response.json()) as ModelsResponse;
+
+    expect(body.data.map(({ id }) => id)).toEqual(["ollama:paid/gpt-oss-120b"]);
+  });
+
   it("should return static models for custom providers when configured", async () => {
     const staticModelsProviderClass = {
       ...mockProviderClass,

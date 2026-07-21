@@ -26,7 +26,7 @@ responses unchanged.
 `src/providers.ts` is the authoritative built-in provider table.
 `ProviderRegistry` combines that table with the custom endpoint snapshot for a
 single request. It owns provider discovery, route-prefix matching, lazy
-construction, and instance reuse. Request handlers therefore consume one
+construction, profile-view creation, and instance reuse. Request handlers therefore consume one
 consistent provider view without rebuilding every adapter during route
 selection.
 
@@ -58,7 +58,7 @@ credentials and routing identifiers are valid. This prevents aggregate model
 discovery from sending predictably unauthenticated requests through Gateway.
 Gateway-specific credential representations remain index-aligned with the
 provider's ordinary credential list so explicit and coordinated selection refer
-to the same slot.
+to the same slot within the selected credential profile.
 Providers may also declare Gateway as mandatory; direct chat and pass-through
 then fail before any upstream request is attempted. Vertex AI uses this mode;
 its service-account JSON is converted to the Gateway credential header instead

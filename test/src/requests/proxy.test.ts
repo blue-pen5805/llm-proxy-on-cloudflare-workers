@@ -84,6 +84,24 @@ describe("proxy", () => {
     );
   });
 
+  it("resolves a named profile for provider pass-through", async () => {
+    const request = new Request("https://example.com/ollama:paid/api/show");
+    const providers = { get: vi.fn(() => mockProviderClass) };
+
+    await handleProviderProxyRequest(
+      { request, providers } as any,
+      "ollama:paid",
+      "/api/show",
+    );
+
+    expect(providers.get).toHaveBeenCalledWith("ollama:paid");
+    expect(mockProviderClass.fetch).toHaveBeenCalledWith(
+      "/api/show",
+      expect.any(Object),
+      0,
+    );
+  });
+
   it("sends one case-insensitive content-type value upstream", async () => {
     const request = new Request("https://example.com/openai/chat/completions", {
       method: "POST",

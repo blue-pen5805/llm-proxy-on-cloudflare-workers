@@ -20,6 +20,16 @@
   "CLOUDFLARE_API_TOKEN": null,
 
   // --- API keys for providers ---
+  // Each setting accepts one key, an array of rotating keys, or named profiles.
+  // Choose a single unprofiled key:
+  // "OPENAI_API_KEY": "sk-..."
+  // Or an unprofiled key array:
+  // "OPENAI_API_KEY": ["YOUR-OPENAI-KEY-1", "YOUR-OPENAI-KEY-2"]
+  // Or a profile map:
+  // "OPENAI_API_KEY": {
+  //   "default": ["YOUR-DEFAULT-OPENAI-KEY"],
+  //   "second": ["YOUR-SECOND-OPENAI-KEY"]
+  // }
   // OpenAI: https://platform.openai.com/
   "OPENAI_API_KEY": null,
   // Google AI Studio: https://aistudio.google.com/
@@ -72,7 +82,7 @@
     // {
     //   "name": "my-custom-llm",
     //   "baseUrl": "https://llm.example.com/v1",
-    //   "apiKeys": [],
+    //   "apiKeys": [], // Or { "default": [...], "second": [...] }
     //   "models": ["model-1", "model-2"] // Optional
     //   "chatCompletionPath": "/v1/chat/completions", // Optional
     //   "modelsPath": "/v1/models" // Optional

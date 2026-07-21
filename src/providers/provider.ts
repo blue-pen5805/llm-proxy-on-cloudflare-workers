@@ -77,6 +77,7 @@ export interface ChatCompletionsRequestArguments {
 
 /** The stable interface consumed by request handlers and provider callers. */
 export interface Provider {
+  readonly credentialProfile: string;
   readonly apiKeyName: keyof Env | undefined;
   readonly baseUrlProp: string;
   readonly pathnamePrefixProp: string;
@@ -93,6 +94,7 @@ export interface Provider {
 
   available(): boolean;
   getApiKeys(): string[];
+  getCredentialProfiles(): string[];
   /** Return Gateway-ready credentials in the same index order as getApiKeys(). */
   getAiGatewayApiKeys(): string[];
   configurationError(): string | undefined;
@@ -158,6 +160,7 @@ export interface ProviderDefinition {
   chatCompletionSupportedParameters?: readonly (keyof OpenAIChatCompletionsRequestBody)[];
   available?(this: Provider): boolean;
   getApiKeys?(this: Provider): string[];
+  getCredentialProfiles?(this: Provider): string[];
   getAiGatewayApiKeys?(this: Provider): string[];
   configurationError?(this: Provider): string | undefined;
   getNextApiKeyIndex?(this: Provider): Promise<number>;
@@ -232,6 +235,7 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
 
   const provider: Provider = {
     ...definition.properties,
+    credentialProfile: "default",
     apiKeyName: definition.apiKeyName,
     baseUrlProp:
       typeof definition.baseUrl === "string"
@@ -267,14 +271,29 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
 
     getApiKeys() {
       if (definition.getApiKeys) return definition.getApiKeys.call(this);
-      return this.apiKeyName ? Secrets.getAll(this.apiKeyName) : [];
+      return this.apiKeyName
+        ? this.credentialProfile === "default"
+          ? Secrets.getAll(this.apiKeyName)
+          : Secrets.getAll(this.apiKeyName, false, this.credentialProfile)
+        : [];
+    },
+
+    getCredentialProfiles() {
+      if (definition.getCredentialProfiles) {
+        return definition.getCredentialProfiles.call(this);
+      }
+      return this.apiKeyName ? Secrets.getProfiles(this.apiKeyName) : [];
     },
 
     getAiGatewayApiKeys() {
       if (definition.getAiGatewayApiKeys) {
         return definition.getAiGatewayApiKeys.call(this);
       }
-      return this.apiKeyName ? Secrets.getAll(this.apiKeyName) : [];
+      return this.apiKeyName
+        ? this.credentialProfile === "default"
+          ? Secrets.getAll(this.apiKeyName)
+          : Secrets.getAll(this.apiKeyName, false, this.credentialProfile)
+        : [];
     },
 
     configurationError() {
@@ -287,7 +306,9 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
       }
       const apiKeys = this.getApiKeys();
       if (apiKeys.length <= 1 || !this.apiKeyName) return 0;
-      return Secrets.getNext(this.apiKeyName);
+      return this.credentialProfile === "default"
+        ? Secrets.getNext(this.apiKeyName)
+        : Secrets.getNext(this.apiKeyName, this.credentialProfile);
     },
 
     async fetch(pathname, init, apiKeyIndex) {
@@ -438,6 +459,20 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
     Object.defineProperty(provider, openAICompatibleBrand, { value: true });
   }
   return provider;
+}
+
+/** Create an immutable provider view whose credential reads use one profile. */
+export function withProviderProfile(
+  provider: ProviderBase,
+  credentialProfile: string,
+): ProviderBase {
+  if (provider.credentialProfile === credentialProfile) return provider;
+  const profiledProvider = Object.create(provider) as ProviderBase;
+  Object.defineProperty(profiledProvider, "credentialProfile", {
+    value: credentialProfile,
+    enumerable: true,
+  });
+  return profiledProvider;
 }
 
 /**

@@ -9,7 +9,7 @@ authentication and response formats already follow the OpenAI contract.
 ## Configuration model
 
 Each `CUSTOM_OPENAI_ENDPOINTS` entry requires a unique `name` and `baseUrl` and
-may define `apiKeys`, a static `models` array, `chatCompletionPath`, and
+may define `apiKeys` as a scalar, array, or profile map, a static `models` array, `chatCompletionPath`, and
 `modelsPath`. The default paths are `/chat/completions` and `/models`.
 
 Configuration remains trusted operator input, but schema and runtime validation
@@ -47,7 +47,8 @@ direct request behavior are unchanged.
 Keys are optional. When present, the adapter adds Bearer authentication and uses
 the same explicit or striped per-isolate round-robin selection policy as
 built-in providers.
-Its rotation identifier is the endpoint name. An unauthenticated
+Its rotation identifier is the endpoint name plus the selected named profile;
+the default profile retains the endpoint name alone. An unauthenticated
 custom endpoint is considered available, which is necessary for internal or
 public upstreams but places responsibility for origin access control on the
 operator.

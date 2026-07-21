@@ -10,6 +10,15 @@ dated section; when multiple changes share a date, put the newest change first.
 Planned version: `1.0.0`. The package remains at `0.2.1` until the version
 update is explicitly approved.
 
+### 2026-07-21
+
+- Added named credential profiles for built-in and Custom OpenAI providers.
+  Existing scalar and array credentials remain the `default` profile, while
+  `<provider>:<profile>` selects an independent key pool for chat,
+  pass-through, model discovery, status, and Universal Endpoint requests.
+  Rotation, cooldowns, explicit key indices, AI Gateway credential alignment,
+  model IDs, diagnostics, and safe structured logging now remain profile-aware.
+
 ### 2026-07-20
 
 - Removed `ENABLE_GLOBAL_ROUND_ROBIN`; automatic multi-key selection now always

@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AwsBedrock } from "~/src/providers/aws-bedrock/provider";
 import { AzureOpenAI } from "~/src/providers/azure-openai/provider";
 import { GoogleVertexAi } from "~/src/providers/google-vertex-ai/provider";
-import { ProviderNotSupportedError } from "~/src/providers/provider";
+import {
+  ProviderNotSupportedError,
+  withProviderProfile,
+} from "~/src/providers/provider";
 import { Environments } from "~/src/utils/environments";
 import { Secrets } from "~/src/utils/secrets";
 
@@ -148,6 +151,43 @@ describe("cloud platform providers", () => {
     );
   });
 
+  it("selects profiled Vertex service accounts independently", async () => {
+    const defaultCredential = JSON.parse(
+      values.GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON!,
+    );
+    const paidCredential = {
+      ...defaultCredential,
+      project_id: "paid-project",
+      client_email: "vertex@paid-project.iam.gserviceaccount.com",
+    };
+    values.GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON = JSON.stringify({
+      default: defaultCredential,
+      paid: [paidCredential],
+    });
+    const provider = new GoogleVertexAi();
+    const paidProvider = withProviderProfile(provider, "paid");
+
+    expect(provider.getCredentialProfiles()).toEqual(["default", "paid"]);
+    expect(JSON.parse(atob(provider.getApiKeys()[0]))).toEqual(
+      defaultCredential,
+    );
+    expect(JSON.parse(atob(paidProvider.getApiKeys()[0]))).toEqual(
+      paidCredential,
+    );
+    vi.spyOn(Secrets, "getNextIndex").mockResolvedValue(0);
+    await paidProvider.getNextApiKeyIndex();
+    expect(Secrets.getNextIndex).toHaveBeenCalledWith(
+      "GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON:paid",
+      1,
+    );
+  });
+
+  it("does not fall back to legacy Vertex credentials for a named profile", () => {
+    const paidProvider = withProviderProfile(new GoogleVertexAi(), "paid");
+    expect(paidProvider.getApiKeys()).toEqual([]);
+    expect(paidProvider.configurationError()).toBeUndefined();
+  });
+
   it("rejects Vertex service-account JSON without a region", () => {
     values.GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON = JSON.stringify({
       type: "service_account",
@@ -169,9 +209,17 @@ describe("cloud platform providers", () => {
 
     values.GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON = "not-json";
     expect(provider.configurationError()).toContain("valid JSON");
+    expect(provider.getCredentialProfiles()).toEqual([]);
 
     values.GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON = "[]";
     expect(provider.getApiKeys()).toEqual([]);
+    expect(provider.getCredentialProfiles()).toEqual(["default"]);
+
+    values.GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON = JSON.stringify(
+      "not-a-service-account",
+    );
+    expect(provider.getApiKeys()).toEqual([]);
+    expect(provider.configurationError()).toContain("service-account JSON");
 
     values.GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON = JSON.stringify([
       {

@@ -4,6 +4,7 @@ import {
   resolveGatewayProvider,
 } from "../ai_gateway/custom_provider";
 import { MiddlewareContext } from "../middleware";
+import { parseProviderSelector } from "../providers/profile";
 import { mergeHeaders } from "../providers/provider";
 import {
   determineApiKeySelectionPolicy,
@@ -72,8 +73,8 @@ export async function handleChatCompletionsRequest(
   // virtual model map, whose keys are then tried as an ordered candidate list.
   // "virtual/<name>" is the recommended convention for these keys (no real
   // provider is named "virtual"), but any configured key resolves here.
-  const [providerName] = requestedModel.split("/");
-  if (!resolveProvider(context, providerName)) {
+  const [providerSelector] = requestedModel.split("/");
+  if (!resolveProvider(context, providerSelector)) {
     const candidates = Config.virtualModels()?.[requestedModel];
     if (candidates) {
       return await runVirtualModelChain(
@@ -113,20 +114,22 @@ async function attemptChatCompletion(
   ) => fetchWithCandidateTimeout(request.signal, timeout, fetchAttempt);
 
   // Split model into provider and model name
-  const [providerName, ...modelParts] = requestedModel.split("/");
+  const [providerSelector, ...modelParts] = requestedModel.split("/");
   const model = modelParts.join("/");
+  const parsedSelector = parseProviderSelector(providerSelector);
 
   // Validate provider name
-  const providerInstance = resolveProvider(context, providerName);
-  if (!providerInstance) {
+  const providerInstance = resolveProvider(context, providerSelector);
+  if (!providerInstance || !parsedSelector) {
     return {
       response: invalidRequestResponse("Invalid provider."),
       retryable: true,
     };
   }
+  const { providerName, profile } = parsedSelector;
 
   const providerError = createProviderConfigurationErrorResponse(
-    providerName,
+    providerSelector,
     providerInstance,
     aiGateway,
   );
@@ -143,7 +146,7 @@ async function attemptChatCompletion(
     providerInstance,
     contextApiKeyIndex,
     "rotate",
-    providerName,
+    providerSelector,
   );
   const aiGatewayProvider =
     aiGateway &&
@@ -171,6 +174,7 @@ async function attemptChatCompletion(
   const recordSelection = (selectedIndex: number) =>
     recordApiKeySelection({
       provider: providerName,
+      credentialProfile: profile,
       operation: "chat_completions",
       keyIndex: selectedIndex,
       keyCount: configuredApiKeys.length,
@@ -192,7 +196,7 @@ async function attemptChatCompletion(
   // If AI Gateway is enabled and the provider supports it, use AI Gateway
   if (aiGateway && aiGatewayProvider) {
     const eligibleApiKeyIndexes = getEligibleApiKeyIndexes(
-      providerName,
+      providerSelector,
       configuredApiKeys.length,
     );
     const remainingApiKeyIndexes = shuffleArray(
@@ -237,7 +241,7 @@ async function attemptChatCompletion(
             recordSelection(gatewayApiKeyIndexes[attemptIndex] ?? 0),
           (attemptIndex, attemptResponse) =>
             recordApiKeyOutcome(
-              providerName,
+              providerSelector,
               gatewayApiKeyIndexes[attemptIndex] ?? 0,
               configuredApiKeys.length,
               attemptResponse.status,
@@ -292,7 +296,7 @@ async function attemptChatCompletion(
         ),
       );
       recordApiKeyOutcome(
-        providerName,
+        providerSelector,
         apiKeyIndex,
         configuredApiKeys.length,
         response.status,
@@ -338,7 +342,7 @@ async function attemptChatCompletion(
       ),
     );
     recordApiKeyOutcome(
-      providerName,
+      providerSelector,
       apiKeyIndex,
       configuredApiKeys.length,
       response.status,
@@ -362,7 +366,7 @@ async function attemptChatCompletion(
     ),
   );
   recordApiKeyOutcome(
-    providerName,
+    providerSelector,
     apiKeyIndex,
     configuredApiKeys.length,
     response.status,
