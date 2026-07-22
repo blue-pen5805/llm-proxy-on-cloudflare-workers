@@ -68,6 +68,7 @@ forwarded.
 - [Key rotation](features/key_rotation.md)
 - [Provider credential profiles](features/provider_profiles.md)
 - [Virtual models](features/virtual_models.md)
+- [Chat response metadata](features/chat-response-metadata.md)
 
 ### Cloudflare integration and diagnostics
 

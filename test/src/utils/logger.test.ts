@@ -2,6 +2,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { redactLogText, RequestLogger } from "~/src/utils/logger";
 
 describe("RequestLogger", () => {
+  it("returns the current request ID", () => {
+    expect(RequestLogger.requestId()).toBeUndefined();
+    RequestLogger.run(
+      new Request("https://example.com/", {
+        headers: { "cf-ray": "ray-id" },
+      }),
+      () => expect(RequestLogger.requestId()).toBe("ray-id"),
+    );
+  });
   afterEach(() => {
     vi.restoreAllMocks();
   });

@@ -142,6 +142,27 @@ describe("runVirtualModelChainAttempt", () => {
     expect(attempt).toHaveBeenCalledWith("a/1");
   });
 
+  it("preserves routing metadata from the selected attempt", async () => {
+    const route = {
+      provider: "openai",
+      model: "gpt-4o-mini",
+      credentialProfile: "default",
+      viaAiGateway: false,
+    };
+
+    const result = await runVirtualModelChainAttempt(
+      "virtual/route",
+      [{ model: "openai/gpt-4o-mini", retries: 0 }],
+      async () => ({
+        response: new Response("ok"),
+        retryable: false,
+        route,
+      }),
+    );
+
+    expect(result.route).toBe(route);
+  });
+
   it("moves to the next candidate when the response is retryable", async () => {
     const attempt = vi
       .fn()

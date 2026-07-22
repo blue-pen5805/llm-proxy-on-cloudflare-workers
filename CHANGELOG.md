@@ -12,6 +12,14 @@ update is explicitly approved.
 
 ### 2026-07-22
 
+- Added opt-in `llm_proxy` routing and timing metadata to routed
+  OpenAI-compatible Chat Completions JSON responses, including upstream JSON
+  errors. `CHAT_RESPONSE_METADATA_ENABLED` defaults to `false` for strict client
+  compatibility. When enabled, streaming SSE responses receive an
+  empty-choice metadata chunk immediately before `[DONE]` without buffering the
+  stream, exposing the concrete provider/model, safe credential slot, AI Gateway
+  route, request ID, and header/completion timings. Local pre-routing errors and
+  malformed, oversized, or unrecognized response bodies remain unchanged.
 - Added authenticated `GET /virtual-models` discovery, returning every
   configured virtual model in a `/models`-compatible list and model-object
   schema, extended with ordered candidates, retry, total-attempt, and optional

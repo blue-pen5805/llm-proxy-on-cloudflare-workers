@@ -22,6 +22,10 @@ import {
   shuffleArray,
 } from "../utils/helpers";
 import { RequestLogger } from "../utils/logger";
+import {
+  ChatResponseRouteMetadata,
+  enrichChatResponseWithMetadata,
+} from "./chat_response_metadata";
 import { fetchCompatibilityFallback } from "./compatibility_fallback";
 import {
   createProviderConfigurationErrorResponse,
@@ -46,6 +50,9 @@ export async function handleChatCompletionsRequest(
   aiGateway: CloudflareAIGateway | undefined = undefined,
 ) {
   const { request } = context;
+  const responseMetadataEnabled = Config.chatResponseMetadataEnabled();
+  const startedAt = responseMetadataEnabled ? new Date().toISOString() : "";
+  const startedAtPerformance = responseMetadataEnabled ? performance.now() : 0;
   // Validate Request Data Structure
   const parsedRequestBody = parseJsonOrReturnText(
     await readRequestText(request),
@@ -79,26 +86,43 @@ export async function handleChatCompletionsRequest(
     const virtualModels = Config.virtualModels();
     const candidates = virtualModels?.[requestedModel];
     if (candidates) {
-      return (
-        await attemptResolvedChatCompletion(
-          context,
-          aiGateway,
-          chatRequestBody,
-          requestedModel,
-          virtualModels,
-          new Set(),
-        )
-      ).response;
+      const result = await attemptResolvedChatCompletion(
+        context,
+        aiGateway,
+        chatRequestBody,
+        requestedModel,
+        virtualModels,
+        new Set(),
+      );
+      return result.route && responseMetadataEnabled
+        ? enrichChatResponseWithMetadata({
+            response: result.response,
+            route: result.route,
+            requestedModel,
+            requestId: RequestLogger.requestId(),
+            startedAt,
+            startedAtPerformance,
+          })
+        : result.response;
     }
   }
 
-  const { response } = await attemptChatCompletion(
+  const result = await attemptChatCompletion(
     context,
     aiGateway,
     chatRequestBody,
     requestedModel,
   );
-  return response;
+  return result.route && responseMetadataEnabled
+    ? enrichChatResponseWithMetadata({
+        response: result.response,
+        route: result.route,
+        requestedModel,
+        requestId: RequestLogger.requestId(),
+        startedAt,
+        startedAtPerformance,
+      })
+    : result.response;
 }
 
 async function attemptResolvedChatCompletion(
@@ -239,6 +263,17 @@ async function attemptChatCompletion(
           (aiGateway.alwaysUse || providerInstance.supportsAiGatewayNativeChat),
         ),
     });
+  const routeMetadata = (
+    viaAiGateway: boolean,
+    selectedIndex = apiKeyIndex,
+  ): ChatResponseRouteMetadata => ({
+    provider: providerName,
+    model,
+    credentialProfile: profile,
+    ...(configuredApiKeys.length > 0 ? { credentialIndex: selectedIndex } : {}),
+    viaAiGateway,
+    ...(viaAiGateway && aiGateway ? { gateway: aiGateway.gatewayId } : {}),
+  });
 
   // Generate chat completions request
   const supportedRequestBody = providerInstance.filterSupportedChatParameters({
@@ -248,6 +283,7 @@ async function attemptChatCompletion(
 
   // If AI Gateway is enabled and the provider supports it, use AI Gateway
   if (aiGateway && aiGatewayProvider) {
+    let selectedApiKeyIndex = apiKeyIndex;
     const eligibleApiKeyIndexes = getEligibleApiKeyIndexes(
       providerSelector,
       configuredApiKeys.length,
@@ -290,8 +326,10 @@ async function attemptChatCompletion(
           gatewayRequests,
           signal,
           /* istanbul ignore next -- Gateway requests and credential indexes are built one-to-one */
-          (attemptIndex) =>
-            recordSelection(gatewayApiKeyIndexes[attemptIndex] ?? 0),
+          (attemptIndex) => {
+            selectedApiKeyIndex = gatewayApiKeyIndexes[attemptIndex] ?? 0;
+            return recordSelection(selectedApiKeyIndex);
+          },
           (attemptIndex, attemptResponse) =>
             recordApiKeyOutcome(
               providerSelector,
@@ -302,7 +340,11 @@ async function attemptChatCompletion(
         ),
       ),
     );
-    return { response, retryable: isRetryableCandidateStatus(response.status) };
+    return {
+      response,
+      retryable: isRetryableCandidateStatus(response.status),
+      route: routeMetadata(true, selectedApiKeyIndex),
+    };
   }
 
   const [requestInfo, requestInit] =
@@ -331,7 +373,11 @@ async function attemptChatCompletion(
       configuredApiKeys.length,
       response.status,
     );
-    return { response, retryable: isRetryableCandidateStatus(response.status) };
+    return {
+      response,
+      retryable: isRetryableCandidateStatus(response.status),
+      route: routeMetadata(true),
+    };
   };
 
   // Some Gateway providers (notably Azure OpenAI) require account-specific
@@ -414,5 +460,9 @@ async function attemptChatCompletion(
     configuredApiKeys.length,
     response.status,
   );
-  return { response, retryable: isRetryableCandidateStatus(response.status) };
+  return {
+    response,
+    retryable: isRetryableCandidateStatus(response.status),
+    route: routeMetadata(false),
+  };
 }

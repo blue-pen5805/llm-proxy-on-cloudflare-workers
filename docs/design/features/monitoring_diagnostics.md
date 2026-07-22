@@ -46,7 +46,8 @@ Provider credentials are represented only by zero-based slot numbers and
 connectivity status; no key value or suffix is returned. AI Gateway tokens
 become `***`, but account and Gateway identifiers remain visible. Default model,
 strict AI Gateway mode, development mode, API-key cooldown duration, provider
-names, and key counts are also exposed.
+names, key counts, and whether Chat Completions response metadata is enabled are
+also exposed.
 
 The route passes through normal authentication, except when authentication has
 been disabled by configuration. Operators should not expose it publicly or use

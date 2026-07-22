@@ -53,6 +53,9 @@ describe("handleChatCompletionsRequest", () => {
     vi.mocked(helpers.readRequestText).mockImplementation((request) =>
       request.text(),
     );
+    vi.mocked(helpers.readResponseJson).mockImplementation((response) =>
+      response.json(),
+    );
     vi.mocked(helpers.shuffleArray).mockImplementation((values) => [...values]);
     vi.mocked(helpers.fetchWithLogging).mockResolvedValue(new Response());
     vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(true);
@@ -60,6 +63,7 @@ describe("handleChatCompletionsRequest", () => {
       return mockProviderClass;
     });
     vi.mocked(Config.defaultModel).mockReturnValue("openai/gpt-4");
+    vi.mocked(Config.chatResponseMetadataEnabled).mockReturnValue(false);
     vi.mocked(Secrets.getAll).mockReturnValue(["test-key"]);
     vi.mocked(Secrets.getNext).mockResolvedValue(0);
     mockProviderClass.getApiKeys.mockReturnValue(["test-key"]);
@@ -134,6 +138,51 @@ describe("handleChatCompletionsRequest", () => {
     expect(
       mockProviderClass.filterSupportedChatParameters,
     ).toHaveBeenCalledWith(expect.objectContaining({ model: "gpt-oss-120b" }));
+  });
+
+  it("preserves the upstream JSON body when response metadata is disabled", async () => {
+    const upstreamBody = { id: "chatcmpl-test", choices: [] };
+    const request = new Request("https://example.com/chat/completions", {
+      method: "POST",
+      body: JSON.stringify({ model: "openai/gpt-4", messages: [] }),
+    });
+    mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
+      "/chat/completions",
+      { method: "POST", body: "{}" },
+    ]);
+    mockProviderClass.fetch.mockResolvedValue(Response.json(upstreamBody));
+
+    const response = await handleChatCompletionsRequest({ request } as any);
+
+    expect(await response.json()).toEqual(upstreamBody);
+  });
+
+  it("adds llm_proxy metadata when response metadata is enabled", async () => {
+    vi.mocked(Config.chatResponseMetadataEnabled).mockReturnValue(true);
+    const request = new Request("https://example.com/chat/completions", {
+      method: "POST",
+      body: JSON.stringify({ model: "openai/gpt-4", messages: [] }),
+    });
+    mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
+      "/chat/completions",
+      { method: "POST", body: "{}" },
+    ]);
+    mockProviderClass.fetch.mockResolvedValue(
+      Response.json({ id: "chatcmpl-test", choices: [] }),
+    );
+
+    const response = await handleChatCompletionsRequest({ request } as any);
+    const body = (await response.json()) as Record<string, any>;
+
+    expect(body.id).toBe("chatcmpl-test");
+    expect(body.llm_proxy).toMatchObject({
+      provider: "openai",
+      model: "gpt-4",
+      requested_model: "openai/gpt-4",
+      credential_profile: "default",
+      credential_index: 0,
+      via_ai_gateway: false,
+    });
   });
 
   it("uses an explicit middleware key selection", async () => {
@@ -675,6 +724,33 @@ describe("handleChatCompletionsRequest", () => {
       );
     });
 
+    it("adds enabled metadata for the selected virtual-model candidate", async () => {
+      vi.mocked(Config.chatResponseMetadataEnabled).mockReturnValue(true);
+      vi.mocked(Config.virtualModels).mockReturnValue({
+        "virtual/fast-tier": [{ model: "openai/gpt-4", retries: 0 }],
+      });
+      mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
+        "/chat/completions",
+        { method: "POST", body: "{}" },
+      ]);
+      mockProviderClass.fetch.mockResolvedValue(
+        Response.json({ id: "chatcmpl-virtual", choices: [] }),
+      );
+
+      const response = await handleChatCompletionsRequest({
+        request: buildRequest("virtual/fast-tier"),
+      } as any);
+
+      await expect(response.json()).resolves.toMatchObject({
+        id: "chatcmpl-virtual",
+        llm_proxy: {
+          provider: "openai",
+          model: "gpt-4",
+          requested_model: "virtual/fast-tier",
+        },
+      });
+    });
+
     it("defensively rejects a cycle that bypassed configuration validation", async () => {
       vi.mocked(Config.virtualModels).mockReturnValue({
         "virtual/one": [{ model: "virtual/two", retries: 0 }],
@@ -808,6 +884,20 @@ describe("handleChatCompletionsRequest", () => {
 
       expect(response.status).toBe(503);
       expect(mockProviderClass.fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it("returns a local candidate error without response metadata", async () => {
+      vi.mocked(Config.virtualModels).mockReturnValue({
+        "virtual/broken": [{ model: "unknown/model", retries: 0 }],
+      });
+
+      const response = await handleChatCompletionsRequest({
+        request: buildRequest("virtual/broken"),
+      } as any);
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: "Invalid provider." });
+      expect(mockProviderClass.fetch).not.toHaveBeenCalled();
     });
 
     it("returns 400 for an unknown virtual model", async () => {

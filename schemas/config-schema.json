@@ -424,6 +424,16 @@
         }
       ]
     },
+    "CHAT_RESPONSE_METADATA_ENABLED": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "API_KEY_COOLDOWN_SECONDS": {
       "oneOf": [
         {

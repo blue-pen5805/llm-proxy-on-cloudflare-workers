@@ -93,6 +93,14 @@ uses an AI Gateway provider endpoint.
    prefix from the model.
 5. Send directly or construct an AI Gateway request.
 6. Apply the provider's optional response transformation and forward the result.
+7. When `CHAT_RESPONSE_METADATA_ENABLED=true`, add bounded `llm_proxy` metadata
+   to an object-valued JSON response, or inject one final metadata chunk into an
+   SSE response.
+
+The metadata stage runs only on the OpenAI-compatible Chat Completions route and
+is disabled by default for strict client compatibility. It preserves local
+pre-routing errors and malformed, oversized, or unrecognized upstream responses.
+See [Chat response metadata](chat-response-metadata.md).
 
 The incoming abort signal is attached to the provider or Gateway subrequest so
 client cancellation can stop avoidable work. The Worker enables the

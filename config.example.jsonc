@@ -117,6 +117,10 @@
   // run with authentication enabled.
   "DEV": false,
   "DEFAULT_MODEL": null,
+  // Add an llm_proxy object to routed Chat Completions JSON responses and a
+  // final llm_proxy metadata chunk to streams. Disabled by default for strict
+  // OpenAI client compatibility.
+  "CHAT_RESPONSE_METADATA_ENABLED": false,
   // Seconds to avoid an API-key slot after HTTP 401, 403, 404, 429, or 5xx.
   // Set to 0 to disable cooldowns (default: 60).
   "API_KEY_COOLDOWN_SECONDS": null,

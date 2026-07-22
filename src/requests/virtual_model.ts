@@ -4,6 +4,7 @@ import { RequestLogger } from "../utils/logger";
 export interface ChatCompletionAttemptResult {
   response: Response;
   retryable: boolean;
+  route?: import("./chat_response_metadata").ChatResponseRouteMetadata;
 }
 
 type ChatCompletionAttempt = (
@@ -72,9 +73,10 @@ export async function runVirtualModelChainAttempt(
     const isLastAttempt = attemptIndex === attempts.length - 1;
 
     try {
-      const { response, retryable } = await (candidate.timeout === undefined
+      const result = await (candidate.timeout === undefined
         ? attempt(candidate.model)
         : attempt(candidate.model, candidate.timeout));
+      const { response, retryable } = result;
 
       if (!retryable || isLastAttempt) {
         RequestLogger.info(
@@ -88,7 +90,7 @@ export async function runVirtualModelChainAttempt(
             timeout_ms: candidate.timeout,
           },
         );
-        return { response, retryable };
+        return result;
       }
 
       RequestLogger.warn(

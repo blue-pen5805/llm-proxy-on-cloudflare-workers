@@ -213,6 +213,10 @@ export class RequestLogger {
     return startedAt === undefined ? 0 : RequestLogger.durationMs(startedAt);
   }
 
+  static requestId(): string | undefined {
+    return requestLogContext.getStore()?.requestId;
+  }
+
   static durationMs(startedAt: number): number {
     return Math.max(0, Math.round((performance.now() - startedAt) * 100) / 100);
   }

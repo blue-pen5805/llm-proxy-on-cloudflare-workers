@@ -248,6 +248,12 @@ export class Config {
     return defaultModel;
   }
 
+  /** Whether Chat Completions responses receive the `llm_proxy` extension. */
+  static chatResponseMetadataEnabled(): boolean {
+    const rawValue = Environments.get("CHAT_RESPONSE_METADATA_ENABLED", false);
+    return rawValue?.trim().toLowerCase() === "true";
+  }
+
   /**
    * TTL for the aggregated `/models` response cache, in seconds.
    * `0` disables caching. Misconfigured values fall back to the default so a

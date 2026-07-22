@@ -57,6 +57,7 @@ describe("status", () => {
       alwaysUse: false,
     });
     vi.mocked(Config.apiKeyCooldownSeconds).mockReturnValue(60);
+    vi.mocked(Config.chatResponseMetadataEnabled).mockReturnValue(false);
 
     vi.mocked(Environments.getEnv).mockReturnValue({} as Env);
     vi.mocked(Environments.all).mockReturnValue({} as any);
@@ -102,6 +103,7 @@ describe("status", () => {
     expect(body.config).toEqual({
       DEV: false,
       DEFAULT_MODEL: "gpt-4",
+      CHAT_RESPONSE_METADATA_ENABLED: false,
       AI_GATEWAY: {
         accountId: "acc-123",
         name: "gw-123",

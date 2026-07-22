@@ -223,6 +223,25 @@ describe("Config", () => {
     });
   });
 
+  describe("chatResponseMetadataEnabled", () => {
+    it.each([
+      ["true", true],
+      [" TRUE ", true],
+      ["false", false],
+      ["1", false],
+      ["", false],
+      [undefined, false],
+    ])("maps %j to %s", (value, expected) => {
+      vi.mocked(Environments.get).mockReturnValue(value);
+
+      expect(Config.chatResponseMetadataEnabled()).toBe(expected);
+      expect(Environments.get).toHaveBeenCalledWith(
+        "CHAT_RESPONSE_METADATA_ENABLED",
+        false,
+      );
+    });
+  });
+
   describe("modelsCacheTtlSeconds", () => {
     it.each([
       [undefined, 300],

@@ -2,7 +2,9 @@
 
 All routes except CORS preflight pass through the same authentication layer.
 Use `Authorization: Bearer <PROXY_API_KEY>` in normal clients. Responses from
-upstream providers are streamed or forwarded without a proxy-specific envelope.
+upstream providers are streamed or forwarded without a proxy-specific envelope,
+except for the opt-in additive `llm_proxy` metadata on routed
+OpenAI-compatible Chat Completions responses.
 
 ## Route summary
 
@@ -88,6 +90,51 @@ unknown provider.
 The adapters retain only parameters supported by each upstream API. Translation
 is therefore OpenAI-compatible at the endpoint level, not a guarantee that every
 OpenAI field or provider feature has identical semantics.
+
+When `CHAT_RESPONSE_METADATA_ENABLED=true`, object-valued JSON responses include
+an additive top-level `llm_proxy` object after a concrete upstream route is
+selected, including upstream JSON errors. It identifies the concrete `provider`
+and `model`, the resolved
+`requested_model`, credential profile and zero-based configured credential slot,
+AI Gateway route, request ID, and request timing. `credential_index` is omitted
+when AI Gateway supplies a credential; `gateway` is omitted for direct requests.
+No credential value or derived identifier is exposed. For example:
+
+```json
+{
+  "id": "chatcmpl-example",
+  "object": "chat.completion",
+  "choices": [],
+  "llm_proxy": {
+    "request_id": "example-request-id",
+    "provider": "openai",
+    "model": "gpt-4o-mini",
+    "requested_model": "virtual/fast",
+    "credential_profile": "default",
+    "credential_index": 0,
+    "via_ai_gateway": true,
+    "gateway": "production",
+    "started_at": "2026-07-22T00:00:00.000Z",
+    "headers_received_ms": 184.27,
+    "completed_at": "2026-07-22T00:00:00.190Z",
+    "duration_ms": 190.14
+  }
+}
+```
+
+With `"stream": true`, existing SSE chunks remain unchanged and one additional
+`chat.completion.chunk` with `choices: []` and `llm_proxy` is emitted immediately
+before `data: [DONE]`. Its `duration_ms` measures through stream completion;
+`headers_received_ms` measures time to the selected upstream response headers.
+Clients that strictly enumerate chunks should accept or ignore an empty-choice
+metadata chunk. A JSON body is parsed only up to 5 MiB; malformed, oversized,
+non-object, and non-JSON upstream responses are returned unchanged. Local errors
+that occur before provider selection also keep their existing shape. See
+[the response metadata design](design/features/chat-response-metadata.md).
+
+The setting defaults to `false`. When disabled, the response body and stream are
+not inspected or rewritten by this metadata feature, preserving strict OpenAI
+client compatibility.
 
 Cloud-platform model examples are `azure-openai/<deployment-name>`,
 `google-vertex-ai/google/<gemini-model>`, and

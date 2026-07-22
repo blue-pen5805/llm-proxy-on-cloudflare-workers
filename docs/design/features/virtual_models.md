@@ -179,6 +179,12 @@ model name, candidate model, attempt index, configured timeout in milliseconds,
 and (when available) the response status (`virtual_model.selected`,
 `virtual_model.retry`). No request or response body is logged.
 
+The successful candidate's concrete provider, model, credential slot, and
+Gateway route are also returned in the optional Chat Completions `llm_proxy`
+extension. The client-requested virtual model remains visible as
+`requested_model`; failed candidate history remains log-only. See
+[Chat response metadata](chat-response-metadata.md).
+
 ## References
 
 - [Custom OpenAI-compatible endpoints](custom-openai-endpoints.md) — the

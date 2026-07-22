@@ -144,6 +144,7 @@ export async function handleStatusRequest(
   const configurationStatus = {
     DEV: Config.isDevelopment(),
     DEFAULT_MODEL: Config.defaultModel() || null,
+    CHAT_RESPONSE_METADATA_ENABLED: Config.chatResponseMetadataEnabled(),
     AI_GATEWAY: {
       ...aiGatewayConfig,
       token: aiGatewayConfig.token ? "***" : undefined,
