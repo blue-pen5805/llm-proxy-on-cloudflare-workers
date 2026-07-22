@@ -5,7 +5,6 @@ import {
   parseJsonOrReturnText,
   getRequestPath,
   shuffleArray,
-  interpolateTemplate,
   maskSensitiveUrl,
   removeAuthorizationQueryParameters,
   fetchWithLogging,
@@ -126,28 +125,6 @@ describe("utf8ByteLength", () => {
     ["\udc00", "lone trail surrogate"],
   ])("matches TextEncoder byte counts for %j (%s)", (value) => {
     expect(utf8ByteLength(value)).toBe(new TextEncoder().encode(value).length);
-  });
-});
-
-describe("interpolateTemplate", () => {
-  it("should format the string with the given arguments", () => {
-    const template = "Hello, {name}!";
-    const args = { name: "World" };
-    const result = interpolateTemplate(template, args);
-    expect(result).toBe("Hello, World!");
-  });
-
-  it("should replace multiple occurrences of the same key", () => {
-    const template = "{greeting}, {name}! {greeting} again!";
-    const args = { greeting: "Hello", name: "World" };
-    const result = interpolateTemplate(template, args);
-    expect(result).toBe("Hello, World! Hello again!");
-  });
-
-  it("should replace placeholder keys containing regular expression characters", () => {
-    expect(interpolateTemplate("Value: {a.b}", { "a.b": "matched" })).toBe(
-      "Value: matched",
-    );
   });
 });
 

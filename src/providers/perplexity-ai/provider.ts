@@ -1,10 +1,4 @@
-import {
-  defineProvider,
-  ProviderNotSupportedError,
-  type Provider,
-} from "../provider";
-
-export type PerplexityAi = Provider;
+import { defineProvider, ProviderNotSupportedError } from "../provider";
 
 export const PerplexityAi = defineProvider({
   openAICompatible: true,

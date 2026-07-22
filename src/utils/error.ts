@@ -21,21 +21,9 @@ export class UnauthorizedError extends AppError {
   }
 }
 
-export class ForbiddenError extends AppError {
-  constructor(message: string = "Forbidden") {
-    super(message, 403);
-  }
-}
-
 export class NotFoundError extends AppError {
   constructor(message: string = "Not Found") {
     super(message, 404);
-  }
-}
-
-export class InternalServerError extends AppError {
-  constructor(message: string = "Internal Server Error") {
-    super(message, 500);
   }
 }
 

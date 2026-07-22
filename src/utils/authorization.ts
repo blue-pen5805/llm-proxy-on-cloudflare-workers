@@ -1,14 +1,7 @@
 import { Config } from "./config";
-import { SENSITIVE_CREDENTIAL_NAMES } from "./sensitive_data";
 import { createHash } from "node:crypto";
 
-export const AUTHORIZATION_KEYS = [
-  "Authorization",
-  "x-api-key",
-  "x-goog-api-key",
-];
-
-export const AUTHORIZATION_QUERY_PARAMETERS = [...SENSITIVE_CREDENTIAL_NAMES];
+const AUTHORIZATION_KEYS = ["Authorization", "x-api-key", "x-goog-api-key"];
 
 const UPSTREAM_CONTROLLED_AUTHORIZATION_HEADERS = new Set([
   ...AUTHORIZATION_KEYS.map((key) => key.toLowerCase()),

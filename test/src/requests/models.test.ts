@@ -77,7 +77,7 @@ describe("models", () => {
     // Provide withTimeout implementation to the mocked helpers module
     if (helpers.withTimeout !== undefined) {
       vi.mocked(helpers.withTimeout).mockImplementation(
-        async (promise: Promise<any>, abortController: AbortController) => {
+        async (promise: Promise<any>, _abortController: AbortController) => {
           return promise;
         },
       );

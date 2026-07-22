@@ -1,6 +1,4 @@
-import { defineProvider, type Provider } from "../provider";
-
-export type Ollama = Provider;
+import { defineProvider } from "../provider";
 
 export const Ollama = defineProvider({
   openAICompatible: true,

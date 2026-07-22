@@ -25,13 +25,6 @@ export interface GenerateDevVarsCliArguments {
 
 export type GenerationResult = OperationResult;
 
-export interface GenerationOptions {
-  repositoryRoot: string;
-  env?: string;
-  fsOps?: FileSystemOperations;
-  includeNullPlaceholders?: boolean;
-}
-
 /**
  * Get file paths for given environment
  */

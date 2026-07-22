@@ -1,6 +1,4 @@
-import { defineProvider, type Provider } from "../provider";
-
-export type Grok = Provider;
+import { defineProvider } from "../provider";
 
 export const Grok = defineProvider({
   openAICompatible: true,

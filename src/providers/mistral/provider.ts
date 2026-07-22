@@ -1,11 +1,8 @@
 import {
   defineProvider,
   convertModelsToOpenAIFormatWithMetadata,
-  type Provider,
 } from "../provider";
 import { MistralModelsListResponseBody } from "./types";
-
-export type Mistral = Provider;
 
 export const Mistral = defineProvider({
   openAICompatible: true,

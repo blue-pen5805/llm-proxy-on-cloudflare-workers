@@ -1,6 +1,4 @@
-import { defineProvider, type Provider } from "../provider";
-
-export type NvidiaNim = Provider;
+import { defineProvider } from "../provider";
 
 export const NvidiaNim = defineProvider({
   openAICompatible: true,

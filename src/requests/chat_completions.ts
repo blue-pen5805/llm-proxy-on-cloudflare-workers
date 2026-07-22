@@ -314,6 +314,25 @@ async function attemptChatCompletion(
     });
 
   const keyLogFields = recordSelection(apiKeyIndex);
+  const completeGatewayRequest = async ([url, gatewayInit]: [
+    RequestInfo,
+    RequestInit,
+  ]): Promise<ChatCompletionAttemptResult> => {
+    const response = await transformResponse(
+      RequestLogger.withFields({ ...keyLogFields, via_ai_gateway: true }, () =>
+        fetchWithTimeout((signal) =>
+          fetchCompatibilityFallback([[url, gatewayInit]], signal),
+        ),
+      ),
+    );
+    recordApiKeyOutcome(
+      providerSelector,
+      apiKeyIndex,
+      configuredApiKeys.length,
+      response.status,
+    );
+    return { response, retryable: isRetryableCandidateStatus(response.status) };
+  };
 
   // Some Gateway providers (notably Azure OpenAI) require account-specific
   // path segments and are not represented by the Compatibility Endpoint.
@@ -332,32 +351,15 @@ async function attemptChatCompletion(
       });
     if (providerRequest) {
       const [path, init] = providerRequest;
-      const [url, gatewayInit] = aiGateway.buildProviderEndpointRequest({
-        provider: providerName,
-        method: init.method,
-        path,
-        body: init.body,
-        headers: init.headers ?? {},
-      });
-      const response = await transformResponse(
-        RequestLogger.withFields(
-          { ...keyLogFields, via_ai_gateway: true },
-          () =>
-            fetchWithTimeout((signal) =>
-              fetchCompatibilityFallback([[url, gatewayInit]], signal),
-            ),
-        ),
+      return completeGatewayRequest(
+        aiGateway.buildProviderEndpointRequest({
+          provider: providerName,
+          method: init.method,
+          path,
+          body: init.body,
+          headers: init.headers ?? {},
+        }),
       );
-      recordApiKeyOutcome(
-        providerSelector,
-        apiKeyIndex,
-        configuredApiKeys.length,
-        response.status,
-      );
-      return {
-        response,
-        retryable: isRetryableCandidateStatus(response.status),
-      };
     }
   }
 
@@ -374,33 +376,21 @@ async function attemptChatCompletion(
       )
     : undefined;
   if (aiGateway && strictGatewayProvider) {
-    const [url, gatewayInit] = aiGateway.buildProviderEndpointRequest({
-      provider: strictGatewayProvider,
-      method: requestInit.method,
-      path: gatewayProviderPath(
-        providerName,
-        providerInstance,
-        providerInstance.chatCompletionPath,
-        strictGatewayProvider,
-      ),
-      body: requestInit.body,
-      // Provider request builders always normalize headers before returning.
-      headers: requestInit.headers!,
-    });
-    const response = await transformResponse(
-      RequestLogger.withFields({ ...keyLogFields, via_ai_gateway: true }, () =>
-        fetchWithTimeout((signal) =>
-          fetchCompatibilityFallback([[url, gatewayInit]], signal),
+    return completeGatewayRequest(
+      aiGateway.buildProviderEndpointRequest({
+        provider: strictGatewayProvider,
+        method: requestInit.method,
+        path: gatewayProviderPath(
+          providerName,
+          providerInstance,
+          providerInstance.chatCompletionPath,
+          strictGatewayProvider,
         ),
-      ),
+        body: requestInit.body,
+        // Provider request builders always normalize headers before returning.
+        headers: requestInit.headers!,
+      }),
     );
-    recordApiKeyOutcome(
-      providerSelector,
-      apiKeyIndex,
-      configuredApiKeys.length,
-      response.status,
-    );
-    return { response, retryable: isRetryableCandidateStatus(response.status) };
   }
 
   // Request to the provider endpoint

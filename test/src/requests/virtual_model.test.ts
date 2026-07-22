@@ -2,8 +2,12 @@ import { describe, it, expect, vi } from "vitest";
 import {
   fetchWithCandidateTimeout,
   isRetryableCandidateStatus,
-  runVirtualModelChain,
+  runVirtualModelChainAttempt,
 } from "~/src/requests/virtual_model";
+
+const runVirtualModelChain = async (
+  ...args: Parameters<typeof runVirtualModelChainAttempt>
+): Promise<Response> => (await runVirtualModelChainAttempt(...args)).response;
 
 describe("isRetryableCandidateStatus", () => {
   it.each([
@@ -117,7 +121,7 @@ describe("fetchWithCandidateTimeout", () => {
   });
 });
 
-describe("runVirtualModelChain", () => {
+describe("runVirtualModelChainAttempt", () => {
   it("returns the first response when it is not retryable", async () => {
     const attempt = vi.fn().mockResolvedValue({
       response: new Response("ok"),

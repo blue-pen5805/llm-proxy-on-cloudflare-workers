@@ -12,7 +12,7 @@ export interface MiddlewareContext {
   providers?: ProviderRegistry;
 }
 
-export type NextFunction = () => Promise<Response>;
+type NextFunction = () => Promise<Response>;
 
 export type Middleware = (
   context: MiddlewareContext,

@@ -2,10 +2,8 @@ import {
   OpenAIChatCompletionsRequestBody,
   OpenAIModelsListResponseBody,
 } from "../openai/types";
-import { defineProvider, type Provider } from "../provider";
+import { defineProvider } from "../provider";
 import { CohereModelsListResponseBody } from "./types";
-
-export type Cohere = Provider;
 
 export const Cohere = defineProvider({
   openAICompatible: true,

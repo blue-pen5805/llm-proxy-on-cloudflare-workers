@@ -62,13 +62,13 @@ const DEFAULT_CHAT_COMPLETIONS_SUPPORTED_PARAMETERS: (keyof OpenAIChatCompletion
     "functions",
   ];
 
-export interface AiGatewayChatRequestArguments {
+interface AiGatewayChatRequestArguments {
   data: Readonly<Record<string, unknown>> & { model: string };
   headers: HeadersInit;
   apiKeyIndex?: number;
 }
 
-export interface ChatCompletionsRequestArguments {
+interface ChatCompletionsRequestArguments {
   body: string;
   preparedData?: Readonly<Record<string, unknown>>;
   headers: HeadersInit;

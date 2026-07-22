@@ -1,12 +1,10 @@
 import { readResponseJson } from "../../utils/helpers";
 import { OpenAIModelsListResponseBody } from "../openai/types";
-import { defineProvider, type Provider } from "../provider";
+import { defineProvider } from "../provider";
 import {
   ClineRecommendedModel,
   ClineRecommendedModelsResponseBody,
 } from "./types";
-
-export type Cline = Provider;
 
 type ClineModelCategory = keyof ClineRecommendedModelsResponseBody;
 

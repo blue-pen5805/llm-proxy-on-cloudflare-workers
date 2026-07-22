@@ -104,7 +104,6 @@ vi.mock("~/src/requests/compat", () => ({
 }));
 vi.mock("~/src/utils/authorization", () => ({
   isRequestAuthorized: vi.fn(),
-  AUTHORIZATION_QUERY_PARAMETERS: ["key"],
 }));
 vi.mock("~/src/utils/config", () => ({
   Config: { isDevelopment: vi.fn(), apiKeys: vi.fn(), aiGateway: vi.fn() },

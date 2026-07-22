@@ -1,23 +1,11 @@
-import {
-  defineProvider,
-  ProviderNotSupportedError,
-  type Provider,
-} from "../provider";
-
-export type HuggingFace = Provider;
+import { defineProvider, ProviderNotSupportedError } from "../provider";
 
 export const HuggingFace = defineProvider({
   apiKeyName: "HUGGINGFACE_API_KEY",
   baseUrl: "https://api-inference.huggingface.co/models",
   chatCompletionPath: "",
   modelsPath: "",
-  async buildChatCompletionsRequest({
-    body, // eslint-disable-line @typescript-eslint/no-unused-vars
-    headers, // eslint-disable-line @typescript-eslint/no-unused-vars
-  }: {
-    body: string;
-    headers: HeadersInit;
-  }): Promise<[string, RequestInit]> {
+  async buildChatCompletionsRequest(): Promise<[string, RequestInit]> {
     throw new ProviderNotSupportedError(
       "HuggingFace does not support chat completions",
     );

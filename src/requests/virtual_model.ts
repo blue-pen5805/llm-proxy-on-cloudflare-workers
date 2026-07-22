@@ -122,12 +122,3 @@ export async function runVirtualModelChainAttempt(
 
   throw new Error("Virtual model requires at least one candidate.");
 }
-
-export async function runVirtualModelChain(
-  virtualModel: string,
-  candidates: readonly VirtualModelCandidate[],
-  attempt: ChatCompletionAttempt,
-): Promise<Response> {
-  return (await runVirtualModelChainAttempt(virtualModel, candidates, attempt))
-    .response;
-}

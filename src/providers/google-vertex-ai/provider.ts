@@ -4,13 +4,7 @@ import {
   DEFAULT_PROVIDER_PROFILE,
   PROVIDER_PROFILE_PATTERN,
 } from "../../utils/secrets";
-import {
-  defineProvider,
-  ProviderNotSupportedError,
-  type Provider,
-} from "../provider";
-
-export type GoogleVertexAi = Provider;
+import { defineProvider, ProviderNotSupportedError } from "../provider";
 
 interface ServiceAccountJson extends Record<string, unknown> {
   type: "service_account";

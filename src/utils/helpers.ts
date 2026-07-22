@@ -3,8 +3,8 @@ import { RequestLogger } from "./logger";
 import { SENSITIVE_CREDENTIAL_NAMES } from "./sensitive_data";
 import { randomInt } from "node:crypto";
 
-export const MAX_BUFFERED_BODY_BYTES = 10 * 1024 * 1024;
-export const MAX_BUFFERED_RESPONSE_BYTES = 5 * 1024 * 1024;
+const MAX_BUFFERED_BODY_BYTES = 10 * 1024 * 1024;
+const MAX_BUFFERED_RESPONSE_BYTES = 5 * 1024 * 1024;
 
 export function maskSensitiveUrl(url: string): string {
   try {
@@ -174,18 +174,6 @@ export function utf8ByteLength(value: string): number {
     }
   }
   return bytes;
-}
-
-export function interpolateTemplate(
-  template: string,
-  templateValues: Record<string, string>,
-): string {
-  return Object.keys(templateValues).reduce((formattedString, placeholder) => {
-    return formattedString.replaceAll(
-      `{${placeholder}}`,
-      templateValues[placeholder],
-    );
-  }, template);
 }
 
 /**

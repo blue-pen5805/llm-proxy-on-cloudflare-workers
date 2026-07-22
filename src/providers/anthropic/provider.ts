@@ -1,9 +1,7 @@
 import { Secrets } from "../../utils/secrets";
 import { OpenAIModelsListResponseBody } from "../openai/types";
-import { defineProvider, type Provider } from "../provider";
+import { defineProvider } from "../provider";
 import { AnthropicModelsListResponseBody } from "./types";
-
-export type Anthropic = Provider;
 
 export const Anthropic = defineProvider({
   apiKeyName: "ANTHROPIC_API_KEY",

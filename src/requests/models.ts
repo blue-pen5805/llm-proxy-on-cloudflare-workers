@@ -24,12 +24,12 @@ import { resolveAiGatewayModelsProvider } from "./model_gateway";
 
 // Timeout for individual provider model fetch operations (milliseconds)
 const PROVIDER_FETCH_TIMEOUT_MS = 5000;
-export const MODEL_PROVIDER_CONCURRENCY = 5;
-export const MAX_PROVIDER_MODELS_RESPONSE_BYTES = 1024 * 1024;
+const MODEL_PROVIDER_CONCURRENCY = 5;
+const MAX_PROVIDER_MODELS_RESPONSE_BYTES = 1024 * 1024;
 export const MAX_MODELS_PER_PROVIDER = 1000;
 export const MAX_AGGREGATED_MODELS_BYTES = 4 * 1024 * 1024;
 
-export const MODELS_CACHE_NAME = "llm-proxy-models";
+const MODELS_CACHE_NAME = "llm-proxy-models";
 
 const EMPTY_MODELS: OpenAIModelsListResponseBody = {
   object: "list",

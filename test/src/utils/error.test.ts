@@ -3,9 +3,7 @@ import {
   AppError,
   BadRequestError,
   UnauthorizedError,
-  ForbiddenError,
   NotFoundError,
-  InternalServerError,
   ServiceUnavailableError,
 } from "~/src/utils/error";
 
@@ -30,22 +28,10 @@ describe("Error Classes", () => {
     expect(error.message).toBe("Unauthorized");
   });
 
-  it("ForbiddenError should have status 403", () => {
-    const error = new ForbiddenError();
-    expect(error.status).toBe(403);
-    expect(error.message).toBe("Forbidden");
-  });
-
   it("NotFoundError should have status 404", () => {
     const error = new NotFoundError();
     expect(error.status).toBe(404);
     expect(error.message).toBe("Not Found");
-  });
-
-  it("InternalServerError should have status 500", () => {
-    const error = new InternalServerError();
-    expect(error.status).toBe(500);
-    expect(error.message).toBe("Internal Server Error");
   });
 
   it("ServiceUnavailableError should use its default message", () => {

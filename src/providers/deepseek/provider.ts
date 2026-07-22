@@ -1,6 +1,4 @@
-import { defineProvider, type Provider } from "../provider";
-
-export type DeepSeek = Provider;
+import { defineProvider } from "../provider";
 
 export const DeepSeek = defineProvider({
   openAICompatible: true,

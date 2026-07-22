@@ -1,7 +1,5 @@
 import { OpenAIChatCompletionsRequestBody } from "../openai/types";
-import { defineProvider, type Provider } from "../provider";
-
-export type Cerebras = Provider;
+import { defineProvider } from "../provider";
 
 export const Cerebras = defineProvider({
   openAICompatible: true,

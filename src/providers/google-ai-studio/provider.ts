@@ -2,10 +2,8 @@ import {
   OpenAIChatCompletionsRequestBody,
   OpenAIModelsListResponseBody,
 } from "../openai/types";
-import { defineProvider, type Provider } from "../provider";
+import { defineProvider } from "../provider";
 import { GoogleAiStudioModelsListResponseBody } from "./types";
-
-export type GoogleAiStudio = Provider;
 
 export const GoogleAiStudio = defineProvider({
   apiKeyName: "GEMINI_API_KEY",
