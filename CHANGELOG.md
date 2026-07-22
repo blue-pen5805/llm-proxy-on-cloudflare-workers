@@ -10,6 +10,15 @@ dated section; when multiple changes share a date, put the newest change first.
 Planned version: `1.0.0`. The package remains at `0.2.1` until the version
 update is explicitly approved.
 
+### 2026-07-22
+
+- Added authenticated `GET /virtual-models` discovery, returning every
+  configured virtual model in a `/models`-compatible list and model-object
+  schema, extended with ordered candidates, retry, total-attempt, and optional
+  response-header timeout metadata. Nested virtual-model references are expanded
+  recursively while retaining their retry boundaries, and deployments without
+  virtual models return an empty list.
+
 ### 2026-07-21
 
 - Allowed virtual models to reference other virtual models recursively. Secret

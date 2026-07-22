@@ -4,6 +4,7 @@ import { handleRouting } from "~/src/middlewares/router";
 import { handleAiGatewayRestRequest } from "~/src/requests/ai_gateway_rest";
 import { handleCompatibilityRequest } from "~/src/requests/compat";
 import { handleProviderProxyRequest } from "~/src/requests/proxy";
+import { handleVirtualModelsRequest } from "~/src/requests/virtual_models";
 import { BadRequestError, NotFoundError } from "~/src/utils/error";
 
 // Mock the request handlers
@@ -27,6 +28,9 @@ vi.mock("~/src/requests/proxy", () => ({
 }));
 vi.mock("~/src/requests/status", () => ({
   handleStatusRequest: vi.fn(() => Promise.resolve(new Response("status"))),
+}));
+vi.mock("~/src/requests/virtual_models", () => ({
+  handleVirtualModelsRequest: vi.fn(() => new Response("virtual-models")),
 }));
 vi.mock("~/src/requests/compat", () => ({
   handleCompatibilityRequest: vi.fn(() =>
@@ -54,6 +58,15 @@ describe("handleRouting", () => {
     const response = await handleRouting({ request, pathname: "/ping" } as any);
     expect(await response.text()).toBe("Pong");
     expect(response.status).toBe(200);
+  });
+
+  it("should route to virtual models", async () => {
+    const response = await handleRouting({
+      request,
+      pathname: "/virtual-models",
+    } as any);
+    expect(await response.text()).toBe("virtual-models");
+    expect(handleVirtualModelsRequest).toHaveBeenCalledOnce();
   });
 
   it("should route to chat completions", async () => {
@@ -102,6 +115,7 @@ describe("handleRouting", () => {
   it.each([
     ["GET", "/ping", undefined],
     ["GET", "/status", undefined],
+    ["GET", "/virtual-models", undefined],
     ["POST", "/compat/chat/completions", "gateway"],
     ["POST", "/ai/run", "gateway"],
     ["POST", "/", "gateway"],

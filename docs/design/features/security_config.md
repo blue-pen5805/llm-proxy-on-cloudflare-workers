@@ -69,8 +69,10 @@ omitted entirely.
 
 `/status` never returns key values or suffixes, but intentionally reveals
 provider availability, credential slot numbers, the default model, AI Gateway
-identifiers, and feature flags. It must remain behind proxy authentication and
-should not be treated as public health metadata.
+identifiers, and feature flags. `/virtual-models` reveals configured virtual
+model names, candidate model names, failover order, retries, and timeouts, but
+no credential material. Both routes remain behind proxy authentication and
+their output should not be treated as public metadata.
 
 ## Non-goals
 

@@ -9,6 +9,7 @@ import { handleModelsRequest } from "../requests/models";
 import { handleProviderProxyRequest } from "../requests/proxy";
 import { handleStatusRequest } from "../requests/status";
 import { handleUniversalEndpointRequest } from "../requests/universal_endpoint";
+import { handleVirtualModelsRequest } from "../requests/virtual_models";
 import { Environments } from "../utils/environments";
 import { BadRequestError, NotFoundError } from "../utils/error";
 
@@ -38,6 +39,11 @@ export async function handleRouting(
   if (request.method === "GET" && pathname === "/status") {
     rejectUnsupportedKeySelection();
     return await handleStatusRequest(aiGateway, context.providers);
+  }
+
+  if (request.method === "GET" && pathname === "/virtual-models") {
+    rejectUnsupportedKeySelection();
+    return handleVirtualModelsRequest(context);
   }
 
   if (aiGateway && COMPAT_PATH_PATTERN.test(pathname)) {

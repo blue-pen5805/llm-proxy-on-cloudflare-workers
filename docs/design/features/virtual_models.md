@@ -89,6 +89,29 @@ always advertised. Discovery reuses the same `Config.virtualModels()` accessor a
 routing, so a malformed `VIRTUAL_MODELS` fails `/models` closed with the same
 HTTP 503 as a chat request rather than silently dropping the entries.
 
+The authenticated `GET /virtual-models` route provides the configuration view
+that the OpenAI-compatible model list intentionally omits. Its list envelope and
+the standard `id`, `object`, `created`, and `owned_by` fields on each item match
+the virtual-model entries in `/models`; `access_order` is an additive extension
+containing the normalized candidate array. Candidate entries expose the model,
+one-based position, additional retry count, total attempts for that candidate,
+and the response-header timeout when one was configured. It makes no provider
+subrequests and returns an empty list when the setting is absent. Nested
+references are expanded recursively as an
+`access_order` on the referencing candidate. The reference candidate remains as
+the parent node so its retry and timeout settings continue to describe the
+boundary at which the complete referenced chain is restarted. References whose
+leading selector resolves to a real provider are not expanded, matching the
+provider precedence used by chat routing. Runtime configuration validation
+guarantees that this bounded recursive rendering receives an acyclic graph.
+
+Like `/status`, this route passes through normal proxy authentication and
+rejects `/key/<selection>` because it performs no credential selection. A
+Gateway prefix is accepted by the shared path middleware, but Gateway selection
+does not change the response. The route uses `Config.virtualModels()`, so
+malformed configuration fails closed with the standard HTTP 503 configuration
+error.
+
 ## Retry policy
 
 `runVirtualModelChainAttempt` (`src/requests/virtual_model.ts`) tries candidates

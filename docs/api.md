@@ -11,6 +11,7 @@ upstream providers are streamed or forwarded without a proxy-specific envelope.
 | `OPTIONS` | any                                    | CORS preflight                                    |
 | `GET`     | `/ping`                                | Lightweight liveness response (`Pong`)            |
 | `GET`     | `/status`                              | Configuration and provider credential diagnostics |
+| `GET`     | `/virtual-models`                      | Virtual models and ordered failover candidates    |
 | `POST`    | `/v1/chat/completions`                 | OpenAI-compatible chat translation                |
 | `GET`     | `/v1/models`                           | Best-effort aggregate model list                  |
 | any       | `/<provider>[:<profile>]/<path>`       | Provider pass-through                             |
@@ -122,6 +123,65 @@ cache header. The cache is per Cloudflare datacenter, so a configuration
 change can serve a stale list from an already-primed datacenter for up to the
 TTL.
 
+## Virtual models
+
+`GET /virtual-models` returns the configured virtual models without making
+provider subrequests. Its top-level `{ "object": "list", "data": [...] }`
+shape and each item's `id`, `object`, `created`, and `owned_by` fields match the
+virtual-model entries returned by `GET /models`. The additional `access_order`
+array contains the Virtual Model-specific routing details in the same order as
+`VIRTUAL_MODELS`. `position` is one-based, `retries` is the number of additional
+attempts, and `attempts` is the resulting maximum number of times that candidate
+can be entered before failover. `timeout_ms` appears only when a response-header
+timeout is configured.
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "virtual/reliable",
+      "object": "model",
+      "created": 0,
+      "owned_by": "virtual",
+      "access_order": [
+        {
+          "position": 1,
+          "model": "virtual/fast",
+          "retries": 1,
+          "attempts": 2,
+          "timeout_ms": 5000,
+          "access_order": [
+            {
+              "position": 1,
+              "model": "openai/gpt-4o-mini",
+              "retries": 0,
+              "attempts": 1
+            },
+            {
+              "position": 2,
+              "model": "anthropic/claude-sonnet",
+              "retries": 0,
+              "attempts": 1
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+Nested virtual-model references are expanded recursively into an `access_order`
+on the referencing candidate. The reference candidate remains in the response,
+so its retries and timeout still describe the boundary around the complete
+nested chain. A virtual-model key shadowed by a real provider is not expanded,
+matching runtime provider precedence. An unconfigured deployment returns an
+empty `data` array. Invalid `VIRTUAL_MODELS` configuration fails with the same
+HTTP 503 as chat and model discovery. The route uses normal proxy
+authentication, does not support `/key/<selection>`, and accepts
+`/g/<gateway>/virtual-models` without changing the response.
+
 Custom endpoints should define a static `models` list when reliable discovery
 matters. The endpoint uses the first provider key by default to avoid advancing
 key rotation merely for discovery. Amazon Bedrock and Azure OpenAI are omitted
@@ -216,9 +276,10 @@ return HTTP 400:
 | `/key/-2/...`  | Random key from index 0 through 2             |
 
 Do not use a key-selection prefix for a provider with no configured keys.
-The prefix is not supported by `/ping`, `/status`, AI Gateway REST or legacy
-compatibility pass-through routes, the Universal Endpoint, or unknown routes;
-those combinations return HTTP 400 instead of ignoring the selection.
+The prefix is not supported by `/ping`, `/status`, `/virtual-models`, AI Gateway
+REST or legacy compatibility pass-through routes, the Universal Endpoint, or
+unknown routes; those combinations return HTTP 400 instead of ignoring the
+selection.
 
 For OpenAI-compatible chat through AI Gateway, an explicit index or range sends
 only the resolved credential and does not fall back to another configured key.
