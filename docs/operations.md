@@ -171,7 +171,7 @@ configuration after seeing the warning.
 - `/v1/models` uses the first key unless a prefix is present.
 - A `provider:profile` selector limits rotation, cooldowns, and explicit key
   indices to that profile; omitting the suffix selects `default`.
-- Only chat, models, and registered provider pass-through accept the prefix;
+- Only chat, Responses, models, and registered provider pass-through accept the prefix;
   health, Gateway REST/legacy, Universal, and unknown routes return HTTP 400.
 
 ## Rollback

@@ -79,9 +79,11 @@ export type OpenAIChatCompletionsRequestBody = {
   metadata?: Record<string, any> | null;
   frequency_penalty?: number | null;
   logit_bias?: Record<string, number> | null;
-  logprobs?: number | null;
+  logprobs?: boolean | null;
+  top_logprobs?: number | null;
   max_tokens?: number | null; // deprecated
   max_completion_tokens?: number | null;
+  reasoning_effort?: string | null;
   n?: number | null;
   modalities?: string[] | null;
   prediction?: {

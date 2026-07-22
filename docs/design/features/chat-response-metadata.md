@@ -1,18 +1,19 @@
-# Chat Response Metadata
+# OpenAI-Compatible Response Metadata
 
 ## Purpose and scope
 
-The OpenAI-compatible Chat Completions route adds request-scoped routing and
-timing metadata to routed responses. This makes the proxy's actual provider
-selection visible to clients, including when `default`, a virtual model, key
-rotation, or AI Gateway changes the concrete upstream route.
+The OpenAI-compatible Chat Completions and converted Responses routes add
+request-scoped routing and timing metadata to routed responses. This makes the
+proxy's actual provider selection visible to clients, including when `default`,
+a virtual model, key rotation, or AI Gateway changes the concrete upstream
+route.
 
 This is a route-specific, operator-enabled compatibility extension, not a
 proxy-wide response envelope. `CHAT_RESPONSE_METADATA_ENABLED` defaults to
-`false`; while disabled, Chat Completions responses remain unchanged by this
-stage. Provider pass-through, AI Gateway REST, Universal Endpoint, model
-discovery, local pre-routing errors, and non-chat routes retain their existing
-response contracts regardless of the setting.
+`false`; while disabled, Chat Completions and converted Responses output omit
+the extension. Provider pass-through, AI Gateway REST, Universal Endpoint,
+model discovery, and local pre-routing errors retain their existing response
+contracts regardless of the setting.
 
 ## Metadata contract
 
@@ -59,6 +60,12 @@ enough decoded text to find complete SSE lines and inserts one OpenAI-compatible
 chunk with `choices: []` and `llm_proxy` immediately before `data: [DONE]`. If a
 provider closes a valid event stream without a done marker, the chunk is emitted
 at the end. Existing provider chunks are otherwise forwarded unchanged.
+
+The Responses compatibility layer preserves the JSON `llm_proxy` object on the
+converted top-level Responses object. For streaming output, it consumes the
+Chat metadata chunk and includes the object in the final
+`response.completed` or `response.incomplete` event's `response`. Earlier
+Responses lifecycle events omit it because completion timing is not yet known.
 
 The metadata chunk's `duration_ms` and `completed_at` therefore describe stream
 completion rather than response-header arrival; `headers_received_ms` separately

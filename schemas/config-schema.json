@@ -425,6 +425,7 @@
       ]
     },
     "CHAT_RESPONSE_METADATA_ENABLED": {
+      "description": "Add llm_proxy routing and timing metadata to routed Chat Completions and converted Responses output.",
       "oneOf": [
         {
           "type": "boolean"

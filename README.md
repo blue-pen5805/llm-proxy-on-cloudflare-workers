@@ -10,6 +10,7 @@ APIs on [Cloudflare Workers](https://developers.cloudflare.com/workers/).
 ## Features
 
 - OpenAI-compatible `POST /v1/chat/completions` and `GET /v1/models`
+- Experimental `POST /v1/responses`, converted internally through Chat Completions
 - Provider pass-through routes such as `/openai/v1/responses`
 - Cloudflare AI Gateway provider routes and account-level REST API
 - Multiple provider keys with striped per-isolate round-robin selection
@@ -89,6 +90,12 @@ curl https://your-worker.example/v1/chat/completions \
     "messages": [{"role": "user", "content": "Hello"}]
   }'
 ```
+
+`POST /v1/responses` is an experimental compatibility feature. It converts
+Responses requests to Chat Completions internally and converts provider JSON or
+SSE back to Responses format. It is not a pass-through to a provider-native
+Responses endpoint, and its supported inputs, tools, and streaming behavior are
+intentionally bounded. See [HTTP API and routing](docs/api.md#responses).
 
 Or forward a provider-native request through a pass-through route:
 

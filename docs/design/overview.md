@@ -3,7 +3,7 @@
 ## Scope
 
 The Worker presents one authenticated edge endpoint for multiple LLM APIs. It
-supports three request styles: OpenAI-compatible chat and model routes,
+supports three request styles: OpenAI-compatible chat, Responses, and model routes,
 provider-specific pass-through routes, and Cloudflare AI Gateway routes.
 
 This documentation describes the current implementation. User-facing commands
@@ -64,11 +64,12 @@ forwarded.
 ### Provider behavior and reliability
 
 - [Provider abstraction](features/provider_abstraction.md)
+- [OpenAI-compatible Responses](features/responses-api.md)
 - [Custom OpenAI-compatible endpoints](features/custom-openai-endpoints.md)
 - [Key rotation](features/key_rotation.md)
 - [Provider credential profiles](features/provider_profiles.md)
 - [Virtual models](features/virtual_models.md)
-- [Chat response metadata](features/chat-response-metadata.md)
+- [OpenAI-compatible response metadata](features/chat-response-metadata.md)
 
 ### Cloudflare integration and diagnostics
 

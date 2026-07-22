@@ -70,7 +70,7 @@ to the final key and chooses randomly from the inclusive range. Open bounds mean
 the first or final key. Explicit selection is request-scoped and does not
 advance the rotation counter.
 
-The prefix is accepted only for OpenAI-compatible chat, model aggregation, and
+The prefix is accepted only for OpenAI-compatible chat, Responses, model aggregation, and
 registered provider pass-through. Routes that do not consume a selected
 provider credential reject it with HTTP 400 rather than silently ignoring it.
 
@@ -84,7 +84,7 @@ remain usable when no selection prefix is supplied.
   selection, OpenAI-compatible Gateway chat tries the selected rotation slot
   first, then shuffled remaining keys until a request succeeds. An explicit
   index or range resolves one key and disables this fallback.
-- Cooldowns affect only automatic chat and provider pass-through selection;
+- Cooldowns affect only automatic chat, Responses, and provider pass-through selection;
   model discovery retains its first-key contract, diagnostics scan every key,
   and Universal Endpoint responses cannot be attributed to one step credential.
 - Reordering the configured array changes which credential a stored numeric

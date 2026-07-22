@@ -183,7 +183,7 @@ The successful candidate's concrete provider, model, credential slot, and
 Gateway route are also returned in the optional Chat Completions `llm_proxy`
 extension. The client-requested virtual model remains visible as
 `requested_model`; failed candidate history remains log-only. See
-[Chat response metadata](chat-response-metadata.md).
+[OpenAI-compatible response metadata](chat-response-metadata.md).
 
 ## References
 

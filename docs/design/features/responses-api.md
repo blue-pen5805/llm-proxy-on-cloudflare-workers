@@ -1,0 +1,88 @@
+# OpenAI-Compatible Responses API
+
+## Purpose and boundary
+
+This compatibility feature is experimental. Its accepted subset and converted
+JSON/SSE contract may change while interoperability is validated across the
+supported Chat Completions providers.
+
+The proxy exposes `POST /v1/responses` and `/responses` for clients that use the
+OpenAI Responses request and response shapes while targeting providers that
+offer Chat Completions. It implements a bounded compatibility conversion around
+the existing Chat Completions handler; it does not call a provider-native
+Responses endpoint.
+
+This keeps provider selection, virtual-model fallback, credential profiles, key
+rotation and cooldown, provider parameter filtering, AI Gateway routing, and
+cancellation in one established request path. The conversion is intentionally
+narrow: it maps constructs with a direct Chat Completions equivalent and rejects
+constructs that would require proxy-owned state or tool execution.
+
+## Request conversion
+
+The handler reads at most 10 MiB, validates the Responses object, and constructs
+a Chat Completions request with the original provider-qualified `model`.
+`instructions` becomes a leading system message. A string `input` becomes a user
+message. Message items retain user, assistant, or system roles; developer
+messages become system messages for broader provider compatibility. Text parts
+and image URLs map to Chat content parts. Responses `function_call` and
+`function_call_output` items map to assistant tool calls and tool messages.
+
+Function tool definitions and named function tool choices are wrapped in the
+Chat Completions function shape. `text.format` maps to `response_format`,
+`max_output_tokens` to `max_completion_tokens`, and `reasoning.effort` to
+`reasoning_effort`. Compatible sampling, metadata, user, service-tier,
+log-probability, and parallel-tool fields retain their values. Streaming
+requests force `stream_options.include_usage` so the final Responses event can
+carry usage when the selected provider supports it.
+
+The converted request is passed to `handleChatCompletionsRequest`. This means a
+Responses request accepts the same real provider selectors, named credential
+profiles, `default`, virtual models, explicit `/key/...` selection, and
+`/g/<gateway>` selection as Chat Completions. Each provider still filters the
+resulting Chat fields according to its declared capability.
+
+## Response conversion
+
+A successful object-valued Chat Completions response is parsed up to 5 MiB. The
+first choice becomes a completed Responses message item; Chat tool calls become
+separate `function_call` output items. Prompt, completion, cached, and reasoning
+token counts are renamed to the Responses usage shape. A `length` finish reason
+produces `status: "incomplete"`; other finish reasons produce `completed`.
+Non-successful upstream responses keep their status and error body.
+
+When `CHAT_RESPONSE_METADATA_ENABLED=true`, the `llm_proxy` object produced by
+the selected Chat route is retained on the converted Responses object. In a
+stream it appears on the final `response.completed` or `response.incomplete`
+event's `response`, preserving the concrete provider, model, credential slot,
+Gateway route, request ID, and timing metadata without adding a Chat chunk to
+the client-visible Responses stream.
+
+For `text/event-stream`, a `TransformStream` incrementally converts Chat chunks
+to typed Responses events. It emits response lifecycle events, message/content
+item creation, `response.output_text.delta`, function-call item creation,
+`response.function_call_arguments.delta`, matching done events, and a final
+`response.completed` or `response.incomplete`. It does not buffer the complete
+stream, and backpressure and request cancellation continue through the existing
+Chat request path.
+
+## Explicitly unsupported features
+
+The Worker has no persistent conversation state and does not execute tools.
+Fields such as `previous_response_id` or Conversations references, background
+mode, stored responses (`store: true`), prompt templates, built-in tools, file inputs, item references, and
+automatic truncation therefore return HTTP 400. Unknown fields are also rejected
+rather than silently discarded. Function tools remain supported because their
+execution stays with the client, matching Chat Completions semantics.
+
+This boundary prevents a request from appearing successful after losing state,
+tool, or input semantics. Expanding it requires a direct and tested mapping to
+the Chat Completions contract; stateful or built-in execution belongs in a
+separate service under the project principles.
+
+## References
+
+- [OpenAI Responses API](https://developers.openai.com/api/reference/resources/responses/methods/create)
+- [Migrating to Responses](https://developers.openai.com/api/docs/guides/migrate-to-responses)
+- [Responses streaming events](https://developers.openai.com/api/reference/resources/responses/streaming-events)
+- [Cloudflare Workers streaming best practices](https://developers.cloudflare.com/workers/best-practices/workers-best-practices/#stream-request-and-response-bodies)

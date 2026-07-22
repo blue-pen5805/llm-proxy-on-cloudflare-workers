@@ -100,11 +100,29 @@ uses an AI Gateway provider endpoint.
 The metadata stage runs only on the OpenAI-compatible Chat Completions route and
 is disabled by default for strict client compatibility. It preserves local
 pre-routing errors and malformed, oversized, or unrecognized upstream responses.
-See [Chat response metadata](chat-response-metadata.md).
+See [OpenAI-compatible response metadata](chat-response-metadata.md).
 
 The incoming abort signal is attached to the provider or Gateway subrequest so
 client cancellation can stop avoidable work. The Worker enables the
 `enable_request_signal` compatibility flag.
+
+## OpenAI-compatible Responses flow
+
+1. Parse and validate a Responses body of at most 10 MiB.
+2. Convert supported input items, function tools, structured output, and common
+   generation controls to Chat Completions.
+3. Invoke the ordinary OpenAI-compatible chat flow, including virtual models,
+   provider filtering, key policy, and AI Gateway routing.
+4. Convert a successful Chat JSON response into typed Responses output items,
+   bounded to 5 MiB, or convert Chat SSE chunks incrementally into Responses
+   lifecycle, text-delta, and function-call events.
+5. Preserve upstream errors and reject Responses features that cannot retain
+   their semantics through Chat Completions.
+
+Responses compatibility is consequently derived from each provider's declared
+Chat capability rather than a new provider-native capability. See
+[OpenAI-compatible Responses](responses-api.md) for the supported mapping and
+explicit exclusions.
 
 ## Model aggregation flow
 
@@ -123,6 +141,6 @@ Gateway behavior independently. See [Development and verification](../../develop
 
 ## References
 
-- [OpenAI API reference](https://platform.openai.com/docs/api-reference)
+- [OpenAI Responses API](https://developers.openai.com/api/reference/resources/responses/methods/create)
 - [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/)
 - [Cloudflare AI Gateway providers](https://developers.cloudflare.com/ai-gateway/providers/)

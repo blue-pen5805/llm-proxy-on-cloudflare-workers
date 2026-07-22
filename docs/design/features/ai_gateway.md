@@ -172,6 +172,14 @@ in Cloudflare documentation does not advertise that combination. Treat this as
 an operational compatibility contract and reverify it when Gateway behavior
 changes.
 
+### OpenAI-compatible Responses
+
+The public Responses compatibility route first converts its request to Chat
+Completions. The converted request then follows the same Compatibility Endpoint,
+provider-native chat, or strict Custom Provider path as a direct Chat
+Completions request. AI Gateway therefore receives Chat Completions format; the
+Worker converts the returned JSON or SSE chunks back to Responses format.
+
 ### Legacy Universal Endpoint and compatibility pass-through
 
 `POST /g/<gateway>/` accepts the repository's Universal Endpoint request shape,

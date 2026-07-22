@@ -4,6 +4,7 @@ import { handleRouting } from "~/src/middlewares/router";
 import { handleAiGatewayRestRequest } from "~/src/requests/ai_gateway_rest";
 import { handleCompatibilityRequest } from "~/src/requests/compat";
 import { handleProviderProxyRequest } from "~/src/requests/proxy";
+import { handleResponsesRequest } from "~/src/requests/responses";
 import { handleVirtualModelsRequest } from "~/src/requests/virtual_models";
 import { BadRequestError, NotFoundError } from "~/src/utils/error";
 
@@ -20,6 +21,11 @@ vi.mock("~/src/requests/ai_gateway_rest", () => ({
 }));
 vi.mock("~/src/requests/models", () => ({
   handleModelsRequest: vi.fn(() => Promise.resolve(new Response("models"))),
+}));
+vi.mock("~/src/requests/responses", () => ({
+  handleResponsesRequest: vi.fn(() =>
+    Promise.resolve(new Response("responses")),
+  ),
 }));
 vi.mock("~/src/requests/proxy", () => ({
   handleProviderProxyRequest: vi.fn(() =>
@@ -87,6 +93,25 @@ describe("handleRouting", () => {
     } as any);
     expect(await response.text()).toBe("models");
   });
+
+  it.each(["/responses", "/v1/responses"])(
+    "should route POST %s to Responses",
+    async (pathname) => {
+      const postRequest = new Request(`http://localhost${pathname}`, {
+        method: "POST",
+      });
+      const response = await handleRouting({
+        request: postRequest,
+        pathname,
+      } as any);
+
+      expect(await response.text()).toBe("responses");
+      expect(handleResponsesRequest).toHaveBeenLastCalledWith(
+        expect.objectContaining({ request: postRequest }),
+        undefined,
+      );
+    },
+  );
 
   it("should route to proxy for supported providers", async () => {
     const response = await handleRouting({

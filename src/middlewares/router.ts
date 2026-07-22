@@ -7,6 +7,7 @@ import { handleChatCompletionsRequest } from "../requests/chat_completions";
 import { handleCompatibilityRequest } from "../requests/compat";
 import { handleModelsRequest } from "../requests/models";
 import { handleProviderProxyRequest } from "../requests/proxy";
+import { handleResponsesRequest } from "../requests/responses";
 import { handleStatusRequest } from "../requests/status";
 import { handleUniversalEndpointRequest } from "../requests/universal_endpoint";
 import { handleVirtualModelsRequest } from "../requests/virtual_models";
@@ -83,6 +84,17 @@ export async function handleRouting(
     (pathname === "/chat/completions" || pathname === "/v1/chat/completions")
   ) {
     return await handleChatCompletionsRequest(context, aiGateway);
+  }
+
+  // Responses - https://developers.openai.com/api/reference/resources/responses/methods/create
+  // Example: /responses
+  //          /v1/responses
+  //          /g/{AI_GATEWAY_NAME}/v1/responses
+  if (
+    request.method === "POST" &&
+    (pathname === "/responses" || pathname === "/v1/responses")
+  ) {
+    return await handleResponsesRequest(context, aiGateway);
   }
 
   // Models - https://platform.openai.com/docs/api-reference/models

@@ -21,8 +21,8 @@ immutable credential-profile view. Adapter instances remain safe to share
 across concurrent requests because no mutable profile is stored on the base
 instance. Credential reads made through the view select only that profile.
 
-The selector is accepted by Chat Completions model IDs, provider pass-through
-paths, and Universal Endpoint provider fields. AI Gateway still receives the
+The selector is accepted by Chat Completions and Responses model IDs, provider
+pass-through paths, and Universal Endpoint provider fields. AI Gateway still receives the
 base provider name because profiles are a proxy-side credential-selection
 concept. Unknown or malformed named profiles do not silently fall back to
 `default`.

@@ -4,7 +4,7 @@ All routes except CORS preflight pass through the same authentication layer.
 Use `Authorization: Bearer <PROXY_API_KEY>` in normal clients. Responses from
 upstream providers are streamed or forwarded without a proxy-specific envelope,
 except for the opt-in additive `llm_proxy` metadata on routed
-OpenAI-compatible Chat Completions responses.
+OpenAI-compatible Chat Completions and converted Responses output.
 
 ## Route summary
 
@@ -15,6 +15,7 @@ OpenAI-compatible Chat Completions responses.
 | `GET`     | `/status`                              | Configuration and provider credential diagnostics |
 | `GET`     | `/virtual-models`                      | Virtual models and ordered failover candidates    |
 | `POST`    | `/v1/chat/completions`                 | OpenAI-compatible chat translation                |
+| `POST`    | `/v1/responses`                        | Experimental Responses-to-Chat conversion         |
 | `GET`     | `/v1/models`                           | Best-effort aggregate model list                  |
 | any       | `/<provider>[:<profile>]/<path>`       | Provider pass-through                             |
 | `POST`    | `/g/<gateway>/ai/run`                  | AI Gateway REST API: Workers AI native format     |
@@ -24,14 +25,14 @@ OpenAI-compatible Chat Completions responses.
 | `POST`    | `/g/<gateway>/`                        | Legacy AI Gateway Universal Endpoint              |
 | `POST`    | `/g/<gateway>/compat/chat/completions` | Legacy AI Gateway compatibility pass-through      |
 
-`/chat/completions` and `/models` are aliases of their `/v1` forms. Supported
+`/chat/completions`, `/responses`, and `/models` are aliases of their `/v1` forms. Supported
 routes may be prefixed with `/g/<gateway>` to choose a Gateway for that request.
-OpenAI-compatible chat, models, and registered provider pass-through routes may
+OpenAI-compatible chat, Responses, models, and registered provider pass-through routes may
 also use `/key/<selection>` to select provider credentials. When both are used,
 the key prefix comes first: `/key/1/g/team-gateway/v1/models`.
 
 When `ALWAYS_USE_AI_GATEWAY=true`, every provider subrequest made by chat,
-models, status, or provider pass-through routing uses AI Gateway. The configured
+Responses, models, status, or provider pass-through routing uses AI Gateway. The configured
 `AI_GATEWAY_NAME` is selected automatically; when it is absent, the Gateway
 name is `default`. An explicit `/g/<gateway>` prefix still overrides it. Native
 Gateway provider routes are preferred, while unsupported operations use the
@@ -144,6 +145,58 @@ endpoint. Vertex chat is sent only through AI Gateway using the configured
 service-account JSON; direct requests are rejected with HTTP 400. Vertex model
 discovery is not available through the compatibility API and is therefore
 omitted from `/v1/models`.
+
+## Responses
+
+The proxy's Responses compatibility API is experimental. Its supported fields,
+output mapping, and streaming event conversion may change before it is promoted
+to a stable contract.
+
+`POST /v1/responses` and its `/responses` alias accept an OpenAI Responses
+request with the same provider-qualified `model` used by Chat Completions:
+
+```bash
+curl https://your-worker.example/v1/responses \
+  --header "Authorization: Bearer $PROXY_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "model": "openai/gpt-5.4",
+    "instructions": "Answer concisely.",
+    "input": "Why is the sky blue?",
+    "stream": true
+  }'
+```
+
+The Worker converts `instructions`, string or message-item `input`, image URLs,
+function calls and outputs, function tools, tool choice, structured-output
+format, reasoning effort, token limits, sampling fields, metadata, and streaming
+controls to Chat Completions. It then runs the ordinary Chat Completions path,
+including real and virtual models, provider parameter filtering, credential
+profiles, key rotation/cooldown, `/key/<selection>`, and direct or AI Gateway
+routing. This makes the route available to every provider whose Chat
+Completions adapter supports the resulting fields.
+
+Successful Chat Completions JSON is converted into a Responses object with
+typed message and function-call output items and Responses token-usage names.
+With `stream: true`, Chat Completions chunks are converted incrementally into
+typed Responses SSE events, including text deltas, function-call argument
+deltas, completed output items, and a final `response.completed` or
+`response.incomplete` event. The conversion remains streaming and propagates
+client cancellation. Upstream error responses retain their status and error
+body.
+
+When `CHAT_RESPONSE_METADATA_ENABLED=true`, converted JSON includes the same
+top-level `llm_proxy` routing and timing object as Chat Completions. Streaming
+output includes it in the final `response.completed` or
+`response.incomplete` event's `response`; it is not exposed as a Chat chunk.
+
+The proxy has no conversation store or built-in tool executor. It therefore
+returns HTTP 400 for state references such as `previous_response_id`, built-in
+storage, built-in tools, file inputs, background execution, and other fields that cannot be
+represented faithfully by Chat Completions. Unknown request fields are also
+rejected instead of being silently discarded. See the
+[Responses compatibility design](design/features/responses-api.md) for the
+complete boundary.
 
 ## Models
 

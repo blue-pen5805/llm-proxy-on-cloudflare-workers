@@ -12,13 +12,23 @@ update is explicitly approved.
 
 ### 2026-07-22
 
+- Added experimental OpenAI-compatible `POST /v1/responses` and `/responses`
+  routes with bounded Responses-to-Chat Completions request conversion and
+  JSON/SSE conversion back to typed Responses output. The route reuses all
+  existing providers, virtual models, credential profiles, key rotation/cooldown,
+  and AI Gateway routing. It supports text/message/image inputs, function tools and
+  call results, structured outputs, common generation parameters, streaming
+  text and function arguments, and explicit errors for stateful, built-in-tool,
+  file, background, or unknown features that Chat Completions cannot represent
+  faithfully.
 - Added opt-in `llm_proxy` routing and timing metadata to routed
-  OpenAI-compatible Chat Completions JSON responses, including upstream JSON
-  errors. `CHAT_RESPONSE_METADATA_ENABLED` defaults to `false` for strict client
-  compatibility. When enabled, streaming SSE responses receive an
-  empty-choice metadata chunk immediately before `[DONE]` without buffering the
-  stream, exposing the concrete provider/model, safe credential slot, AI Gateway
-  route, request ID, and header/completion timings. Local pre-routing errors and
+  OpenAI-compatible Chat Completions and converted Responses output, including
+  upstream JSON errors. `CHAT_RESPONSE_METADATA_ENABLED` defaults to `false`
+  for strict client compatibility. When enabled, Chat SSE responses receive an
+  empty-choice metadata chunk immediately before `[DONE]`; converted Responses
+  streams retain it on the final response event. Both remain streaming while
+  exposing the concrete provider/model, safe credential slot, AI Gateway route,
+  request ID, and header/completion timings. Local pre-routing errors and
   malformed, oversized, or unrecognized response bodies remain unchanged.
 - Added authenticated `GET /virtual-models` discovery, returning every
   configured virtual model in a `/models`-compatible list and model-object
