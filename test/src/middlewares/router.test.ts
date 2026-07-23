@@ -3,6 +3,7 @@ import { CloudflareAIGateway } from "~/src/ai_gateway";
 import { handleRouting } from "~/src/middlewares/router";
 import { handleAiGatewayRestRequest } from "~/src/requests/ai_gateway_rest";
 import { handleCompatibilityRequest } from "~/src/requests/compat";
+import { handleMessagesRequest } from "~/src/requests/messages";
 import { handleProviderProxyRequest } from "~/src/requests/proxy";
 import { handleResponsesRequest } from "~/src/requests/responses";
 import { handleVirtualModelsRequest } from "~/src/requests/virtual_models";
@@ -21,6 +22,9 @@ vi.mock("~/src/requests/ai_gateway_rest", () => ({
 }));
 vi.mock("~/src/requests/models", () => ({
   handleModelsRequest: vi.fn(() => Promise.resolve(new Response("models"))),
+}));
+vi.mock("~/src/requests/messages", () => ({
+  handleMessagesRequest: vi.fn(() => Promise.resolve(new Response("messages"))),
 }));
 vi.mock("~/src/requests/responses", () => ({
   handleResponsesRequest: vi.fn(() =>
@@ -107,6 +111,25 @@ describe("handleRouting", () => {
 
       expect(await response.text()).toBe("responses");
       expect(handleResponsesRequest).toHaveBeenLastCalledWith(
+        expect.objectContaining({ request: postRequest }),
+        undefined,
+      );
+    },
+  );
+
+  it.each(["/messages", "/v1/messages"])(
+    "should route POST %s to Messages",
+    async (pathname) => {
+      const postRequest = new Request(`http://localhost${pathname}`, {
+        method: "POST",
+      });
+      const response = await handleRouting({
+        request: postRequest,
+        pathname,
+      } as any);
+
+      expect(await response.text()).toBe("messages");
+      expect(handleMessagesRequest).toHaveBeenLastCalledWith(
         expect.objectContaining({ request: postRequest }),
         undefined,
       );

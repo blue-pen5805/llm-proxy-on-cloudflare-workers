@@ -11,6 +11,7 @@
 
 - OpenAI 互換の `POST /v1/chat/completions` と `GET /v1/models`
 - 実験的な `POST /v1/responses`（内部で Chat Completions に変換）
+- 実験的な Anthropic 互換 `POST /v1/messages`（内部で Chat Completions に変換）
 - `/openai/v1/responses` などのプロバイダー別パススルールート
 - Cloudflare AI Gateway のプロバイダールートとアカウントレベル REST API
 - 複数のプロバイダーキーからランダム選択、またはストライプ方式のラウンドロビン選択
@@ -93,6 +94,12 @@ Completions 形式に変換し、プロバイダーからの JSON または SSE 
 戻します。プロバイダー固有の Responses API へのパススルーではなく、対応する入力、
 ツール、ストリーミング機能には制限があります。詳細は
 [HTTP API and routing](docs/api.md#responses) を参照してください。
+
+`POST /v1/messages` も実験的な互換機能です。Anthropic Messages の対応範囲を Chat
+Completions に変換し、プロバイダーの JSON または SSE を Anthropic 形式へ戻します。
+プロバイダー、virtual model、認証情報、AI Gateway の経路は既存処理を再利用します。
+Anthropic 固有機能をそのまま使う場合は `/anthropic/v1/messages` を使用してください。
+詳細は [HTTP API and routing](docs/api.md#messages) を参照してください。
 
 プロバイダー固有のリクエストは、パススルールートへそのまま送信できます。
 

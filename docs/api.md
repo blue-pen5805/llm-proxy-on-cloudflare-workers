@@ -4,7 +4,7 @@ All routes except CORS preflight pass through the same authentication layer.
 Use `Authorization: Bearer <PROXY_API_KEY>` in normal clients. Responses from
 upstream providers are streamed or forwarded without a proxy-specific envelope,
 except for the opt-in additive `llm_proxy` metadata on routed
-OpenAI-compatible Chat Completions and converted Responses output.
+OpenAI-compatible Chat Completions and converted Responses or Messages output.
 
 ## Route summary
 
@@ -16,6 +16,7 @@ OpenAI-compatible Chat Completions and converted Responses output.
 | `GET`     | `/virtual-models`                      | Virtual models and ordered failover candidates    |
 | `POST`    | `/v1/chat/completions`                 | OpenAI-compatible chat translation                |
 | `POST`    | `/v1/responses`                        | Experimental Responses-to-Chat conversion         |
+| `POST`    | `/v1/messages`                         | Experimental Messages-to-Chat conversion          |
 | `GET`     | `/v1/models`                           | Best-effort aggregate model list                  |
 | any       | `/<provider>[:<profile>]/<path>`       | Provider pass-through                             |
 | `POST`    | `/g/<gateway>/ai/run`                  | AI Gateway REST API: Workers AI native format     |
@@ -25,14 +26,15 @@ OpenAI-compatible Chat Completions and converted Responses output.
 | `POST`    | `/g/<gateway>/`                        | Legacy AI Gateway Universal Endpoint              |
 | `POST`    | `/g/<gateway>/compat/chat/completions` | Legacy AI Gateway compatibility pass-through      |
 
-`/chat/completions`, `/responses`, and `/models` are aliases of their `/v1` forms. Supported
-routes may be prefixed with `/g/<gateway>` to choose a Gateway for that request.
-OpenAI-compatible chat, Responses, models, and registered provider pass-through routes may
-also use `/key/<selection>` to select provider credentials. When both are used,
-the key prefix comes first: `/key/1/g/team-gateway/v1/models`.
+`/chat/completions`, `/responses`, `/messages`, and `/models` are aliases of
+their `/v1` forms. Supported routes may be prefixed with `/g/<gateway>` to
+choose a Gateway for that request. OpenAI-compatible chat, Responses,
+Anthropic-compatible Messages, models, and registered provider pass-through
+routes may also use `/key/<selection>` to select provider credentials. When
+both are used, the key prefix comes first: `/key/1/g/team-gateway/v1/models`.
 
 When `ALWAYS_USE_AI_GATEWAY=true`, every provider subrequest made by chat,
-Responses, models, status, or provider pass-through routing uses AI Gateway. The configured
+Responses, Messages, models, status, or provider pass-through routing uses AI Gateway. The configured
 `AI_GATEWAY_NAME` is selected automatically; when it is absent, the Gateway
 name is `default`. An explicit `/g/<gateway>` prefix still overrides it. Native
 Gateway provider routes are preferred, while unsupported operations use the
@@ -197,6 +199,47 @@ represented faithfully by Chat Completions. Unknown request fields are also
 rejected instead of being silently discarded. See the
 [Responses compatibility design](design/features/responses-api.md) for the
 complete boundary.
+
+## Messages
+
+The proxy's Anthropic Messages compatibility API is experimental. Its accepted
+fields and converted JSON/SSE events may change before it becomes stable.
+
+`POST /v1/messages` and its `/messages` alias accept an Anthropic Messages body
+whose `model` uses the same provider-qualified selector as Chat Completions:
+
+```bash
+curl https://your-worker.example/v1/messages \
+  --header "x-api-key: $PROXY_API_KEY" \
+  --header "anthropic-version: 2023-06-01" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "model": "openai/gpt-5.4",
+    "max_tokens": 256,
+    "messages": [{"role": "user", "content": "Why is the sky blue?"}],
+    "stream": true
+  }'
+```
+
+The Worker converts text, base64 or URL images, system prompts, `tool_use` and
+`tool_result` blocks, custom tools and tool choice, stop sequences, token and
+sampling controls, streaming, and `metadata.user_id` to Chat Completions. It
+then uses the normal provider, virtual-model, credential-profile, key rotation,
+cooldown, `/key/...`, and AI Gateway path.
+
+Successful Chat JSON becomes an Anthropic message with `text` and `tool_use`
+content blocks, Anthropic stop reasons, and token usage. Streaming Chat chunks
+become `message_*` and `content_block_*` SSE events without buffering the whole
+response. Upstream errors retain their original status and body. With
+`CHAT_RESPONSE_METADATA_ENABLED=true`, JSON includes `llm_proxy`, while a
+stream includes it on the final `message_delta` event.
+
+Unknown fields and features without a direct Chat equivalent—including
+documents, citations, cache controls, thinking, server tools, MCP, containers,
+and context management—return HTTP 400. Use `/anthropic/v1/messages` when the
+complete provider-native contract is required. See the
+[Messages compatibility design](design/features/messages-api.md) for the exact
+boundary.
 
 ## Models
 

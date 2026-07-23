@@ -11,6 +11,7 @@ APIs on [Cloudflare Workers](https://developers.cloudflare.com/workers/).
 
 - OpenAI-compatible `POST /v1/chat/completions` and `GET /v1/models`
 - Experimental `POST /v1/responses`, converted internally through Chat Completions
+- Experimental Anthropic-compatible `POST /v1/messages`, converted through Chat Completions
 - Provider pass-through routes such as `/openai/v1/responses`
 - Cloudflare AI Gateway provider routes and account-level REST API
 - Multiple provider keys with striped per-isolate round-robin selection
@@ -96,6 +97,12 @@ Responses requests to Chat Completions internally and converts provider JSON or
 SSE back to Responses format. It is not a pass-through to a provider-native
 Responses endpoint, and its supported inputs, tools, and streaming behavior are
 intentionally bounded. See [HTTP API and routing](docs/api.md#responses).
+
+`POST /v1/messages` is likewise experimental. It accepts an Anthropic Messages
+subset and converts provider JSON or SSE back to Anthropic message events while
+reusing the same providers, virtual models, credentials, and AI Gateway routing.
+Use `/anthropic/v1/messages` instead for native Anthropic pass-through. See
+[HTTP API and routing](docs/api.md#messages).
 
 Or forward a provider-native request through a pass-through route:
 

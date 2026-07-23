@@ -180,6 +180,15 @@ provider-native chat, or strict Custom Provider path as a direct Chat
 Completions request. AI Gateway therefore receives Chat Completions format; the
 Worker converts the returned JSON or SSE chunks back to Responses format.
 
+### Anthropic-compatible Messages
+
+The public Messages compatibility route also converts through Chat
+Completions. Its converted request follows the same Compatibility Endpoint,
+provider-native chat, or strict Custom Provider path. AI Gateway receives Chat
+Completions format, and the Worker converts successful JSON or SSE back to
+Anthropic Messages format. The provider-native
+`/<provider>/v1/messages` pass-through route remains a separate contract.
+
 ### Legacy Universal Endpoint and compatibility pass-through
 
 `POST /g/<gateway>/` accepts the repository's Universal Endpoint request shape,

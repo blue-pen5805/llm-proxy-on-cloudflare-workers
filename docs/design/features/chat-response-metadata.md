@@ -1,8 +1,8 @@
-# OpenAI-Compatible Response Metadata
+# Compatibility Response Metadata
 
 ## Purpose and scope
 
-The OpenAI-compatible Chat Completions and converted Responses routes add
+The OpenAI-compatible Chat Completions and converted Responses or Messages routes add
 request-scoped routing and timing metadata to routed responses. This makes the
 proxy's actual provider selection visible to clients, including when `default`,
 a virtual model, key rotation, or AI Gateway changes the concrete upstream
@@ -10,7 +10,7 @@ route.
 
 This is a route-specific, operator-enabled compatibility extension, not a
 proxy-wide response envelope. `CHAT_RESPONSE_METADATA_ENABLED` defaults to
-`false`; while disabled, Chat Completions and converted Responses output omit
+`false`; while disabled, Chat Completions and converted Responses or Messages output omit
 the extension. Provider pass-through, AI Gateway REST, Universal Endpoint,
 model discovery, and local pre-routing errors retain their existing response
 contracts regardless of the setting.
@@ -66,6 +66,11 @@ converted top-level Responses object. For streaming output, it consumes the
 Chat metadata chunk and includes the object in the final
 `response.completed` or `response.incomplete` event's `response`. Earlier
 Responses lifecycle events omit it because completion timing is not yet known.
+
+The Messages compatibility layer likewise preserves `llm_proxy` at the top
+level of converted JSON. For streaming output, it consumes the Chat metadata
+chunk and adds the object to the final `message_delta` event; earlier Messages
+events omit it.
 
 The metadata chunk's `duration_ms` and `completed_at` therefore describe stream
 completion rather than response-header arrival; `headers_received_ms` separately

@@ -5,6 +5,7 @@ import { createProviderRegistry } from "../providers";
 import { handleAiGatewayRestRequest } from "../requests/ai_gateway_rest";
 import { handleChatCompletionsRequest } from "../requests/chat_completions";
 import { handleCompatibilityRequest } from "../requests/compat";
+import { handleMessagesRequest } from "../requests/messages";
 import { handleModelsRequest } from "../requests/models";
 import { handleProviderProxyRequest } from "../requests/proxy";
 import { handleResponsesRequest } from "../requests/responses";
@@ -95,6 +96,17 @@ export async function handleRouting(
     (pathname === "/responses" || pathname === "/v1/responses")
   ) {
     return await handleResponsesRequest(context, aiGateway);
+  }
+
+  // Messages - https://platform.claude.com/docs/en/api/messages/create
+  // Example: /messages
+  //          /v1/messages
+  //          /g/{AI_GATEWAY_NAME}/v1/messages
+  if (
+    request.method === "POST" &&
+    (pathname === "/messages" || pathname === "/v1/messages")
+  ) {
+    return await handleMessagesRequest(context, aiGateway);
   }
 
   // Models - https://platform.openai.com/docs/api-reference/models

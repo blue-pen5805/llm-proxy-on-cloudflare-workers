@@ -12,6 +12,13 @@ update is explicitly approved.
 
 ### 2026-07-22
 
+- Added experimental Anthropic-compatible `POST /v1/messages` and `/messages`
+  routes with bounded Messages-to-Chat Completions conversion and streaming
+  JSON/SSE conversion back to Anthropic message, content, tool-use, stop-reason,
+  and usage shapes. The routes reuse providers, virtual models, credential
+  profiles, key rotation/cooldown, explicit key selection, AI Gateway routing,
+  cancellation, and optional `llm_proxy` metadata, while rejecting unsupported
+  provider-native and stateful features explicitly.
 - Added experimental OpenAI-compatible `POST /v1/responses` and `/responses`
   routes with bounded Responses-to-Chat Completions request conversion and
   JSON/SSE conversion back to typed Responses output. The route reuses all

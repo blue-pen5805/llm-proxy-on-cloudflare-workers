@@ -39,16 +39,17 @@ The middleware records the selection; the provider handler resolves it after it
 knows the number of configured keys. A single index wraps modulo the key count,
 while ranges select randomly from an inclusive bounded interval.
 
-Explicit selection is supported only by OpenAI-compatible chat, Responses, model
-aggregation, and registered provider pass-through routes. `/ping`, `/status`,
+Explicit selection is supported only by OpenAI-compatible chat, Responses,
+Anthropic-compatible Messages, model aggregation, and registered provider
+pass-through routes. `/ping`, `/status`,
 AI Gateway REST and compatibility pass-through routes, the Universal Endpoint,
 and unknown routes reject a leading key-selection prefix with HTTP 400. This
 prevents a syntactically valid prefix from being silently ignored.
 
 ## Router matching
 
-Exact OpenAI-compatible routes include the versioned and unversioned Chat
-Completions, Responses, and models aliases.
+Exact compatibility routes include the versioned and unversioned Chat
+Completions, Responses, Messages, and models aliases.
 Provider pass-through requires `/<provider>/` with a trailing slash after the
 provider name. The Gateway compatibility route matches only
 `POST /compat/chat/completions` when a Gateway context exists. The Universal
