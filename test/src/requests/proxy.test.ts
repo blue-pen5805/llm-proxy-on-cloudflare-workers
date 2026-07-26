@@ -351,4 +351,33 @@ describe("proxy", () => {
     );
     expect(init.signal).toBe(request.signal);
   });
+
+  it("returns an upstream redirect to the caller instead of following it", async () => {
+    // Outbound requests use manual redirect handling so credentials are never
+    // replayed to the Location host. The 3xx therefore reaches the client
+    // unchanged and must not be rewritten or followed by the proxy.
+    const providerName = "testProvider";
+    BUILT_IN_PROVIDER_CONSTRUCTORS[providerName] = vi.fn(function () {
+      return mockProviderClass;
+    }) as unknown as (typeof BUILT_IN_PROVIDER_CONSTRUCTORS)[string];
+    mockProviderClass.fetch.mockResolvedValue(
+      new Response(null, {
+        status: 302,
+        headers: { Location: "https://files.example.com/artifact.bin" },
+      }),
+    );
+    const request = new Request("https://example.com/v1/files/artifact");
+
+    const response = await handleProviderProxyRequest(
+      { request } as any,
+      providerName,
+      "/v1/files/artifact",
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toBe(
+      "https://files.example.com/artifact.bin",
+    );
+    expect(mockProviderClass.fetch).toHaveBeenCalledOnce();
+  });
 });

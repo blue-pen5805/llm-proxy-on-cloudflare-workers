@@ -26,6 +26,13 @@ function classifyConnectivity(response: Response): ConnectivityStatus {
   return "unknown";
 }
 
+function isSubrequestLimitError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.toLowerCase().includes("too many subrequests")
+  );
+}
+
 /**
  * Checks connectivity for a specific API key of a provider.
  * @param instance The provider instance.
@@ -119,7 +126,8 @@ async function checkProviderConnectivity(
   } catch (error) {
     if (
       error instanceof ProviderNotSupportedError ||
-      (error instanceof Error && error.name === "TimeoutError")
+      (error instanceof Error && error.name === "TimeoutError") ||
+      isSubrequestLimitError(error)
     ) {
       return "unknown";
     }
@@ -153,21 +161,47 @@ export async function handleStatusRequest(
   };
 
   const env = Environments.all();
+  const providerEnumeration = providerRegistry?.allSettled();
   const providerEntries = Object.entries(
-    providerRegistry?.all() ?? getAllProviderInstances(env),
+    providerEnumeration?.providers ?? getAllProviderInstances(env),
   );
   const providersStatus: Record<string, ProviderStatus> = {};
   const connectivityTasks: (() => Promise<void>)[] = [];
 
+  for (const { providerName, error } of providerEnumeration?.failures ?? []) {
+    RequestLogger.error(
+      "provider.status.failed",
+      "Provider status could not be determined",
+      error,
+      { provider: providerName },
+    );
+    providersStatus[providerName] = { available: false, keys: [] };
+  }
+
   for (const [providerName, providerInstance] of providerEntries) {
-    const allApiKeys = providerInstance.getApiKeys();
-    const providerStatus: ProviderStatus = {
-      available: providerInstance.available(),
-      keys: allApiKeys.map((_apiKey, apiKeyIndex) => ({
-        slot: apiKeyIndex,
-        status: "unknown",
-      })),
-    };
+    // A provider adapter that throws while reading its own configuration must
+    // not remove the other providers from the diagnostic.
+    let allApiKeys: string[];
+    let providerStatus: ProviderStatus;
+    try {
+      allApiKeys = providerInstance.getApiKeys();
+      providerStatus = {
+        available: providerInstance.available(),
+        keys: allApiKeys.map((_apiKey, apiKeyIndex) => ({
+          slot: apiKeyIndex,
+          status: "unknown",
+        })),
+      };
+    } catch (error) {
+      RequestLogger.error(
+        "provider.status.failed",
+        "Provider status could not be determined",
+        error,
+        { provider: providerName },
+      );
+      providersStatus[providerName] = { available: false, keys: [] };
+      continue;
+    }
     providersStatus[providerName] = providerStatus;
 
     for (let apiKeyIndex = 0; apiKeyIndex < allApiKeys.length; apiKeyIndex++) {
@@ -187,7 +221,11 @@ export async function handleStatusRequest(
     }
   }
 
-  await Promise.all(connectivityTasks.map((task) => task()));
+  // The number of checks follows the deployed credential count, so a large
+  // configuration can exhaust the Worker's per-request subrequest budget.
+  // Settle every check independently: an individual failure leaves that slot's
+  // status behind and never turns the whole diagnostic into an error response.
+  await Promise.allSettled(connectivityTasks.map((task) => task()));
 
   const responseBody = {
     config: configurationStatus,

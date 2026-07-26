@@ -1,5 +1,58 @@
 import { describe, it, expect } from "vitest";
-import { handleOptions } from "~/src/requests/options";
+import { addCorsHeaders, handleOptions } from "~/src/requests/options";
+
+describe("Vary", () => {
+  it("marks a preflight response as varying by its CORS request headers", async () => {
+    const response = await handleOptions(
+      new Request("https://example.com", {
+        method: "OPTIONS",
+        headers: {
+          Origin: "https://example.com",
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers": "authorization",
+        },
+      }),
+    );
+
+    expect(response.headers.get("Vary")).toBe(
+      "Origin, Access-Control-Request-Headers",
+    );
+  });
+
+  it("marks a preflight response without requested headers as varying by Origin", async () => {
+    const response = await handleOptions(
+      new Request("https://example.com", {
+        method: "OPTIONS",
+        headers: {
+          Origin: "https://example.com",
+          "Access-Control-Request-Method": "POST",
+        },
+      }),
+    );
+
+    expect(response.headers.get("Vary")).toBe("Origin");
+  });
+
+  it("appends Origin to an upstream Vary on a cross-origin response", () => {
+    const response = addCorsHeaders(
+      new Request("https://example.com", {
+        headers: { Origin: "https://example.com" },
+      }),
+      new Response("ok", { headers: { Vary: "Accept-Encoding" } }),
+    );
+
+    expect(response.headers.get("Vary")).toBe("Accept-Encoding, Origin");
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  });
+
+  it("leaves a same-origin response untouched", () => {
+    const upstream = new Response("ok");
+
+    expect(addCorsHeaders(new Request("https://example.com"), upstream)).toBe(
+      upstream,
+    );
+  });
+});
 
 describe("handleOptions", () => {
   it("should handle preflight CORS request", async () => {

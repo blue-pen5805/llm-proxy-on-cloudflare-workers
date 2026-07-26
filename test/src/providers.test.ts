@@ -115,6 +115,52 @@ describe("provider registry", () => {
     expect(Object.keys(registry.all())).toContain("internal:paid");
   });
 
+  it("settles provider enumeration independently", () => {
+    const healthy = {
+      credentialProfile: "default",
+      getCredentialProfiles: () => [],
+    };
+    const broken = {
+      credentialProfile: "default",
+      getCredentialProfiles: () => {
+        throw new Error("profile discovery failed");
+      },
+    };
+    const invalidProfile = {
+      credentialProfile: "default",
+      getCredentialProfiles: () => ["bad/profile"],
+    };
+    const registry = new ProviderRegistry({
+      broken: vi.fn(function () {
+        return broken;
+      }) as never,
+      healthy: vi.fn(function () {
+        return healthy;
+      }) as never,
+      invalid: vi.fn(function () {
+        return invalidProfile;
+      }) as never,
+    });
+
+    const result = registry.allSettled();
+
+    expect(result.providers).toEqual({ healthy });
+    expect(
+      result.failures.map(({ providerName, error }) => ({
+        providerName,
+        message: (error as Error).message,
+      })),
+    ).toEqual([
+      { providerName: "broken", message: "profile discovery failed" },
+      {
+        providerName: "invalid",
+        message:
+          "Provider profile could not be constructed: invalid:bad/profile",
+      },
+    ]);
+    expect(() => registry.all()).toThrow("profile discovery failed");
+  });
+
   it("reuses registries across requests with an unchanged configuration", () => {
     const withoutEndpoints = vi
       .spyOn(Config, "customOpenAIEndpoints")

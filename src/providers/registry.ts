@@ -13,6 +13,11 @@ export interface ProviderRoute {
   pathname: string;
 }
 
+export interface ProviderEnumerationResult {
+  providers: Record<string, ProviderBase>;
+  failures: { providerName: string; error: unknown }[];
+}
+
 /**
  * Owns provider discovery and construction for a single request.
  *
@@ -72,7 +77,15 @@ export class ProviderRegistry {
     if (!parsedSelector) return undefined;
     const { providerName, profile } = parsedSelector;
     const existingProvider = this.builtInInstances.get(providerName);
-    const BuiltInProvider = this.builtIns[providerName];
+    // Only own properties name a configured provider. Without this guard a
+    // client-supplied selector such as "toString" or "constructor" would
+    // resolve to an inherited Object.prototype member and be constructed.
+    const BuiltInProvider = Object.prototype.hasOwnProperty.call(
+      this.builtIns,
+      providerName,
+    )
+      ? this.builtIns[providerName]
+      : undefined;
     const customEndpoint = this.firstCustomEndpointByName.get(providerName);
     const baseProvider =
       existingProvider ??
@@ -101,16 +114,45 @@ export class ProviderRegistry {
   }
 
   all(): Record<string, ProviderBase> {
+    const { providers, failures } = this.allSettled();
+    if (failures.length > 0) throw failures[0].error;
+    return providers;
+  }
+
+  /**
+   * Enumerate each provider independently for best-effort diagnostics.
+   *
+   * A provider's default and named-profile instances are added atomically, so
+   * a profile-discovery failure cannot leave a misleading partial description.
+   */
+  allSettled(): ProviderEnumerationResult {
     const providerInstances: Record<string, ProviderBase> = {};
+    const failures: ProviderEnumerationResult["failures"] = [];
     for (const providerName of this.providerNames) {
-      const defaultProvider = this.get(providerName)!;
-      providerInstances[providerName] = defaultProvider;
-      for (const profile of defaultProvider.getCredentialProfiles()) {
-        const selector = formatProviderSelector(providerName, profile);
-        providerInstances[selector] = this.get(selector)!;
+      try {
+        const instances: Record<string, ProviderBase> = {};
+        const defaultProvider = this.get(providerName);
+        /* istanbul ignore next -- names() contains only constructible registry entries */
+        if (!defaultProvider) {
+          throw new Error(`Provider could not be constructed: ${providerName}`);
+        }
+        instances[providerName] = defaultProvider;
+        for (const profile of defaultProvider.getCredentialProfiles()) {
+          const selector = formatProviderSelector(providerName, profile);
+          const profiledProvider = this.get(selector);
+          if (!profiledProvider) {
+            throw new Error(
+              `Provider profile could not be constructed: ${selector}`,
+            );
+          }
+          instances[selector] = profiledProvider;
+        }
+        Object.assign(providerInstances, instances);
+      } catch (error) {
+        failures.push({ providerName, error });
       }
     }
-    return providerInstances;
+    return { providers: providerInstances, failures };
   }
 
   match(pathname: string): ProviderRoute | undefined {

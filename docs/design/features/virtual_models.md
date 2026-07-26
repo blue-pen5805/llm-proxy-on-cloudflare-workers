@@ -24,6 +24,10 @@ candidate after its first retryable failure, defaults to `0`, and is limited to
 headers to an integer from `1` through `300000`; omitting it leaves that wait
 unbounded except for client cancellation and platform limits.
 
+Virtual-model lookup uses only configured keys; `__proto__` is stored and
+listed as an ordinary model name. See
+[Security Design Decisions](../security-decisions.md).
+
 Real providers take precedence over virtual model keys, so a key never shadows a
 built-in provider or a `CUSTOM_OPENAI_ENDPOINTS` name: a request resolves as a
 virtual model only when its `model` does not name a real provider. The `virtual`

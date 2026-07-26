@@ -186,6 +186,27 @@ describe("cloud platform providers", () => {
     );
   });
 
+  it("parses Vertex credential profiles once per configured value", () => {
+    values.GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON = JSON.stringify({
+      paid: {
+        type: "service_account",
+        project_id: "example-project",
+        private_key: "private-key",
+        client_email: "vertex@example-project.iam.gserviceaccount.com",
+        region: "us-central1",
+      },
+    });
+    const provider = new GoogleVertexAi();
+    const parse = vi.spyOn(JSON, "parse");
+
+    expect(provider.getCredentialProfiles()).toEqual(["paid"]);
+    const parseCallsAfterFirstRead = parse.mock.calls.length;
+    expect(provider.getCredentialProfiles()).toEqual(["paid"]);
+
+    expect(parse.mock.calls.length).toBe(parseCallsAfterFirstRead);
+    parse.mockRestore();
+  });
+
   it("does not fall back to legacy Vertex credentials for a named profile", () => {
     const paidProvider = withProviderProfile(new GoogleVertexAi(), "paid");
     expect(paidProvider.getApiKeys()).toEqual([]);

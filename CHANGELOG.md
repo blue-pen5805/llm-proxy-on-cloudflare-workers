@@ -12,6 +12,36 @@ update is explicitly approved.
 
 ### 2026-07-26
 
+- Rejected inherited `Object.prototype` names in client-supplied provider,
+  credential-profile, and virtual-model selectors with HTTP 400.
+  `VIRTUAL_MODELS` also retains `__proto__` as an ordinary model name.
+- Hardened Responses and Messages streaming by joining multiline SSE data,
+  requiring the `[DONE]` sentinel before success, and emitting a terminal error
+  for truncated streams.
+- Restricted `DEV` to locally running Workers. A deployed Worker keeps client
+  authentication enforced even when the binding is present, and logs
+  `auth.development_mode_ignored`.
+- Isolated `/status` provider descriptions and connectivity checks so individual
+  failures leave affected entries `unknown` without failing the authenticated
+  diagnostic.
+- Emitted Anthropic Messages content blocks sequentially. The text block closes
+  before the first `tool_use` block opens, and each `tool_use` block is emitted
+  complete; tool arguments are no longer streamed incrementally.
+- Preserved retained query parameters byte-for-byte when removing
+  credential-like parameters, including empty fields, instead of re-encoding
+  and reordering them.
+  Proxied paths carrying a query string are no longer dot-segment normalized
+  before the traversal check.
+- Stopped splitting a provider credential that is not valid JSON on commas; such
+  a value is now treated as a single opaque secret.
+- Added `Vary: Origin` to cross-origin responses and preflight results, and
+  kept CORS headers on error responses raised while handling CORS.
+- Read a chat response body once instead of teeing it when adding optional
+  `llm_proxy` metadata; malformed, non-object, and over-budget bodies are
+  forwarded byte-for-byte.
+- Removed the plaintext secret file left behind when `secrets:deploy` is
+  interrupted, by asynchronously supervising Wrangler and cleaning up on
+  `SIGINT`, `SIGTERM`, and `SIGHUP`.
 - Prevented credential-bearing upstream requests from following redirects,
   removed `True-Client-IP` before forwarding, and kept cross-origin redirect
   destinations from receiving provider or AI Gateway credentials.

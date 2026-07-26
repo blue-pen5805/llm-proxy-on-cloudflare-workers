@@ -133,7 +133,10 @@ describe("status", () => {
     };
 
     const response = await handleStatusRequest(undefined, {
-      all: () => ({ "openai:paid": profiledProvider }),
+      allSettled: () => ({
+        providers: { "openai:paid": profiledProvider },
+        failures: [],
+      }),
     } as any);
     const body = (await response.json()) as any;
 
@@ -321,6 +324,19 @@ describe("status", () => {
     });
   });
 
+  it("leaves a credential unknown when the subrequest limit is exhausted", async () => {
+    vi.mocked(Secrets.getAll).mockReturnValue(["key"]);
+    mockProviderClass.fetch.mockRejectedValue(
+      new Error("Too many subrequests."),
+    );
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const response = await handleStatusRequest();
+    const body = (await response.json()) as any;
+
+    expect(body.providers.openai.keys[0].status).toBe("unknown");
+  });
+
   it("checks supported providers through AI Gateway", async () => {
     vi.mocked(Secrets.getAll).mockReturnValue(["valid", "invalid", "unknown"]);
     vi.spyOn(CloudflareAIGateway, "isSupportedProvider").mockReturnValue(true);
@@ -491,5 +507,84 @@ describe("status", () => {
 
     const body = (await (await handleStatusRequest()).json()) as any;
     expect(body.providers.openai.keys[0].status).toBe("valid");
+  });
+
+  it("still reports other providers when one cannot describe itself", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(Secrets.getAll).mockReturnValue(["key"]);
+    mockProviderClass.fetch.mockResolvedValue(
+      new Response(null, { status: 200 }),
+    );
+    vi.mocked(getAllProviderInstances).mockReturnValue({
+      broken: {
+        ...mockProviderClass,
+        getApiKeys: vi.fn(() => {
+          throw new Error("credential configuration is unreadable");
+        }),
+      },
+      openai: mockProviderClass,
+    } as any);
+
+    const response = await handleStatusRequest();
+    const body = (await response.json()) as any;
+
+    expect(response.status).toBe(200);
+    expect(body.providers.broken).toEqual({ available: false, keys: [] });
+    expect(body.providers.openai.keys[0].status).toBe("valid");
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "provider.status.failed" }),
+    );
+  });
+
+  it("reports a provider that fails during registry enumeration", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const response = await handleStatusRequest(undefined, {
+      allSettled: () => ({
+        providers: {},
+        failures: [
+          {
+            providerName: "broken",
+            error: new Error("profile configuration is unreadable"),
+          },
+        ],
+      }),
+    } as any);
+    const body = (await response.json()) as any;
+
+    expect(body.providers.broken).toEqual({ available: false, keys: [] });
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "provider.status.failed",
+        provider: "broken",
+      }),
+    );
+  });
+
+  it("still returns a diagnostic when a connectivity check rejects outright", async () => {
+    // A rejection raised outside the per-check guard — for example the Worker's
+    // per-request subrequest budget being exhausted while the check is being
+    // set up — must leave the slot unresolved instead of failing the route.
+    let modelsPathReads = 0;
+    vi.mocked(getAllProviderInstances).mockReturnValue({
+      openai: {
+        ...mockProviderClass,
+        available: vi.fn(() => true),
+        getApiKeys: vi.fn(() => ["key"]),
+        get modelsPath() {
+          modelsPathReads += 1;
+          if (modelsPathReads > 1) throw new Error("Too many subrequests.");
+          return "/models";
+        },
+      },
+    } as any);
+
+    const response = await handleStatusRequest();
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      providers: {
+        openai: { available: true, keys: [{ slot: 0, status: "unknown" }] },
+      },
+    });
   });
 });

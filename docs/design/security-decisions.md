@@ -22,6 +22,21 @@ allow cross-caller cache reads or poisoning). See
 `OPERATOR_CONTROLLED_AI_GATEWAY_HEADERS` and `stripProxyAuthorizationHeaders`
 in `src/utils/authorization.ts`.
 
+## Client-controlled names never resolve through an object's prototype
+
+**Behavior.** Client-supplied provider selectors, credential profiles, and
+virtual model names match only registered entries. Provider routes use a `Set`,
+object lookups require own properties, and the virtual-model map has a null
+prototype.
+
+**Rationale.** Plain objects inherit names such as `toString` and `constructor`,
+while assigning `__proto__` can replace the prototype. Treating those names as
+configured entries could cause HTTP 500 responses or discard a virtual model.
+
+**Boundary that _is_ enforced.** Inherited names return "not configured", while
+`__proto__` remains a valid virtual-model key. The adversarial-input regression
+suite covers this boundary.
+
 ## `/models` and `/status` fan out to every provider
 
 **Behavior.** A single authenticated `GET /models` or `GET /status` request
@@ -33,6 +48,10 @@ guarantees, and both require a valid `PROXY_API_KEY`. `/models` starts every
 configured provider concurrently with a 30-second per-provider timeout, while
 `/status` starts every configured credential check concurrently with an
 individual five-second timeout.
+
+**Boundary that _is_ enforced.** Fan-out can reach the per-request subrequest
+limit. Provider and check failures remain isolated, yielding omitted providers
+or `unknown` credential slots instead of failing an authenticated diagnostic.
 Validated provider configuration limits, per-provider response-size caps, and a
 4 MB aggregate cap bound `/models`; see `src/requests/models.ts` and
 `src/requests/status.ts`. For `/models`, the short-lived response cache

@@ -49,6 +49,42 @@ let cachedCredentialsByProfile = new Map<string, ParsedCredentials>();
 // is likewise memoized by the parsed credentials' identity.
 const encodedCredentialCache = new WeakMap<ServiceAccountJson[], string[]>();
 
+// Profile discovery re-reads the same multi-kilobyte secret on every provider
+// enumeration (`/models`, `/status`), so its result is memoized by raw value
+// alongside the parsed credentials.
+let cachedProfilesRaw: string | undefined;
+let cachedProfiles: string[] = [];
+
+function listCredentialProfiles(): string[] {
+  const serializedCredentials = Environments.get(API_KEY_NAME, false);
+  if (!serializedCredentials?.trim()) return [];
+  if (serializedCredentials === cachedProfilesRaw) return cachedProfiles;
+
+  cachedProfilesRaw = serializedCredentials;
+  cachedProfiles = computeCredentialProfiles(serializedCredentials);
+  return cachedProfiles;
+}
+
+function computeCredentialProfiles(serializedCredentials: string): string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(serializedCredentials);
+  } catch {
+    return [];
+  }
+  if (
+    typeof parsed === "object" &&
+    parsed !== null &&
+    !Array.isArray(parsed) &&
+    (parsed as Record<string, unknown>).type !== "service_account"
+  ) {
+    return Object.keys(parsed).filter((profile) =>
+      PROVIDER_PROFILE_PATTERN.test(profile),
+    );
+  }
+  return [DEFAULT_PROVIDER_PROFILE];
+}
+
 function parseServiceAccountCredentials(profile: string): ParsedCredentials {
   const serializedCredentials = Environments.get(API_KEY_NAME, false);
   if (!serializedCredentials?.trim()) return EMPTY_CREDENTIALS;
@@ -156,24 +192,7 @@ export const GoogleVertexAi = defineProvider({
   },
 
   getCredentialProfiles(): string[] {
-    const serializedCredentials = Environments.get(API_KEY_NAME, false);
-    if (!serializedCredentials?.trim()) return [];
-    try {
-      const parsed = JSON.parse(serializedCredentials) as unknown;
-      if (
-        typeof parsed === "object" &&
-        parsed !== null &&
-        !Array.isArray(parsed) &&
-        (parsed as Record<string, unknown>).type !== "service_account"
-      ) {
-        return Object.keys(parsed).filter((profile) =>
-          PROVIDER_PROFILE_PATTERN.test(profile),
-        );
-      }
-    } catch {
-      return [];
-    }
-    return [DEFAULT_PROVIDER_PROFILE];
+    return listCredentialProfiles();
   },
 
   getAiGatewayApiKeys(): string[] {

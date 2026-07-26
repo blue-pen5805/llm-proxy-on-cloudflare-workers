@@ -105,8 +105,20 @@ must each remain at 100%. Add meaningful assertions for reachable behavior.
 Use narrowly scoped Istanbul exclusions only for structurally unreachable or
 runtime-only code, and document the reason inline at every exclusion.
 
-ESLint uses the TypeScript project service for `src` and `scripts` so
-Promise-returning expressions are checked by
+Coverage measures which lines ran, not which inputs were tried, so it does not
+by itself establish that a route behaves under hostile input. When a change
+introduces or touches a name, path, or field that a client controls, add a case
+to `test/src/security/adversarial_inputs.test.ts` asserting the documented
+rejection rather than relying on the coverage percentage.
+
+`npm run tsc` type-checks three projects: `src` and `scripts` from the root
+`tsconfig.json`, Worker-runtime tests from `test/tsconfig.json`, and Node-based
+deployment-tooling tests from `test/scripts/tsconfig.json`. The last is separate
+because the Workers and Node global declarations for shared names such as `URL`
+are not assignable to each other in one program.
+
+ESLint covers `src`, `scripts`, and `test`. It uses the TypeScript project
+service for `src` and `scripts` so Promise-returning expressions are checked by
 `@typescript-eslint/no-floating-promises`. Await a Promise when its result is
 part of control flow; otherwise mark intentional fire-and-forget work with
 `void` and handle rejection where applicable.

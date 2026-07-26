@@ -15,13 +15,15 @@ import {
   type FileSystemOperations,
 } from "../../scripts/deploy-secrets";
 import { syncAiGatewayCustomProviders } from "../../scripts/sync-ai-gateway-custom-providers";
-import { execFileSync } from "child_process";
+import { execFileSync, spawn } from "child_process";
 import fs from "fs";
+import { EventEmitter } from "node:events";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock child_process module
 vi.mock("child_process", () => ({
   execFileSync: vi.fn(),
+  spawn: vi.fn(),
 }));
 
 vi.mock("../../scripts/sync-ai-gateway-custom-providers", () => ({
@@ -55,9 +57,24 @@ const createMockFsOps = (
   writeFileSync: vi.fn(),
 });
 
+function mockWranglerSpawn(
+  code: number | null = 0,
+  signal: NodeJS.Signals | null = null,
+) {
+  const kill = vi.fn(() => true);
+  const child = Object.assign(new EventEmitter(), { kill });
+  vi.mocked(spawn).mockImplementationOnce(() => {
+    queueMicrotask(() => child.emit("exit", code, signal));
+    return child as never;
+  });
+  return { child, kill };
+}
+
 describe("deploy-secrets", () => {
   beforeEach(() => {
     vi.mocked(execFileSync).mockReset();
+    vi.mocked(spawn).mockReset();
+    mockWranglerSpawn();
     vi.mocked(fs.writeFileSync).mockReset();
     vi.mocked(fs.readFileSync).mockReset();
     vi.mocked(fs.unlinkSync).mockReset();
@@ -336,15 +353,15 @@ describe("deploy-secrets", () => {
   });
 
   describe("deploySecrets", () => {
-    it("should return error when config file does not exist", () => {
+    it("should return error when config file does not exist", async () => {
       const mockFs = createMockFsOps({});
-      const result = deploySecrets("/root", undefined, true, mockFs);
+      const result = await deploySecrets("/root", undefined, true, mockFs);
 
       expect(result.success).toBe(false);
       expect(result.messages[0]).toContain("config.jsonc not found");
     });
 
-    it("accepts an acyclic virtual-model reference graph during dry-run", () => {
+    it("accepts an acyclic virtual-model reference graph during dry-run", async () => {
       const mockFs = createMockFsOps({
         "/root/config.jsonc": JSON.stringify({
           VIRTUAL_MODELS: {
@@ -354,13 +371,13 @@ describe("deploy-secrets", () => {
         }),
       });
 
-      const result = deploySecrets("/root", undefined, true, mockFs);
+      const result = await deploySecrets("/root", undefined, true, mockFs);
 
       expect(result.success).toBe(true);
       expect(result.messages).toContain("   - VIRTUAL_MODELS: [set]");
     });
 
-    it("honors custom-provider precedence while checking graph edges", () => {
+    it("honors custom-provider precedence while checking graph edges", async () => {
       const mockFs = createMockFsOps({
         "/root/config.jsonc": JSON.stringify({
           CUSTOM_OPENAI_ENDPOINTS: [
@@ -374,18 +391,20 @@ describe("deploy-secrets", () => {
         }),
       });
 
-      const result = deploySecrets("/root", undefined, true, mockFs);
+      const result = await deploySecrets("/root", undefined, true, mockFs);
 
       expect(result.success).toBe(true);
       expect(result.messages).toContain("   - VIRTUAL_MODELS: [set]");
     });
 
-    it("rejects malformed virtual models before deployment", () => {
+    it("rejects malformed virtual models before deployment", async () => {
       const mockFs = createMockFsOps({
         "/root/config.jsonc": '{"VIRTUAL_MODELS":{"virtual/route":[]}}',
       });
 
-      expect(deploySecrets("/root", undefined, true, mockFs)).toEqual({
+      await expect(
+        deploySecrets("/root", undefined, true, mockFs),
+      ).resolves.toEqual({
         success: false,
         messages: [
           "❌ Error processing config.jsonc: VIRTUAL_MODELS is invalid.",
@@ -403,30 +422,33 @@ describe("deploy-secrets", () => {
         "virtual/two": [{ model: "virtual/three", retries: 1 }],
         "virtual/three": ["virtual/one"],
       },
-    ])("rejects a virtual-model cycle before deployment: %j", (models) => {
-      const mockFs = createMockFsOps({
-        "/root/config.jsonc": JSON.stringify({ VIRTUAL_MODELS: models }),
-      });
+    ])(
+      "rejects a virtual-model cycle before deployment: %j",
+      async (models) => {
+        const mockFs = createMockFsOps({
+          "/root/config.jsonc": JSON.stringify({ VIRTUAL_MODELS: models }),
+        });
 
-      const result = deploySecrets("/root", undefined, true, mockFs);
+        const result = await deploySecrets("/root", undefined, true, mockFs);
 
-      expect(result).toEqual({
-        success: false,
-        messages: [
-          "❌ Error processing config.jsonc: VIRTUAL_MODELS contains a circular reference.",
-        ],
-      });
-      expect(execFileSync).not.toHaveBeenCalled();
-    });
+        expect(result).toEqual({
+          success: false,
+          messages: [
+            "❌ Error processing config.jsonc: VIRTUAL_MODELS contains a circular reference.",
+          ],
+        });
+        expect(execFileSync).not.toHaveBeenCalled();
+      },
+    );
 
-    it("rejects a cycle before a real deployment invokes Wrangler", () => {
+    it("rejects a cycle before a real deployment invokes Wrangler", async () => {
       const mockFs = createMockFsOps({
         "/root/config.jsonc": JSON.stringify({
           VIRTUAL_MODELS: { "virtual/self": ["virtual/self"] },
         }),
       });
 
-      const result = deploySecrets("/root", undefined, false, mockFs);
+      const result = await deploySecrets("/root", undefined, false, mockFs);
 
       expect(result.success).toBe(false);
       expect(result.messages[0]).toContain("circular reference");
@@ -434,7 +456,7 @@ describe("deploy-secrets", () => {
       expect(fs.writeFileSync).not.toHaveBeenCalled();
     });
 
-    it("rejects a nested graph above the expanded attempt limit", () => {
+    it("rejects a nested graph above the expanded attempt limit", async () => {
       const mockFs = createMockFsOps({
         "/root/config.jsonc": JSON.stringify({
           VIRTUAL_MODELS: {
@@ -447,7 +469,7 @@ describe("deploy-secrets", () => {
         }),
       });
 
-      const result = deploySecrets("/root", undefined, true, mockFs);
+      const result = await deploySecrets("/root", undefined, true, mockFs);
 
       expect(result.success).toBe(false);
       expect(result.messages).toEqual([
@@ -456,18 +478,18 @@ describe("deploy-secrets", () => {
       expect(execFileSync).not.toHaveBeenCalled();
     });
 
-    it("uses the default dry-run value", () => {
+    it("uses the default dry-run value", async () => {
       const mockFs = createMockFsOps({
         "/root/config.jsonc": '{"KEY":"value"}',
       });
 
-      expect(deploySecrets("/root", undefined, undefined, mockFs).success).toBe(
-        true,
-      );
-      expect(execFileSync).toHaveBeenCalled();
+      expect(
+        (await deploySecrets("/root", undefined, undefined, mockFs)).success,
+      ).toBe(true);
+      expect(spawn).toHaveBeenCalled();
     });
 
-    it("should return warning when no secret operations are found", () => {
+    it("should return warning when no secret operations are found", async () => {
       const configContent = `{
         "$schema": "schema.json",
         "EMPTY_KEY": "",
@@ -477,18 +499,18 @@ describe("deploy-secrets", () => {
         "/root/config.jsonc": configContent,
       });
 
-      const result = deploySecrets("/root", undefined, true, mockFs);
+      const result = await deploySecrets("/root", undefined, true, mockFs);
 
       expect(result.success).toBe(true);
       expect(result.messages[0]).toContain("No secret operations found");
     });
 
-    it("warns and succeeds when only the deprecated setting remains", () => {
+    it("warns and succeeds when only the deprecated setting remains", async () => {
       const mockFs = createMockFsOps({
         "/root/config.jsonc": '{"ENABLE_GLOBAL_ROUND_ROBIN":false}',
       });
 
-      const result = deploySecrets("/root", undefined, true, mockFs);
+      const result = await deploySecrets("/root", undefined, true, mockFs);
 
       expect(result.success).toBe(true);
       expect(result.messages).toEqual([
@@ -500,7 +522,7 @@ describe("deploy-secrets", () => {
       expect(execFileSync).not.toHaveBeenCalled();
     });
 
-    it("warns and excludes the deprecated setting from deployment", () => {
+    it("warns and excludes the deprecated setting from deployment", async () => {
       const mockFs = createMockFsOps({
         "/root/config.jsonc": JSON.stringify({
           ENABLE_GLOBAL_ROUND_ROBIN: true,
@@ -508,7 +530,7 @@ describe("deploy-secrets", () => {
         }),
       });
 
-      const result = deploySecrets("/root", undefined, true, mockFs);
+      const result = await deploySecrets("/root", undefined, true, mockFs);
 
       expect(result.success).toBe(true);
       expect(result.messages[0]).toContain(
@@ -521,33 +543,33 @@ describe("deploy-secrets", () => {
       expect(result.messages.join("\n")).not.toContain("secret-value");
     });
 
-    it("should include null values as redacted delete operations", () => {
+    it("should include null values as redacted delete operations", async () => {
       const mockFs = createMockFsOps({
         "/root/config.jsonc": '{"OLD_API_KEY":null}',
       });
 
-      const result = deploySecrets("/root", undefined, true, mockFs);
+      const result = await deploySecrets("/root", undefined, true, mockFs);
 
       expect(result.success).toBe(true);
       expect(result.messages).toContain("   - OLD_API_KEY: [delete]");
       expect(result.messages.join("\n")).not.toContain("null");
     });
 
-    it("should reject oversized serialized secrets before invoking Wrangler", () => {
+    it("should reject oversized serialized secrets before invoking Wrangler", async () => {
       const mockFs = createMockFsOps({
         "/root/config.jsonc": JSON.stringify({
           LARGE_SECRET: "x".repeat(MAX_WORKER_SECRET_BYTES + 1),
         }),
       });
 
-      const result = deploySecrets("/root", undefined, true, mockFs);
+      const result = await deploySecrets("/root", undefined, true, mockFs);
 
       expect(result.success).toBe(false);
       expect(result.messages[0]).toContain("exceeds Cloudflare's");
       expect(execFileSync).not.toHaveBeenCalled();
     });
 
-    it("should process valid config in dry run mode", () => {
+    it("should process valid config in dry run mode", async () => {
       const configContent = `{
         "$schema": "schema.json",
         "API_KEY": "secret-value",
@@ -557,7 +579,7 @@ describe("deploy-secrets", () => {
         "/root/config.jsonc": configContent,
       });
 
-      const result = deploySecrets("/root", undefined, true, mockFs);
+      const result = await deploySecrets("/root", undefined, true, mockFs);
 
       expect(result.success).toBe(true);
       expect(
@@ -576,7 +598,7 @@ describe("deploy-secrets", () => {
       expect(result.messages.join("\n")).not.toContain("another-secret");
     });
 
-    it("should handle environment-specific config", () => {
+    it("should handle environment-specific config", async () => {
       const configContent = `{
         "PROD_API_KEY": "production-secret"
       }`;
@@ -584,7 +606,7 @@ describe("deploy-secrets", () => {
         "/root/config.prod.jsonc": configContent,
       });
 
-      const result = deploySecrets("/root", "prod", true, mockFs);
+      const result = await deploySecrets("/root", "prod", true, mockFs);
 
       expect(result.success).toBe(true);
       expect(
@@ -595,14 +617,14 @@ describe("deploy-secrets", () => {
       ).toBe(true);
     });
 
-    it("should validate environment names", () => {
-      const result = deploySecrets("/root", "invalid env", true);
+    it("should validate environment names", async () => {
+      const result = await deploySecrets("/root", "invalid env", true);
 
       expect(result.success).toBe(false);
       expect(result.messages[0]).toContain("Invalid environment name");
     });
 
-    it("should fully redact secret values in display", () => {
+    it("should fully redact secret values in display", async () => {
       const longSecret = "a".repeat(30);
       const configContent = `{
         "LONG_SECRET": "${longSecret}"
@@ -611,7 +633,7 @@ describe("deploy-secrets", () => {
         "/root/config.jsonc": configContent,
       });
 
-      const result = deploySecrets("/root", undefined, true, mockFs);
+      const result = await deploySecrets("/root", undefined, true, mockFs);
 
       expect(result.success).toBe(true);
       const secretLine = result.messages.find((msg) =>
@@ -621,31 +643,36 @@ describe("deploy-secrets", () => {
       expect(result.messages.join("\n")).not.toContain(longSecret);
     });
 
-    it("should report malformed configuration", () => {
+    it("should report malformed configuration", async () => {
       const mockFs = createMockFsOps({
         "/root/config.jsonc": "{ malformed",
       });
-      expect(deploySecrets("/root", undefined, true, mockFs)).toEqual({
+      await expect(
+        deploySecrets("/root", undefined, true, mockFs),
+      ).resolves.toEqual({
         success: false,
         messages: [expect.stringContaining("Error processing config.jsonc")],
       });
     });
 
-    it("should report non-Error filesystem failures", () => {
+    it("should report non-Error filesystem failures", async () => {
       const mockFs = createMockFsOps({
         "/root/config.jsonc": "{}",
       });
       vi.mocked(mockFs.readFileSync).mockImplementation(() => {
         throw "unreadable";
       });
-      expect(deploySecrets("/root", undefined, true, mockFs).messages).toEqual([
-        "❌ Error processing config.jsonc: unreadable",
-      ]);
+      await expect(
+        deploySecrets("/root", undefined, true, mockFs),
+      ).resolves.toMatchObject({
+        messages: ["❌ Error processing config.jsonc: unreadable"],
+      });
     });
 
     describe("deletion of non-existent secrets (non-dry-run)", () => {
-      // Route the shared execFileSync mock: `secret list` returns the given
-      // JSON; `secret bulk` is a no-op whose payload we inspect via writeFileSync.
+      // Route the shared execFileSync mock used by `secret list`; the default
+      // spawn mock completes `secret bulk`, whose payload is inspected via
+      // writeFileSync.
       const routeWrangler = (listOutput: string | (() => never)) => {
         vi.mocked(execFileSync).mockImplementation(
           (_cmd, args?: readonly string[]) => {
@@ -662,13 +689,13 @@ describe("deploy-secrets", () => {
         vi.spyOn(console, "log").mockImplementation(() => undefined);
       });
 
-      it("skips deletions for secrets that are not currently set", () => {
+      it("skips deletions for secrets that are not currently set", async () => {
         routeWrangler('[{"name":"API_KEY","type":"secret_text"}]');
         const mockFs = createMockFsOps({
           "/root/config.jsonc": '{"OLD_KEY":null,"API_KEY":"val"}',
         });
 
-        const result = deploySecrets("/root", undefined, false, mockFs);
+        const result = await deploySecrets("/root", undefined, false, mockFs);
 
         expect(result.success).toBe(true);
         expect(result.messages).toContain(
@@ -683,13 +710,13 @@ describe("deploy-secrets", () => {
         expect(JSON.parse(bulkPayload)).toEqual({ API_KEY: "val" });
       });
 
-      it("keeps deletions for secrets that currently exist", () => {
+      it("keeps deletions for secrets that currently exist", async () => {
         routeWrangler('[{"name":"OLD_KEY","type":"secret_text"}]');
         const mockFs = createMockFsOps({
           "/root/config.jsonc": '{"OLD_KEY":null}',
         });
 
-        const result = deploySecrets("/root", undefined, false, mockFs);
+        const result = await deploySecrets("/root", undefined, false, mockFs);
 
         expect(result.success).toBe(true);
         expect(result.messages).toContain("   - OLD_KEY: [delete]");
@@ -700,13 +727,13 @@ describe("deploy-secrets", () => {
         expect(JSON.parse(bulkPayload)).toEqual({ OLD_KEY: null });
       });
 
-      it("deploys nothing when every deletion targets an absent secret", () => {
+      it("deploys nothing when every deletion targets an absent secret", async () => {
         routeWrangler("[]");
         const mockFs = createMockFsOps({
           "/root/config.jsonc": '{"OLD_KEY":null}',
         });
 
-        const result = deploySecrets("/root", undefined, false, mockFs);
+        const result = await deploySecrets("/root", undefined, false, mockFs);
 
         expect(result.success).toBe(true);
         expect(result.messages).toContain(
@@ -717,7 +744,7 @@ describe("deploy-secrets", () => {
         expect(execFileSync).toHaveBeenCalledTimes(1);
       });
 
-      it("falls back to sending deletions when existing secrets can't be listed", () => {
+      it("falls back to sending deletions when existing secrets can't be listed", async () => {
         routeWrangler(() => {
           throw new Error("worker not found");
         });
@@ -725,7 +752,7 @@ describe("deploy-secrets", () => {
           "/root/config.jsonc": '{"OLD_KEY":null}',
         });
 
-        const result = deploySecrets("/root", undefined, false, mockFs);
+        const result = await deploySecrets("/root", undefined, false, mockFs);
 
         expect(result.success).toBe(true);
         expect(result.messages).toContain("   - OLD_KEY: [delete]");
@@ -736,13 +763,13 @@ describe("deploy-secrets", () => {
         expect(JSON.parse(bulkPayload)).toEqual({ OLD_KEY: null });
       });
 
-      it("does not query existing secrets on a dry run", () => {
+      it("does not query existing secrets on a dry run", async () => {
         routeWrangler("[]");
         const mockFs = createMockFsOps({
           "/root/config.jsonc": '{"OLD_KEY":null}',
         });
 
-        const result = deploySecrets("/root", undefined, true, mockFs);
+        const result = await deploySecrets("/root", undefined, true, mockFs);
 
         expect(result.success).toBe(true);
         expect(result.messages).toContain("   - OLD_KEY: [delete]");
@@ -812,29 +839,33 @@ describe("deploy-secrets", () => {
   });
 
   describe("executeWranglerSecretBulk", () => {
-    it("builds a dry-run command without writing plaintext", () => {
-      const result = executeWranglerSecretBulk('{"KEY":"value"}', "prod", true);
+    it("builds a dry-run command without writing plaintext", async () => {
+      const result = await executeWranglerSecretBulk(
+        '{"KEY":"value"}',
+        "prod",
+        true,
+      );
 
       expect(fs.writeFileSync).not.toHaveBeenCalled();
       expect(fs.unlinkSync).not.toHaveBeenCalled();
-      expect(execFileSync).not.toHaveBeenCalled();
+      expect(spawn).not.toHaveBeenCalled();
       expect(result).toEqual({
         success: true,
         message: expect.stringContaining("--env prod"),
       });
     });
 
-    it("executes Wrangler and cleans up on success", () => {
+    it("executes Wrangler and cleans up on success", async () => {
       const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-      const result = executeWranglerSecretBulk('{"KEY":"value"}');
+      const result = await executeWranglerSecretBulk('{"KEY":"value"}');
 
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         expect.stringMatching(/\.secrets-temp-.*\.json$/),
         '{"KEY":"value"}',
         { flag: "wx", mode: 0o600 },
       );
-      expect(execFileSync).toHaveBeenCalledWith(
+      expect(spawn).toHaveBeenCalledWith(
         "wrangler",
         ["secret", "bulk", expect.stringMatching(/\.secrets-temp-.*\.json$/)],
         { stdio: "inherit" },
@@ -849,30 +880,151 @@ describe("deploy-secrets", () => {
       });
     });
 
-    it("cleans up and reports execution failures", () => {
-      vi.mocked(execFileSync).mockImplementation(() => {
-        throw new Error("wrangler failed");
-      });
+    it("cleans up and reports execution failures", async () => {
+      vi.mocked(spawn)
+        .mockReset()
+        .mockImplementation(() => {
+          throw new Error("wrangler failed");
+        });
       vi.mocked(fs.existsSync).mockReturnValue(true);
 
-      expect(executeWranglerSecretBulk('{"KEY":"value"}')).toEqual({
+      await expect(
+        executeWranglerSecretBulk('{"KEY":"value"}'),
+      ).resolves.toEqual({
         success: false,
         message: "❌ Error deploying secrets: wrangler failed",
       });
       expect(fs.unlinkSync).toHaveBeenCalled();
     });
 
-    it("handles non-Error failures without a temporary file", () => {
+    it("reports a Wrangler process start error", async () => {
+      vi.mocked(spawn).mockReset();
+      const child = Object.assign(new EventEmitter(), {
+        kill: vi.fn(() => true),
+      });
+      vi.mocked(spawn).mockImplementationOnce(() => {
+        queueMicrotask(() => child.emit("error", new Error("spawn failed")));
+        return child as never;
+      });
+
+      await expect(executeWranglerSecretBulk("{}")).resolves.toEqual({
+        success: false,
+        message: "❌ Error deploying secrets: spawn failed",
+      });
+      expect(fs.unlinkSync).toHaveBeenCalled();
+    });
+
+    it("handles non-Error failures without a temporary file", async () => {
       vi.mocked(fs.writeFileSync).mockImplementation(() => {
         throw "disk full";
       });
       vi.mocked(fs.existsSync).mockReturnValue(false);
 
-      expect(executeWranglerSecretBulk("{}")).toEqual({
+      await expect(executeWranglerSecretBulk("{}")).resolves.toEqual({
         success: false,
         message: "❌ Error deploying secrets: disk full",
       });
       expect(fs.unlinkSync).not.toHaveBeenCalled();
+    });
+
+    it("skips deletion when the temporary file is already gone", async () => {
+      vi.spyOn(console, "log").mockImplementation(() => undefined);
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+
+      await expect(
+        executeWranglerSecretBulk('{"KEY":"value"}'),
+      ).resolves.toEqual({
+        success: true,
+        message: "✅ Secrets deployed successfully",
+      });
+      expect(fs.unlinkSync).not.toHaveBeenCalled();
+    });
+
+    it("still reports success when deleting the temporary file fails", async () => {
+      vi.spyOn(console, "log").mockImplementation(() => undefined);
+      vi.mocked(fs.unlinkSync).mockImplementation(() => {
+        throw new Error("permission denied");
+      });
+
+      await expect(
+        executeWranglerSecretBulk('{"KEY":"value"}'),
+      ).resolves.toEqual({
+        success: true,
+        message: "✅ Secrets deployed successfully",
+      });
+    });
+
+    it("deletes the temporary file and stops Wrangler when interrupted", async () => {
+      vi.spyOn(console, "log").mockImplementation(() => undefined);
+      vi.mocked(spawn).mockReset();
+      const kill = vi.fn(() => true);
+      const child = Object.assign(new EventEmitter(), { kill });
+      let interruptHandler: ((signal: NodeJS.Signals) => void) | undefined;
+      vi.mocked(spawn).mockImplementationOnce(() => {
+        queueMicrotask(() => {
+          interruptHandler = process.listeners("SIGINT").at(-1) as (
+            signal: NodeJS.Signals,
+          ) => void;
+          interruptHandler("SIGINT");
+          child.emit("exit", null, "SIGINT");
+        });
+        return child as never;
+      });
+
+      const result = await executeWranglerSecretBulk('{"KEY":"value"}');
+
+      expect(interruptHandler).toBeDefined();
+      expect(fs.unlinkSync).toHaveBeenCalled();
+      expect(kill).toHaveBeenCalledWith("SIGINT");
+      expect(result).toEqual({
+        success: false,
+        message: "❌ Error deploying secrets: Wrangler interrupted by SIGINT.",
+      });
+      expect(process.listeners("SIGINT")).not.toContain(interruptHandler);
+    });
+
+    it("reports a Wrangler exit code", async () => {
+      vi.mocked(spawn).mockReset();
+      mockWranglerSpawn(2);
+
+      await expect(executeWranglerSecretBulk("{}")).resolves.toEqual({
+        success: false,
+        message: "❌ Error deploying secrets: Wrangler exited with code 2.",
+      });
+    });
+
+    it("reports a child termination signal", async () => {
+      vi.mocked(spawn).mockReset();
+      mockWranglerSpawn(null, "SIGTERM");
+
+      await expect(executeWranglerSecretBulk("{}")).resolves.toEqual({
+        success: false,
+        message: "❌ Error deploying secrets: Wrangler terminated by SIGTERM.",
+      });
+    });
+
+    it("still cleans up if signaling the child fails", async () => {
+      vi.mocked(spawn).mockReset();
+      const child = Object.assign(new EventEmitter(), {
+        kill: vi.fn(() => {
+          throw new Error("child already exited");
+        }),
+      });
+      vi.mocked(spawn).mockImplementationOnce(() => {
+        queueMicrotask(() => {
+          const interruptHandler = process.listeners("SIGTERM").at(-1) as (
+            signal: NodeJS.Signals,
+          ) => void;
+          interruptHandler("SIGTERM");
+          child.emit("exit", null, "SIGTERM");
+        });
+        return child as never;
+      });
+
+      const result = await executeWranglerSecretBulk("{}");
+
+      expect(fs.unlinkSync).toHaveBeenCalled();
+      expect(result.success).toBe(false);
     });
   });
 

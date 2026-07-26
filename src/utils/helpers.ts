@@ -249,20 +249,46 @@ export function assertSafeProxyPath(pathname: string): void {
   }
 }
 
+/**
+ * Drop credential-like query parameters while leaving every retained parameter
+ * byte-for-byte intact. Re-serializing through `URLSearchParams` would rewrite
+ * percent-encoding (`%20` becomes `+`) and resolve dot segments, which breaks
+ * pass-through fidelity for providers that sign or strictly parse their query
+ * strings. A path whose parameters are all retained is returned unchanged.
+ */
 export function removeAuthorizationQueryParameters(pathname: string): string {
-  // Request paths reaching this point are already URL-normalized, so a path
-  // without a query string has nothing to remove or re-serialize.
-  if (!pathname.includes("?")) {
+  const queryStart = pathname.indexOf("?");
+  if (queryStart === -1) {
     return pathname;
   }
-  const parsedPath = new URL(pathname, "https://proxy.invalid");
-  for (const parameterName of [...parsedPath.searchParams.keys()]) {
-    if (SENSITIVE_CREDENTIAL_NAMES.has(parameterName.toLowerCase())) {
-      parsedPath.searchParams.delete(parameterName);
+  const fragmentStart = pathname.indexOf("#", queryStart);
+  const queryEnd = fragmentStart === -1 ? pathname.length : fragmentStart;
+  const parameters = pathname.slice(queryStart + 1, queryEnd).split("&");
+  const retained: string[] = [];
+  let removed = false;
+
+  for (const parameter of parameters) {
+    const separatorIndex = parameter.indexOf("=");
+    const rawName =
+      separatorIndex === -1 ? parameter : parameter.slice(0, separatorIndex);
+    let name = rawName.replace(/\+/g, " ");
+    try {
+      name = decodeURIComponent(name);
+    } catch {
+      // A malformed escape cannot name a credential parameter; compare as-is.
     }
+    if (SENSITIVE_CREDENTIAL_NAMES.has(name.toLowerCase())) {
+      removed = true;
+      continue;
+    }
+    retained.push(parameter);
   }
-  parsedPath.search = parsedPath.searchParams.toString();
-  return `${parsedPath.pathname}${parsedPath.search}${parsedPath.hash}`;
+
+  if (!removed) {
+    return pathname;
+  }
+  const query = retained.join("&");
+  return `${pathname.slice(0, queryStart)}${retained.length === 0 ? "" : `?${query}`}${pathname.slice(queryEnd)}`;
 }
 
 /**

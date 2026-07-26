@@ -150,7 +150,13 @@ export function parseVirtualModels(value: unknown): VirtualModels | undefined {
   const virtualModelNames = Object.keys(rawMap);
   if (virtualModelNames.length > MAX_VIRTUAL_MODELS) return undefined;
 
-  const normalized: Record<string, VirtualModelCandidate[]> = {};
+  // A null-prototype map so a configured or requested key never resolves to an
+  // inherited Object.prototype member, and so a key such as "__proto__" stays
+  // an ordinary own entry instead of silently replacing the prototype.
+  const normalized = Object.create(null) as Record<
+    string,
+    VirtualModelCandidate[]
+  >;
   for (const virtualModelName of virtualModelNames) {
     if (!VIRTUAL_MODEL_NAME_PATTERN.test(virtualModelName)) return undefined;
     const rawCandidates = rawMap[virtualModelName];

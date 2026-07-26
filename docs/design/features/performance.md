@@ -70,7 +70,15 @@ filter arrays.
 Virtual-model retries iterate the bounded candidate configuration directly
 instead of expanding it into a duplicate attempt array. Status connectivity
 checks start all configured credential subrequests concurrently without a local
-scheduling loop or application-level concurrency cap.
+scheduling loop or application-level concurrency cap; they are settled
+independently. Google Vertex AI memoizes its parsed credential profiles by raw
+secret value, so provider enumeration does not repeatedly parse service-account
+JSON.
+
+Optional `llm_proxy` response metadata avoids `clone()` and reads a JSON chat
+body once. A body beyond the 5 MiB metadata budget is forwarded unchanged by
+replaying the bytes already read before the untouched remainder. Malformed or
+non-object JSON similarly replays the original bytes.
 
 ## Bounded model aggregation
 
@@ -111,6 +119,9 @@ fails or the Cache API is unavailable in the deployment environment, the route
 logs the failed cache operation and continues with an uncached provider
 fan-out. This includes environments where Cloudflare Access makes the Cache API
 unavailable.
+
+Cache API operations are inert on `*.workers.dev`, so
+`MODELS_CACHE_TTL_SECONDS` requires a custom domain to reduce `/models` fan-out.
 
 The Cache API is per-datacenter: each Cloudflare location warms its own entry,
 and a configuration change (for example adding a provider key) can serve a

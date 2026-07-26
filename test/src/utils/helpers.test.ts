@@ -364,10 +364,51 @@ describe("removeAuthorizationQueryParameters", () => {
     );
   });
 
-  it("should clean up invalid query string formats like ?&", () => {
-    const pathname = "/v1/chat/completions?&model=gpt-4";
-    const result = removeAuthorizationQueryParameters(pathname);
-    expect(result).toBe("/v1/chat/completions?model=gpt-4");
+  it("should return a path with no credential parameter byte-for-byte", () => {
+    for (const pathname of [
+      "/v1/chat/completions?&model=gpt-4",
+      "/v1beta/models/gemini:generateContent?alt=sse&prompt=a%20b",
+      "/openai/v1/files?filter=name%3Da+b&order=desc",
+      "/v1/models?",
+      "/v1/models?a=1#frag",
+    ]) {
+      expect(removeAuthorizationQueryParameters(pathname)).toBe(pathname);
+    }
+  });
+
+  it("should remove a credential parameter without re-encoding the rest", () => {
+    expect(
+      removeAuthorizationQueryParameters(
+        "/v1beta/models?key=secret&prompt=a%20b&q=x+y",
+      ),
+    ).toBe("/v1beta/models?prompt=a%20b&q=x+y");
+    expect(
+      removeAuthorizationQueryParameters("/v1/models?&api%5Fkey=secret&a=1"),
+    ).toBe("/v1/models?&a=1");
+    expect(removeAuthorizationQueryParameters("/v1/models?token=x#frag")).toBe(
+      "/v1/models#frag",
+    );
+    expect(removeAuthorizationQueryParameters("/v1/models?key=x&")).toBe(
+      "/v1/models?",
+    );
+    expect(removeAuthorizationQueryParameters("/v1/models?&key=x")).toBe(
+      "/v1/models?",
+    );
+    expect(removeAuthorizationQueryParameters("/v1/models?key=x&&")).toBe(
+      "/v1/models?&",
+    );
+  });
+
+  it("should compare a malformed parameter name without decoding it", () => {
+    expect(
+      removeAuthorizationQueryParameters("/v1/models?%E0%A4=1&key=x"),
+    ).toBe("/v1/models?%E0%A4=1");
+  });
+
+  it("should not resolve dot segments in a path that carries a query", () => {
+    expect(
+      removeAuthorizationQueryParameters("/openai/v1/%2e%2e/admin?key=x"),
+    ).toBe("/openai/v1/%2e%2e/admin");
   });
 });
 

@@ -67,6 +67,22 @@ describe("errorMiddleware", () => {
     expect(await response.text()).toBe("success");
   });
 
+  it("adds CORS headers to an error raised for a cross-origin caller", async () => {
+    context.request = new Request("https://proxy.example/", {
+      headers: { Origin: "https://app.example" },
+    });
+
+    const response = await errorMiddleware(
+      context,
+      vi.fn().mockRejectedValue(new AppError("Bad Request", 400)),
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(response.headers.get("Vary")).toBe("Origin");
+    expect(response.headers.get("Content-Type")).toBe("application/json");
+  });
+
   it("should hide unknown thrown values", async () => {
     const next = vi.fn().mockRejectedValue({ reason: "not an Error" });
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});

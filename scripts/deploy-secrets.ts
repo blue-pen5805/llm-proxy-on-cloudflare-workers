@@ -16,7 +16,7 @@ import {
   validateEnvironmentName,
 } from "./utils.ts";
 import type { FileSystemOperations, OperationResult } from "./utils.ts";
-import { execFileSync } from "child_process";
+import { execFileSync, spawn } from "child_process";
 import { randomUUID } from "crypto";
 import fs from "fs";
 import path from "path";
@@ -220,51 +220,90 @@ export function serializeSecretsJson(
 /**
  * Execute wrangler secret bulk command
  */
-export function executeWranglerSecretBulk(
+export async function executeWranglerSecretBulk(
   secretsJson: string,
   environmentName?: string,
   isDryRun: boolean = false,
-): { success: boolean; message: string } {
+): Promise<{ success: boolean; message: string }> {
   const tempFilePath = path.join(
     process.cwd(),
     `.secrets-temp-${randomUUID()}.json`,
   );
-  try {
-    const wranglerArguments = ["secret", "bulk", tempFilePath];
-    if (environmentName) wranglerArguments.push("--env", environmentName);
-    const commandDisplay = `wrangler ${wranglerArguments.join(" ")}`;
+  const wranglerArguments = ["secret", "bulk", tempFilePath];
+  if (environmentName) wranglerArguments.push("--env", environmentName);
+  const commandDisplay = `wrangler ${wranglerArguments.join(" ")}`;
 
-    if (isDryRun) {
-      return {
-        success: true,
-        message: `🔍 Dry run - would execute: ${commandDisplay}`,
-      };
+  if (isDryRun) {
+    return {
+      success: true,
+      message: `🔍 Dry run - would execute: ${commandDisplay}`,
+    };
+  }
+
+  let created = false;
+  const removeTempFile = (): void => {
+    if (!created) return;
+    try {
+      if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
+    } catch {
+      // Deletion is best effort; the file is owner-only and version-ignored.
     }
+  };
+  // Use an asynchronous child so signal callbacks can run while Wrangler is
+  // active. Synchronous child-process APIs block JavaScript signal handlers and
+  // can leave the plaintext file behind when the parent is terminated.
+  const interruptSignals: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
+  let child: ReturnType<typeof spawn> | undefined;
+  let interruptedBy: NodeJS.Signals | undefined;
+  const onInterrupt = (signal: NodeJS.Signals): void => {
+    interruptedBy ??= signal;
+    removeTempFile();
+    try {
+      child?.kill(signal);
+    } catch {
+      // The child may already have exited; final cleanup still runs below.
+    }
+  };
+  for (const signal of interruptSignals) process.on(signal, onInterrupt);
 
+  try {
     // Exclusive creation prevents a symlink or concurrent process from being
     // overwritten. Owner-only permissions protect the short-lived plaintext.
     fs.writeFileSync(tempFilePath, secretsJson, { flag: "wx", mode: 0o600 });
+    created = true;
     console.log(`🚀 Executing: ${commandDisplay}`);
-    execFileSync("wrangler", wranglerArguments, { stdio: "inherit" });
-
-    // Clean up temp file
-    fs.unlinkSync(tempFilePath);
+    child = spawn("wrangler", wranglerArguments, { stdio: "inherit" });
+    await new Promise<void>((resolve, reject) => {
+      child!.once("error", reject);
+      child!.once("exit", (code, signal) => {
+        if (code === 0 && signal === null && interruptedBy === undefined) {
+          resolve();
+          return;
+        }
+        const outcome = interruptedBy
+          ? `interrupted by ${interruptedBy}`
+          : signal
+            ? `terminated by ${signal}`
+            : `exited with code ${code}`;
+        reject(new Error(`Wrangler ${outcome}.`));
+      });
+    });
 
     return {
       success: true,
       message: "✅ Secrets deployed successfully",
     };
   } catch (error) {
-    // Clean up temp file if it exists
-    if (fs.existsSync(tempFilePath)) {
-      fs.unlinkSync(tempFilePath);
-    }
-
     const errorMessage = getErrorMessage(error);
     return {
       success: false,
       message: `❌ Error deploying secrets: ${errorMessage}`,
     };
+  } finally {
+    removeTempFile();
+    for (const signal of interruptSignals) {
+      process.removeListener(signal, onInterrupt);
+    }
   }
 }
 
@@ -317,12 +356,12 @@ export function listExistingSecretNames(
 /**
  * Deploy secrets based on configuration
  */
-export function deploySecrets(
+export async function deploySecrets(
   repositoryRoot: string,
   environmentName?: string,
   isDryRun: boolean = false,
   fileSystem: FileSystemOperations = fs,
-): DeployResult {
+): Promise<DeployResult> {
   // Validate environment name if provided
   if (environmentName && !validateEnvironmentName(environmentName)) {
     return {
@@ -423,7 +462,7 @@ export function deploySecrets(
       messages.push("🔍 Dry run mode - values are intentionally redacted.");
     }
 
-    const deploymentResult = executeWranglerSecretBulk(
+    const deploymentResult = await executeWranglerSecretBulk(
       secretsJson,
       environmentName,
       isDryRun,
@@ -486,7 +525,7 @@ export async function runDeploySecretsCli(): Promise<void> {
     }
   }
 
-  const deploymentResult = deploySecrets(
+  const deploymentResult = await deploySecrets(
     repositoryRoot,
     environmentName,
     isDryRun,

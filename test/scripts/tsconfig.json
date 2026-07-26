@@ -1,0 +1,17 @@
+{
+  // Deployment-tooling tests run under Node, so they use the Node global types
+  // only. Keeping them out of the Worker-runtime project avoids conflicting
+  // declarations for shared globals such as URL.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["es2022"],
+    "paths": {
+      "~/src/*": ["../../src/*"],
+      "~/scripts/*": ["../../scripts/*"]
+    },
+    "types": ["node"]
+  },
+  "include": ["./**/*.ts", "../../worker-configuration.d.ts"],
+  "exclude": []
+}

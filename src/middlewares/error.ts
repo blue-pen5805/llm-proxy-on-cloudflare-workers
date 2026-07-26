@@ -1,4 +1,5 @@
 import { Middleware } from "../middleware";
+import { addCorsHeaders } from "../requests/options";
 import { AppError } from "../utils/error";
 import { RequestLogger } from "../utils/logger";
 
@@ -21,19 +22,25 @@ export const errorMiddleware: Middleware = async (context, next) => {
       );
     }
 
-    return new Response(
-      JSON.stringify({
-        error: {
-          message,
+    // This middleware wraps CORS handling, so the error response adds the CORS
+    // headers itself instead of relying on an inner middleware that was
+    // bypassed by the throw.
+    return addCorsHeaders(
+      context.request,
+      new Response(
+        JSON.stringify({
+          error: {
+            message,
+            status,
+          },
+        }),
+        {
           status,
+          headers: {
+            "Content-Type": "application/json",
+          },
         },
-      }),
-      {
-        status,
-        headers: {
-          "Content-Type": "application/json",
-        },
-      },
+      ),
     );
   }
 };

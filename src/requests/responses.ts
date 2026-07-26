@@ -800,16 +800,20 @@ function convertStreamingResponse(
       }
     }
   };
+  // Per the SSE specification, every `data:` line of one record forms a single
+  // payload joined by newlines. Providers normally send one line per record.
   const processBlock = (
     block: string,
     controller: TransformStreamDefaultController<Uint8Array>,
   ) => {
+    let data: string | undefined;
     for (const line of block.split(/\r?\n/)) {
       if (line.startsWith("data:")) {
-        processData(line.slice(5).trimStart(), controller);
-        if (finished) break;
+        const value = line.slice(5).trimStart();
+        data = data === undefined ? value : `${data}\n${value}`;
       }
     }
+    if (data !== undefined) processData(data, controller);
   };
 
   const body = response.body.pipeThrough(
@@ -858,7 +862,14 @@ function convertStreamingResponse(
         if (pending.trim()) {
           processBlock(pending, controller);
         }
-        finish(controller);
+        // Reaching flush without `[DONE]` means the upstream stream ended
+        // early. Emitting a success terminal event here would present a
+        // truncated generation as a complete response, so fail instead.
+        if (finished) return;
+        fail(
+          controller,
+          new Error("Upstream stream ended without a terminal event."),
+        );
       },
     }),
   );

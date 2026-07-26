@@ -91,6 +91,9 @@ curl https://your-worker.example/v1/models \
 credential slot counts and configuration metadata. `/v1/models` is best-effort and
 may omit a provider that times out or does not support model listing.
 
+Wrangler's default `*.workers.dev` URL does not use the Cache API. Add a custom
+domain for `MODELS_CACHE_TTL_SECONDS` to take effect.
+
 Next, read [HTTP API and routing](api.md). For named environments, key rotation,
 AI Gateway, and custom endpoints, continue with [Configuration](configuration.md)
 and [Operations](operations.md).

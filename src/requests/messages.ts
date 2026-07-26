@@ -475,7 +475,8 @@ async function convertJsonResponse(
 
 interface StreamingTool {
   id: string;
-  outputIndex: number;
+  name: string;
+  input: string;
 }
 
 function convertStreamingResponse(
@@ -498,7 +499,6 @@ function convertStreamingResponse(
   let finishReason: unknown;
   let usage: JsonObject = { input_tokens: 0, output_tokens: 0 };
   let proxyMetadata: JsonObject | undefined;
-  let nextOutputIndex = 0;
   let textOutputIndex: number | undefined;
   const tools = new Map<number, StreamingTool>();
 
@@ -538,7 +538,7 @@ function convertStreamingResponse(
       fail(controller, limitError);
       return;
     }
-    textOutputIndex = nextOutputIndex++;
+    textOutputIndex = 0;
     event(controller, "content_block_start", {
       index: textOutputIndex,
       content_block: { type: "text", text: "" },
@@ -547,12 +547,34 @@ function convertStreamingResponse(
   const finish = (controller: TransformStreamDefaultController<Uint8Array>) => {
     start(controller);
     finished = true;
-    const indexes = [
-      ...(textOutputIndex === undefined ? [] : [textOutputIndex]),
-      ...[...tools.values()].map((tool) => tool.outputIndex),
-    ].sort((a, b) => a - b);
-    for (const index of indexes)
+    // Anthropic content blocks do not interleave: one block is opened, filled,
+    // and stopped before the next begins. Chat Completions may emit text and
+    // tool-call deltas in the same chunk, so tool arguments are accumulated
+    // (within the existing streaming budget) and each tool_use block is
+    // emitted in full after the text block is closed.
+    let outputIndex = textOutputIndex === undefined ? 0 : textOutputIndex + 1;
+    if (textOutputIndex !== undefined) {
+      event(controller, "content_block_stop", { index: textOutputIndex });
+    }
+    for (const tool of tools.values()) {
+      const index = outputIndex++;
+      event(controller, "content_block_start", {
+        index,
+        content_block: {
+          type: "tool_use",
+          id: tool.id,
+          name: tool.name,
+          input: {},
+        },
+      });
+      if (tool.input) {
+        event(controller, "content_block_delta", {
+          index,
+          delta: { type: "input_json_delta", partial_json: tool.input },
+        });
+      }
       event(controller, "content_block_stop", { index });
+    }
     event(controller, "message_delta", {
       delta: { stop_reason: stopReason(finishReason), stop_sequence: null },
       usage,
@@ -637,18 +659,12 @@ function convertStreamingResponse(
               typeof callDelta.id === "string"
                 ? callDelta.id
                 : `toolu_${crypto.randomUUID()}`,
-            outputIndex: nextOutputIndex++,
+            name: typeof fn.name === "string" ? fn.name : "",
+            input: "",
           };
           tools.set(callDelta.index, tool);
-          event(controller, "content_block_start", {
-            index: tool.outputIndex,
-            content_block: {
-              type: "tool_use",
-              id: tool.id,
-              name: typeof fn.name === "string" ? fn.name : "",
-              input: {},
-            },
-          });
+        } else if (typeof fn.name === "string" && fn.name !== tool.name) {
+          tool.name = fn.name;
         }
         if (typeof fn.arguments === "string") {
           const limitError = budget.addToolArguments(fn.arguments);
@@ -656,24 +672,25 @@ function convertStreamingResponse(
             fail(controller, limitError);
             return;
           }
-          event(controller, "content_block_delta", {
-            index: tool.outputIndex,
-            delta: { type: "input_json_delta", partial_json: fn.arguments },
-          });
+          tool.input += fn.arguments;
         }
       }
     }
   };
+  // Per the SSE specification, every `data:` line of one record forms a single
+  // payload joined by newlines. Providers normally send one line per record.
   const processBlock = (
     block: string,
     controller: TransformStreamDefaultController<Uint8Array>,
   ) => {
+    let data: string | undefined;
     for (const line of block.split(/\r?\n/)) {
       if (line.startsWith("data:")) {
-        processData(line.slice(5).trimStart(), controller);
-        if (finished) break;
+        const value = line.slice(5).trimStart();
+        data = data === undefined ? value : `${data}\n${value}`;
       }
     }
+    if (data !== undefined) processData(data, controller);
   };
 
   const body = response.body.pipeThrough(
@@ -722,7 +739,14 @@ function convertStreamingResponse(
         if (pending.trim()) {
           processBlock(pending, controller);
         }
-        finish(controller);
+        // Reaching flush without `[DONE]` means the upstream stream ended
+        // early. Emitting `message_stop` here would present a truncated
+        // generation as a complete message, so fail instead.
+        if (finished) return;
+        fail(
+          controller,
+          new Error("Upstream stream ended without a terminal event."),
+        );
       },
     }),
   );

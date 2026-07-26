@@ -194,6 +194,10 @@ stream. The final Responses event therefore retains at most 8 MiB of generated
 content: 4 MiB of text plus 4 MiB of tool arguments, with item and metadata
 overhead bounded separately.
 
+Each SSE record's `data:` lines are joined with newlines. A stream that ends
+without `[DONE]` emits a terminal `error` event instead of
+`response.completed` or `response.incomplete`.
+
 When `CHAT_RESPONSE_METADATA_ENABLED=true`, converted JSON includes the same
 top-level `llm_proxy` routing and timing object as Chat Completions. Streaming
 output includes it in the final `response.completed` or
@@ -241,10 +245,17 @@ response. Upstream errors retain their original status and body. With
 `CHAT_RESPONSE_METADATA_ENABLED=true`, JSON includes `llm_proxy`, while a
 stream includes it on the final `message_delta` event.
 
+Content blocks never interleave. The text block is closed before the first
+`tool_use` block opens, and each `tool_use` block is emitted complete — start,
+one `input_json_delta`, stop — after the text block ends. Tool arguments are
+therefore not streamed incrementally; text deltas still are.
+
 Messages streams use the same independent SSE, text, tool-argument, tool-count,
 and output-item limits as Responses; Messages does not retain tool metadata.
-A malformed record or exceeded limit emits a terminal error event, emits no
-`message_stop`, and cancels the upstream stream.
+A malformed record, an exceeded limit, or an upstream stream that ends without
+its `[DONE]` sentinel emits a terminal error event, emits no `message_stop`,
+and cancels the upstream stream. Each SSE record's `data:` lines are joined
+with newlines.
 
 Unknown fields and features without a direct Chat equivalent—including
 documents, citations, cache controls, thinking, server tools, MCP, containers,
@@ -277,7 +288,8 @@ cache header. The cache is per Cloudflare datacenter, so a configuration
 change can serve a stale list from an already-primed datacenter for up to the
 TTL. Cache API `open`, `match`, and `put` are optional optimizations: if an
 operation is unavailable or fails, the request continues with an uncached
-provider fan-out.
+provider fan-out. The cache is ineffective on a `*.workers.dev` deployment;
+use a custom domain to enable it.
 
 ## Virtual models
 
@@ -361,8 +373,15 @@ The proxy replaces client authentication headers with the selected upstream
 credential. It also removes cookies, hop-by-hop headers, client/network metadata,
 and credential-like query parameters, including API-key variants,
 `access_token`, `token`, `authorization`, `auth`, `password`, and `secret`.
-`True-Client-IP` is never forwarded. All outbound requests use manual redirect
-handling, so the Worker never follows a redirect with credentials attached.
+`True-Client-IP` is never forwarded. Retained query parameters are passed
+through byte-for-byte, including empty fields; the proxy does not re-encode or
+reorder them, and it does not resolve dot segments in a path that carries a
+query string.
+
+All outbound requests use manual redirect handling, so the Worker never follows
+a redirect with credentials attached. Pass-through routes return upstream 3xx
+responses unchanged; clients must not replay the proxy credential when following
+them.
 Request-level `cf-aig-*` control headers are forwarded when the selected route
 uses AI Gateway and removed on direct provider requests. Client
 `cf-aig-authorization` and `cf-aig-byok-alias` are always removed; Gateway
@@ -459,6 +478,11 @@ compact JSON without indentation or line breaks.
 Timeouts, unsupported model listing, and non-authentication HTTP failures are
 reported as `unknown`. Authentication failures and unexpected fetch errors are
 `invalid`; unexpected fetch errors are also logged.
+
+The check count follows the deployed credential count and can exhaust the
+per-request subrequest budget. After authentication, provider and check failures
+remain isolated: unexamined slots stay `unknown`, and providers that cannot be
+described report `available: false` with no key slots.
 
 ## Errors
 

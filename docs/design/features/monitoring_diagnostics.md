@@ -20,6 +20,13 @@ without an application-level concurrency cap. Each result remains isolated, so
 one slow or failed check does not prevent the other credential slots from being
 examined.
 
+The number of checks follows the deployed credential count, so a large
+configuration can exhaust the per-request subrequest budget. Provider
+descriptions and checks fail independently: unexamined slots stay `unknown`,
+and an unreadable provider reports `available: false` with no key slots and a
+`provider.status.failed` log. Subrequest-limit exceptions also leave the
+affected slot `unknown`. Many `unknown` slots indicate an incomplete scan.
+
 The status handler shares the model-list Gateway capability decision with the
 normal model aggregation route. A provider that sets
 `supportsAiGatewayModels=false` is checked directly even when a Gateway is
@@ -36,6 +43,7 @@ Responses are classified as follows:
 | Other non-success HTTP response      | `unknown`               |
 | Unsupported model listing or timeout | `unknown`               |
 | Unexpected exception                 | `invalid` after logging |
+| Check that could not be started      | `unknown`               |
 
 This is connectivity evidence, not proof that every model, quota, permission,
 or API operation works. Conversely, a transient failure can make a usable key
@@ -50,9 +58,10 @@ strict AI Gateway mode, development mode, API-key cooldown duration, provider
 names, key counts, and whether OpenAI-compatible response metadata is enabled are
 also exposed.
 
-The route passes through normal authentication, except when authentication has
-been disabled by configuration. Operators should not expose it publicly or use
-its output as an unaudited monitoring payload.
+The route passes through normal authentication. Authentication is disabled only
+for a locally running Worker with `DEV` set, so a deployed `/status` is always
+authenticated. Operators should not expose it publicly or use its output as an
+unaudited monitoring payload.
 
 ## Platform observability
 
@@ -85,6 +94,8 @@ The following events support operational queries:
 | `provider.models.invalid_response` | A model-list response could not be used    |
 | `models.cache.unavailable`         | An optional model cache operation failed   |
 | `provider.connectivity.failed`     | A status connectivity check failed         |
+| `provider.status.failed`           | A provider could not describe itself       |
+| `auth.development_mode_ignored`    | `DEV` was ignored on a deployed Worker     |
 | `provider.key.selected`            | A credential slot was selected             |
 | `provider.key.cooldown`            | A credential slot entered cooldown         |
 | `virtual_model.select`             | A candidate was selected for an attempt    |

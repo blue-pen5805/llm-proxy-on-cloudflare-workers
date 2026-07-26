@@ -18,14 +18,16 @@ The order in `src/index.ts` is behaviorally significant:
 1. `loggingMiddleware` guarantees a request-start record and records final
    response status and request latency. Route handlers emit the start record
    earlier when safe endpoint-specific metadata becomes available.
-2. `corsMiddleware` answers preflight requests immediately and adds CORS headers
-   to actual cross-origin responses, including errors.
-3. `errorMiddleware` converts known application errors to JSON and redacts
-   unexpected error details from clients.
+2. `errorMiddleware` converts known application errors to JSON and redacts
+   unexpected error details from clients. Because it wraps CORS handling, it
+   returns CORS failures as JSON with the applicable cross-origin headers.
+3. `corsMiddleware` answers preflight requests immediately and adds CORS headers
+   to actual cross-origin responses.
 4. `requestMiddleware` initializes the path, including its query string.
 5. `apiKeyPathMiddleware` extracts a `/key/...` prefix.
 6. `authMiddleware` removes credential-like query parameters and authenticates
-   header credentials unless development mode is enabled.
+   header credentials unless development mode is enabled on a locally running
+   Worker.
 7. `providerRegistryMiddleware` validates custom endpoint configuration and
    creates the request-scoped provider registry.
 8. `aiGatewayMiddleware` selects the default or path-specific Gateway and

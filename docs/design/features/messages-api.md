@@ -49,17 +49,21 @@ Non-successful upstream responses retain their status and body.
 
 For `text/event-stream`, a `TransformStream` converts Chat chunks incrementally
 into `message_start`, `content_block_start`, `content_block_delta`,
-`content_block_stop`, `message_delta`, and `message_stop` events. Text and tool
-argument fragments are emitted incrementally rather than retained as a complete
-response body.
+`content_block_stop`, `message_delta`, and `message_stop` events. Multiline SSE
+data is joined before parsing.
+
+Anthropic content blocks are sequential, while Chat chunks may interleave text
+and tool-call deltas. The converter therefore streams text at index 0, retains
+tool arguments, then emits each `tool_use` block complete after closing the text
+block.
 
 The converter independently caps each SSE record at 1 MiB, cumulative text at
 4 MiB, cumulative tool arguments at 4 MiB, tool calls at 64, and output items
 at 64. These limits leave headroom beneath the Workers 128 MiB isolate limit.
-Exceeding a limit or receiving malformed SSE emits a terminal error event,
-emits no `message_stop`, and cancels the upstream stream.
-Backpressure and downstream cancellation otherwise propagate through the Chat
-path.
+Malformed, oversized, or truncated streams emit a terminal error without
+`message_stop` and cancel the upstream stream. A stream is truncated if it ends
+without `[DONE]`. Backpressure and downstream cancellation otherwise propagate
+through the Chat path.
 
 When `CHAT_RESPONSE_METADATA_ENABLED=true`, JSON output retains the Chat route's
 top-level `llm_proxy` object. Streaming output places it on the final

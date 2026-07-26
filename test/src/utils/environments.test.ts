@@ -104,9 +104,9 @@ describe("Environments", () => {
       expect(result).toBe(123);
     });
 
-    test("should parse comma-separated values", () => {
+    test("should keep a comma-containing value as one opaque secret", () => {
       const result = Environments.get("COMMA_SEPARATED", true);
-      expect(result).toEqual(["a", "b", "c"]);
+      expect(result).toBe("a, b, c");
     });
 
     test("should memoize parsed values by raw value", () => {
@@ -117,18 +117,11 @@ describe("Environments", () => {
 
     test("should keep parsing correctly after the bounded cache clears", () => {
       for (let index = 0; index < 513; index++) {
-        Environments.setEnv({ TEST_VAR: `value-${index}, extra` } as Env);
-        expect(Environments.get("TEST_VAR", true)).toEqual([
-          `value-${index}`,
-          "extra",
-        ]);
+        Environments.setEnv({ TEST_VAR: `[${index}, 1]` } as Env);
+        expect(Environments.get("TEST_VAR", true)).toEqual([index, 1]);
       }
       Environments.setEnv(undefined);
-      expect(Environments.get("COMMA_SEPARATED", true)).toEqual([
-        "a",
-        "b",
-        "c",
-      ]);
+      expect(Environments.get("COMMA_SEPARATED", true)).toBe("a, b, c");
     });
 
     test("should return the original value if parsing fails", () => {

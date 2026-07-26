@@ -11,10 +11,14 @@ import { routerMiddleware } from "./middlewares/router";
 import { Environments } from "./utils/environments";
 import { RequestLogger } from "./utils/logger";
 
+// errorMiddleware wraps corsMiddleware so a failure inside CORS handling still
+// produces a JSON error response instead of an uncaught Worker exception. It
+// applies the CORS headers to its own responses to keep browser clients able to
+// read proxy errors.
 const middlewareChain = composeMiddleware([
   loggingMiddleware,
-  corsMiddleware,
   errorMiddleware,
+  corsMiddleware,
   requestMiddleware,
   apiKeyPathMiddleware,
   authMiddleware,

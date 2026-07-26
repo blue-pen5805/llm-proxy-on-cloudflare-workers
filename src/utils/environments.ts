@@ -102,9 +102,10 @@ export class Environments {
   static get(key: keyof Env, parse: false): string | undefined;
 
   /**
-   * Gets a specific environment variable by key and parses it.
-   * Parsing attempts to convert the value to a JSON object, array, or number.
-   * If JSON parsing fails, it tries to parse as comma-separated values.
+   * Gets a specific environment variable by key and parses it as JSON.
+   * A value that is not valid JSON is returned unchanged, so a credential is
+   * never split or coerced: multiple values are configured explicitly as a
+   * JSON array and profiles as a JSON object.
    *
    * @param {keyof Env} key - The environment variable key to retrieve
    * @param {boolean} [parse=true] - Whether to parse the value
@@ -135,15 +136,10 @@ export class Environments {
       return parsedValueCache.get(configuredValue);
     }
 
-    // Try to parse as JSON first
+    // A value that is not valid JSON is a single opaque secret. It must not be
+    // split on any separator: provider credentials legitimately contain commas.
     const jsonValue = this.parseJson(configuredValue);
-
-    // If JSON parsing fails, try to parse as comma-separated values.
-    // If that also fails, fall back to the original value.
-    const parsedValue =
-      jsonValue !== undefined
-        ? jsonValue
-        : (this.parseCommaSeparatedText(configuredValue) ?? configuredValue);
+    const parsedValue = jsonValue !== undefined ? jsonValue : configuredValue;
 
     if (parsedValueCache.size >= MAX_PARSED_VALUE_CACHE_ENTRIES) {
       parsedValueCache.clear();
@@ -167,21 +163,5 @@ export class Environments {
     } catch {
       return undefined;
     }
-  }
-
-  /**
-   * Parses a comma-separated string into an array of trimmed strings.
-   *
-   * @private
-   * @param {string} value - The comma-separated string to parse
-   * @returns {Array<string> | undefined} An array of trimmed strings
-   */
-  private static parseCommaSeparatedText(
-    value: string,
-  ): Array<string> | undefined {
-    if (value.includes(",")) {
-      return value.split(",").map((item) => item.trim());
-    }
-    return undefined;
   }
 }

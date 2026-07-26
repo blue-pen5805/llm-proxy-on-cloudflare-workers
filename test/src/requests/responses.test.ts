@@ -682,30 +682,9 @@ describe("handleResponsesRequest", () => {
     }
   });
 
-  it("processes a final valid SSE record without a blank-line delimiter", async () => {
+  const streamResponse = async (upstream: string) => {
     vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
-      new Response(
-        `data: ${JSON.stringify({
-          choices: [{ delta: { content: "tail" }, finish_reason: "stop" }],
-        })}`,
-        { headers: { "content-type": "text/event-stream" } },
-      ),
-    );
-    const response = await handleResponsesRequest({
-      request: request({
-        model: "openai/model",
-        input: "Hello",
-        stream: true,
-      }),
-    } as never);
-    const body = await response.text();
-    expect(body).toContain('"text":"tail"');
-    expect(body).toContain("event: response.completed");
-  });
-
-  it("ignores a non-data SSE record and completes an empty response", async () => {
-    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
-      new Response("event: ping\n\n", {
+      new Response(upstream, {
         headers: { "content-type": "text/event-stream" },
       }),
     );
@@ -716,9 +695,55 @@ describe("handleResponsesRequest", () => {
         stream: true,
       }),
     } as never);
-    const body = await response.text();
+    return await response.text();
+  };
+
+  it("processes a final valid SSE record without a blank-line delimiter", async () => {
+    const body = await streamResponse(
+      `data: ${JSON.stringify({
+        choices: [{ delta: { content: "tail" }, finish_reason: "stop" }],
+      })}\n\ndata: [DONE]`,
+    );
+
+    expect(body).toContain('"text":"tail"');
+    expect(body).toContain("event: response.completed");
+  });
+
+  it("ignores a non-data SSE record and completes a terminated empty response", async () => {
+    const body = await streamResponse("event: ping\n\ndata: [DONE]\n\n");
+
     expect(body).toContain("event: response.completed");
     expect(body).not.toContain("event: response.output_item.added");
+  });
+
+  it("fails a stream that ends before its terminal event", async () => {
+    const body = await streamResponse(
+      `data: ${JSON.stringify({
+        choices: [{ delta: { content: "par" } }],
+      })}\n\n`,
+    );
+
+    expect(body).toContain("event: error");
+    expect(body).toContain("Upstream stream ended without a terminal event.");
+    expect(body).not.toContain("event: response.completed");
+    expect(body).not.toContain("event: response.incomplete");
+  });
+
+  it("fails an upstream stream that carries no event at all", async () => {
+    const body = await streamResponse("");
+
+    expect(body).toContain("event: response.created");
+    expect(body).toContain("event: error");
+    expect(body).not.toContain("event: response.completed");
+  });
+
+  it("joins the data lines of one SSE record into a single payload", async () => {
+    const body = await streamResponse(
+      'data: {"choices":[{"delta":\ndata: {"content":"split"}}]}\n\ndata: [DONE]\n\n',
+    );
+
+    expect(body).toContain('"delta":"split"');
+    expect(body).toContain("event: response.completed");
   });
 
   it("preserves payload-too-large errors from bounded request parsing", async () => {

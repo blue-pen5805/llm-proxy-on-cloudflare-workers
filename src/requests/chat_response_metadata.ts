@@ -1,4 +1,4 @@
-import { readResponseJson, utf8ByteLength } from "../utils/helpers";
+import { utf8ByteLength } from "../utils/helpers";
 import { StreamingResponseBudget } from "./stream_limits";
 
 const MAX_CHAT_RESPONSE_BYTES = 5 * 1024 * 1024;
@@ -186,6 +186,74 @@ function enrichEventStream(
   });
 }
 
+/**
+ * Read a JSON body once, without `clone()`.
+ *
+ * Teeing a response holds the whole body twice and leaves the unread branch
+ * buffering when enrichment is abandoned. Instead the body is read directly:
+ * if it outgrows the budget, the bytes already read are replayed ahead of the
+ * untouched remainder so the caller can still forward the response unchanged.
+ */
+async function readBoundedResponseBody(
+  body: ReadableStream<Uint8Array>,
+  maximumBytes: number,
+): Promise<{
+  text?: string;
+  body: ReadableStream<Uint8Array>;
+}> {
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let receivedBytes = 0;
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    receivedBytes += value.byteLength;
+    if (receivedBytes > maximumBytes) {
+      return {
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            for (const chunk of chunks) controller.enqueue(chunk);
+          },
+          async pull(controller) {
+            const next = await reader.read();
+            if (next.done) {
+              controller.close();
+              return;
+            }
+            controller.enqueue(next.value);
+          },
+          cancel(reason) {
+            return reader.cancel(reason);
+          },
+        }),
+      };
+    }
+  }
+
+  reader.releaseLock();
+  const replayBody = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(chunk);
+      controller.close();
+    },
+  });
+  const decoder = new TextDecoder("utf-8", {
+    fatal: true,
+    ignoreBOM: false,
+  });
+  try {
+    let text = "";
+    for (const chunk of chunks) text += decoder.decode(chunk, { stream: true });
+    return { text: text + decoder.decode(), body: replayBody };
+  } catch {
+    // Metadata is optional. Preserve malformed UTF-8 byte-for-byte instead of
+    // replacing invalid sequences while attempting to parse JSON.
+    return { body: replayBody };
+  }
+}
+
 /** Add bounded JSON or streaming SSE metadata to a routed chat response. */
 export async function enrichChatResponseWithMetadata(
   args: ChatResponseMetadataArguments,
@@ -196,28 +264,38 @@ export async function enrichChatResponseWithMetadata(
   if (contentType.includes("text/event-stream")) {
     return enrichEventStream(response, metadataArgs, headersReceivedMs);
   }
-  if (!contentType.includes("application/json")) return response;
+  if (!contentType.includes("application/json") || !response.body) {
+    return response;
+  }
+
+  const read = await readBoundedResponseBody(
+    response.body,
+    MAX_CHAT_RESPONSE_BYTES,
+  );
+  const forwardUnchanged = (body: BodyInit | null): Response =>
+    new Response(body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: responseHeaders(response.headers),
+    });
+  if (read.text === undefined) {
+    return forwardUnchanged(read.body);
+  }
 
   let body: unknown;
   try {
-    body = await readResponseJson(response.clone(), MAX_CHAT_RESPONSE_BYTES);
+    body = JSON.parse(read.text) as unknown;
   } catch {
-    return response;
+    return forwardUnchanged(read.body);
   }
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
-    return response;
+    return forwardUnchanged(read.body);
   }
 
-  await response.body?.cancel().catch(() => undefined);
-  return new Response(
+  return forwardUnchanged(
     JSON.stringify({
       ...(body as Record<string, unknown>),
       llm_proxy: createMetadata(metadataArgs, headersReceivedMs),
     }),
-    {
-      status: response.status,
-      statusText: response.statusText,
-      headers: responseHeaders(response.headers),
-    },
   );
 }

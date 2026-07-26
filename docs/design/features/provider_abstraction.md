@@ -34,6 +34,10 @@ The top-level `getProviderByName` and `getAllProviderInstances` functions are
 convenience facades over the registry. Built-in providers take precedence over
 custom endpoints with the same name in lookup and aggregate listing.
 
+Client-supplied provider selectors match only registered names, never inherited
+`Object.prototype` members. See
+[Security Design Decisions](../security-decisions.md).
+
 Universal Endpoint steps must pass both Cloudflare's supported-provider check
 and lookup in the request-scoped registry. A provider advertised by Gateway but
 without a local adapter is therefore a client error rather than an undefined

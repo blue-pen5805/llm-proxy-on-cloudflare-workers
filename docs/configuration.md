@@ -38,10 +38,10 @@ serialized form must fit within this limit.
 
 ## Authentication
 
-| Setting         | Type               | Required | Meaning                                                                                                          |
-| --------------- | ------------------ | -------- | ---------------------------------------------------------------------------------------------------------------- |
-| `PROXY_API_KEY` | string or string[] | Required | Up to 64 credentials accepted from proxy clients. Missing, empty, or excessive values fail closed with HTTP 503. |
-| `DEV`           | boolean            | No       | Disables proxy authentication only when explicitly `true`. Use only for local development.                       |
+| Setting         | Type               | Required | Meaning                                                                                                                        |
+| --------------- | ------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `PROXY_API_KEY` | string or string[] | Required | Up to 64 credentials accepted from proxy clients. Missing, empty, or excessive values fail closed with HTTP 503.               |
+| `DEV`           | boolean            | No       | Disables proxy authentication only when explicitly `true` **and** the Worker is running locally. Ignored by a deployed Worker. |
 
 Clients can send a proxy credential as a Bearer token, `x-api-key`, or
 `x-goog-api-key`. Query-string credentials are rejected because URLs are
@@ -58,8 +58,9 @@ Possession of a proxy credential therefore includes permission to change AI
 Gateway cache, retry, logging, cost, and metadata behavior per request. Restrict
 proxy credentials accordingly.
 
-> `DEV=true` exposes the proxy without client authentication. A missing
-> `PROXY_API_KEY` returns HTTP 503.
+> `DEV=true` bypasses client authentication only for a locally running Worker.
+> A deployed Worker ignores it, logs `auth.development_mode_ignored`, and
+> continues to require `PROXY_API_KEY`. A missing key returns HTTP 503.
 
 ## Provider credentials
 
@@ -67,6 +68,10 @@ Each provider key accepts a string, an array of strings, a profile object, or
 `null`. Arrays use striped per-isolate round-robin selection. Setting a key to
 `null` deletes the corresponding deployed secret on the next secrets
 deployment.
+
+A value that is not valid JSON is treated as one opaque credential and is never
+split on any separator, so a key that contains a comma stays intact. Multiple
+credentials are always expressed as a JSON array and profiles as a JSON object.
 
 | Route name         | Setting                                           |
 | ------------------ | ------------------------------------------------- |
@@ -209,13 +214,13 @@ it does not contact Cloudflare or expose Base URLs and credentials.
 
 ## Routing and key selection
 
-| Setting                          | Type            | Default | Meaning                                                                                                                                                                                           |
-| -------------------------------- | --------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DEFAULT_MODEL`                  | string or null  | none    | Provider-qualified model used when a chat request specifies `"model": "default"`.                                                                                                                 |
-| `CHAT_RESPONSE_METADATA_ENABLED` | boolean or null | `false` | Adds `llm_proxy` routing and timing metadata to routed Chat Completions and converted Responses or Messages JSON and streaming responses. Disabled by default for strict client compatibility.    |
-| `API_KEY_COOLDOWN_SECONDS`       | integer or null | `60`    | Seconds to avoid a multi-key credential slot after HTTP 401, 403, 404, 429, or 5xx. `0` disables cooldowns; values above `86400` are clamped.                                                     |
-| `MODELS_CACHE_TTL_SECONDS`       | integer or null | `300`   | TTL of the aggregated `/v1/models` response cache. `0` disables caching; values above `86400` are clamped. Invalid values fall back to the default.                                               |
-| `VIRTUAL_MODELS`                 | object or null  | none    | Operator-defined model names (`"virtual/<name>"` by convention, any key allowed), each mapped to an ordered list of `"<provider>/<model>"` candidates. Real providers take precedence. See below. |
+| Setting                          | Type            | Default | Meaning                                                                                                                                                                                                                          |
+| -------------------------------- | --------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DEFAULT_MODEL`                  | string or null  | none    | Provider-qualified model used when a chat request specifies `"model": "default"`.                                                                                                                                                |
+| `CHAT_RESPONSE_METADATA_ENABLED` | boolean or null | `false` | Adds `llm_proxy` routing and timing metadata to routed Chat Completions and converted Responses or Messages JSON and streaming responses. Disabled by default for strict client compatibility.                                   |
+| `API_KEY_COOLDOWN_SECONDS`       | integer or null | `60`    | Seconds to avoid a multi-key credential slot after HTTP 401, 403, 404, 429, or 5xx. `0` disables cooldowns; values above `86400` are clamped.                                                                                    |
+| `MODELS_CACHE_TTL_SECONDS`       | integer or null | `300`   | TTL of the aggregated `/v1/models` response cache. `0` disables caching; values above `86400` are clamped. Invalid values fall back to the default. Has no effect on a `*.workers.dev` deployment, where the Cache API is inert. |
+| `VIRTUAL_MODELS`                 | object or null  | none    | Operator-defined model names (`"virtual/<name>"` by convention, any key allowed), each mapped to an ordered list of `"<provider>/<model>"` candidates. Real providers take precedence. See below.                                |
 
 Each Worker isolate rotates through multiple keys in order from a random
 starting phase. Isolates are not coordinated, so aggregate usage is near-uniform

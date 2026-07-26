@@ -22,9 +22,10 @@ deployment does not prove that the expected secrets exist in the same Wrangler
 environment.
 
 The repository's secret deployment script prints setting names only. The
-temporary JSON is owner-readable only and is removed after Wrangler finishes.
-Generated `config.jsonc` and `.dev.vars*` files are also forced to mode `0600`;
-dotenv values are quoted and escaped to prevent line injection.
+temporary JSON is owner-readable only and is removed after Wrangler finishes or
+the deployment receives a termination signal. Generated `config.jsonc` and
+`.dev.vars*` files are also forced to mode `0600`; dotenv values are quoted and
+escaped to prevent line injection.
 
 ## Safe configuration changes
 
@@ -90,15 +91,16 @@ Use health endpoints deliberately:
 
 - `/ping` checks Worker routing without contacting providers.
 - `/status` checks every configured credential against its model-list endpoint,
-  five at a time. Large credential sets can make the response slow, consume
-  provider quota, and expose limited configuration metadata.
+  concurrently. Large credential sets can exhaust the per-request subrequest
+  budget, consume provider quota, and expose limited configuration metadata.
 - `/v1/models` is best-effort. Check Worker logs when a provider is absent.
 
 ## Common failures
 
 ### HTTP 401 from the proxy
 
-- Confirm `DEV` is not being relied on outside local development.
+- Confirm `DEV` is not being relied on outside local development. A deployed
+  Worker ignores it and logs `auth.development_mode_ignored` when it is set.
 - Verify the client sends one of the supported proxy authentication formats.
 - Confirm the key was deployed to the same Wrangler environment as the code.
 - A Bearer header must contain the proxy key, not the provider key.

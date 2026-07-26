@@ -56,6 +56,40 @@ describe("authMiddleware", () => {
     expect(next).toHaveBeenCalled();
   });
 
+  it("should enforce authentication when DEV is set on a deployed Worker", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.spyOn(Config, "isDevelopment").mockReturnValue(true);
+    vi.spyOn(Config, "apiKeys").mockReturnValue(["valid-key"]);
+    // cf-ray is present on every request that reaches a deployed Worker.
+    context.request = new Request("https://proxy.example/v1/chat/completions", {
+      headers: { "cf-ray": "8f0b1a2c3d4e5f60-NRT" },
+    });
+
+    await expect(authMiddleware(context, next)).rejects.toThrow(
+      UnauthorizedError,
+    );
+    expect(next).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "auth.development_mode_ignored" }),
+    );
+  });
+
+  it("should accept a valid key when DEV is set on a deployed Worker", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.spyOn(Config, "isDevelopment").mockReturnValue(true);
+    vi.spyOn(Config, "apiKeys").mockReturnValue(["valid-key"]);
+    context.request = new Request("https://proxy.example/v1/chat/completions", {
+      headers: {
+        "cf-ray": "8f0b1a2c3d4e5f60-NRT",
+        Authorization: "Bearer valid-key",
+      },
+    });
+    const nextResponse = new Response("ok");
+    next.mockResolvedValue(nextResponse);
+
+    await expect(authMiddleware(context, next)).resolves.toBe(nextResponse);
+  });
+
   it("should fail closed if no API keys are configured", async () => {
     vi.spyOn(Config, "isDevelopment").mockReturnValue(false);
     vi.spyOn(Config, "apiKeys").mockReturnValue(undefined);

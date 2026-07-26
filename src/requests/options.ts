@@ -9,6 +9,9 @@ export function addCorsHeaders(request: Request, response: Response): Response {
 
   const headers = new Headers(response.headers);
   headers.set("Access-Control-Allow-Origin", "*");
+  // The presence of the CORS headers depends on the request's Origin, so any
+  // cache in front of the Worker must key on it.
+  headers.append("Vary", "Origin");
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
@@ -23,11 +26,13 @@ export async function handleOptions(request: Request): Promise<Response> {
     request.headers.get("Access-Control-Request-Method") !== null
   ) {
     const headers = new Headers(CORS_HEADERS);
+    headers.append("Vary", "Origin");
     const requestedHeaders = request.headers.get(
       "Access-Control-Request-Headers",
     );
     if (requestedHeaders !== null) {
       headers.set("Access-Control-Allow-Headers", requestedHeaders);
+      headers.append("Vary", "Access-Control-Request-Headers");
     }
     return new Response(null, {
       headers,

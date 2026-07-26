@@ -85,24 +85,79 @@ describe("enrichChatResponseWithMetadata", () => {
       "a non-JSON success",
       new Response("plain", { headers: { "Content-Type": "text/plain" } }),
     ],
-    [
-      "invalid JSON",
-      new Response("not-json", {
-        headers: { "Content-Type": "application/json" },
-      }),
-    ],
-    [
-      "a JSON array",
-      new Response("[]", {
-        headers: { "Content-Type": "application/json" },
-      }),
-    ],
-  ])("preserves %s", async (_description, upstream) => {
+  ])("returns %s untouched", async (_description, upstream) => {
     const response = await enrichChatResponseWithMetadata(
       metadataArguments(upstream),
     );
 
     expect(response).toBe(upstream);
+  });
+
+  it.each([
+    ["invalid JSON", "not-json"],
+    ["a JSON array", "[]"],
+  ])("forwards %s unchanged", async (_description, body) => {
+    const upstream = new Response(body, {
+      status: 201,
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const response = await enrichChatResponseWithMetadata(
+      metadataArguments(upstream),
+    );
+
+    expect(response.status).toBe(201);
+    await expect(response.text()).resolves.toBe(body);
+  });
+
+  it("forwards invalid UTF-8 JSON bytes unchanged", async () => {
+    const body = new Uint8Array([0xff, 0x7b]);
+    const upstream = new Response(body, {
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const response = await enrichChatResponseWithMetadata(
+      metadataArguments(upstream),
+    );
+
+    await expect(response.arrayBuffer()).resolves.toEqual(body.buffer);
+  });
+
+  it("forwards a JSON body larger than the metadata budget unchanged", async () => {
+    const oversized = `{"padding":"${"x".repeat(6 * 1024 * 1024)}"}`;
+    const upstream = new Response(oversized, {
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const response = await enrichChatResponseWithMetadata(
+      metadataArguments(upstream),
+    );
+
+    await expect(response.text()).resolves.toBe(oversized);
+  });
+
+  it("cancels the remainder when an oversized forwarded body is abandoned", async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    const upstream = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode(
+              `{"padding":"${"x".repeat(6 * 1024 * 1024)}"}`,
+            ),
+          );
+        },
+        cancel,
+      }),
+      { headers: { "Content-Type": "application/json" } },
+    );
+
+    const response = await enrichChatResponseWithMetadata(
+      metadataArguments(upstream),
+    );
+    await response.body?.cancel("client went away");
+
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it("adds route metadata to an object-valued upstream JSON error", async () => {
@@ -119,25 +174,31 @@ describe("enrichChatResponseWithMetadata", () => {
     });
   });
 
-  it("continues when releasing the original JSON body fails", async () => {
-    const cancel = vi.fn().mockRejectedValue(new Error("already closed"));
-    const upstream = {
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      headers: new Headers({ "Content-Type": "application/json" }),
-      body: { cancel },
-      clone: () =>
-        new Response('{"choices":[]}', {
-          headers: { "Content-Type": "application/json" },
-        }),
-    } as unknown as Response;
+  it("returns a JSON response without a body untouched", async () => {
+    const upstream = new Response(null, {
+      status: 204,
+      headers: { "Content-Type": "application/json" },
+    });
 
     const response = await enrichChatResponseWithMetadata(
       metadataArguments(upstream),
     );
 
-    expect(cancel).toHaveBeenCalledOnce();
+    expect(response).toBe(upstream);
+  });
+
+  it("reads the JSON body once instead of teeing it", async () => {
+    const upstream = new Response('{"choices":[]}', {
+      headers: { "Content-Type": "application/json" },
+    });
+    const clone = vi.spyOn(upstream, "clone");
+
+    const response = await enrichChatResponseWithMetadata(
+      metadataArguments(upstream),
+    );
+
+    expect(clone).not.toHaveBeenCalled();
+    expect(upstream.bodyUsed).toBe(true);
     await expect(response.json()).resolves.toMatchObject({
       llm_proxy: { provider: "openai" },
     });

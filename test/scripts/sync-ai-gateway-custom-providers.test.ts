@@ -3,6 +3,7 @@ import {
   syncAiGatewayCustomProviders,
 } from "../../scripts/sync-ai-gateway-custom-providers";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const logoSources = vi.hoisted(() => ({
@@ -50,7 +51,7 @@ describe("AI Gateway Custom Provider synchronization", () => {
 
   it("plans unsupported built-ins and configured custom endpoints", () => {
     const ollamaLogo = readFileSync(
-      new URL("../../src/providers/ollama/logo.svg", import.meta.url),
+      join(import.meta.dirname, "../../src/providers/ollama/logo.svg"),
       "base64",
     );
     expect(buildCustomProviderTargets(strictConfig)).toEqual(
@@ -171,7 +172,7 @@ describe("AI Gateway Custom Provider synchronization", () => {
       ).toString("utf8"),
     ).toBe(
       readFileSync(
-        new URL("../../src/providers/nvidia-nim/logo.svg", import.meta.url),
+        join(import.meta.dirname, "../../src/providers/nvidia-nim/logo.svg"),
         "utf8",
       ),
     );
