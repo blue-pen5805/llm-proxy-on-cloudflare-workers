@@ -10,11 +10,21 @@ interface RequestLogContext {
   requestPath: string;
   providers: Set<string>;
   requestId: string;
+  started: boolean;
   startedAt: number;
 }
 
 const MAX_ERROR_MESSAGE_LENGTH = 500;
+const REQUEST_ID_MESSAGE_PREFIX_LENGTH = 8;
 const LOG_MESSAGE_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  "request.started": [
+    "method",
+    "path",
+    "endpoint",
+    "provider",
+    "credential_profile",
+    "model",
+  ],
   "request.completed": [
     "method",
     "path",
@@ -26,13 +36,16 @@ const LOG_MESSAGE_FIELDS: Readonly<Record<string, readonly string[]>> = {
   "request.unhandled_error": ["error_name", "error_message"],
   "subrequest.completed": [
     "provider",
+    "model",
     "method",
     "url",
     "status",
     "duration_ms",
   ],
+  "subrequest.started": ["provider", "model", "method", "url"],
   "subrequest.failed": [
     "provider",
+    "model",
     "method",
     "url",
     "duration_ms",
@@ -60,12 +73,20 @@ const LOG_MESSAGE_FIELDS: Readonly<Record<string, readonly string[]>> = {
     "status",
     "cooldown_seconds",
   ],
-  "virtual_model.selected": [
+  "virtual_model.select": [
+    "virtual_model",
+    "candidate",
+    "attempt",
+    "timeout_ms",
+  ],
+  "virtual_model.completed": [
     "virtual_model",
     "candidate",
     "attempt",
     "status",
     "timeout_ms",
+    "error_name",
+    "error_message",
   ],
   "virtual_model.retry": [
     "virtual_model",
@@ -152,7 +173,10 @@ function logRecord(
   if (logContext && typeof record.provider === "string") {
     logContext.providers.add(record.provider);
   }
-  record.message = summarizeLogMessage(event, message, record);
+  const summarizedMessage = summarizeLogMessage(event, message, record);
+  record.message = logContext
+    ? `[${logContext.requestId.slice(0, REQUEST_ID_MESSAGE_PREFIX_LENGTH)}] ${summarizedMessage}`
+    : summarizedMessage;
   return record;
 }
 
@@ -178,10 +202,21 @@ export class RequestLogger {
         requestPath,
         providers: new Set<string>(),
         requestId: request.headers.get("cf-ray") ?? crypto.randomUUID(),
+        started: false,
         startedAt: performance.now(),
       },
       callback,
     );
+  }
+
+  static start(fields: LogFields = {}): void {
+    const logContext = requestLogContext.getStore();
+    if (!logContext || logContext.started) return;
+    logContext.started = true;
+    RequestLogger.info("request.started", "Request started", {
+      ...RequestLogger.requestFields(),
+      ...fields,
+    });
   }
 
   static info(event: string, message: string, fields: LogFields = {}): void {

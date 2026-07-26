@@ -5,6 +5,7 @@ import { getProviderByName } from "~/src/providers";
 import { handleChatCompletionsRequest } from "~/src/requests/chat_completions";
 import { Config } from "~/src/utils/config";
 import * as helpers from "~/src/utils/helpers";
+import { RequestLogger } from "~/src/utils/logger";
 import { Secrets } from "~/src/utils/secrets";
 
 vi.mock("~/src/ai_gateway");
@@ -119,6 +120,77 @@ describe("handleChatCompletionsRequest", () => {
       mockProviderClass.transformChatCompletionsResponse,
     ).toHaveBeenCalledOnce();
   });
+
+  it("starts logging with the resolved endpoint, provider, and model", async () => {
+    const request = new Request("https://example.com/v1/chat/completions", {
+      method: "POST",
+      body: JSON.stringify({
+        model: "openai:paid/gpt-4",
+        messages: [],
+      }),
+      headers: { "cf-ray": "abcdef123456" },
+    });
+    mockProviderClass.buildChatCompletionsRequest.mockReturnValue([
+      "/chat/completions",
+      { method: "POST" },
+    ]);
+    mockProviderClass.fetch.mockResolvedValue(new Response());
+    const providers = { get: vi.fn(() => mockProviderClass) };
+    const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await RequestLogger.run(request, () =>
+      handleChatCompletionsRequest({ request, providers } as any),
+    );
+
+    expect(consoleInfo).toHaveBeenNthCalledWith(1, {
+      event: "request.started",
+      request_id: "abcdef123456",
+      method: "POST",
+      path: "/v1/chat/completions",
+      endpoint: "chat_completions",
+      provider: "openai",
+      credential_profile: "paid",
+      model: "gpt-4",
+      message:
+        "[abcdef12] Request started: method=POST, path=/v1/chat/completions, endpoint=chat_completions, provider=openai, credential_profile=paid, model=gpt-4",
+    });
+  });
+
+  it.each(["openai", "openai/"])(
+    "omits an empty routed model from request start logging for %s",
+    async (requestedModel) => {
+      const request = new Request("https://example.com/v1/chat/completions", {
+        method: "POST",
+        body: JSON.stringify({ model: requestedModel, messages: [] }),
+        headers: { "cf-ray": "abcdef123456" },
+      });
+      mockProviderClass.buildChatCompletionsRequest.mockReturnValue([
+        "/chat/completions",
+        { method: "POST" },
+      ]);
+      mockProviderClass.fetch.mockResolvedValue(new Response());
+      const consoleInfo = vi
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      await RequestLogger.run(request, () =>
+        handleChatCompletionsRequest({ request } as any),
+      );
+
+      const startRecord = consoleInfo.mock.calls
+        .map(([record]) => record)
+        .find(
+          (record) =>
+            (record as Record<string, unknown>).event === "request.started",
+        ) as Record<string, unknown>;
+      expect(startRecord).toMatchObject({
+        endpoint: "chat_completions",
+        provider: "openai",
+      });
+      expect(startRecord).not.toHaveProperty("model");
+      expect(startRecord.message).not.toContain("model=");
+    },
+  );
 
   it("routes a named credential profile without forwarding it in the model", async () => {
     const request = new Request("https://example.com/chat/completions", {

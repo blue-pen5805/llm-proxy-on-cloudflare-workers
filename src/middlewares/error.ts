@@ -9,6 +9,7 @@ export const errorMiddleware: Middleware = async (context, next) => {
     let status = 500;
     let message = "Internal Server Error";
 
+    RequestLogger.start();
     if (err instanceof AppError) {
       status = err.status;
       message = err.message;

@@ -60,7 +60,10 @@ its output as an unaudited monitoring payload.
 Application logs are structured JSON objects with a human-readable `message`, a
 stable `event` field, and a `request_id`. The logger requires every record to
 provide `message` so Cloudflare Workers Observability can populate its summary
-Message column. The message includes the event's most useful safe fields, such
+Message column. Every request-scoped message starts with the first eight
+characters of its request ID in brackets, allowing related records to be
+identified at a glance while the complete value remains available in
+`request_id`. The remainder includes the event's most useful safe fields, such
 as provider, operation, HTTP method, query-free destination, status, credential
 slot, selection policy, and duration as applicable. The request ID uses
 Cloudflare's `cf-ray` value when available and falls back to a generated UUID.
@@ -72,8 +75,10 @@ The following events support operational queries:
 
 | Event                              | Meaning                                    |
 | ---------------------------------- | ------------------------------------------ |
+| `request.started`                  | Routed handler started                     |
 | `request.completed`                | Handler completed, with status and latency |
 | `request.unhandled_error`          | An unexpected exception reached the guard  |
+| `subrequest.started`               | Provider request started                   |
 | `subrequest.completed`             | Provider request returned an HTTP response |
 | `subrequest.failed`                | Provider request failed before a response  |
 | `provider.models.failed`           | A provider model-list operation failed     |
@@ -81,11 +86,29 @@ The following events support operational queries:
 | `provider.connectivity.failed`     | A status connectivity check failed         |
 | `provider.key.selected`            | A credential slot was selected             |
 | `provider.key.cooldown`            | A credential slot entered cooldown         |
+| `virtual_model.select`             | A candidate was selected for an attempt    |
+| `virtual_model.retry`              | Another candidate attempt will be made     |
+| `virtual_model.completed`          | The final candidate attempt completed      |
+
+`request.started` always includes the HTTP method and query-free path. Once a
+route has resolved safe routing metadata, it also reports an `endpoint` label.
+Chat Completions, Responses, and Messages requests report the concrete
+`provider`, optional non-default `credential_profile`, and redacted,
+length-limited `model` before credential selection or upstream I/O. Virtual
+model requests report the configured virtual model name; their concrete
+providers remain visible in subsequent candidate events. Provider pass-through
+requests report their provider. Requests rejected before routing and preflight
+requests retain the method/path-only fallback.
 
 `duration_ms` on `request.completed` measures time until response headers are
-available; it does not wait for a streamed response body to finish. Subrequest
-events include their HTTP method, query-free upstream URL, status when available,
-and duration. Error events contain only a redacted, length-limited error name and
+available; it does not wait for a streamed response body to finish.
+`subrequest.started` is emitted immediately before each upstream `fetch`.
+Subrequest events include their HTTP method and query-free upstream URL. Chat
+Completions, Responses, and Messages subrequests also include the concrete,
+redacted, length-limited `model`; pass-through and aggregate operations omit it
+when the proxy cannot determine one without parsing otherwise preserved traffic.
+Completion adds status and duration, while failure adds duration and safe error
+fields. Error events contain only a redacted, length-limited error name and
 message. Request bodies, response bodies, headers, stack traces, query strings,
 fragments, and arbitrary thrown objects are not logged.
 

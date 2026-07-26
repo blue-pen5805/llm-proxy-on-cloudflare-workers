@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   fetchWithCandidateTimeout,
   isRetryableCandidateStatus,
@@ -122,6 +122,10 @@ describe("fetchWithCandidateTimeout", () => {
 });
 
 describe("runVirtualModelChainAttempt", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("returns the first response when it is not retryable", async () => {
     const attempt = vi.fn().mockResolvedValue({
       response: new Response("ok"),
@@ -164,6 +168,13 @@ describe("runVirtualModelChainAttempt", () => {
   });
 
   it("moves to the next candidate when the response is retryable", async () => {
+    const events: Record<string, unknown>[] = [];
+    vi.spyOn(console, "info").mockImplementation((record) => {
+      events.push(record as Record<string, unknown>);
+    });
+    vi.spyOn(console, "warn").mockImplementation((record) => {
+      events.push(record as Record<string, unknown>);
+    });
     const attempt = vi
       .fn()
       .mockResolvedValueOnce({
@@ -187,6 +198,39 @@ describe("runVirtualModelChainAttempt", () => {
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("second");
     expect(attempt).toHaveBeenCalledTimes(2);
+    expect(
+      events.map(({ event, candidate, attempt, status }) => ({
+        event,
+        candidate,
+        attempt,
+        status,
+      })),
+    ).toEqual([
+      {
+        event: "virtual_model.select",
+        candidate: "a/1",
+        attempt: 0,
+        status: undefined,
+      },
+      {
+        event: "virtual_model.retry",
+        candidate: "a/1",
+        attempt: 0,
+        status: 429,
+      },
+      {
+        event: "virtual_model.select",
+        candidate: "a/2",
+        attempt: 1,
+        status: undefined,
+      },
+      {
+        event: "virtual_model.completed",
+        candidate: "a/2",
+        attempt: 1,
+        status: 200,
+      },
+    ]);
   });
 
   it("returns the last candidate's response once every candidate is retryable", async () => {
@@ -231,6 +275,16 @@ describe("runVirtualModelChainAttempt", () => {
   });
 
   it("rethrows when the last candidate's attempt throws", async () => {
+    const events: Record<string, unknown>[] = [];
+    vi.spyOn(console, "info").mockImplementation((record) => {
+      events.push(record as Record<string, unknown>);
+    });
+    vi.spyOn(console, "warn").mockImplementation((record) => {
+      events.push(record as Record<string, unknown>);
+    });
+    vi.spyOn(console, "error").mockImplementation((record) => {
+      events.push(record as Record<string, unknown>);
+    });
     const attempt = vi.fn().mockRejectedValue(new Error("network error"));
 
     await expect(
@@ -244,6 +298,46 @@ describe("runVirtualModelChainAttempt", () => {
       ),
     ).rejects.toThrow("network error");
     expect(attempt).toHaveBeenCalledTimes(2);
+    expect(
+      events.map(
+        ({ event, candidate, attempt, error_name, error_message }) => ({
+          event,
+          candidate,
+          attempt,
+          error_name,
+          error_message,
+        }),
+      ),
+    ).toEqual([
+      {
+        event: "virtual_model.select",
+        candidate: "a/1",
+        attempt: 0,
+        error_name: undefined,
+        error_message: undefined,
+      },
+      {
+        event: "virtual_model.retry",
+        candidate: "a/1",
+        attempt: 0,
+        error_name: undefined,
+        error_message: undefined,
+      },
+      {
+        event: "virtual_model.select",
+        candidate: "a/2",
+        attempt: 1,
+        error_name: undefined,
+        error_message: undefined,
+      },
+      {
+        event: "virtual_model.completed",
+        candidate: "a/2",
+        attempt: 1,
+        error_name: "Error",
+        error_message: "network error",
+      },
+    ]);
   });
 
   it("cancels the losing response's body before moving on", async () => {

@@ -130,7 +130,10 @@ describe("handleResponsesRequest", () => {
     expect(handleChatCompletionsRequest).toHaveBeenCalledWith(
       expect.objectContaining({ request: expect.any(Request) }),
       gateway,
-      expect.objectContaining({ responseMetadataEnabled: true }),
+      expect.objectContaining({
+        endpoint: "responses",
+        responseMetadataEnabled: true,
+      }),
     );
     const preparedRequest = vi.mocked(handleChatCompletionsRequest).mock
       .calls[0][2]!;

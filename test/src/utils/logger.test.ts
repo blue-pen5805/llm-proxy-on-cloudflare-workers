@@ -19,7 +19,7 @@ describe("RequestLogger", () => {
     const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
     const request = new Request("https://example.com/v1/models?key=secret", {
       method: "POST",
-      headers: { "cf-ray": "ray-id" },
+      headers: { "cf-ray": "abcdef123456" },
     });
 
     RequestLogger.run(request, () => {
@@ -32,9 +32,9 @@ describe("RequestLogger", () => {
 
     expect(consoleInfo).toHaveBeenCalledWith({
       event: "test.event",
-      request_id: "ray-id",
+      request_id: "abcdef123456",
       status: 200,
-      message: "Test event",
+      message: "[abcdef12] Test event",
     });
   });
 
@@ -50,7 +50,39 @@ describe("RequestLogger", () => {
       request_id: expect.stringMatching(
         /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
       ),
-      message: "Test event",
+      message: expect.stringMatching(/^\[[0-9a-f]{8}\] Test event$/i),
+    });
+  });
+
+  it("records enriched request start metadata only once", () => {
+    const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
+    const request = new Request("https://example.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "cf-ray": "abcdef123456" },
+    });
+
+    RequestLogger.run(request, () => {
+      RequestLogger.start({
+        endpoint: "chat_completions",
+        provider: "openai",
+        credential_profile: "paid",
+        model: "gpt-4",
+      });
+      RequestLogger.start({ endpoint: "ignored" });
+    });
+
+    expect(consoleInfo).toHaveBeenCalledOnce();
+    expect(consoleInfo).toHaveBeenCalledWith({
+      event: "request.started",
+      request_id: "abcdef123456",
+      method: "POST",
+      path: "/v1/chat/completions",
+      endpoint: "chat_completions",
+      provider: "openai",
+      credential_profile: "paid",
+      model: "gpt-4",
+      message:
+        "[abcdef12] Request started: method=POST, path=/v1/chat/completions, endpoint=chat_completions, provider=openai, credential_profile=paid, model=gpt-4",
     });
   });
 

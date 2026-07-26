@@ -32,6 +32,11 @@ export async function handleProviderProxyRequest(
   /* istanbul ignore next -- registry matches only validated selectors */
   if (!parsedSelector) throw new NotFoundError();
   const { providerName, profile } = parsedSelector;
+  RequestLogger.start({
+    endpoint: "provider_proxy",
+    provider: providerName,
+    credential_profile: profile === "default" ? undefined : profile,
+  });
   // Reject traversal/scheme smuggling in the client-controlled path before it is
   // concatenated into the provider or Gateway upstream URL.
   assertSafeProxyPath(pathname);

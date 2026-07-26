@@ -76,6 +76,17 @@ export async function runVirtualModelChainAttempt(
       candidateAttempt++, attemptIndex++
     ) {
       const isLastAttempt = attemptIndex === totalAttempts - 1;
+      const logFields = {
+        virtual_model: virtualModel,
+        candidate: candidate.model,
+        attempt: attemptIndex,
+        timeout_ms: candidate.timeout,
+      };
+      RequestLogger.info(
+        "virtual_model.select",
+        "Virtual model candidate selected for attempt",
+        logFields,
+      );
 
       try {
         const result = await (candidate.timeout === undefined
@@ -85,14 +96,11 @@ export async function runVirtualModelChainAttempt(
 
         if (!retryable || isLastAttempt) {
           RequestLogger.info(
-            "virtual_model.selected",
-            "Virtual model candidate selected",
+            "virtual_model.completed",
+            "Virtual model candidate completed",
             {
-              virtual_model: virtualModel,
-              candidate: candidate.model,
-              attempt: attemptIndex,
+              ...logFields,
               status: response.status,
-              timeout_ms: candidate.timeout,
             },
           );
           return result;
@@ -102,27 +110,25 @@ export async function runVirtualModelChainAttempt(
           "virtual_model.retry",
           "Virtual model candidate failed, trying the next attempt",
           {
-            virtual_model: virtualModel,
-            candidate: candidate.model,
-            attempt: attemptIndex,
+            ...logFields,
             status: response.status,
-            timeout_ms: candidate.timeout,
           },
         );
         await response.body?.cancel().catch(() => undefined);
       } catch (error) {
         if (isLastAttempt) {
+          RequestLogger.error(
+            "virtual_model.completed",
+            "Virtual model candidate completed with an error",
+            error,
+            logFields,
+          );
           throw error;
         }
         RequestLogger.warn(
           "virtual_model.retry",
           "Virtual model candidate threw, trying the next attempt",
-          {
-            virtual_model: virtualModel,
-            candidate: candidate.model,
-            attempt: attemptIndex,
-            timeout_ms: candidate.timeout,
-          },
+          logFields,
         );
       }
     }

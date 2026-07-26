@@ -10,6 +10,7 @@ import { recordApiKeySelection } from "../utils/api_key_selection";
 import { stripProxyAuthorizationHeaders } from "../utils/authorization";
 import { BadRequestError } from "../utils/error";
 import { fetchWithLogging, readJsonRequest } from "../utils/helpers";
+import { RequestLogger } from "../utils/logger";
 import { Secrets } from "../utils/secrets";
 
 type UniversalEndpointRequest = {
@@ -113,6 +114,7 @@ export async function handleUniversalEndpointRequest(
   const endpointRequests = parseUniversalEndpointRequests(
     await readJsonRequest(request),
   );
+  RequestLogger.start({ endpoint: "universal_endpoint" });
   const gatewayHeaders = stripProxyAuthorizationHeaders(request.headers, {
     preserveAiGatewayHeaders: true,
   });

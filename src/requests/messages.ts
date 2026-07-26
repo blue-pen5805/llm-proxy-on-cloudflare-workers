@@ -2,6 +2,7 @@ import { CloudflareAIGateway } from "../ai_gateway";
 import { MiddlewareContext } from "../middleware";
 import { Config } from "../utils/config";
 import { readRequestText, readResponseJson } from "../utils/helpers";
+import { RequestLogger } from "../utils/logger";
 import { handleChatCompletionsRequest } from "./chat_completions";
 
 const MAX_CONVERTED_RESPONSE_BYTES = 5 * 1024 * 1024;
@@ -684,12 +685,14 @@ export async function handleMessagesRequest(
   try {
     parsed = JSON.parse(await readRequestText(context.request)) as unknown;
   } catch {
+    RequestLogger.start({ endpoint: "messages" });
     return invalidRequest("Request body must be valid JSON.");
   }
   let converted: ReturnType<typeof convertMessagesRequest>;
   try {
     converted = convertMessagesRequest(parsed);
   } catch (error) {
+    RequestLogger.start({ endpoint: "messages" });
     return invalidRequest((error as Error).message);
   }
 
@@ -700,6 +703,7 @@ export async function handleMessagesRequest(
   const responseMetadataEnabled = Config.chatResponseMetadataEnabled();
   const chatResponse = await handleChatCompletionsRequest(context, aiGateway, {
     body: converted.chat,
+    endpoint: "messages",
     headers,
     responseMetadataEnabled,
   });

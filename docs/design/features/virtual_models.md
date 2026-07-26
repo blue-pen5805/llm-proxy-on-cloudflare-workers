@@ -171,10 +171,13 @@ this risk.
 
 ## Observability
 
-Each candidate attempt and the final selection are logged with the virtual
+Each candidate attempt emits `virtual_model.select` when its candidate is
+selected, before provider credential selection or upstream I/O. An attempt
+followed by another emits `virtual_model.retry`; the final HTTP result or final
+thrown error emits `virtual_model.completed`. These events report the virtual
 model name, candidate model, attempt index, configured timeout in milliseconds,
-and (when available) the response status (`virtual_model.selected`,
-`virtual_model.retry`). No request or response body is logged.
+and response status or safe error fields when available. No request or response
+body is logged.
 
 The successful candidate's concrete provider, model, credential slot, and
 Gateway route are also returned in the optional Chat Completions `llm_proxy`

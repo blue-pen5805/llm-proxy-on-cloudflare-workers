@@ -15,7 +15,7 @@ User-facing commands and endpoint examples live in the
 
 ```mermaid
 flowchart LR
-  Client --> Logging[Completion logging]
+  Client --> Logging[Lifecycle logging]
   Logging --> CORS[CORS handling]
   CORS --> Error[Error boundary]
   Error --> Request[Request parsing]

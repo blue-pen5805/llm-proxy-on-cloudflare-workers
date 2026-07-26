@@ -12,6 +12,13 @@ update is explicitly approved.
 
 ### 2026-07-26
 
+- Added request and provider-subrequest start lifecycle logs and prefixed every
+  request-scoped log message with the first eight request ID characters for
+  at-a-glance correlation. Routed request starts include safe endpoint-specific
+  provider, credential-profile, and model fields when applicable; chat-derived
+  subrequest lifecycle events also include the concrete model. Virtual-model
+  candidate attempts emit paired select and retry/completed events, while
+  complete request IDs remain available as structured fields.
 - Reduced Worker CPU work across request setup, provider forwarding, converted
   Responses and Messages requests, structured logging, virtual-model retries,
   and status checks. Converted requests now enter the Chat handler as parsed

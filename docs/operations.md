@@ -49,13 +49,24 @@ dotenv values are quoted and escaped to prevent line injection.
 Workers Logs are enabled for every invocation in `wrangler.jsonc`; traces use
 head sampling. Every application record has a human-readable `message` for the
 Workers Observability summary and can be filtered by its structured `event` and
-`request_id` fields. Messages repeat the most useful safe structured fields so
-the summary identifies the provider, operation, destination, status, credential
-slot, and duration when those values apply. Start with `request.completed` for
-status and handler latency; it also summarizes the provider or providers
-observed during the request. Then correlate `subrequest.completed`,
-`subrequest.failed`, or provider-specific failure events using the same request
-ID.
+`request_id` fields. Request-scoped messages begin with the first eight request ID
+characters in brackets and repeat the most useful safe structured fields, so
+the summary identifies related events at a glance together with the provider,
+operation, destination, status, credential slot, and duration when those values
+apply. Use `request.started` to identify the query-free method/path and resolved
+endpoint. Chat Completions, Responses, and Messages starts also identify the
+provider, non-default credential profile, and model; early rejections retain
+method/path only. Each upstream attempt then emits `subrequest.started` followed
+by `subrequest.completed` or `subrequest.failed`; Chat Completions, Responses,
+and Messages subrequest events repeat the concrete model. Use
+`request.completed` for status and handler latency; completion also summarizes
+the provider or providers observed during the request.
+Correlate `subrequest.completed`, `subrequest.failed`, or provider-specific
+failure events using the complete structured request ID.
+
+Virtual-model requests emit `virtual_model.select` before each candidate
+attempt. A retryable result emits `virtual_model.retry` before the next select
+event; the final HTTP result or final error emits `virtual_model.completed`.
 
 Inbound logs contain the path but exclude the query string. Logged upstream URLs
 contain only scheme, host, and path, with every query value omitted. Error

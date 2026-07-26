@@ -62,6 +62,12 @@ export async function fetchWithLogging(
   const maskedUrl = maskSensitiveUrl(requestUrl);
   const startedAt = performance.now();
 
+  RequestLogger.start();
+  RequestLogger.info("subrequest.started", "Provider subrequest started", {
+    method: requestMethod,
+    url: maskedUrl,
+  });
+
   try {
     const upstreamResponse = await fetch(input, init);
     RequestLogger.info(

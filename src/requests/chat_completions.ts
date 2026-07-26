@@ -21,7 +21,7 @@ import {
   readRequestText,
   shuffleArray,
 } from "../utils/helpers";
-import { RequestLogger } from "../utils/logger";
+import { redactLogText, RequestLogger } from "../utils/logger";
 import {
   ChatResponseRouteMetadata,
   enrichChatResponseWithMetadata,
@@ -47,6 +47,7 @@ function invalidRequestResponse(message: string, status = 400): Response {
 
 export interface PreparedChatCompletionsRequest {
   body: Record<string, unknown> & { model: string };
+  endpoint?: "messages" | "responses";
   headers: HeadersInit;
   responseMetadataEnabled: boolean;
 }
@@ -57,6 +58,7 @@ export async function handleChatCompletionsRequest(
   preparedRequest?: PreparedChatCompletionsRequest,
 ) {
   const { request } = context;
+  const endpoint = preparedRequest?.endpoint ?? "chat_completions";
   const responseMetadataEnabled =
     preparedRequest?.responseMetadataEnabled ??
     Config.chatResponseMetadataEnabled();
@@ -71,6 +73,7 @@ export async function handleChatCompletionsRequest(
     parsedRequestBody === null ||
     typeof (parsedRequestBody as Record<string, unknown>).model !== "string"
   ) {
+    RequestLogger.start({ endpoint });
     return invalidRequestResponse("Invalid request.");
   }
 
@@ -82,6 +85,7 @@ export async function handleChatCompletionsRequest(
       ? Config.defaultModel()
       : chatRequestBody.model;
   if (!requestedModel) {
+    RequestLogger.start({ endpoint });
     return invalidRequestResponse("Invalid request.");
   }
 
@@ -91,9 +95,32 @@ export async function handleChatCompletionsRequest(
   // "virtual/<name>" is the recommended convention for these keys (no real
   // provider is named "virtual"), but any configured key resolves here.
   const [providerSelector] = requestedModel.split("/");
-  if (!resolveProvider(context, providerSelector)) {
-    const virtualModels = Config.virtualModels();
-    const candidates = virtualModels?.[requestedModel];
+  const parsedProviderSelector = parseProviderSelector(providerSelector);
+  const providerInstance = resolveProvider(context, providerSelector);
+  const virtualModels = providerInstance ? undefined : Config.virtualModels();
+  const candidates = virtualModels?.[requestedModel];
+  const modelSeparatorIndex = requestedModel.indexOf("/");
+  RequestLogger.start({
+    endpoint,
+    provider: providerInstance
+      ? parsedProviderSelector?.providerName
+      : undefined,
+    credential_profile:
+      providerInstance &&
+      parsedProviderSelector?.profile !== undefined &&
+      parsedProviderSelector.profile !== "default"
+        ? parsedProviderSelector.profile
+        : undefined,
+    model: providerInstance
+      ? modelSeparatorIndex === -1
+        ? undefined
+        : redactLogText(requestedModel.slice(modelSeparatorIndex + 1)) ||
+          undefined
+      : candidates
+        ? redactLogText(requestedModel)
+        : undefined,
+  });
+  if (!providerInstance && virtualModels) {
     if (candidates) {
       const result = await attemptResolvedChatCompletion(
         context,
@@ -219,6 +246,7 @@ async function attemptChatCompletion(
       : requestedModel.slice(0, separatorIndex);
   const model =
     separatorIndex === -1 ? "" : requestedModel.slice(separatorIndex + 1);
+  const loggedModel = redactLogText(model) || undefined;
   const parsedSelector = parseProviderSelector(providerSelector);
 
   // Validate provider name
@@ -354,7 +382,10 @@ async function attemptChatCompletion(
           /* istanbul ignore next -- Gateway requests and credential indexes are built one-to-one */
           (attemptIndex) => {
             selectedApiKeyIndex = gatewayApiKeyIndexes[attemptIndex] ?? 0;
-            return recordSelection(selectedApiKeyIndex);
+            return {
+              ...recordSelection(selectedApiKeyIndex),
+              model: loggedModel,
+            };
           },
           (attemptIndex, attemptResponse) =>
             recordApiKeyOutcome(
@@ -387,10 +418,12 @@ async function attemptChatCompletion(
     RequestInit,
   ]): Promise<ChatCompletionAttemptResult> => {
     const response = await transformResponse(
-      RequestLogger.withFields({ ...keyLogFields, via_ai_gateway: true }, () =>
-        fetchWithTimeout((signal) =>
-          fetchCompatibilityFallback([[url, gatewayInit]], signal),
-        ),
+      RequestLogger.withFields(
+        { ...keyLogFields, via_ai_gateway: true, model: loggedModel },
+        () =>
+          fetchWithTimeout((signal) =>
+            fetchCompatibilityFallback([[url, gatewayInit]], signal),
+          ),
       ),
     );
     recordApiKeyOutcome(
@@ -467,7 +500,7 @@ async function attemptChatCompletion(
 
   // Request to the provider endpoint
   const response = await transformResponse(
-    RequestLogger.withFields(keyLogFields, () =>
+    RequestLogger.withFields({ ...keyLogFields, model: loggedModel }, () =>
       fetchWithTimeout((signal) =>
         providerInstance.fetch(
           requestInfo,

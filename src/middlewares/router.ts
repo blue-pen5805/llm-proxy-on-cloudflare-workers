@@ -14,6 +14,7 @@ import { handleUniversalEndpointRequest } from "../requests/universal_endpoint";
 import { handleVirtualModelsRequest } from "../requests/virtual_models";
 import { Environments } from "../utils/environments";
 import { BadRequestError, NotFoundError } from "../utils/error";
+import { RequestLogger } from "../utils/logger";
 
 const COMPAT_PATH_PATTERN = /^\/compat(?:$|\/|\?)/;
 const AI_PATH_PATTERN = /^\/ai(?:$|\/|\?)/;
@@ -35,16 +36,19 @@ export async function handleRouting(
   //          /g/{AI_GATEWAY_NAME}/status
   if (request.method === "GET" && pathname === "/ping") {
     rejectUnsupportedKeySelection();
+    RequestLogger.start({ endpoint: "ping" });
     return new Response("Pong", { status: 200 });
   }
 
   if (request.method === "GET" && pathname === "/status") {
     rejectUnsupportedKeySelection();
+    RequestLogger.start({ endpoint: "status" });
     return await handleStatusRequest(aiGateway, context.providers);
   }
 
   if (request.method === "GET" && pathname === "/virtual-models") {
     rejectUnsupportedKeySelection();
+    RequestLogger.start({ endpoint: "virtual_models" });
     return handleVirtualModelsRequest(context);
   }
 
@@ -52,6 +56,7 @@ export async function handleRouting(
     rejectUnsupportedKeySelection();
     // Example: /g/{AI_GATEWAY_NAME}/compat/chat/completions
     if (request.method === "POST" && pathname === "/compat/chat/completions") {
+      RequestLogger.start({ endpoint: "ai_gateway_compatibility" });
       return await handleCompatibilityRequest(request, aiGateway);
     }
 
@@ -69,6 +74,7 @@ export async function handleRouting(
           "AI Gateway REST API requires CLOUDFLARE_ACCOUNT_ID.",
         );
       }
+      RequestLogger.start({ endpoint: "ai_gateway_rest" });
       return await handleAiGatewayRestRequest(request, pathname, aiGateway);
     }
 
@@ -117,6 +123,7 @@ export async function handleRouting(
     request.method === "GET" &&
     (pathname === "/models" || pathname === "/v1/models")
   ) {
+    RequestLogger.start({ endpoint: "models" });
     return await handleModelsRequest(context, aiGateway);
   }
 

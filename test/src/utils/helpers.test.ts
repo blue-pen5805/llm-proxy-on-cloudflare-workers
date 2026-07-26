@@ -216,7 +216,7 @@ describe("fetchWithLogging", () => {
     const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
 
     const result = await RequestLogger.withFields(
-      { provider: "openai", key_index: 1 },
+      { provider: "openai", model: "gpt-4", key_index: 1 },
       () =>
         fetchWithLogging(
           new Request("https://example.com/models?api_key=private", {
@@ -227,17 +227,29 @@ describe("fetchWithLogging", () => {
 
     expect(result).toBe(response);
     expect(fetchSpy).toHaveBeenCalledOnce();
-    expect(consoleInfo).toHaveBeenCalledWith({
+    expect(consoleInfo).toHaveBeenNthCalledWith(1, {
+      event: "subrequest.started",
+      request_id: null,
+      provider: "openai",
+      model: "gpt-4",
+      key_index: 1,
+      method: "POST",
+      url: "https://example.com/models",
+      message:
+        "Provider subrequest started: provider=openai, model=gpt-4, method=POST, url=https://example.com/models",
+    });
+    expect(consoleInfo).toHaveBeenNthCalledWith(2, {
       event: "subrequest.completed",
       request_id: null,
       provider: "openai",
+      model: "gpt-4",
       key_index: 1,
       method: "POST",
       url: "https://example.com/models",
       status: 202,
       duration_ms: expect.any(Number),
       message: expect.stringMatching(
-        /^Provider subrequest completed: provider=openai, method=POST, url=https:\/\/example\.com\/models, status=202, duration_ms=\d+(?:\.\d+)?$/,
+        /^Provider subrequest completed: provider=openai, model=gpt-4, method=POST, url=https:\/\/example\.com\/models, status=202, duration_ms=\d+(?:\.\d+)?$/,
       ),
     });
 
@@ -247,6 +259,7 @@ describe("fetchWithLogging", () => {
   it("logs a structured failure and rethrows the original error", async () => {
     const error = new Error("request failed with token=private");
     vi.spyOn(globalThis, "fetch").mockRejectedValue(error);
+    const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
     const consoleError = vi
       .spyOn(console, "error")
       .mockImplementation(() => {});
@@ -256,6 +269,14 @@ describe("fetchWithLogging", () => {
         method: "DELETE",
       }),
     ).rejects.toBe(error);
+    expect(consoleInfo).toHaveBeenCalledWith({
+      event: "subrequest.started",
+      request_id: null,
+      method: "DELETE",
+      url: "https://example.com/models",
+      message:
+        "Provider subrequest started: method=DELETE, url=https://example.com/models",
+    });
     expect(consoleError).toHaveBeenCalledWith({
       event: "subrequest.failed",
       request_id: null,

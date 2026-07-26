@@ -116,6 +116,38 @@ describe("Gateway chat key selection", () => {
       2,
       Number(attemptedCredentials[1].slice(-1)),
     ]);
+    const subrequestRecords = consoleInfo.mock.calls
+      .map(([record]) => record as Record<string, unknown>)
+      .filter(
+        (record) =>
+          record.event === "subrequest.started" ||
+          record.event === "subrequest.completed",
+      );
+    expect(subrequestRecords).toHaveLength(4);
+    expect(subrequestRecords.every((record) => record.model === "model")).toBe(
+      true,
+    );
+  });
+
+  it("includes the model in direct provider subrequest lifecycle logs", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("ok"));
+    const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await handleChatCompletionsRequest(createContext());
+
+    const subrequestRecords = consoleInfo.mock.calls
+      .map(([record]) => record as Record<string, unknown>)
+      .filter(
+        (record) =>
+          record.event === "subrequest.started" ||
+          record.event === "subrequest.completed",
+      );
+    expect(
+      subrequestRecords.map((record) => [record.event, record.model]),
+    ).toEqual([
+      ["subrequest.started", "model"],
+      ["subrequest.completed", "model"],
+    ]);
   });
 
   it("supports Gateway-managed BYOK without local provider keys", async () => {

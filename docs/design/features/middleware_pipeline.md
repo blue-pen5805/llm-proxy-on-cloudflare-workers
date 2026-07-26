@@ -15,7 +15,9 @@ rejects, and reaching the end of the chain produces a not-found error.
 
 The order in `src/index.ts` is behaviorally significant:
 
-1. `loggingMiddleware` records the final response status and request latency.
+1. `loggingMiddleware` guarantees a request-start record and records final
+   response status and request latency. Route handlers emit the start record
+   earlier when safe endpoint-specific metadata becomes available.
 2. `corsMiddleware` answers preflight requests immediately and adds CORS headers
    to actual cross-origin responses, including errors.
 3. `errorMiddleware` converts known application errors to JSON and redacts
@@ -36,6 +38,10 @@ The order in `src/index.ts` is behaviorally significant:
 The preflight short circuit intentionally occurs before authentication. Other
 routes are authenticated before dispatch. Provider handlers remove all headers
 accepted as proxy credentials and then add the selected provider credential.
+For routed requests, `request.started` is emitted after bounded parsing needed
+to identify the endpoint, provider, and model, but before credential selection
+and upstream I/O. The outer logging middleware supplies a method/path-only
+fallback for requests that return before route metadata becomes available.
 
 ## Request-scoped environment
 
