@@ -186,6 +186,14 @@ deltas, completed output items, and a final `response.completed` or
 client cancellation. Upstream error responses retain their status and error
 body.
 
+Converted streams independently limit an SSE record to 1 MiB, retained text to
+4 MiB, retained tool arguments to 4 MiB, tool metadata to 64 KiB, tool calls to
+64, and output items to 64. A malformed record or exceeded limit emits a
+terminal error event, emits no success terminal event, and cancels the upstream
+stream. The final Responses event therefore retains at most 8 MiB of generated
+content: 4 MiB of text plus 4 MiB of tool arguments, with item and metadata
+overhead bounded separately.
+
 When `CHAT_RESPONSE_METADATA_ENABLED=true`, converted JSON includes the same
 top-level `llm_proxy` routing and timing object as Chat Completions. Streaming
 output includes it in the final `response.completed` or
@@ -233,6 +241,11 @@ response. Upstream errors retain their original status and body. With
 `CHAT_RESPONSE_METADATA_ENABLED=true`, JSON includes `llm_proxy`, while a
 stream includes it on the final `message_delta` event.
 
+Messages streams use the same independent SSE, text, tool-argument, tool-count,
+and output-item limits as Responses; Messages does not retain tool metadata.
+A malformed record or exceeded limit emits a terminal error event, emits no
+`message_stop`, and cancels the upstream stream.
+
 Unknown fields and features without a direct Chat equivalent—including
 documents, citations, cache controls, thinking, server tools, MCP, containers,
 and context management—return HTTP 400. Use `/anthropic/v1/messages` when the
@@ -262,7 +275,9 @@ cached copy and refreshes it; `Cache-Control: no-store` or any `cf-aig-*`
 request header bypasses the cache entirely, and bypassed responses carry no
 cache header. The cache is per Cloudflare datacenter, so a configuration
 change can serve a stale list from an already-primed datacenter for up to the
-TTL.
+TTL. Cache API `open`, `match`, and `put` are optional optimizations: if an
+operation is unavailable or fails, the request continues with an uncached
+provider fan-out.
 
 ## Virtual models
 
@@ -346,6 +361,8 @@ The proxy replaces client authentication headers with the selected upstream
 credential. It also removes cookies, hop-by-hop headers, client/network metadata,
 and credential-like query parameters, including API-key variants,
 `access_token`, `token`, `authorization`, `auth`, `password`, and `secret`.
+`True-Client-IP` is never forwarded. All outbound requests use manual redirect
+handling, so the Worker never follows a redirect with credentials attached.
 Request-level `cf-aig-*` control headers are forwarded when the selected route
 uses AI Gateway and removed on direct provider requests. Client
 `cf-aig-authorization` and `cf-aig-byok-alias` are always removed; Gateway
@@ -431,12 +448,13 @@ after a network error, HTTP 401/403, or HTTP 429.
 ## Status and health
 
 `/ping` proves only that the Worker can route a request. `/status` additionally
-checks every configured credential against provider model-list endpoints, five
-at a time, and returns `valid`, `invalid`, or `unknown`. No key value or suffix
-is returned, but the response reveals configured providers, credential slot
-counts, default model configuration, and AI Gateway identifiers. Keep it
-authenticated and do not publish its output in support tickets without review.
-The response body uses compact JSON without indentation or line breaks.
+checks every configured credential against provider model-list endpoints
+concurrently, without an application-level concurrency cap, and returns
+`valid`, `invalid`, or `unknown`. No key value or suffix is returned, but the
+response reveals configured providers, credential slot counts, default model
+configuration, and AI Gateway identifiers. Keep it authenticated and do not
+publish its output in support tickets without review. The response body uses
+compact JSON without indentation or line breaks.
 
 Timeouts, unsupported model listing, and non-authentication HTTP failures are
 reported as `unknown`. Authentication failures and unexpected fetch errors are
@@ -447,3 +465,5 @@ reported as `unknown`. Authentication failures and unexpected fetch errors are
 Known routing and authentication errors use JSON with an HTTP status. Unexpected
 errors return a generic HTTP 500 response and details are written only to Worker
 logs. Provider error bodies and status codes are normally forwarded as received.
+Requests whose decoded body exceeds 10 MiB return HTTP 413 before JSON parsing,
+including Responses and Messages requests.

@@ -12,6 +12,17 @@ update is explicitly approved.
 
 ### 2026-07-26
 
+- Prevented credential-bearing upstream requests from following redirects,
+  removed `True-Client-IP` before forwarding, and kept cross-origin redirect
+  destinations from receiving provider or AI Gateway credentials.
+- Bounded converted SSE records, cumulative text, tool arguments, tool
+  metadata, tool counts, and output items. Oversized or malformed streams now
+  emit a terminal error without a contradictory success event and cancel the
+  upstream body; oversized Responses and Messages request bodies retain HTTP
+  413 classification.
+- Made aggregated model caching optional: unavailable or failed Cache API
+  `open`, `match`, and `put` operations now fall back to uncached provider
+  fan-out.
 - Added request and provider-subrequest start lifecycle logs and prefixed every
   request-scoped log message with the first eight request ID characters for
   at-a-glance correlation. Routed request starts include safe endpoint-specific

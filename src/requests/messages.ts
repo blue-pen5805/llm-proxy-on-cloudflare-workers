@@ -1,9 +1,15 @@
 import { CloudflareAIGateway } from "../ai_gateway";
 import { MiddlewareContext } from "../middleware";
 import { Config } from "../utils/config";
-import { readRequestText, readResponseJson } from "../utils/helpers";
+import { AppError } from "../utils/error";
+import {
+  readRequestText,
+  readResponseJson,
+  utf8ByteLength,
+} from "../utils/helpers";
 import { RequestLogger } from "../utils/logger";
 import { handleChatCompletionsRequest } from "./chat_completions";
+import { StreamingResponseBudget } from "./stream_limits";
 
 const MAX_CONVERTED_RESPONSE_BYTES = 5 * 1024 * 1024;
 const SUPPORTED_REQUEST_FIELDS = new Set([
@@ -468,9 +474,7 @@ async function convertJsonResponse(
 }
 
 interface StreamingTool {
-  arguments: string;
   id: string;
-  name: string;
   outputIndex: number;
 }
 
@@ -480,10 +484,15 @@ function convertStreamingResponse(
   responseMetadataEnabled: boolean,
 ): Response {
   if (!response.body) return invalidUpstreamResponse();
-  const decoder = new TextDecoder();
+  const decoder = new TextDecoder("utf-8", {
+    fatal: true,
+    ignoreBOM: false,
+  });
   const encoder = new TextEncoder();
+  const budget = new StreamingResponseBudget();
   const id = messageId();
   let pending = "";
+  let pendingBytes = 0;
   let started = false;
   let finished = false;
   let finishReason: unknown;
@@ -524,6 +533,11 @@ function convertStreamingResponse(
     controller: TransformStreamDefaultController<Uint8Array>,
   ) => {
     if (textOutputIndex !== undefined) return;
+    const limitError = budget.addOutputItem();
+    if (limitError) {
+      fail(controller, limitError);
+      return;
+    }
     textOutputIndex = nextOutputIndex++;
     event(controller, "content_block_start", {
       index: textOutputIndex,
@@ -531,7 +545,6 @@ function convertStreamingResponse(
     });
   };
   const finish = (controller: TransformStreamDefaultController<Uint8Array>) => {
-    if (finished) return;
     start(controller);
     finished = true;
     const indexes = [
@@ -549,6 +562,20 @@ function convertStreamingResponse(
     });
     event(controller, "message_stop", {});
   };
+  const fail = (
+    controller: TransformStreamDefaultController<Uint8Array>,
+    error: Error,
+  ) => {
+    start(controller);
+    finished = true;
+    event(controller, "error", {
+      error: {
+        type: "api_error",
+        message: error.message,
+      },
+    });
+    controller.terminate();
+  };
   const processData = (
     data: string,
     controller: TransformStreamDefaultController<Uint8Array>,
@@ -556,18 +583,17 @@ function convertStreamingResponse(
     start(controller);
     if (data === "[DONE]") {
       finish(controller);
+      controller.terminate();
       return;
     }
     let chunk: unknown;
     try {
       chunk = JSON.parse(data) as unknown;
     } catch {
-      event(controller, "error", {
-        error: {
-          type: "api_error",
-          message: "Upstream returned an invalid streaming chunk.",
-        },
-      });
+      fail(
+        controller,
+        new Error("Upstream returned an invalid streaming chunk."),
+      );
       return;
     }
     if (!isObject(chunk)) return;
@@ -582,7 +608,13 @@ function convertStreamingResponse(
       }
       if (!isObject(choice.delta)) continue;
       if (typeof choice.delta.content === "string") {
+        const limitError = budget.addText(choice.delta.content);
+        if (limitError) {
+          fail(controller, limitError);
+          return;
+        }
         startText(controller);
+        if (finished) return;
         event(controller, "content_block_delta", {
           index: textOutputIndex,
           delta: { type: "text_delta", text: choice.delta.content },
@@ -595,13 +627,16 @@ function convertStreamingResponse(
         const fn = isObject(callDelta.function) ? callDelta.function : {};
         let tool = tools.get(callDelta.index);
         if (!tool) {
+          const limitError = budget.addTool() ?? budget.addOutputItem();
+          if (limitError) {
+            fail(controller, limitError);
+            return;
+          }
           tool = {
-            arguments: "",
             id:
               typeof callDelta.id === "string"
                 ? callDelta.id
                 : `toolu_${crypto.randomUUID()}`,
-            name: typeof fn.name === "string" ? fn.name : "",
             outputIndex: nextOutputIndex++,
           };
           tools.set(callDelta.index, tool);
@@ -610,14 +645,17 @@ function convertStreamingResponse(
             content_block: {
               type: "tool_use",
               id: tool.id,
-              name: tool.name,
+              name: typeof fn.name === "string" ? fn.name : "",
               input: {},
             },
           });
         }
-        if (typeof fn.name === "string") tool.name = fn.name;
         if (typeof fn.arguments === "string") {
-          tool.arguments += fn.arguments;
+          const limitError = budget.addToolArguments(fn.arguments);
+          if (limitError) {
+            fail(controller, limitError);
+            return;
+          }
           event(controller, "content_block_delta", {
             index: tool.outputIndex,
             delta: { type: "input_json_delta", partial_json: fn.arguments },
@@ -631,26 +669,59 @@ function convertStreamingResponse(
     controller: TransformStreamDefaultController<Uint8Array>,
   ) => {
     for (const line of block.split(/\r?\n/)) {
-      if (line.startsWith("data:"))
+      if (line.startsWith("data:")) {
         processData(line.slice(5).trimStart(), controller);
+        if (finished) break;
+      }
     }
   };
 
   const body = response.body.pipeThrough(
     new TransformStream<Uint8Array, Uint8Array>({
       transform(chunk, controller) {
-        pending += decoder.decode(chunk, { stream: true });
+        pendingBytes += chunk.byteLength;
+        try {
+          pending += decoder.decode(chunk, { stream: true });
+        } catch {
+          fail(
+            controller,
+            new Error("Upstream returned invalid UTF-8 in an SSE record."),
+          );
+          return;
+        }
         let boundary: number;
         while ((boundary = pending.search(/\r?\n\r?\n/)) >= 0) {
           const match = pending.slice(boundary).match(/^\r?\n\r?\n/)![0];
           const block = pending.slice(0, boundary);
           pending = pending.slice(boundary + match.length);
+          const blockBytes = utf8ByteLength(block);
+          pendingBytes -= blockBytes + utf8ByteLength(match);
+          const limitError = budget.checkSseRecord(blockBytes);
+          if (limitError) {
+            fail(controller, limitError);
+            return;
+          }
           processBlock(block, controller);
+          if (finished) return;
+        }
+        const limitError = budget.checkSseRecord(pendingBytes);
+        if (limitError) {
+          fail(controller, limitError);
         }
       },
       flush(controller) {
-        pending += decoder.decode();
-        if (pending.trim()) processBlock(pending, controller);
+        try {
+          pending += decoder.decode();
+        } catch {
+          fail(
+            controller,
+            new Error("Upstream returned invalid UTF-8 in an SSE record."),
+          );
+          return;
+        }
+        if (pending.trim()) {
+          processBlock(pending, controller);
+        }
         finish(controller);
       },
     }),
@@ -684,7 +755,8 @@ export async function handleMessagesRequest(
   let parsed: unknown;
   try {
     parsed = JSON.parse(await readRequestText(context.request)) as unknown;
-  } catch {
+  } catch (error) {
+    if (error instanceof AppError) throw error;
     RequestLogger.start({ endpoint: "messages" });
     return invalidRequest("Request body must be valid JSON.");
   }

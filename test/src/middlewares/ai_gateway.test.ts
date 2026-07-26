@@ -22,6 +22,7 @@ describe("aiGatewayMiddleware", () => {
       name: "default-gateway",
       token: "test-token",
       restApiToken: "rest-token",
+      alwaysUse: false,
     });
 
     context.pathname = "/g/my-gateway/v1/chat/completions";
@@ -42,6 +43,7 @@ describe("aiGatewayMiddleware", () => {
       name: "default-gateway",
       token: "test-token",
       restApiToken: "rest-token",
+      alwaysUse: false,
     });
 
     await aiGatewayMiddleware(context, next);
@@ -57,6 +59,7 @@ describe("aiGatewayMiddleware", () => {
       name: undefined,
       token: undefined,
       restApiToken: "rest-token",
+      alwaysUse: false,
     });
     context.pathname = "/ai/v1/responses";
 
@@ -105,6 +108,7 @@ describe("aiGatewayMiddleware", () => {
       name: undefined,
       token: undefined,
       restApiToken: undefined,
+      alwaysUse: false,
     });
     context.pathname = "/ai/run";
 
@@ -120,6 +124,7 @@ describe("aiGatewayMiddleware", () => {
       name: undefined,
       token: undefined,
       restApiToken: undefined,
+      alwaysUse: false,
     });
 
     await aiGatewayMiddleware(context, next);
@@ -136,6 +141,7 @@ describe("aiGatewayMiddleware", () => {
         name: "default-gateway",
         token: "test-token",
         restApiToken: "rest-token",
+        alwaysUse: false,
       });
       context.pathname = `/g/${gatewayName}/v1/models`;
 

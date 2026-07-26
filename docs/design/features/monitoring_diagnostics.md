@@ -83,6 +83,7 @@ The following events support operational queries:
 | `subrequest.failed`                | Provider request failed before a response  |
 | `provider.models.failed`           | A provider model-list operation failed     |
 | `provider.models.invalid_response` | A model-list response could not be used    |
+| `models.cache.unavailable`         | An optional model cache operation failed   |
 | `provider.connectivity.failed`     | A status connectivity check failed         |
 | `provider.key.selected`            | A credential slot was selected             |
 | `provider.key.cooldown`            | A credential slot entered cooldown         |

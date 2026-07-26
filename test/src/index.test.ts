@@ -121,6 +121,7 @@ describe("fetch", () => {
       name: "test-gateway",
       token: "test-token",
       restApiToken: "rest-token",
+      alwaysUse: false,
     });
     vi.mocked(getAllProviderInstances).mockImplementation(() => ({
       openai: new (BUILT_IN_PROVIDER_CONSTRUCTORS.openai as any)(),
@@ -141,7 +142,7 @@ describe("fetch", () => {
         baseUrl: "https://api.openai.com",
         headers: vi.fn().mockResolvedValue({}),
       };
-    });
+    }) as unknown as (typeof BUILT_IN_PROVIDER_CONSTRUCTORS)[string];
   });
 
   it("should handle OPTIONS request", async () => {

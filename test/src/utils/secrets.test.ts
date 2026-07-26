@@ -19,7 +19,7 @@ describe("Secrets", () => {
     };
 
     vi.mocked(Environments.get).mockImplementation((keyName) => {
-      return env[keyName];
+      return env[keyName] as string | number | object | unknown[] | undefined;
     });
   });
 

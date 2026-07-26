@@ -130,6 +130,7 @@ describe("stripProxyAuthorizationHeaders", () => {
       "api-key": "attacker-azure-key",
       cookie: "session=private",
       "x-forwarded-for": "203.0.113.1",
+      "true-client-ip": "203.0.113.2",
       "x-client-header": "preserved",
     });
 
@@ -144,6 +145,7 @@ describe("stripProxyAuthorizationHeaders", () => {
     expect(sanitized.has("api-key")).toBe(false);
     expect(sanitized.has("cookie")).toBe(false);
     expect(sanitized.has("x-forwarded-for")).toBe(false);
+    expect(sanitized.has("true-client-ip")).toBe(false);
     expect(sanitized.get("x-client-header")).toBe("preserved");
     expect(original.get("Authorization")).toBe("Bearer proxy-secret");
   });

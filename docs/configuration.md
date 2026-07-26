@@ -119,8 +119,8 @@ Azure OpenAI requires both `AZURE_OPENAI_API_KEY` and
 ### Provider credential profiles
 
 A profile object groups independent key pools under names containing 1–64
-letters, digits, `.`, `_`, `~`, or `-`. Up to 32 profiles and 32 keys per
-profile are accepted. A single unprofiled key selects the `default` profile:
+letters, digits, `.`, `_`, `~`, or `-`. Up to 32 profiles are accepted. A
+single unprofiled key selects the `default` profile:
 
 ```jsonc
 "OPENAI_API_KEY": "sk-..."

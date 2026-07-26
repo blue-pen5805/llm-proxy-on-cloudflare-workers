@@ -1,4 +1,5 @@
-import { readResponseJson } from "../utils/helpers";
+import { readResponseJson, utf8ByteLength } from "../utils/helpers";
+import { StreamingResponseBudget } from "./stream_limits";
 
 const MAX_CHAT_RESPONSE_BYTES = 5 * 1024 * 1024;
 const DONE_LINE_PATTERN = /^data:\s*\[DONE\]\s*\r?\n$/;
@@ -100,9 +101,15 @@ function enrichEventStream(
 ): Response {
   if (!response.body) return response;
 
-  const decoder = new TextDecoder();
+  const decoder = new TextDecoder("utf-8", {
+    fatal: true,
+    ignoreBOM: false,
+  });
   const encoder = new TextEncoder();
+  const budget = new StreamingResponseBudget();
   let pending = "";
+  let pendingBytes = 0;
+  let recordBytes = 0;
   let metadataWritten = false;
   const writeMetadata = (controller: TransformStreamDefaultController) => {
     if (metadataWritten) return;
@@ -111,21 +118,58 @@ function enrichEventStream(
     );
     metadataWritten = true;
   };
+  const fail = (
+    controller: TransformStreamDefaultController<Uint8Array>,
+    message: string,
+  ) => {
+    controller.enqueue(
+      encoder.encode(
+        `data: ${JSON.stringify({
+          error: { type: "stream_error", message },
+        })}\n\n`,
+      ),
+    );
+    controller.terminate();
+  };
 
   const body = response.body.pipeThrough(
     new TransformStream<Uint8Array, Uint8Array>({
       transform(chunk, controller) {
-        pending += decoder.decode(chunk, { stream: true });
+        pendingBytes += chunk.byteLength;
+        try {
+          pending += decoder.decode(chunk, { stream: true });
+        } catch {
+          fail(controller, "Upstream returned invalid UTF-8 in an SSE record.");
+          return;
+        }
         let newlineIndex: number;
         while ((newlineIndex = pending.indexOf("\n")) >= 0) {
           const line = pending.slice(0, newlineIndex + 1);
           pending = pending.slice(newlineIndex + 1);
+          const lineBytes = utf8ByteLength(line);
+          pendingBytes -= lineBytes;
+          recordBytes += lineBytes;
+          const limitError = budget.checkSseRecord(recordBytes);
+          if (limitError) {
+            fail(controller, limitError.message);
+            return;
+          }
           if (DONE_LINE_PATTERN.test(line)) writeMetadata(controller);
           controller.enqueue(encoder.encode(line));
+          if (/^\r?\n$/.test(line)) recordBytes = 0;
+        }
+        const limitError = budget.checkSseRecord(recordBytes + pendingBytes);
+        if (limitError) {
+          fail(controller, limitError.message);
         }
       },
       flush(controller) {
-        pending += decoder.decode();
+        try {
+          pending += decoder.decode();
+        } catch {
+          fail(controller, "Upstream returned invalid UTF-8 in an SSE record.");
+          return;
+        }
         if (pending && DONE_LINE_PATTERN.test(`${pending}\n`)) {
           writeMetadata(controller);
         }

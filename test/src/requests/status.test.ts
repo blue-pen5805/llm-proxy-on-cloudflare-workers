@@ -63,7 +63,7 @@ describe("status", () => {
       const instance = Object.create(mockProviderClass);
       instance.apiKeyName = "OPENAI_API_KEY";
       return instance;
-    });
+    }) as unknown as (typeof BUILT_IN_PROVIDER_CONSTRUCTORS)[string];
 
     vi.mocked(getAllProviderInstances).mockImplementation(() => {
       return Object.fromEntries(
@@ -174,7 +174,7 @@ describe("status", () => {
         available: vi.fn().mockReturnValue(true),
         getApiKeys: vi.fn().mockReturnValue([]),
       };
-    });
+    }) as unknown as (typeof BUILT_IN_PROVIDER_CONSTRUCTORS)[string];
 
     const response = await handleStatusRequest();
     const body = (await response.json()) as any;
@@ -191,14 +191,16 @@ describe("status", () => {
       name: "gw-123",
       token: undefined,
       restApiToken: undefined,
+      alwaysUse: false,
     });
     vi.mocked(Secrets.getAll).mockReturnValue([]);
 
-    const body = await (await handleStatusRequest()).json();
+    const body = (await (await handleStatusRequest()).json()) as any;
 
     expect(body.config.AI_GATEWAY).toEqual({
       accountId: "acc-123",
       name: "gw-123",
+      alwaysUse: false,
     });
   });
 
@@ -228,13 +230,13 @@ describe("status", () => {
         apiKeyName: "SKIP_API_KEY",
         modelsPath: "",
         available: vi.fn().mockReturnValue(true),
-        getApiKeys: vi.fn(() => Secrets.getAll("SKIP_API_KEY")),
+        getApiKeys: vi.fn(() => Secrets.getAll("SKIP_API_KEY" as keyof Env)),
       };
-    });
+    }) as unknown as (typeof BUILT_IN_PROVIDER_CONSTRUCTORS)[string];
     vi.mocked(Secrets.getAll).mockReturnValue(["any-key"]);
 
     const response = await handleStatusRequest();
-    const body = await response.json();
+    const body = (await response.json()) as any;
 
     expect(body.providers.skip.keys[0].status).toBe("unknown");
   });
@@ -256,7 +258,7 @@ describe("status", () => {
     vi.mocked(Config.defaultModel).mockReturnValue(undefined);
 
     const response = await handleStatusRequest();
-    const body = await response.json();
+    const body = (await response.json()) as any;
 
     expect(body.config.DEFAULT_MODEL).toBeNull();
     expect(body.providers.custom.keys).toEqual([
@@ -273,7 +275,7 @@ describe("status", () => {
     );
 
     const response = await handleStatusRequest();
-    const body = await response.json();
+    const body = (await response.json()) as any;
 
     expect(body.providers.openai.keys[0].status).toBe("unknown");
   });
@@ -285,7 +287,7 @@ describe("status", () => {
     vi.mocked(withTimeout).mockRejectedValue(timeoutError);
 
     const response = await handleStatusRequest();
-    const body = await response.json();
+    const body = (await response.json()) as any;
 
     expect(body.providers.openai.keys[0].status).toBe("unknown");
     expect(withTimeout).toHaveBeenCalledWith(
@@ -305,7 +307,7 @@ describe("status", () => {
       .mockImplementation(() => {});
 
     const response = await handleStatusRequest();
-    const body = await response.json();
+    const body = (await response.json()) as any;
 
     expect(body.providers.openai.keys[0].status).toBe("invalid");
     expect(consoleError).toHaveBeenCalledWith({
@@ -333,7 +335,7 @@ describe("status", () => {
     } as any;
 
     const response = await handleStatusRequest(gateway);
-    const body = await response.json();
+    const body = (await response.json()) as any;
 
     expect(body.providers.openai.keys.map((key: any) => key.status)).toEqual([
       "valid",
@@ -358,7 +360,7 @@ describe("status", () => {
       buildProviderEndpointRequest: vi.fn(),
     } as any;
 
-    const body = await (await handleStatusRequest(gateway)).json();
+    const body = (await (await handleStatusRequest(gateway)).json()) as any;
 
     expect(body.providers.openai.keys[0].status).toBe("valid");
     expect(mockProviderClass.fetch).toHaveBeenCalledOnce();
@@ -383,7 +385,7 @@ describe("status", () => {
         ]),
     } as any;
 
-    const body = await (await handleStatusRequest(gateway)).json();
+    const body = (await (await handleStatusRequest(gateway)).json()) as any;
 
     expect(body.providers.openai.keys[0].status).toBe("valid");
     expect(gateway.buildProviderEndpointRequest).toHaveBeenCalledWith(
@@ -405,7 +407,7 @@ describe("status", () => {
       buildProviderEndpointRequest: vi.fn(),
     } as any;
 
-    const body = await (await handleStatusRequest(gateway)).json();
+    const body = (await (await handleStatusRequest(gateway)).json()) as any;
 
     expect(body.providers.openai.keys[0].status).toBe("unknown");
     expect(gateway.buildProviderEndpointRequest).not.toHaveBeenCalled();
@@ -441,7 +443,7 @@ describe("status", () => {
     await vi.waitFor(() => expect(second.fetch).toHaveBeenCalledOnce());
     releaseFirst(new Response(null, { status: 200 }));
 
-    const body = await (await statusPromise).json();
+    const body = (await (await statusPromise).json()) as any;
     expect(Object.keys(body.providers)).toEqual(["first", "second"]);
   });
 
@@ -460,7 +462,7 @@ describe("status", () => {
       return new Response(null, { status: 200 });
     });
 
-    const body = await (await handleStatusRequest()).json();
+    const body = (await (await handleStatusRequest()).json()) as any;
     expect(mockProviderClass.fetch).toHaveBeenCalledTimes(apiKeyCount);
     expect(maximumActiveChecks).toBe(apiKeyCount);
     expect(body.providers.openai.keys.at(-1)).toEqual({
@@ -487,7 +489,7 @@ describe("status", () => {
     );
     mockProviderClass.fetch.mockResolvedValue(upstreamResponse);
 
-    const body = await (await handleStatusRequest()).json();
+    const body = (await (await handleStatusRequest()).json()) as any;
     expect(body.providers.openai.keys[0].status).toBe("valid");
   });
 });

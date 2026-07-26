@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { Context } from "~/src/middleware";
+import { MiddlewareContext } from "~/src/middleware";
 import { corsMiddleware } from "~/src/middlewares/cors";
 import { handleOptions } from "~/src/requests/options";
 
@@ -9,7 +9,7 @@ vi.mock("~/src/requests/options", async (importOriginal) => ({
 }));
 
 describe("corsMiddleware", () => {
-  let context: Context;
+  let context: MiddlewareContext;
   const next = vi.fn().mockResolvedValue(new Response("ok"));
 
   beforeEach(() => {
@@ -17,7 +17,7 @@ describe("corsMiddleware", () => {
     next.mockResolvedValue(new Response("ok"));
     context = {
       request: new Request("http://localhost/"),
-    } as Context;
+    } as MiddlewareContext;
   });
 
   it("should call handleOptions for OPTIONS requests", async () => {

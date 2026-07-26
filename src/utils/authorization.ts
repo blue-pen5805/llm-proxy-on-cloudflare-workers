@@ -19,6 +19,7 @@ const UPSTREAM_CONTROLLED_AUTHORIZATION_HEADERS = new Set([
   "upgrade",
   "forwarded",
   "x-real-ip",
+  "true-client-ip",
   "origin",
   "referer",
   "cf-aig-authorization",

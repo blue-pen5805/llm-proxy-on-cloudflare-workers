@@ -2,7 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
 import { handleChatCompletionsRequest } from "~/src/requests/chat_completions";
 import { handleMessagesRequest } from "~/src/requests/messages";
+import {
+  MAX_SSE_RECORD_BYTES,
+  MAX_STREAM_TEXT_BYTES,
+  MAX_STREAM_TOOL_ARGUMENT_BYTES,
+} from "~/src/requests/stream_limits";
 import { Config } from "~/src/utils/config";
+import { PayloadTooLargeError } from "~/src/utils/error";
 
 vi.mock("~/src/requests/chat_completions", () => ({
   handleChatCompletionsRequest: vi.fn(),
@@ -309,7 +315,9 @@ describe("handleMessagesRequest", () => {
         tool_choice: { type: "none", disable_parallel_tool_use: false },
       }),
     } as never);
-    expect((await filtered.json()).stop_reason).toBe("refusal");
+    expect(
+      ((await filtered.json()) as { stop_reason: string }).stop_reason,
+    ).toBe("refusal");
     preparedRequest = vi.mocked(handleChatCompletionsRequest).mock.calls[1][2]!;
     expect(preparedRequest.body).toMatchObject({
       tool_choice: "none",
@@ -414,9 +422,19 @@ describe("handleMessagesRequest", () => {
     });
   });
 
-  it("finishes unterminated streams and reports malformed chunks", async () => {
+  it("terminates malformed streams without emitting a successful stop", async () => {
+    const cancel = vi.fn();
+    let sent = false;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent) return;
+        sent = true;
+        controller.enqueue(new TextEncoder().encode("data: not-json\n\n"));
+      },
+      cancel,
+    });
     vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
-      new Response("data: not-json", {
+      new Response(stream, {
         headers: { "content-type": "text/event-stream" },
       }),
     );
@@ -426,7 +444,217 @@ describe("handleMessagesRequest", () => {
     const body = await response.text();
     expect(body).toContain("event: error");
     expect(body).toContain("event: message_start");
+    expect(body).not.toContain("event: message_stop");
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it("terminates a stream when cumulative tool arguments exceed their byte budget", async () => {
+    const delta = "x".repeat(900 * 1024);
+    const sse = Array.from(
+      { length: Math.ceil(MAX_STREAM_TOOL_ARGUMENT_BYTES / delta.length) + 1 },
+      (_, index) =>
+        `data: ${JSON.stringify({
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    ...(index === 0
+                      ? { id: "toolu_1", function: { name: "lookup" } }
+                      : {}),
+                    function: {
+                      ...(index === 0 ? { name: "lookup" } : {}),
+                      arguments: delta,
+                    },
+                  },
+                ],
+              },
+              finish_reason: null,
+            },
+          ],
+        })}\n\n`,
+    ).join("");
+    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+      new Response(sse, {
+        headers: { "content-type": "text/event-stream" },
+      }),
+    );
+
+    const response = await handleMessagesRequest({
+      request: request({
+        model: "openai/model",
+        max_tokens: 1,
+        messages: [],
+        stream: true,
+      }),
+    } as never);
+    const body = await response.text();
+
+    expect(body).toContain("Streaming tool arguments exceed the proxy limit.");
+    expect(body).not.toContain("event: message_stop");
+  });
+
+  it("enforces the independent text, tool-count, and output-item budgets", async () => {
+    const textDelta = "x".repeat(900 * 1024);
+    const toolCalls = (count: number) =>
+      Array.from({ length: count }, (_, index) => ({
+        index,
+        id: `call_${index}`,
+        function: { name: "lookup", arguments: "" },
+      }));
+    const cases = [
+      {
+        expected: "Streaming text exceeds the proxy limit.",
+        sse: Array.from(
+          { length: Math.ceil(MAX_STREAM_TEXT_BYTES / textDelta.length) + 1 },
+          () =>
+            `data: ${JSON.stringify({
+              choices: [{ delta: { content: textDelta }, finish_reason: null }],
+            })}\n\n`,
+        ).join(""),
+      },
+      {
+        expected: "Streaming tool call count exceeds the proxy limit.",
+        sse: `data: ${JSON.stringify({
+          choices: [
+            { delta: { tool_calls: toolCalls(65) }, finish_reason: null },
+          ],
+        })}\n\n`,
+      },
+      {
+        expected: "Streaming output item count exceeds the proxy limit.",
+        sse:
+          `data: ${JSON.stringify({
+            choices: [
+              { delta: { tool_calls: toolCalls(64) }, finish_reason: null },
+            ],
+          })}\n\n` +
+          `data: ${JSON.stringify({
+            choices: [
+              { delta: { content: "one item too many" }, finish_reason: null },
+            ],
+          })}\n\n`,
+      },
+    ];
+
+    for (const testCase of cases) {
+      vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+        new Response(testCase.sse, {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      );
+      const response = await handleMessagesRequest({
+        request: request({
+          model: "openai/model",
+          max_tokens: 1,
+          messages: [],
+          stream: true,
+        }),
+      } as never);
+      const body = await response.text();
+      expect(body).toContain(testCase.expected);
+      expect(body).not.toContain("event: message_stop");
+    }
+  });
+
+  it("rejects oversized complete and unterminated SSE records", async () => {
+    for (const suffix of ["\n\n", ""]) {
+      vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+        new Response(`data: ${"x".repeat(MAX_SSE_RECORD_BYTES + 1)}${suffix}`, {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      );
+      const response = await handleMessagesRequest({
+        request: request({
+          model: "openai/model",
+          max_tokens: 1,
+          messages: [],
+          stream: true,
+        }),
+      } as never);
+      const body = await response.text();
+      expect(body).toContain("Upstream SSE record exceeds the proxy limit.");
+      expect(body).not.toContain("event: message_stop");
+    }
+  });
+
+  it("turns invalid UTF-8 during transform or flush into a terminal error", async () => {
+    for (const bytes of [new Uint8Array([0xff]), new Uint8Array([0xc3])]) {
+      vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+        new Response(bytes, {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      );
+      const response = await handleMessagesRequest({
+        request: request({
+          model: "openai/model",
+          max_tokens: 1,
+          messages: [],
+          stream: true,
+        }),
+      } as never);
+      const body = await response.text();
+      expect(body).toContain("invalid UTF-8");
+      expect(body).not.toContain("event: message_stop");
+    }
+  });
+
+  it("processes a final valid SSE record without a blank-line delimiter", async () => {
+    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({
+          choices: [{ delta: { content: "tail" }, finish_reason: "stop" }],
+        })}`,
+        { headers: { "content-type": "text/event-stream" } },
+      ),
+    );
+    const response = await handleMessagesRequest({
+      request: request({
+        model: "openai/model",
+        max_tokens: 1,
+        messages: [],
+        stream: true,
+      }),
+    } as never);
+    const body = await response.text();
+    expect(body).toContain('"text":"tail"');
     expect(body).toContain("event: message_stop");
+  });
+
+  it("completes an empty stream without content blocks", async () => {
+    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+      new Response("", {
+        headers: { "content-type": "text/event-stream" },
+      }),
+    );
+    const response = await handleMessagesRequest({
+      request: request({
+        model: "openai/model",
+        max_tokens: 1,
+        messages: [],
+        stream: true,
+      }),
+    } as never);
+    const body = await response.text();
+    expect(body).toContain("event: message_stop");
+    expect(body).not.toContain("event: content_block_stop");
+  });
+
+  it("preserves payload-too-large errors from bounded request parsing", async () => {
+    const oversized = new Request("https://proxy.example/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "content-length": String(10 * 1024 * 1024 + 1),
+      },
+      body: "{}",
+    });
+
+    await expect(
+      handleMessagesRequest({ request: oversized } as never),
+    ).rejects.toBeInstanceOf(PayloadTooLargeError);
+    expect(handleChatCompletionsRequest).not.toHaveBeenCalled();
   });
 
   it("passes upstream errors through and rejects invalid upstream success responses", async () => {

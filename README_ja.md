@@ -120,6 +120,12 @@ curl https://your-worker.example/google-ai-studio/v1beta/models/gemini-3.5-flash
 `GET /status` は認証情報を検査しますが、設定メタデータと認証情報スロット数を含むため、
 出力を公開しないでください。
 
+Workers Free plan では 1 invocation あたりの subrequest が 50 件に制限されるため、
+多数の provider を登録すると `/v1/models` や `/status` が失敗する可能性があります。
+その場合は Workers Paid plan を検討してください。詳細は
+[Workers limits](https://developers.cloudflare.com/workers/platform/limits/#subrequests)
+を参照してください。
+
 プロバイダー認証情報の設定では、プロファイル名ごとのキー配列も指定できます。指定を
 省略したルートは `default` を使います。たとえば OpenAI の `second` プロファイルは
 `openai:second/gpt-5.6-sol` で選択できます。詳細は

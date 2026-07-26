@@ -2,7 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
 import { handleChatCompletionsRequest } from "~/src/requests/chat_completions";
 import { handleResponsesRequest } from "~/src/requests/responses";
+import {
+  MAX_SSE_RECORD_BYTES,
+  MAX_STREAM_TEXT_BYTES,
+  MAX_STREAM_TOOL_ARGUMENT_BYTES,
+  MAX_STREAM_TOOL_METADATA_BYTES,
+} from "~/src/requests/stream_limits";
 import { Config } from "~/src/utils/config";
+import { PayloadTooLargeError } from "~/src/utils/error";
 
 vi.mock("~/src/requests/chat_completions", () => ({
   handleChatCompletionsRequest: vi.fn(),
@@ -451,9 +458,19 @@ describe("handleResponsesRequest", () => {
     });
   });
 
-  it("finishes an unterminated stream and reports invalid chunks", async () => {
+  it("terminates malformed streams without emitting a successful completion", async () => {
+    const cancel = vi.fn();
+    let sent = false;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent) return;
+        sent = true;
+        controller.enqueue(new TextEncoder().encode("data: not-json\n\n"));
+      },
+      cancel,
+    });
     vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
-      new Response("data: not-json", {
+      new Response(stream, {
         headers: { "content-type": "text/event-stream" },
       }),
     );
@@ -463,7 +480,261 @@ describe("handleResponsesRequest", () => {
     } as never);
     const body = await response.text();
     expect(body).toContain("event: error");
+    expect(body).not.toContain("event: response.completed");
+    expect(body).not.toContain("event: response.incomplete");
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it("terminates a stream when cumulative text exceeds its byte budget", async () => {
+    const delta = "x".repeat(900 * 1024);
+    const sse = Array.from(
+      { length: Math.ceil(MAX_STREAM_TEXT_BYTES / delta.length) + 1 },
+      () =>
+        `data: ${JSON.stringify({
+          choices: [{ delta: { content: delta }, finish_reason: null }],
+        })}\n\n`,
+    ).join("");
+    const cancel = vi.fn();
+    let sent = false;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent) return;
+        sent = true;
+        controller.enqueue(new TextEncoder().encode(sse));
+      },
+      cancel,
+    });
+    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+      new Response(stream, {
+        headers: { "content-type": "text/event-stream" },
+      }),
+    );
+
+    const response = await handleResponsesRequest({
+      request: request({ model: "openai/model", input: "Hello", stream: true }),
+    } as never);
+    const body = await response.text();
+
+    expect(body).toContain("Streaming text exceeds the proxy limit.");
+    expect(body).not.toContain("event: response.completed");
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it("enforces independent tool-argument, tool-count, output-item, and tool-metadata budgets", async () => {
+    const argumentDelta = "x".repeat(900 * 1024);
+    const toolCalls = (count: number) =>
+      Array.from({ length: count }, (_, index) => ({
+        index,
+        id: `call_${index}`,
+        function: { name: "lookup", arguments: "" },
+      }));
+    const cases = [
+      {
+        expected: "Streaming tool arguments exceed the proxy limit.",
+        sse: Array.from(
+          {
+            length:
+              Math.ceil(MAX_STREAM_TOOL_ARGUMENT_BYTES / argumentDelta.length) +
+              1,
+          },
+          (_, index) =>
+            `data: ${JSON.stringify({
+              choices: [
+                {
+                  delta: {
+                    tool_calls: [
+                      {
+                        index: 0,
+                        ...(index === 0
+                          ? { id: "call_0", function: { name: "lookup" } }
+                          : {}),
+                        function: {
+                          ...(index === 0 ? { name: "lookup" } : {}),
+                          arguments: argumentDelta,
+                        },
+                      },
+                    ],
+                  },
+                  finish_reason: null,
+                },
+              ],
+            })}\n\n`,
+        ).join(""),
+      },
+      {
+        expected: "Streaming tool call count exceeds the proxy limit.",
+        sse: `data: ${JSON.stringify({
+          choices: [
+            { delta: { tool_calls: toolCalls(65) }, finish_reason: null },
+          ],
+        })}\n\n`,
+      },
+      {
+        expected: "Streaming output item count exceeds the proxy limit.",
+        sse:
+          `data: ${JSON.stringify({
+            choices: [
+              { delta: { tool_calls: toolCalls(64) }, finish_reason: null },
+            ],
+          })}\n\n` +
+          `data: ${JSON.stringify({
+            choices: [
+              { delta: { content: "one item too many" }, finish_reason: null },
+            ],
+          })}\n\n`,
+      },
+      {
+        expected: "Streaming tool metadata exceeds the proxy limit.",
+        sse:
+          `data: ${JSON.stringify({
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: "call_0",
+                      function: { name: "lookup", arguments: "" },
+                    },
+                  ],
+                },
+                finish_reason: null,
+              },
+            ],
+          })}\n\n` +
+          `data: ${JSON.stringify({
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      function: {
+                        name: "x".repeat(MAX_STREAM_TOOL_METADATA_BYTES + 1),
+                      },
+                    },
+                  ],
+                },
+                finish_reason: null,
+              },
+            ],
+          })}\n\n`,
+      },
+    ];
+
+    for (const testCase of cases) {
+      vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+        new Response(testCase.sse, {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      );
+      const response = await handleResponsesRequest({
+        request: request({
+          model: "openai/model",
+          input: "Hello",
+          stream: true,
+        }),
+      } as never);
+      const body = await response.text();
+      expect(body).toContain(testCase.expected);
+      expect(body).not.toContain("event: response.completed");
+      expect(body).not.toContain("event: response.incomplete");
+    }
+  });
+
+  it("rejects oversized complete and unterminated SSE records", async () => {
+    for (const suffix of ["\n\n", ""]) {
+      vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+        new Response(`data: ${"x".repeat(MAX_SSE_RECORD_BYTES + 1)}${suffix}`, {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      );
+      const response = await handleResponsesRequest({
+        request: request({
+          model: "openai/model",
+          input: "Hello",
+          stream: true,
+        }),
+      } as never);
+      const body = await response.text();
+      expect(body).toContain("Upstream SSE record exceeds the proxy limit.");
+      expect(body).not.toContain("event: response.completed");
+    }
+  });
+
+  it("turns invalid UTF-8 during transform or flush into a terminal error", async () => {
+    for (const bytes of [new Uint8Array([0xff]), new Uint8Array([0xc3])]) {
+      vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+        new Response(bytes, {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      );
+      const response = await handleResponsesRequest({
+        request: request({
+          model: "openai/model",
+          input: "Hello",
+          stream: true,
+        }),
+      } as never);
+      const body = await response.text();
+      expect(body).toContain("invalid UTF-8");
+      expect(body).not.toContain("event: response.completed");
+    }
+  });
+
+  it("processes a final valid SSE record without a blank-line delimiter", async () => {
+    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({
+          choices: [{ delta: { content: "tail" }, finish_reason: "stop" }],
+        })}`,
+        { headers: { "content-type": "text/event-stream" } },
+      ),
+    );
+    const response = await handleResponsesRequest({
+      request: request({
+        model: "openai/model",
+        input: "Hello",
+        stream: true,
+      }),
+    } as never);
+    const body = await response.text();
+    expect(body).toContain('"text":"tail"');
     expect(body).toContain("event: response.completed");
+  });
+
+  it("ignores a non-data SSE record and completes an empty response", async () => {
+    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+      new Response("event: ping\n\n", {
+        headers: { "content-type": "text/event-stream" },
+      }),
+    );
+    const response = await handleResponsesRequest({
+      request: request({
+        model: "openai/model",
+        input: "Hello",
+        stream: true,
+      }),
+    } as never);
+    const body = await response.text();
+    expect(body).toContain("event: response.completed");
+    expect(body).not.toContain("event: response.output_item.added");
+  });
+
+  it("preserves payload-too-large errors from bounded request parsing", async () => {
+    const oversized = new Request("https://proxy.example/v1/responses", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "content-length": String(10 * 1024 * 1024 + 1),
+      },
+      body: "{}",
+    });
+
+    await expect(
+      handleResponsesRequest({ request: oversized } as never),
+    ).rejects.toBeInstanceOf(PayloadTooLargeError);
+    expect(handleChatCompletionsRequest).not.toHaveBeenCalled();
   });
 
   it("passes upstream error responses through", async () => {

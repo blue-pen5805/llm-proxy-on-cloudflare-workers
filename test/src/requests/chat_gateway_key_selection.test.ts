@@ -39,13 +39,13 @@ function createContext(
     apiKeyIndex: selection,
     providers: {
       get: () => provider,
-    } as MiddlewareContext["providers"],
+    } as unknown as MiddlewareContext["providers"],
   };
 }
 
 function authorizationHeaders(fetchMock: ReturnType<typeof vi.fn>): string[] {
-  return fetchMock.mock.calls.map(([, init]) =>
-    new Headers(init?.headers).get("authorization"),
+  return fetchMock.mock.calls.map(
+    ([, init]) => new Headers(init?.headers).get("authorization") ?? "",
   );
 }
 

@@ -209,6 +209,7 @@ describe("provider contracts", () => {
       expect(fetchMock).toHaveBeenCalledWith("https://example.com/resource", {
         method: "POST",
         headers: expect.any(Headers),
+        redirect: "manual",
       });
       expect(new Headers(fetchMock.mock.calls[0][1]?.headers)).toEqual(
         new Headers(),

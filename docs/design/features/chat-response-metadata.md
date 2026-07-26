@@ -75,7 +75,9 @@ The metadata chunk's `duration_ms` and `completed_at` therefore describe stream
 completion rather than response-header arrival; `headers_received_ms` separately
 captures upstream time to headers. Backpressure and downstream cancellation
 propagate through the transform to the upstream body. The response is never
-buffered in full.
+buffered in full. Each SSE record is limited to 1 MiB. A larger or malformed
+record produces a terminal OpenAI-compatible error chunk, suppresses the
+metadata and success marker, and cancels the upstream stream.
 
 ## Virtual models and retries
 

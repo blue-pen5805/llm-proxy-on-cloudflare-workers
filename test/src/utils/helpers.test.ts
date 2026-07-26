@@ -210,6 +210,43 @@ describe("maskSensitiveUrl", () => {
 });
 
 describe("fetchWithLogging", () => {
+  it.each([302, 307, 308])(
+    "uses manual redirect mode for credentialed HTTP %i responses",
+    async (status) => {
+      const redirectDestination = "https://redirect.example/collect";
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(null, {
+          status,
+          headers: { location: redirectDestination },
+        }),
+      );
+
+      const response = await fetchWithLogging("https://provider.example/chat", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer provider-secret",
+          "cf-aig-authorization": "Bearer gateway-secret",
+        },
+        body: "{}",
+      });
+
+      expect(response.status).toBe(status);
+      expect(response.headers.get("location")).toBe(redirectDestination);
+      expect(fetchSpy).toHaveBeenCalledOnce();
+      expect(fetchSpy).toHaveBeenCalledWith(
+        "https://provider.example/chat",
+        expect.objectContaining({ redirect: "manual" }),
+      );
+      expect(
+        fetchSpy.mock.calls.some(([input]) =>
+          String(input).startsWith(redirectDestination),
+        ),
+      ).toBe(false);
+
+      vi.restoreAllMocks();
+    },
+  );
+
   it("logs a structured successful subrequest with a masked URL", async () => {
     const response = new Response("ok", { status: 202 });
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(response);

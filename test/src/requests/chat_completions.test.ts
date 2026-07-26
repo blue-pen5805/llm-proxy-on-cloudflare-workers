@@ -62,7 +62,7 @@ describe("handleChatCompletionsRequest", () => {
     vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(true);
     BUILT_IN_PROVIDER_CONSTRUCTORS.openai = vi.fn(function () {
       return mockProviderClass;
-    });
+    }) as unknown as (typeof BUILT_IN_PROVIDER_CONSTRUCTORS)[string];
     vi.mocked(Config.defaultModel).mockReturnValue("openai/gpt-4");
     vi.mocked(Config.chatResponseMetadataEnabled).mockReturnValue(false);
     vi.mocked(Secrets.getAll).mockReturnValue(["test-key"]);

@@ -56,7 +56,7 @@ describe("proxy", () => {
     const providerName = "testProvider";
     BUILT_IN_PROVIDER_CONSTRUCTORS[providerName] = vi.fn(function () {
       return mockProviderClass;
-    });
+    }) as unknown as (typeof BUILT_IN_PROVIDER_CONSTRUCTORS)[string];
 
     const mockRequest = new Request("https://example.com/test/path", {
       method: "GET",
@@ -134,7 +134,7 @@ describe("proxy", () => {
     const providerName = "testProvider";
     BUILT_IN_PROVIDER_CONSTRUCTORS[providerName] = vi.fn(function () {
       return mockProviderClass;
-    });
+    }) as unknown as (typeof BUILT_IN_PROVIDER_CONSTRUCTORS)[string];
 
     const mockRequest = new Request("https://example.com/test/test/path", {
       method: "GET",
@@ -195,7 +195,7 @@ describe("proxy", () => {
     const providerName = "selectedProvider";
     BUILT_IN_PROVIDER_CONSTRUCTORS[providerName] = vi.fn(function () {
       return mockProviderClass;
-    });
+    }) as unknown as (typeof BUILT_IN_PROVIDER_CONSTRUCTORS)[string];
     vi.mocked(Secrets.resolveApiKeyIndex).mockReturnValue(2);
     const request = new Request("https://example.com/models");
 
@@ -221,7 +221,7 @@ describe("proxy", () => {
     const providerName = "openai";
     BUILT_IN_PROVIDER_CONSTRUCTORS[providerName] = vi.fn(function () {
       return mockProviderClass;
-    });
+    }) as unknown as (typeof BUILT_IN_PROVIDER_CONSTRUCTORS)[string];
     vi.spyOn(CloudflareAIGateway, "isSupportedProvider").mockReturnValue(true);
     const buildProviderEndpointRequest = vi
       .fn()
@@ -332,7 +332,7 @@ describe("proxy", () => {
     const providerName = "testProvider";
     BUILT_IN_PROVIDER_CONSTRUCTORS[providerName] = vi.fn(function () {
       return mockProviderClass;
-    });
+    }) as unknown as (typeof BUILT_IN_PROVIDER_CONSTRUCTORS)[string];
     const request = new Request("https://example.com/test", {
       headers: {
         Authorization: "Bearer proxy-secret",

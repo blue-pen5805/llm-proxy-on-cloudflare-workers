@@ -75,10 +75,12 @@ describe("cloud platform providers", () => {
 
   it("builds Azure provider-native AI Gateway chat requests", async () => {
     const provider = new AzureOpenAI();
-    const [path, init] = await provider.buildAiGatewayChatCompletionsRequest({
+    const gatewayRequest = await provider.buildAiGatewayChatCompletionsRequest({
       data: { model: "gpt-4o", messages: [{ role: "user", content: "hi" }] },
       headers: { "x-client": "kept" },
     });
+    expect(gatewayRequest).toBeDefined();
+    const [path, init] = gatewayRequest!;
 
     expect(path).toBe(
       "/example-resource/gpt-4o/chat/completions?api-version=2024-10-21",
@@ -107,10 +109,12 @@ describe("cloud platform providers", () => {
     expect(provider.aiGatewayPath("/openai/v1/models")).toBe(
       "/openai/v1/models",
     );
-    const [path] = await provider.buildAiGatewayChatCompletionsRequest({
+    const gatewayRequest = await provider.buildAiGatewayChatCompletionsRequest({
       data: { model: "gpt-4o", messages: [] },
       headers: {},
     });
+    expect(gatewayRequest).toBeDefined();
+    const [path] = gatewayRequest!;
     expect(path).toContain("api-version=2024-10-21");
   });
 
@@ -146,7 +150,7 @@ describe("cloud platform providers", () => {
     await expect(provider.buildModelsRequest()).rejects.toBeInstanceOf(
       ProviderNotSupportedError,
     );
-    await expect(provider.fetch()).rejects.toThrow(
+    await expect(provider.fetch("")).rejects.toThrow(
       "Google Vertex AI requires Cloudflare AI Gateway.",
     );
   });

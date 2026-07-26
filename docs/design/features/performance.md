@@ -106,6 +106,12 @@ stripped before the response is served, keeping responses issued under
 `Authorization` out of shared HTTP caches. Cache writes ride
 `ctx.waitUntil`, keeping the store off the response's critical path.
 
+Caching is an optional optimization. If Cache API `open`, `match`, or `put`
+fails or the Cache API is unavailable in the deployment environment, the route
+logs the failed cache operation and continues with an uncached provider
+fan-out. This includes environments where Cloudflare Access makes the Cache API
+unavailable.
+
 The Cache API is per-datacenter: each Cloudflare location warms its own entry,
 and a configuration change (for example adding a provider key) can serve a
 stale list from an already-primed datacenter for up to the TTL. The short
@@ -135,3 +141,4 @@ CPU consumption.
 - [Cloudflare Workers CPU time and limits](https://developers.cloudflare.com/workers/platform/limits/#cpu-time)
 - [Cloudflare Workers streaming best practices](https://developers.cloudflare.com/workers/best-practices/workers-best-practices/#stream-request-and-response-bodies)
 - [Cloudflare Workers Streams API](https://developers.cloudflare.com/workers/runtime-apis/streams/)
+- [Cloudflare Workers Cache API](https://developers.cloudflare.com/workers/runtime-apis/cache/)

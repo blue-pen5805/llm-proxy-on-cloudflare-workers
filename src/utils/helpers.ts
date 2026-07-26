@@ -69,7 +69,13 @@ export async function fetchWithLogging(
   });
 
   try {
-    const upstreamResponse = await fetch(input, init);
+    // A new Worker subrequest defaults to `follow`, which forwards every
+    // header—including credentials—to a cross-origin redirect destination.
+    // Preserve the upstream 3xx response and never follow it automatically.
+    const upstreamResponse = await fetch(input, {
+      ...init,
+      redirect: "manual",
+    });
     RequestLogger.info(
       "subrequest.completed",
       "Provider subrequest completed",

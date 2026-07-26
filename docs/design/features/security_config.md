@@ -36,6 +36,14 @@ upstream key. Credential-like query parameters are removed during middleware
 processing using the same case-insensitive name set used for log redaction;
 this includes API-key variants, `token`, `access_token`, `authorization`,
 `auth`, `password`, and `secret`. Other query parameters are retained.
+`True-Client-IP` is included in the client network metadata that is removed.
+
+Every outbound provider, AI Gateway, model-list, and connectivity-check request
+uses manual redirect handling. The Worker never follows an upstream redirect,
+so an authorization header, API-key header, Gateway token, or credential
+embedded in a Universal Endpoint body cannot be replayed to the redirect
+destination. A redirect response is returned to the caller or handled as the
+origin response by the route that initiated it.
 
 AI Gateway tokens are added as `cf-aig-authorization`. Provider credentials are
 sent in the upstream authorization headers of Compatibility Endpoint requests,
@@ -88,3 +96,4 @@ application-layer policies around the Worker.
 
 - [Workers configuration](https://developers.cloudflare.com/workers/configuration/)
 - [Workers secrets](https://developers.cloudflare.com/workers/configuration/secrets/)
+- [Workers Request API](https://developers.cloudflare.com/workers/runtime-apis/request/)

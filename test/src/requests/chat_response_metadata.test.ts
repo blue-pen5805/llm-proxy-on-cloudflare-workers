@@ -3,6 +3,7 @@ import {
   ChatResponseRouteMetadata,
   enrichChatResponseWithMetadata,
 } from "~/src/requests/chat_response_metadata";
+import { MAX_SSE_RECORD_BYTES } from "~/src/requests/stream_limits";
 
 const directRoute: ChatResponseRouteMetadata = {
   provider: "openai",
@@ -259,5 +260,63 @@ describe("enrichChatResponseWithMetadata", () => {
     await response.body!.cancel("client disconnected");
 
     expect(cancel).toHaveBeenCalledWith("client disconnected");
+  });
+
+  it("terminates and cancels an upstream SSE record over the byte limit", async () => {
+    const cancel = vi.fn();
+    let sent = false;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent) return;
+        sent = true;
+        controller.enqueue(
+          new TextEncoder().encode(
+            `data: ${"x".repeat(MAX_SSE_RECORD_BYTES + 1)}`,
+          ),
+        );
+      },
+      cancel,
+    });
+    const upstream = new Response(stream, {
+      headers: { "Content-Type": "text/event-stream" },
+    });
+
+    const response = await enrichChatResponseWithMetadata(
+      metadataArguments(upstream),
+    );
+    const text = await response.text();
+
+    expect(text).toContain("Upstream SSE record exceeds the proxy limit.");
+    expect(text).not.toContain("proxy-metadata");
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a complete oversized SSE record", async () => {
+    const upstream = new Response(
+      `data: ${"x".repeat(MAX_SSE_RECORD_BYTES + 1)}\n\n`,
+      { headers: { "Content-Type": "text/event-stream" } },
+    );
+
+    const response = await enrichChatResponseWithMetadata(
+      metadataArguments(upstream),
+    );
+    const text = await response.text();
+
+    expect(text).toContain("Upstream SSE record exceeds the proxy limit.");
+    expect(text).not.toContain("proxy-metadata");
+  });
+
+  it("turns invalid UTF-8 during transform or flush into a terminal error", async () => {
+    for (const bytes of [new Uint8Array([0xff]), new Uint8Array([0xc3])]) {
+      const upstream = new Response(bytes, {
+        headers: { "Content-Type": "text/event-stream" },
+      });
+      const response = await enrichChatResponseWithMetadata(
+        metadataArguments(upstream),
+      );
+      const text = await response.text();
+      expect(text).toContain("invalid UTF-8");
+      expect(text).not.toContain("proxy-metadata");
+    }
   });
 });

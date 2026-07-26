@@ -35,6 +35,28 @@ const EMPTY_MODELS: OpenAIModelsListResponseBody = {
   data: [],
 };
 
+function reportModelsCacheUnavailable(
+  operation: "open" | "match" | "put",
+): void {
+  RequestLogger.warn(
+    "models.cache.unavailable",
+    "Models cache operation was unavailable; continuing without it",
+    { operation },
+  );
+}
+
+async function putModelsCache(
+  cache: Cache,
+  key: Request,
+  response: Response,
+): Promise<void> {
+  try {
+    await cache.put(key, response);
+  } catch {
+    reportModelsCacheUnavailable("put");
+  }
+}
+
 /**
  * Cache key for the aggregated models response. Built exclusively from
  * operator-validated values: account and gateway ids are charset-checked at
@@ -192,20 +214,37 @@ export async function handleModelsRequest(
     !requestCacheControl.includes("no-store");
   let modelsCache: { cache: Cache; key: Request } | undefined;
   if (cacheEnabled) {
-    modelsCache = {
-      cache: await caches.open(MODELS_CACHE_NAME),
-      key: buildModelsCacheKey(context.apiKeyIndex, aiGateway),
-    };
-    if (!requestCacheControl.includes("no-cache")) {
-      const cachedResponse = await modelsCache.cache.match(modelsCache.key);
-      if (cachedResponse) {
-        const cachedHeaders = new Headers(cachedResponse.headers);
-        // The stored Cache-Control only encodes the internal TTL; it must not
-        // let a response served under Authorization enter shared HTTP caches.
-        cachedHeaders.delete("Cache-Control");
-        cachedHeaders.set("X-Proxy-Models-Cache", "HIT");
-        return new Response(cachedResponse.body, { headers: cachedHeaders });
+    try {
+      const cache = await caches.open(MODELS_CACHE_NAME);
+      const candidate = {
+        cache,
+        key: buildModelsCacheKey(context.apiKeyIndex, aiGateway),
+      };
+      let cacheUsable = true;
+      if (!requestCacheControl.includes("no-cache")) {
+        try {
+          const cachedResponse = await cache.match(candidate.key);
+          if (cachedResponse) {
+            const cachedHeaders = new Headers(cachedResponse.headers);
+            // The stored Cache-Control only encodes the internal TTL; it must
+            // not let a response served under Authorization enter shared HTTP
+            // caches.
+            cachedHeaders.delete("Cache-Control");
+            cachedHeaders.set("X-Proxy-Models-Cache", "HIT");
+            return new Response(cachedResponse.body, {
+              headers: cachedHeaders,
+            });
+          }
+        } catch {
+          reportModelsCacheUnavailable("match");
+          // A failed cache read is treated as an unavailable Cache API for the
+          // whole request. Provider discovery remains authoritative.
+          cacheUsable = false;
+        }
       }
+      if (cacheUsable) modelsCache = candidate;
+    } catch {
+      reportModelsCacheUnavailable("open");
     }
   }
 
@@ -321,7 +360,8 @@ export async function handleModelsRequest(
   // never cached, so a transient upstream outage cannot pin an incomplete
   // model list for the full TTL.
   if (!providerFailed && !truncated) {
-    const cachePutPromise = modelsCache.cache.put(
+    const cachePutPromise = putModelsCache(
+      modelsCache.cache,
       modelsCache.key,
       new Response(responseBody, {
         headers: {

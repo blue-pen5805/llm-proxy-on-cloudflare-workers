@@ -1,12 +1,13 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "baseUrl": "../../",
+    "target": "es2022",
+    "lib": ["es2022"],
     "paths": {
-      "~/src/*": ["src/*"]
+      "~/src/*": ["../../src/*"]
     },
-    "types": ["@cloudflare/vitest-pool-workers/types"]
+    "types": ["node", "@cloudflare/vitest-pool-workers/types"]
   },
-  "include": ["./**/*.ts", "../worker-configuration.d.ts"],
+  "include": ["./**/*.ts", "../../worker-configuration.d.ts"],
   "exclude": []
 }

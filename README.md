@@ -123,6 +123,11 @@ select a Gateway other than the configured or implicit `default` Gateway.
 `GET /status` checks configured credentials but exposes configuration metadata
 and credential slot counts, so keep its output private.
 
+Workers Free limits each invocation to 50 subrequests, so `/v1/models` and
+`/status` may fail when many providers are configured. Consider Workers Paid in
+that case. See
+[Workers limits](https://developers.cloudflare.com/workers/platform/limits/#subrequests).
+
 Provider credential settings may also map profile names to key arrays. The
 unqualified route uses `default`; for example, configure an OpenAI `second`
 profile and request `openai:second/gpt-5.6-sol`. See the

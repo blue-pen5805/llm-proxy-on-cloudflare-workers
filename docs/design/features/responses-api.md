@@ -63,9 +63,18 @@ For `text/event-stream`, a `TransformStream` incrementally converts Chat chunks
 to typed Responses events. It emits response lifecycle events, message/content
 item creation, `response.output_text.delta`, function-call item creation,
 `response.function_call_arguments.delta`, matching done events, and a final
-`response.completed` or `response.incomplete`. It does not buffer the complete
-stream, and backpressure and request cancellation propagate through the Chat
-request path.
+`response.completed` or `response.incomplete`.
+
+The converter caps each SSE record at 1 MiB, retained text at 4 MiB, retained
+tool arguments at 4 MiB, tool metadata at 64 KiB, tool calls at 64, and output
+items at 64. These independent limits leave headroom beneath the Workers
+128 MiB isolate limit while the converter retains the content required to
+construct the final Responses event. Exceeding a limit or receiving malformed
+SSE emits a terminal `error` event, emits no success terminal event, and
+cancels the upstream stream. Backpressure and downstream cancellation otherwise
+propagate through the Chat request path. Consequently, the final event retains
+at most 8 MiB of generated content: up to 4 MiB of text plus up to 4 MiB of tool
+arguments, with item and metadata overhead bounded separately.
 
 ## Explicitly unsupported features
 

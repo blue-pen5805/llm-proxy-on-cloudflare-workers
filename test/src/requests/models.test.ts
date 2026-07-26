@@ -40,7 +40,7 @@ interface ModelsResponse {
 function mockProviderConstructor(instance: unknown) {
   return vi.fn(function () {
     return instance;
-  });
+  }) as unknown as (typeof BUILT_IN_PROVIDER_CONSTRUCTORS)[string];
 }
 
 describe("models", () => {
@@ -146,6 +146,7 @@ describe("models", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     Environments.setEnv(undefined);
   });
 
@@ -524,7 +525,7 @@ describe("models", () => {
 
     const response = await handleModelsRequest({} as any, mockAIGateway as any);
 
-    expect((await response.json()).data).toEqual([]);
+    expect(((await response.json()) as ModelsResponse).data).toEqual([]);
   });
 
   it("should handle provider errors gracefully", async () => {
@@ -875,6 +876,56 @@ describe("models", () => {
       Environments.setEnv({
         MODELS_CACHE_TTL_SECONDS: "60",
       } as unknown as Env);
+    });
+
+    it("falls back to uncached discovery when opening Cache API fails", async () => {
+      vi.spyOn(caches, "open").mockRejectedValue(
+        new Error("Cache API unavailable"),
+      );
+
+      const response = await handleModelsRequest({
+        apiKeyIndex: 41,
+      } as any);
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("X-Proxy-Models-Cache")).toBeNull();
+      expect(mockProviderClass.fetch).toHaveBeenCalled();
+    });
+
+    it("falls back to uncached discovery when reading Cache API fails", async () => {
+      const cache = {
+        match: vi.fn().mockRejectedValue(new Error("Cache read unavailable")),
+        put: vi.fn(),
+      } as unknown as Cache;
+      vi.spyOn(caches, "open").mockResolvedValue(cache);
+
+      const response = await handleModelsRequest({
+        apiKeyIndex: 42,
+      } as any);
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("X-Proxy-Models-Cache")).toBeNull();
+      expect(cache.put).not.toHaveBeenCalled();
+      expect(mockProviderClass.fetch).toHaveBeenCalled();
+    });
+
+    it("serves a cache miss when an asynchronous cache write fails", async () => {
+      const cache = {
+        match: vi.fn().mockResolvedValue(undefined),
+        put: vi.fn().mockRejectedValue(new Error("Cache write unavailable")),
+      } as unknown as Cache;
+      vi.spyOn(caches, "open").mockResolvedValue(cache);
+      const waitUntil = vi.fn();
+
+      const response = await handleModelsRequest({
+        apiKeyIndex: 43,
+        ctx: { waitUntil },
+      } as any);
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
+      expect(waitUntil).toHaveBeenCalledOnce();
+      await expect(waitUntil.mock.calls[0][0]).resolves.toBeUndefined();
     });
 
     it("stores successful aggregates and serves subsequent requests from the cache", async () => {
