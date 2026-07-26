@@ -8,6 +8,39 @@ and counts against the Worker's CPU budget. Optimizations therefore target
 parsing and allocation on the authenticated request path without
 buffering upstream responses or sharing request state globally.
 
+## Decision priorities
+
+For implementations that preserve the same behavior, security, and documented
+limits, evaluate choices in this order:
+
+1. Minimize expected Worker CPU time across the full request distribution.
+2. Prefer the simplest design when expected CPU cost is equivalent or
+   unmeasured.
+3. Improve wall-clock latency and memory use without moving unnecessary work
+   into the Worker.
+
+Cloudflare measures CPU time while Worker code is actively executing; time
+spent awaiting network or storage I/O does not count. Concurrency can reduce
+wall-clock latency, but it does not make parsing, transformation, logging, or
+other local work free. Similarly, `ctx.waitUntil()` removes eligible work from
+the response's critical path but does not eliminate that work's CPU cost.
+
+The common request path therefore follows these rules:
+
+- Forward request bodies and return upstream response streams directly when the
+  route contract does not require inspecting or changing their contents.
+- Parse, validate, filter, and serialize a payload no more than required by the
+  selected route. Reuse request-scoped intermediate values instead of
+  reconstructing or cloning them.
+- Defer provider-specific conversion, aggregation, diagnostics, and other
+  route-specific work until routing establishes that it is necessary.
+- Keep lookup work indexed and iteration bounded. Do not add speculative
+  precomputation, caching, or abstraction whose common-path overhead lacks a
+  measured or contract-driven justification.
+- Bound exceptional buffering and fan-out independently of performance
+  measurements so malformed or unusually large upstream data cannot exhaust an
+  isolate.
+
 ## Chat request parsing
 
 The chat handler parses and validates the incoming JSON once. The resulting
@@ -70,3 +103,13 @@ paths. Benchmarks are diagnostic rather than correctness gates because absolute
 results vary by machine. Results are comparable only for the same benchmark,
 runtime version, input, and machine. The Worker-runtime test suite and coverage
 thresholds enforce correctness.
+
+Production evaluation uses Workers CPU time rather than handler latency alone:
+handler latency includes upstream wait time and can move independently of local
+CPU consumption.
+
+## References
+
+- [Cloudflare Workers CPU time and limits](https://developers.cloudflare.com/workers/platform/limits/#cpu-time)
+- [Cloudflare Workers streaming best practices](https://developers.cloudflare.com/workers/best-practices/workers-best-practices/#stream-request-and-response-bodies)
+- [Cloudflare Workers Streams API](https://developers.cloudflare.com/workers/runtime-apis/streams/)

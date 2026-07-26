@@ -3,6 +3,28 @@
 These principles define the proxy's architecture, scope, and implementation
 constraints.
 
+## Minimize Worker CPU time, then complexity
+
+For designs that satisfy the documented behavior and security contracts,
+minimizing Cloudflare Workers CPU time is the first implementation priority.
+Minimize active work across the complete request path: perform only work needed
+by the selected route, avoid repeated parsing, serialization, copying, and
+lookup construction, and preserve request and response streams whenever their
+contents do not need to change. Network wait time is not Worker CPU time and
+must not be confused with local processing cost.
+
+When alternatives have equivalent expected CPU cost, choose the simplest
+implementation: the fewest transformations, states, branches, layers, and
+background tasks needed to express the contract. Additional abstraction,
+caching, or precomputation requires evidence that it reduces CPU across the
+expected workload or is necessary for correctness, security, or a documented
+operational limit. A local optimization is not a net improvement when its
+coordination, invalidation, or common-path overhead costs more than it saves.
+
+Performance work remains measurable and reviewable. Use representative
+hot-path benchmarks and production Workers CPU metrics where available, while
+keeping tests and explicit resource bounds as correctness gates.
+
 ## Build the smallest useful proxy
 
 The Worker is a narrow routing and credential boundary between clients,
