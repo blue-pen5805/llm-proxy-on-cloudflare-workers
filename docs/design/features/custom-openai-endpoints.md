@@ -2,7 +2,7 @@
 
 ## Motivation
 
-Deployment configuration can register OpenAI-compatible upstreams without a new
+Deployment configuration registers OpenAI-compatible upstreams without a
 provider class. This covers self-hosted inference and vendor endpoints whose
 authentication and response formats already follow the OpenAI contract.
 
@@ -37,10 +37,9 @@ managed AI Gateway Custom Provider instead of its direct Base URL. The
 deployment helper retains a final Base URL segment shaped like `/v[^/]+` and
 repeats it in every Gateway request path. For an unversioned Base URL, it
 registers a `/v1` sentinel that Cloudflare consumes during URL resolution. This
-compensates for Custom Provider path rewriting while preserving the endpoint's
-configured upstream URL. The provider remains registered under
-`LLM Proxy / <name>`. When strict mode is disabled, the configured Base URL and
-direct request behavior are unchanged.
+compensates for Custom Provider path rewriting and produces the configured
+upstream URL. The provider is registered under `LLM Proxy / <name>`. When
+strict mode is disabled, direct requests use the configured Base URL.
 
 ## Authentication and rotation
 

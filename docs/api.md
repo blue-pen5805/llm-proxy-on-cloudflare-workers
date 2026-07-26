@@ -23,8 +23,8 @@ OpenAI-compatible Chat Completions and converted Responses or Messages output.
 | `POST`    | `/g/<gateway>/ai/v1/chat/completions`  | AI Gateway REST API: Chat Completions             |
 | `POST`    | `/g/<gateway>/ai/v1/responses`         | AI Gateway REST API: Responses                    |
 | `POST`    | `/g/<gateway>/ai/v1/messages`          | AI Gateway REST API: Messages                     |
-| `POST`    | `/g/<gateway>/`                        | Legacy AI Gateway Universal Endpoint              |
-| `POST`    | `/g/<gateway>/compat/chat/completions` | Legacy AI Gateway compatibility pass-through      |
+| `POST`    | `/g/<gateway>/`                        | AI Gateway Universal Endpoint                     |
+| `POST`    | `/g/<gateway>/compat/chat/completions` | AI Gateway compatibility pass-through             |
 
 `/chat/completions`, `/responses`, `/messages`, and `/models` are aliases of
 their `/v1` forms. Supported routes may be prefixed with `/g/<gateway>` to
@@ -34,14 +34,14 @@ routes may also use `/key/<selection>` to select provider credentials. When
 both are used, the key prefix comes first: `/key/1/g/team-gateway/v1/models`.
 
 When `ALWAYS_USE_AI_GATEWAY=true`, every provider subrequest made by chat,
-Responses, Messages, models, status, or provider pass-through routing uses AI Gateway. The configured
-`AI_GATEWAY_NAME` is selected automatically; when it is absent, the Gateway
-name is `default`. An explicit `/g/<gateway>` prefix still overrides it. Native
-Gateway provider routes are preferred, while unsupported operations use the
-managed `custom-llm-proxy-<provider>` provider segment. Strict mode never
-silently falls back to the direct Base URL.
+Responses, Messages, models, status, or provider pass-through routing uses AI
+Gateway. The configured `AI_GATEWAY_NAME` is selected automatically; when it is
+absent, the Gateway name is `default`. An explicit `/g/<gateway>` prefix
+overrides it. Native Gateway provider routes are preferred, while unsupported
+operations use the managed `custom-llm-proxy-<provider>` provider segment.
+Strict mode never silently falls back to the direct Base URL.
 
-The legacy Universal Endpoint body must be a non-empty JSON array with at most
+The Universal Endpoint body must be a non-empty JSON array with at most
 16 steps. Each step needs a supported `provider` and an object-valued `query`.
 Client-provided authentication headers cannot override the configured provider
 credential. A custom step `endpoint` is normalized to a relative path, limited
@@ -69,10 +69,10 @@ uses `DEFAULT_MODEL`. Invalid JSON, a missing model, an unknown provider, or a
 missing default returns HTTP 400.
 
 Append `:<profile>` to select a named provider credential pool, for example
-`openai:second/gpt-5.6-sol`. Omitting it selects `default`, preserving existing
-model IDs. The same selector works in pass-through paths and as the Universal
-Endpoint `provider` value. A missing or malformed named profile is rejected as
-an unknown provider selector.
+`openai:second/gpt-5.6-sol`. Omitting it selects `default`; default-profile
+model IDs use `<provider>/<model>`. The same selector works in pass-through
+paths and as the Universal Endpoint `provider` value. A missing or malformed
+named profile is rejected as an unknown provider selector.
 
 A `model` that does not name a real provider but matches a key in
 `VIRTUAL_MODELS` selects an operator-defined
@@ -125,14 +125,14 @@ No credential value or derived identifier is exposed. For example:
 }
 ```
 
-With `"stream": true`, existing SSE chunks remain unchanged and one additional
+With `"stream": true`, provider SSE chunks pass through unchanged and one additional
 `chat.completion.chunk` with `choices: []` and `llm_proxy` is emitted immediately
 before `data: [DONE]`. Its `duration_ms` measures through stream completion;
 `headers_received_ms` measures time to the selected upstream response headers.
 Clients that strictly enumerate chunks should accept or ignore an empty-choice
 metadata chunk. A JSON body is parsed only up to 5 MiB; malformed, oversized,
 non-object, and non-JSON upstream responses are returned unchanged. Local errors
-that occur before provider selection also keep their existing shape. See
+that occur before provider selection do not include the extension. See
 [the response metadata design](design/features/chat-response-metadata.md).
 
 The setting defaults to `false`. When disabled, the response body and stream are
@@ -150,9 +150,8 @@ omitted from `/v1/models`.
 
 ## Responses
 
-The proxy's Responses compatibility API is experimental. Its supported fields,
-output mapping, and streaming event conversion may change before it is promoted
-to a stable contract.
+The proxy's Responses compatibility API is experimental and limited to the
+fields, output mapping, and streaming events documented in this section.
 
 `POST /v1/responses` and its `/responses` alias accept an OpenAI Responses
 request with the same provider-qualified `model` used by Chat Completions:
@@ -202,8 +201,8 @@ complete boundary.
 
 ## Messages
 
-The proxy's Anthropic Messages compatibility API is experimental. Its accepted
-fields and converted JSON/SSE events may change before it becomes stable.
+The proxy's Anthropic Messages compatibility API is experimental and limited to
+the fields and converted JSON/SSE events documented in this section.
 
 `POST /v1/messages` and its `/messages` alias accept an Anthropic Messages body
 whose `model` uses the same provider-qualified selector as Chat Completions:
@@ -244,7 +243,7 @@ boundary.
 ## Models
 
 `GET /v1/models` queries configured providers and prefixes each returned ID
-with its route selector. Default-profile IDs remain `<provider>/<model>` and
+with its route selector. Default-profile IDs use `<provider>/<model>` and
 named-profile IDs use `<provider>:<profile>/<model>`. When `VIRTUAL_MODELS` is configured, every virtual model is
 listed first — ahead of the provider models — with `owned_by: "virtual"`, so
 clients discover them at the front of the list. All configured providers are
@@ -440,8 +439,8 @@ authenticated and do not publish its output in support tickets without review.
 The response body uses compact JSON without indentation or line breaks.
 
 Timeouts, unsupported model listing, and non-authentication HTTP failures are
-reported as `unknown`. Authentication failures are `invalid`; unexpected fetch
-errors currently also result in `invalid` after being logged.
+reported as `unknown`. Authentication failures and unexpected fetch errors are
+`invalid`; unexpected fetch errors are also logged.
 
 ## Errors
 

@@ -59,7 +59,7 @@ Gateway cache, retry, logging, cost, and metadata behavior per request. Restrict
 proxy credentials accordingly.
 
 > `DEV=true` exposes the proxy without client authentication. A missing
-> `PROXY_API_KEY` no longer enables anonymous access; it returns HTTP 503.
+> `PROXY_API_KEY` returns HTTP 503.
 
 ## Provider credentials
 
@@ -151,16 +151,16 @@ selected profile. Rotation and cooldown state are independent between profiles.
 `GET /v1/models` and `/status` include one entry per configured profile. Default
 model IDs keep `<provider>/<model>`; named profiles use
 `<provider>:<profile>/<model>`. Auxiliary routing settings such as Azure
-resource name, Bedrock region, Workers AI account ID, and Vertex `region` remain
+resource name, Bedrock region, Workers AI account ID, and Vertex `region` are
 provider-wide. Vertex profiles map names to service-account objects or arrays;
 Custom OpenAI endpoint `apiKeys` accepts the same string, array, or profile-map
 forms.
 
 An unconfigured static provider is reported as unavailable and omitted from
-model aggregation. Its route name still resolves, so an attempted request will
-normally fail at the upstream rather than at route lookup. Some providers
-support pass-through requests but cannot translate chat completions or list
-models; consult [HTTP API and routing](api.md) for endpoint behavior.
+model aggregation. Route resolution is independent of availability, so a
+request normally fails at the upstream rather than at route lookup. Some
+providers support pass-through requests but cannot translate chat completions
+or list models; consult [HTTP API and routing](api.md) for endpoint behavior.
 
 ## AI Gateway
 
@@ -186,7 +186,7 @@ Universal Endpoint requests.
 With `ALWAYS_USE_AI_GATEWAY=true`, `CLOUDFLARE_ACCOUNT_ID` and
 `CLOUDFLARE_API_TOKEN` are required. `AI_GATEWAY_NAME` is optional: the Worker
 uses the Gateway named `default` when it is absent. A `/g/<gateway>/` prefix
-still overrides the selected Gateway for one request. Native provider routes
+overrides the selected Gateway for one request. Native provider routes
 are used where Cloudflare supports the operation. Other operations use managed
 AI Gateway Custom Providers and never fall back to a direct origin.
 
@@ -224,11 +224,6 @@ path prefix overrides automatic selection for chat, Responses, Messages, model-l
 and registered provider pass-through requests. Other routes reject the prefix
 with HTTP 400. Model listing intentionally uses the first key unless an explicit
 selection is given.
-
-`ENABLE_GLOBAL_ROUND_ROBIN` is no longer a configuration setting. For migration,
-`npm run secrets:deploy` accepts a configuration file that still contains it,
-prints a warning, and omits it from the secret operations. Remove the obsolete
-property; its value has no effect.
 
 For chat and provider pass-through requests, an attributable upstream HTTP
 401, 403, 404, 429, or 5xx response puts that provider key slot into an
@@ -273,7 +268,7 @@ the entire configuration file as sensitive.
 Malformed JSON, unsafe URLs or paths, limit violations, duplicate names, and
 built-in route collisions cause authenticated requests to fail with HTTP 503.
 The public error identifies `CUSTOM_OPENAI_ENDPOINTS` as invalid without
-including its contents. Missing or explicit `null` configuration still means no
+including its contents. Missing or explicit `null` configuration means no
 custom endpoints are configured.
 
 ## Virtual models
@@ -316,8 +311,8 @@ candidate-specific timeout. Expiration aborts the upstream fetch and is treated
 as a retryable failure. The timer is cleared once headers arrive, so it does not
 limit how long the client may consume a valid streaming response.
 
-Every attempt reuses that candidate's normal request path (direct, AI Gateway,
-or Custom Provider) and existing per-provider key policy. With no `/key/...`
+Every attempt uses that candidate's normal request path (direct, AI Gateway,
+or Custom Provider) and per-provider key policy. With no `/key/...`
 prefix, configured keys use striped per-isolate round-robin. An explicit key
 index or range overrides that automatic policy for all attempts. A fixed
 numeric index stays fixed modulo each provider's key count, while a range is

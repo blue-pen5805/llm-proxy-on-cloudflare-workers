@@ -6,12 +6,12 @@ The `Provider` interface defines upstream URL construction, key access, request
 headers, chat request filtering, model request construction, and model response
 normalization. `createProvider` composes the shared behavior with a small
 `ProviderDefinition` containing only provider-specific values and hooks.
-`defineProvider` preserves the existing `new ProviderName()` constructor
-interface without coupling adapters through a base-class hierarchy.
+`defineProvider` exposes a `new ProviderName()` constructor interface without
+coupling adapters through a base-class hierarchy.
 
-`ProviderBase` and `OpenAICompatibleProvider` remain constructable compatibility
-exports. New adapters should use definitions directly; OpenAI-compatible
-definitions opt into the shared JSON and Bearer-authentication behavior with
+`ProviderBase` and `OpenAICompatibleProvider` are constructable exports.
+Provider adapters use definitions directly; OpenAI-compatible definitions opt
+into the shared JSON and Bearer-authentication behavior with
 `openAICompatible: true`.
 
 This is an adapter boundary rather than a promise of complete semantic parity.
@@ -31,9 +31,8 @@ consistent provider view without rebuilding every adapter during route
 selection.
 
 The top-level `getProviderByName` and `getAllProviderInstances` functions are
-convenience facades over the registry. Built-in provider lookup and aggregate
-listing keep their existing precedence when a custom endpoint reuses a built-in
-name.
+convenience facades over the registry. Built-in providers take precedence over
+custom endpoints with the same name in lookup and aggregate listing.
 
 Universal Endpoint steps must pass both Cloudflare's supported-provider check
 and lookup in the request-scoped registry. A provider advertised by Gateway but
@@ -43,8 +42,8 @@ constructor failure.
 Availability is normally determined by whether a provider's configured key
 list is non-empty. Workers AI has additional account configuration, while
 custom endpoints are available by definition. Availability controls model
-aggregation and status metadata; routing still resolves a registered provider
-class even when it has no key.
+aggregation and status metadata. Routing resolves a registered provider class
+even when it has no key.
 
 AI Gateway-managed authentication is a deliberate exception: chat and model
 requests may be sent
@@ -56,7 +55,7 @@ Amazon Bedrock and Azure OpenAI opt model discovery out of this exception:
 their model requests are omitted unless all locally required provider
 credentials and routing identifiers are valid. This prevents aggregate model
 discovery from sending predictably unauthenticated requests through Gateway.
-Gateway-specific credential representations remain index-aligned with the
+Gateway-specific credential representations are index-aligned with the
 provider's ordinary credential list so explicit and coordinated selection refer
 to the same slot within the selected credential profile.
 Providers may also declare Gateway as mandatory; direct chat and pass-through
@@ -119,8 +118,8 @@ client cancellation can stop avoidable work. The Worker enables the
 5. Preserve upstream errors and reject Responses features that cannot retain
    their semantics through Chat Completions.
 
-Responses compatibility is consequently derived from each provider's declared
-Chat capability rather than a new provider-native capability. See
+Responses compatibility is derived from each provider's declared Chat
+capability rather than provider-native Responses support. See
 [OpenAI-compatible Responses](responses-api.md) for the supported mapping and
 explicit exclusions.
 
@@ -152,10 +151,11 @@ malformed responses are logged and omitted.
 
 ## Extension requirements
 
-A new provider requires a definition, registration, configuration/schema
-support, contract tests, and documentation. Tests should cover URL and header construction,
-availability, supported chat fields, model conversion, direct routing, and AI
-Gateway behavior independently. See [Development and verification](../../development.md).
+A provider consists of a definition, registry entry, configuration/schema
+support, contract tests, and documentation. Tests cover URL and header
+construction, availability, supported chat fields, model conversion, direct
+routing, and AI Gateway behavior independently. See
+[Development and verification](../../development.md).
 
 ## References
 

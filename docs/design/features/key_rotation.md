@@ -8,21 +8,20 @@ Provider keys are normalized to arrays. Selection follows this precedence:
 2. Striped round-robin when the provider has multiple keys.
 3. Index zero for zero or one key.
 
-For automatic chat and provider pass-through selection, currently cooling key
+For automatic chat and provider pass-through selection, cooling key
 slots are removed before the selected rotation phase is resolved. Explicit
-selection remains higher precedence than cooldown filtering.
+selection has higher precedence than cooldown filtering.
 
 Model aggregation is an exception: it uses the first key by default so
-read-only discovery does not advance rotation. Explicit key selection still
-applies.
+read-only discovery does not advance rotation. Explicit key selection applies.
 
 ## Striped isolate-local rotation
 
 Each rotation identifier maps to an in-memory counter scoped to the Worker
 isolate. Static providers use their environment variable name and profile;
 custom endpoints use their configured endpoint name and profile. The default
-profile retains the established unsuffixed identifier. The first selection in an isolate draws a
-cryptographically random starting phase; subsequent selections advance the
+profile uses the unsuffixed identifier. The first selection in an isolate draws
+a cryptographically random starting phase; subsequent selections advance the
 counter modulo the key count.
 
 Rotation exists to spread load across keys so no single key exhausts its
@@ -59,8 +58,8 @@ Filtering is availability-preserving. A provider with zero or one key follows
 its ordinary selection. If every slot is cooling, selection ignores all
 cooldowns and uses the ordinary rotation result. Explicit numeric or range
 selection also bypasses cooldown filtering because caller selection has higher
-precedence. AI Gateway Compatibility fallback omits cooling slots while at
-least one eligible local credential remains and records each attributable
+precedence. AI Gateway Compatibility fallback omits cooling slots when at least
+one eligible local credential is available and records each attributable
 attempt separately.
 
 ## Explicit selection

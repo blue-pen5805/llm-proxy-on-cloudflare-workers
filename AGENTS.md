@@ -44,6 +44,17 @@ These instructions apply to the entire repository.
 - Cite current official documentation when behavior depends on Cloudflare or a
   provider API.
 
+## Keep documentation current
+
+- Except for `CHANGELOG.md`, documentation describes only the current project
+  state. Do not explain historical transitions, superseded behavior, or
+  differences from earlier versions.
+- Keep documentation objective and concise. Remove redundant explanations and
+  express behavior directly as the current contract.
+- `CHANGELOG.md` is the sole history document and must not be deleted or
+  rewritten as a current-state reference. Record application functionality and
+  externally observable runtime changes there in reverse chronological order.
+
 ## Finish changes completely
 
 - Add `CHANGELOG.md` entries only for changes to application functionality or
@@ -62,7 +73,7 @@ These instructions apply to the entire repository.
   resulting version to the operator, and never update the version number
   without their explicit confirmation.
 - Do not leave placeholder implementations or `TODO` comments unless the user
-  explicitly requests them. Roadmap work belongs in `TODO.md`.
+  explicitly requests them.
 - Preserve unrelated worktree changes and never include local configuration or
   generated secret files in a change.
 - Verify changes according to

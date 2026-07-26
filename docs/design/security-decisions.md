@@ -1,8 +1,7 @@
 # Security Design Decisions
 
-Behaviors that are intentional or accepted risks, documented so they are not
-repeatedly questioned. Each entry states the behavior, the rationale, where it
-lives, and the condition under which it should be reconsidered.
+This document defines intentional security behavior, accepted risks, rationale,
+and enforced boundaries.
 
 ## Client-controlled `cf-aig-*` request headers are forwarded to AI Gateway
 
@@ -23,11 +22,6 @@ allow cross-caller cache reads or poisoning). See
 `OPERATOR_CONTROLLED_AI_GATEWAY_HEADERS` and `stripProxyAuthorizationHeaders`
 in `src/utils/authorization.ts`.
 
-**Reconsider if.** The proxy is deployed multi-tenant behind a single shared
-Gateway where callers must not influence each other's analytics/cost/log
-records. In that case, move the relevant `cf-aig-*` headers to the
-operator-controlled set as well.
-
 ## `/models` and `/status` fan out to every provider
 
 **Behavior.** A single authenticated `GET /models` or `GET /status` request
@@ -45,11 +39,6 @@ Validated provider configuration limits, per-provider response-size caps, and a
 listings, though a client can still force a fan-out with
 `Cache-Control: no-store`/`no-cache` or a `cf-aig-*` header.
 
-**Reconsider if.** These routes are exposed to low-trust clients or provider
-rate limits become a practical concern. A per-key rate limit, or ignoring
-client cache-bypass directives on `/models`, would mitigate it; `/status` has
-no cache.
-
 ## `cf-ray` is used as the log `request_id`
 
 **Behavior.** The structured-log request identifier is taken from the incoming
@@ -59,10 +48,6 @@ no cache.
 identifier is used only for log correlation — never as an authorization or
 integrity control. A spoofed value can at most muddle log correlation for the
 spoofer's own requests; it grants no access and affects no routing.
-
-**Reconsider if.** Logs become an input to an automated security decision (for
-example, correlation-based blocking), at which point the id should be
-server-generated unconditionally.
 
 ## Clients can select the upstream key slot via `/key/...`
 
@@ -75,7 +60,3 @@ credential (for example, to confirm a rotated key works). It never reveals key
 material, and every selection is reduced into range with a modulo bound, so an
 out-of-range index cannot escape the configured key set. See
 `Secrets.resolveApiKeyIndex` in `src/utils/secrets.ts`.
-
-**Reconsider if.** Key-slot selection should be operator-only. Gating the
-feature behind a configuration flag would separate the diagnostic capability
-from ordinary proxy traffic.

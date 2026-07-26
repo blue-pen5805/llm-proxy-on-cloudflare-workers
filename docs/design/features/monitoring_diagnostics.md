@@ -91,7 +91,7 @@ fragments, and arbitrary thrown objects are not logged.
 `provider.key.selected` reports `provider`, `operation`, zero-based
 `key_index`, `key_count`, `credential_configured`, `selection_policy`, and
 `via_ai_gateway`. Named profiles also report `credential_profile`; the default
-profile omits that field to retain the established event shape. For one-to-one provider requests, a generated
+profile omits that field. For one-to-one provider requests, a generated
 `provider_request_id` links the selection to its
 `subrequest.completed` or `subrequest.failed` event. Gateway Compatibility
 fallback emits one selection event and one request ID for each credential that

@@ -40,9 +40,7 @@ including `--dry-run`, checks the graph before invoking Wrangler and rejects
 direct and indirect cycles. Runtime validation repeats the check for
 configuration installed outside that helper. Validation also computes the
 worst-case number of concrete provider attempts after references and retries
-are expanded. Every virtual model must remain within 96 attempts, preserving
-the previous single-chain bound instead of allowing nested retries to multiply
-without limit.
+are expanded. Every virtual model is limited to 96 concrete attempts.
 
 Configuration remains trusted operator input, matching `CUSTOM_OPENAI_ENDPOINTS`:
 schema and runtime validation reject malformed names, empty or oversized
@@ -64,11 +62,10 @@ provider nor a configured virtual model returns the same HTTP 400
 model name is indistinguishable from a typo in a provider name.
 
 Each candidate is resolved recursively. A candidate that names another virtual
-model runs that model's ordered chain; otherwise it uses the existing
-single-model path (`attemptChatCompletion`), unchanged from a plain
-`"<provider>/<model>"` request. The same provider resolution, AI Gateway routing
-decision, header sanitization, and per-provider key rotation apply. Without an
-explicit key path,
+model runs that model's ordered chain; otherwise it uses the single-model path
+(`attemptChatCompletion`) for a plain `"<provider>/<model>"` request. The same
+provider resolution, AI Gateway routing decision, header sanitization, and
+per-provider key rotation apply. Without an explicit key path,
 each candidate attempt selects a configured key using striped per-isolate
 round-robin. An explicit `/key/<index>/...` selection
 uses that index for every attempt (modulo each provider's key count), while an
@@ -165,12 +162,12 @@ valid, not that candidates are equivalent to one another.
 
 ## Non-idempotent requests
 
-Resolution issues a fresh upstream request per candidate. As with
-per-credential retry, a candidate that fails after partially executing a
+Resolution issues a fresh upstream request per candidate. A candidate that
+fails after partially executing a
 non-idempotent upstream side effect (for example, a provider that bills or logs
 on receipt rather than on completion) may still incur that cost even though its
-response is discarded. This mirrors the existing accepted risk in
-per-credential retry and is not specific to virtual models.
+response is discarded. Per-credential retries and virtual-model retries share
+this risk.
 
 ## Observability
 

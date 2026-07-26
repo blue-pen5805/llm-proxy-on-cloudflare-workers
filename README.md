@@ -137,4 +137,3 @@ profile and request `openai:second/gpt-5.6-sol`. See the
 - [Development and verification](docs/development.md)
 - [Architecture and design](docs/design/overview.md)
 - [Project principles](docs/project-principles.md)
-- [Roadmap candidates](TODO.md)

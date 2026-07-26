@@ -17,7 +17,6 @@ LLM proxy. Start with the setup guide, then use the task-oriented guides below.
 - [Repository instructions for coding agents](../AGENTS.md)
 - [Development and verification](development.md)
 - [Architecture and design](design/overview.md)
-- [Roadmap candidates](../TODO.md)
 
 ## Documentation conventions
 

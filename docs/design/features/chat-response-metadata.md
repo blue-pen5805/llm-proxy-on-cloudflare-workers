@@ -12,8 +12,7 @@ This is a route-specific, operator-enabled compatibility extension, not a
 proxy-wide response envelope. `CHAT_RESPONSE_METADATA_ENABLED` defaults to
 `false`; while disabled, Chat Completions and converted Responses or Messages output omit
 the extension. Provider pass-through, AI Gateway REST, Universal Endpoint,
-model discovery, and local pre-routing errors retain their existing response
-contracts regardless of the setting.
+model discovery, and local pre-routing errors do not include the extension.
 
 ## Metadata contract
 
@@ -48,18 +47,18 @@ An object-valued `application/json` response receives `llm_proxy` as an additive
 top-level field, including an upstream JSON error response after the route has
 been selected. The proxy parses at most 5 MiB. If the body exceeds the limit, is
 malformed, is not a JSON object, or has a non-JSON content type, it is returned
-unchanged. A local error produced before a concrete provider is selected also
-retains its existing contract. Headers that describe the old body representation
+unchanged. A local error produced before a concrete provider is selected does
+not include the extension. Headers that describe the source body representation
 or validator (`Content-Length`, `Content-Encoding`, `Content-MD5`, `Digest`, and
-`ETag`) are removed after a successful rewrite.
+`ETag`) are removed when the body is rewritten.
 
 ## Streaming responses
 
-A `text/event-stream` body remains streaming. A transform reads only
+A `text/event-stream` body is streamed. A transform reads only
 enough decoded text to find complete SSE lines and inserts one OpenAI-compatible
 chunk with `choices: []` and `llm_proxy` immediately before `data: [DONE]`. If a
 provider closes a valid event stream without a done marker, the chunk is emitted
-at the end. Existing provider chunks are otherwise forwarded unchanged.
+at the end. Provider chunks are otherwise forwarded unchanged.
 
 The Responses compatibility layer preserves the JSON `llm_proxy` object on the
 converted top-level Responses object. For streaming output, it consumes the
@@ -91,4 +90,5 @@ and `model` identify the candidate that actually produced the response.
 Client response metadata complements rather than replaces Workers Logs and AI
 Gateway analytics. It contains only information needed to explain the selected
 chat route. Full retry history, rejected candidates, upstream URLs, provider
-request IDs, and diagnostic errors remain in content-minimal structured logs.
+request IDs, and diagnostic errors are recorded only in content-minimal
+structured logs.

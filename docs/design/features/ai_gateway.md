@@ -18,8 +18,8 @@ request and is removed before normal routing.
 
 `ALWAYS_USE_AI_GATEWAY=true` enables strict Gateway routing. It requires an
 account ID, selects `AI_GATEWAY_NAME` when present, and otherwise selects the
-Gateway named `default`. The explicit `/g/<gateway>/` prefix continues to
-override that selection for one request. Strict mode fails closed rather than
+Gateway named `default`. The explicit `/g/<gateway>/` prefix overrides that
+selection for one request. Strict mode fails closed rather than
 falling back to a direct provider request.
 
 If `CF_AIG_TOKEN` exists, requests add
@@ -73,58 +73,44 @@ OpenAI-compatible paths and `x-goog-api-key` for native Gemini paths. Providers
 absent from the locally maintained supported set are called directly unless
 strict Gateway routing is enabled.
 
-In strict mode, provider operations with a native AI Gateway route continue to
-use that route. An operation without a native route uses an account-level
+In strict mode, provider operations with a native AI Gateway route use that
+route. An operation without a native route uses an account-level
 Custom Provider whose display name is `LLM Proxy / <name>`. Simple provider
 names produce a stored slug of `llm-proxy-<name>` and therefore a Gateway URL
 provider segment of `custom-llm-proxy-<name>`. Names that require slug
 normalization receive a deterministic hash suffix so distinct configured names
 do not silently collapse to the same slug.
 
-Cloudflare Custom Provider routing rewrites version-looking path segments as
-described below. Strict mode compensates without changing the provider or
-operator configuration contract. If the configured Base URL ends in a segment
-shaped like `/v[^/]+`, synchronization retains the complete Base URL and every
-Gateway request repeats that segment first. For example, Cline stores
-`https://api.cline.bot/api/v1`, and model discovery sends
-`/v1/ai/cline/recommended-models`. If the Base URL does not end in such a
-segment, synchronization appends a `/v1` sentinel for Gateway to consume while
-the request retains only the adapter prefix and operation path. Ollama therefore
-stores `https://ollama.com/v1` and sends `/v1/models`, producing the intended
-`https://ollama.com/v1/models` upstream URL.
-
-This compensation is exclusive to managed Custom Provider synchronization and
-routing under `ALWAYS_USE_AI_GATEWAY=true`. Direct requests continue to
-concatenate the configured Base URL and operation path without this
-transformation. The provider-specific Gateway endpoint preserves native request
-bodies and supports non-standard paths; it does not force the Compatibility
-Endpoint contract on an incompatible operation.
-
-### Observed Custom Provider path rewriting (2026-07-19)
+### Custom Provider path behavior
 
 Cloudflare's [Custom Providers documentation](https://developers.cloudflare.com/ai-gateway/configuration/custom-providers/)
-states that the provider path is appended directly to `base_url`. Live testing
-on 2026-07-19 instead observed the following undocumented behavior. Treat this
-as a platform quirk, not a stable contract, and reverify it when Cloudflare
-changes Custom Provider routing:
+defines the provider path as a direct append to `base_url`. The Worker's
+integration contract accounts for the following effective Gateway routing
+behavior, which is not part of Cloudflare's documented platform contract:
 
-| Configured Base URL      | Gateway provider path | Observed upstream URL               |
+| Configured Base URL      | Gateway provider path | Effective upstream URL              |
 | ------------------------ | --------------------- | ----------------------------------- |
 | `https://example.com/v1` | `/models`             | `https://example.com/models`        |
 | `https://example.com`    | `/models`             | `https://example.com/v1/models`     |
 | `https://example.com`    | `/v2/models`          | `https://example.com/v2/models`     |
 | `https://example.com`    | `/vABCDE/models`      | `https://example.com/vABCDE/models` |
 
-The observed trigger is broader than the literal `/v1`: a final Base URL
-segment shaped like `/v[^/]+` is omitted, while a Base URL without such a final
-segment receives an implicit `/v1` before the requested path. Gateway does not
-insert that implicit segment when the requested path itself begins with a
-segment shaped like `/v[^/]+`.
+Gateway omits a final Base URL segment shaped like `/v[^/]+`. A Base URL
+without such a final segment receives an implicit `/v1` before the requested
+path, except when the requested path begins with a segment shaped like
+`/v[^/]+`.
 
-The Worker's managed-provider workaround encodes this observed behavior so the
-resulting upstream URL matches direct routing for both versioned and unversioned
-Base URLs. It must be revisited if Cloudflare changes this undocumented
-rewriting.
+Strict mode compensates for this behavior. For a Base URL ending in `/v[^/]+`,
+synchronization keeps the complete URL and repeats the final segment at the
+start of each Gateway path. For any other Base URL, synchronization appends a
+`/v1` sentinel and sends the adapter prefix and operation path after it. This
+managed-provider path construction produces the same upstream URL as direct
+routing. Direct requests concatenate the configured Base URL and operation path
+without the transformation.
+
+The provider-specific Gateway endpoint preserves native request bodies and
+supports non-standard paths; it does not apply the Compatibility Endpoint
+contract to incompatible operations.
 
 Custom Providers are synchronized by `npm run secrets:deploy` before Worker
 secrets are applied. The helper lists account providers and creates missing
@@ -166,11 +152,8 @@ fallback cannot override the caller's selection. Each attempted credential is
 logged with its actual slot. The model is rewritten to `<provider>/<model>` for
 Gateway's compatibility endpoint.
 
-OpenRouter is retained in this subset because the Compatibility Endpoint has
-been verified to accept it in production even though the current provider list
-in Cloudflare documentation does not advertise that combination. Treat this as
-an operational compatibility contract and reverify it when Gateway behavior
-changes.
+OpenRouter is included in this subset under a tested operational contract for
+the Compatibility Endpoint.
 
 ### OpenAI-compatible Responses
 
@@ -187,30 +170,30 @@ Completions. Its converted request follows the same Compatibility Endpoint,
 provider-native chat, or strict Custom Provider path. AI Gateway receives Chat
 Completions format, and the Worker converts successful JSON or SSE back to
 Anthropic Messages format. The provider-native
-`/<provider>/v1/messages` pass-through route remains a separate contract.
+`/<provider>/v1/messages` pass-through route has a separate contract.
 
-### Legacy Universal Endpoint and compatibility pass-through
+### Universal Endpoint and compatibility pass-through
 
 `POST /g/<gateway>/` accepts the repository's Universal Endpoint request shape,
 validates provider names against both the Gateway-supported set and the local
 request-scoped Provider Registry, injects selected provider headers, and
 forwards the mapped steps to Gateway's Universal Endpoint. Gateway providers
 without a local adapter fail with HTTP 400. This also normalizes each optional
-endpoint to a bounded, safe relative path. This explicit route remains
-available even though normal OpenAI-compatible chat uses the Compatibility
+endpoint to a bounded, safe relative path. This explicit route is available
+alongside normal OpenAI-compatible chat through the Compatibility
 Endpoint. `POST /g/<gateway>/compat/chat/completions` forwards directly to that
 fixed Gateway endpoint after stripping proxy credentials. No other path under
 `/compat` is exposed.
 
-## Maintenance risk
+## Provider support contract
 
-The supported-provider arrays in `src/ai_gateway/const.ts` are code, not dynamic
-Gateway discovery. They must normally be checked against current Cloudflare
-documentation when providers are added or Gateway behavior changes. A tested
-operational exception such as OpenRouter must be documented and covered by
+The supported-provider arrays in `src/ai_gateway/const.ts` are static and do not
+use dynamic Gateway discovery. The arrays, current Cloudflare documentation,
+design documentation, and integration tests define provider support together.
+Operational contracts such as OpenRouter are documented and covered by
 integration tests. Strict routing marks configured custom endpoints explicitly
-so a name that happens to match a Cloudflare-native provider cannot escape its
-managed Custom Provider route.
+so a name that matches a Cloudflare-native provider cannot escape its managed
+Custom Provider route.
 
 ## References
 

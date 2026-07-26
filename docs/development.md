@@ -135,22 +135,7 @@ required test suite because they require operator credentials and incur cost.
 Use the separate [live provider testing guide](live-provider-testing.md) when
 validating the local development server against current provider models.
 
-## Changelog and package version
-
-Add `CHANGELOG.md` entries only for changes to application functionality or
-externally observable runtime behavior. Documentation, contributor guidance,
-project policy, development process, tests, refactors, and maintenance with no
-functional effect do not belong in the changelog.
-
-When finishing a work session with changelog-worthy changes, derive the entries
-from the net difference between the state at the start of the session and the
-final state. Describe only the resulting functionality or behavior. Do not
-record intermediate revisions, superseded directions, or approaches that were
-later reverted; consolidate related work into concise entries instead. Add the
-entries at the top of the applicable section, include the change date in
-`YYYY-MM-DD` format, and keep entries in reverse chronological order; for
-multiple entries on the same date, put the newest entry first. Keep pending
-changes under `Unreleased` until a versioned release is prepared.
+## Package version
 
 After completing the change, assess its semantic-versioning impact:
 
@@ -160,12 +145,7 @@ After completing the change, assess its semantic-versioning impact:
 
 Propose the resulting `package.json` version to the operator. Do not change the
 version number without their explicit confirmation. When a version change is
-approved, keep `package.json`, `package-lock.json`, and the version heading in
-`CHANGELOG.md` synchronized.
-
-The next release is currently planned as `1.0.0`. This plan does not authorize
-a version change: keep the package at `0.2.1` until the operator explicitly
-approves the update.
+approved, keep `package.json` and `package-lock.json` synchronized.
 
 ## Documentation maintenance
 

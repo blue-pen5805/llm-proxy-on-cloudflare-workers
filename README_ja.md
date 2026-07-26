@@ -97,7 +97,7 @@ Completions 形式に変換し、プロバイダーからの JSON または SSE 
 
 `POST /v1/messages` も実験的な互換機能です。Anthropic Messages の対応範囲を Chat
 Completions に変換し、プロバイダーの JSON または SSE を Anthropic 形式へ戻します。
-プロバイダー、virtual model、認証情報、AI Gateway の経路は既存処理を再利用します。
+プロバイダー、virtual model、認証情報、AI Gateway の経路は Chat Completions と共通です。
 Anthropic 固有機能をそのまま使う場合は `/anthropic/v1/messages` を使用してください。
 詳細は [HTTP API and routing](docs/api.md#messages) を参照してください。
 
@@ -134,4 +134,3 @@ curl https://your-worker.example/google-ai-studio/v1beta/models/gemini-3.5-flash
 - [Development and verification](docs/development.md)
 - [Architecture and design](docs/design/overview.md)
 - [Project principles](docs/project-principles.md)
-- [Roadmap candidates](TODO.md)

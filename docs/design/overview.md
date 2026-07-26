@@ -7,9 +7,9 @@ supports OpenAI-compatible Chat Completions, Responses, Anthropic-compatible
 Messages, model aggregation, provider-specific pass-through, and Cloudflare AI
 Gateway routes.
 
-This documentation describes the current implementation. User-facing commands
-and endpoint examples live in the [documentation index](../index.md). Design and
-roadmap decisions follow the [project principles](../project-principles.md).
+User-facing commands and endpoint examples live in the
+[documentation index](../index.md). Architecture and scope follow the
+[project principles](../project-principles.md).
 
 ## Request flow
 

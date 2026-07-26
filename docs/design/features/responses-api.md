@@ -3,18 +3,17 @@
 ## Purpose and boundary
 
 This compatibility feature is experimental. Its accepted subset and converted
-JSON/SSE contract may change while interoperability is validated across the
-supported Chat Completions providers.
+JSON/SSE contract are defined in this document.
 
 The proxy exposes `POST /v1/responses` and `/responses` for clients that use the
 OpenAI Responses request and response shapes while targeting providers that
-offer Chat Completions. It implements a bounded compatibility conversion around
-the existing Chat Completions handler; it does not call a provider-native
+offer Chat Completions. It implements a bounded compatibility conversion through
+the Chat Completions handler; it does not call a provider-native
 Responses endpoint.
 
-This keeps provider selection, virtual-model fallback, credential profiles, key
-rotation and cooldown, provider parameter filtering, AI Gateway routing, and
-cancellation in one established request path. The conversion is intentionally
+Both routes use the same provider selection, virtual-model fallback, credential
+profiles, key rotation and cooldown, provider parameter filtering, AI Gateway
+routing, and cancellation behavior. The conversion is intentionally
 narrow: it maps constructs with a direct Chat Completions equivalent and rejects
 constructs that would require proxy-owned state or tool execution.
 
@@ -39,7 +38,7 @@ carry usage when the selected provider supports it.
 The converted request is passed to `handleChatCompletionsRequest`. This means a
 Responses request accepts the same real provider selectors, named credential
 profiles, `default`, virtual models, explicit `/key/...` selection, and
-`/g/<gateway>` selection as Chat Completions. Each provider still filters the
+`/g/<gateway>` selection as Chat Completions. Each provider filters the
 resulting Chat fields according to its declared capability.
 
 ## Response conversion
@@ -63,8 +62,8 @@ to typed Responses events. It emits response lifecycle events, message/content
 item creation, `response.output_text.delta`, function-call item creation,
 `response.function_call_arguments.delta`, matching done events, and a final
 `response.completed` or `response.incomplete`. It does not buffer the complete
-stream, and backpressure and request cancellation continue through the existing
-Chat request path.
+stream, and backpressure and request cancellation propagate through the Chat
+request path.
 
 ## Explicitly unsupported features
 
@@ -76,9 +75,8 @@ rather than silently discarded. Function tools remain supported because their
 execution stays with the client, matching Chat Completions semantics.
 
 This boundary prevents a request from appearing successful after losing state,
-tool, or input semantics. Expanding it requires a direct and tested mapping to
-the Chat Completions contract; stateful or built-in execution belongs in a
-separate service under the project principles.
+tool, or input semantics. Stateful or built-in execution belongs in a separate
+service under the project principles.
 
 ## References
 
