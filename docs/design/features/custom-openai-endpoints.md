@@ -57,7 +57,7 @@ operator.
 
 A non-empty static `models` list is converted to OpenAI model objects locally and
 avoids an upstream request. Otherwise, aggregation fetches `modelsPath` with a
-five-second timeout. Failure omits that endpoint from the aggregate response
+30-second timeout. Failure omits that endpoint from the aggregate response
 without failing the entire request.
 
 Static model objects use the custom name as `owned_by` and are then prefixed by

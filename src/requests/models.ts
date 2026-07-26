@@ -23,8 +23,7 @@ import { RequestLogger } from "../utils/logger";
 import { resolveAiGatewayModelsProvider } from "./model_gateway";
 
 // Timeout for individual provider model fetch operations (milliseconds)
-const PROVIDER_FETCH_TIMEOUT_MS = 5000;
-const MODEL_PROVIDER_CONCURRENCY = 5;
+const PROVIDER_FETCH_TIMEOUT_MS = 30_000;
 const MAX_PROVIDER_MODELS_RESPONSE_BYTES = 1024 * 1024;
 export const MAX_MODELS_PER_PROVIDER = 1000;
 export const MAX_AGGREGATED_MODELS_BYTES = 4 * 1024 * 1024;
@@ -241,72 +240,63 @@ export async function handleModelsRequest(
     }
   }
 
-  for (
-    let batchStart = 0;
-    batchStart < providerEntries.length && !truncated;
-    batchStart += MODEL_PROVIDER_CONCURRENCY
-  ) {
-    const providerBatch = providerEntries.slice(
-      batchStart,
-      batchStart + MODEL_PROVIDER_CONCURRENCY,
-    );
-    const settledModelRequests = await Promise.allSettled(
-      providerBatch.map(([providerName, provider]) =>
-        fetchProviderModels(
-          providerName,
-          provider,
-          context.apiKeyIndex,
-          aiGateway,
-          clientGatewayHeaders,
-        ),
+  const settledModelRequests = await Promise.allSettled(
+    providerEntries.map(([providerName, provider]) =>
+      fetchProviderModels(
+        providerName,
+        provider,
+        context.apiKeyIndex,
+        aiGateway,
+        clientGatewayHeaders,
       ),
-    );
+    ),
+  );
 
-    for (const [index, settledRequest] of settledModelRequests.entries()) {
-      const providerName = providerBatch[index][0];
-      if (settledRequest.status === "rejected") {
-        if (!(settledRequest.reason instanceof ProviderNotSupportedError)) {
-          providerFailed = true;
-          RequestLogger.error(
-            "provider.models.failed",
-            "Provider model discovery failed",
-            settledRequest.reason,
-            {
-              provider: providerName,
-            },
-          );
-        }
-        continue;
-      }
-      if (!Array.isArray(settledRequest.value?.data)) {
+  for (const [index, settledRequest] of settledModelRequests.entries()) {
+    const providerName = providerEntries[index][0];
+    if (settledRequest.status === "rejected") {
+      if (!(settledRequest.reason instanceof ProviderNotSupportedError)) {
         providerFailed = true;
-        RequestLogger.warn(
-          "provider.models.invalid_response",
-          "Provider model discovery returned an invalid response",
+        RequestLogger.error(
+          "provider.models.failed",
+          "Provider model discovery failed",
+          settledRequest.reason,
           {
             provider: providerName,
           },
         );
-        continue;
       }
-
-      for (const { id, ...model } of settledRequest.value.data.slice(
-        0,
-        MAX_MODELS_PER_PROVIDER,
-      )) {
-        const serializedModel = JSON.stringify({
-          id: `${providerName}/${id}`,
-          ...model,
-        });
-        const modelBytes = utf8ByteLength(serializedModel);
-        if (aggregatedBytes + modelBytes > MAX_AGGREGATED_MODELS_BYTES) {
-          truncated = true;
-          break;
-        }
-        serializedModels.push(serializedModel);
-        aggregatedBytes += modelBytes;
-      }
+      continue;
     }
+    if (!Array.isArray(settledRequest.value?.data)) {
+      providerFailed = true;
+      RequestLogger.warn(
+        "provider.models.invalid_response",
+        "Provider model discovery returned an invalid response",
+        {
+          provider: providerName,
+        },
+      );
+      continue;
+    }
+
+    for (const { id, ...model } of settledRequest.value.data.slice(
+      0,
+      MAX_MODELS_PER_PROVIDER,
+    )) {
+      const serializedModel = JSON.stringify({
+        id: `${providerName}/${id}`,
+        ...model,
+      });
+      const modelBytes = utf8ByteLength(serializedModel);
+      if (aggregatedBytes + modelBytes > MAX_AGGREGATED_MODELS_BYTES) {
+        truncated = true;
+        break;
+      }
+      serializedModels.push(serializedModel);
+      aggregatedBytes += modelBytes;
+    }
+    if (truncated) break;
   }
 
   if (truncated) {

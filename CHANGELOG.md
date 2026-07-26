@@ -10,6 +10,11 @@ dated section; when multiple changes share a date, put the newest change first.
 Planned version: `1.0.0`. The package remains at `0.2.1` until the version
 update is explicitly approved.
 
+### 2026-07-26
+
+- Changed aggregated model discovery to query all configured providers
+  concurrently and extended each provider's timeout from 5 to 30 seconds.
+
 ### 2026-07-22
 
 - Added experimental Anthropic-compatible `POST /v1/messages` and `/messages`

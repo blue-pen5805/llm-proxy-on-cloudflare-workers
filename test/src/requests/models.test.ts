@@ -248,9 +248,13 @@ describe("models", () => {
     vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(false);
 
     const response = await handleModelsRequest({} as any);
-    const timeoutPromise = vi.mocked(helpers.withTimeout).mock.calls[0][0];
+    const [timeoutPromise, abortController, timeoutMs, providerName] =
+      vi.mocked(helpers.withTimeout).mock.calls[0];
 
     await expect(timeoutPromise).resolves.toBe(formattedModels);
+    expect(abortController).toBeInstanceOf(AbortController);
+    expect(timeoutMs).toBe(30_000);
+    expect(providerName).toBe("test");
     expect(json).toHaveBeenCalledOnce();
     expect(
       parsingProviderClass.convertModelsToOpenAIFormat,
@@ -266,6 +270,38 @@ describe("models", () => {
         },
       ],
     });
+  });
+
+  it("starts model discovery for every provider without batching", async () => {
+    const pendingResponses: Array<(response: Response) => void> = [];
+    const concurrentProvider = {
+      ...mockProviderClass,
+      fetch: vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            pendingResponses.push(resolve);
+          }),
+      ),
+    };
+    const providers = Object.fromEntries(
+      Array.from({ length: 6 }, (_, index) => [
+        `provider-${index}`,
+        concurrentProvider,
+      ]),
+    );
+
+    const responsePromise = handleModelsRequest({
+      providers: { all: vi.fn(() => providers) },
+    } as any);
+
+    await vi.waitFor(() => {
+      expect(concurrentProvider.fetch).toHaveBeenCalledTimes(6);
+    });
+    for (const resolve of pendingResponses) {
+      resolve(new Response(JSON.stringify({ data: [] })));
+    }
+
+    await expect(responsePromise).resolves.toBeInstanceOf(Response);
   });
 
   it("should skip unavailable providers", async () => {

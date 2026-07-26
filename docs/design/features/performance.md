@@ -22,12 +22,14 @@ streamed through unchanged.
 
 ## Bounded model aggregation
 
-Model discovery reads at most 1 MiB from one provider, queries at most five
-providers concurrently, retains at most 1,000 models per provider, and caps the
+Model discovery reads at most 1 MiB from one provider, queries every configured
+provider concurrently, retains at most 1,000 models per provider, and caps the
 serialized aggregate model entries at 4 MiB. A truncated response includes
-`X-Proxy-Models-Truncated: true`. These limits prevent individually bounded
-provider responses from accumulating beyond the Worker's 128 MB isolate limit.
-Non-successful upstream responses are not parsed as provider model payloads.
+`X-Proxy-Models-Truncated: true`. The provider set remains bounded by the fixed
+built-in registry and validated configuration limits; the response limits
+prevent individually bounded provider responses from accumulating beyond the
+Worker's isolate memory limit. Non-successful upstream responses are not parsed
+as provider model payloads.
 
 ## Model aggregate caching
 
