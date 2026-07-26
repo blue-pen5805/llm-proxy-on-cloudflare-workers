@@ -35,18 +35,17 @@ describe("ProviderBase", () => {
     });
 
     it("builds request init with provider headers", async () => {
-      await expect(
-        providerBase.buildRequestInit({
-          method: "POST",
-          headers: { "X-Request": "test" },
-        }),
-      ).resolves.toEqual({
+      const init = await providerBase.buildRequestInit({
         method: "POST",
-        headers: {
+        headers: { "X-Request": "test" },
+      });
+      expect(init.method).toBe("POST");
+      expect(new Headers(init.headers)).toEqual(
+        new Headers({
           "content-type": "application/json",
           "x-request": "test",
-        },
-      });
+        }),
+      );
     });
   });
 });

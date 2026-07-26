@@ -37,9 +37,9 @@ The common request path therefore follows these rules:
 - Keep lookup work indexed and iteration bounded. Do not add speculative
   precomputation, caching, or abstraction whose common-path overhead lacks a
   measured or contract-driven justification.
-- Bound exceptional buffering and fan-out independently of performance
-  measurements so malformed or unusually large upstream data cannot exhaust an
-  isolate.
+- Keep buffering, item counts, attempts, and time bounded independently of
+  performance measurements. Independent subrequests run concurrently unless a
+  documented platform or upstream requirement justifies a cap.
 
 ## Chat request parsing
 
@@ -49,6 +49,28 @@ request builder, and passed in parsed form to the AI Gateway request builder.
 The serialized-only builder interfaces are available to callers, but the Worker
 request path performs one JSON parse for both direct provider and AI Gateway
 requests. Upstream responses are streamed through unchanged.
+
+The Responses and Messages compatibility routes pass their converted object
+and sanitized headers directly into the Chat handler. They do not serialize the
+converted payload into an intermediate `Request` or make the Chat handler parse
+it again. Response conversion remains bounded and streaming where the
+compatibility contract permits it.
+
+## Shared request setup
+
+The runtime-normalized client URL is scanned once for its path and the result is
+shared by the request logger and request middleware; the common path does not
+invoke the URL parser. Authentication reuses the already-read configured key
+list, while still hashing the candidate and comparing every configured digest.
+Structured log construction, provider parameter filtering, provider header
+forwarding, and compatibility conversion use single-pass loops or `Headers`
+objects directly so common requests do not allocate intermediate entry and
+filter arrays.
+
+Virtual-model retries iterate the bounded candidate configuration directly
+instead of expanding it into a duplicate attempt array. Status connectivity
+checks start all configured credential subrequests concurrently without a local
+scheduling loop or application-level concurrency cap.
 
 ## Bounded model aggregation
 

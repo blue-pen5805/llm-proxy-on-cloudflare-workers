@@ -12,7 +12,6 @@ import { RequestLogger } from "../utils/logger";
 import { resolveAiGatewayModelsProvider } from "./model_gateway";
 
 const CONNECTIVITY_CHECK_TIMEOUT_MS = 5000;
-export const STATUS_CONNECTIVITY_CONCURRENCY = 5;
 
 type ConnectivityStatus = "valid" | "invalid" | "unknown";
 
@@ -188,17 +187,7 @@ export async function handleStatusRequest(
     }
   }
 
-  for (
-    let taskIndex = 0;
-    taskIndex < connectivityTasks.length;
-    taskIndex += STATUS_CONNECTIVITY_CONCURRENCY
-  ) {
-    await Promise.all(
-      connectivityTasks
-        .slice(taskIndex, taskIndex + STATUS_CONNECTIVITY_CONCURRENCY)
-        .map((task) => task()),
-    );
-  }
+  await Promise.all(connectivityTasks.map((task) => task()));
 
   const responseBody = {
     config: configurationStatus,

@@ -54,7 +54,7 @@ export const GoogleAiStudio = defineProvider({
         mergedHeaders.delete("Authorization");
       }
     }
-    return Object.fromEntries(mergedHeaders.entries());
+    return mergedHeaders;
   },
 
   // Convert model list to OpenAI format

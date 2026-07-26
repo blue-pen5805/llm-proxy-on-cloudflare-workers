@@ -255,7 +255,7 @@ function convertResponsesRequest(body: unknown): {
   if (typeof body.input === "string") {
     messages.push({ role: "user", content: body.input });
   } else if (Array.isArray(body.input)) {
-    messages.push(...body.input.map(convertInputItem));
+    for (const item of body.input) messages.push(convertInputItem(item));
   } else {
     unsupported("input");
   }
@@ -316,11 +316,12 @@ function copyDefined(
   source: JsonObject,
   fields: readonly string[],
 ): JsonObject {
-  return Object.fromEntries(
-    fields.flatMap((field) =>
-      source[field] === undefined ? [] : [[field, source[field]]],
-    ),
-  );
+  const copied: JsonObject = {};
+  for (const field of fields) {
+    const value = source[field];
+    if (value !== undefined) copied[field] = value;
+  }
+  return copied;
 }
 
 function profileFor(request: ResponsesRequest): ResponseProfile {
@@ -815,19 +816,15 @@ export async function handleResponsesRequest(
 
   const headers = new Headers(context.request.headers);
   headers.delete("content-length");
-  const chatRequest = new Request(context.request.url, {
-    method: "POST",
+  const responseMetadataEnabled = Config.chatResponseMetadataEnabled();
+  const chatResponse = await handleChatCompletionsRequest(context, aiGateway, {
+    body: converted.chat,
     headers,
-    body: JSON.stringify(converted.chat),
-    signal: context.request.signal,
+    responseMetadataEnabled,
   });
-  const chatResponse = await handleChatCompletionsRequest(
-    { ...context, request: chatRequest },
-    aiGateway,
-  );
   return convertChatResponse(
     chatResponse,
     converted.request,
-    Config.chatResponseMetadataEnabled(),
+    responseMetadataEnabled,
   );
 }

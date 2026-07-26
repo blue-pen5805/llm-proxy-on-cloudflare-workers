@@ -111,28 +111,22 @@ function matchesApiKey(candidate: string, configuredKeys: string[]): boolean {
  * @param request - The incoming request to isRequestAuthorized
  * @returns `true` if the request contains a valid API key, `false` otherwise
  */
-export function isRequestAuthorized(request: Request): boolean {
-  const apiKeys = Config.apiKeys();
+export function isRequestAuthorized(
+  request: Request,
+  configuredApiKeys: string[] | undefined = Config.apiKeys(),
+): boolean {
+  const apiKeys = configuredApiKeys;
   if (!apiKeys || apiKeys.length === 0) {
     return false;
   }
 
-  let apiKey: string | null = null;
-
-  const authorizationKey =
-    AUTHORIZATION_KEYS.find((key) => {
-      return Boolean(request.headers.get(key));
-    }) || "";
-  const authorizationValue = request.headers.get(authorizationKey);
-
-  if (authorizationKey && authorizationValue) {
-    if (authorizationKey.toLowerCase() === "authorization") {
-      const bearerMatch = authorizationValue.match(/^Bearer\s+(\S+)$/i);
-      apiKey = bearerMatch?.[1] ?? null;
-    } else {
-      apiKey = authorizationValue.trim();
-    }
-  }
+  const authorizationValue = request.headers.get(AUTHORIZATION_KEYS[0]);
+  const apiKey = authorizationValue
+    ? (authorizationValue.match(/^Bearer\s+(\S+)$/i)?.[1] ?? null)
+    : (
+        request.headers.get(AUTHORIZATION_KEYS[1]) ??
+        request.headers.get(AUTHORIZATION_KEYS[2])
+      )?.trim() || null;
 
   if (!apiKey) {
     return false;

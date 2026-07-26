@@ -50,7 +50,9 @@ describe("provider contracts", () => {
       expect(provider.baseUrl()).toBe("https://example.com");
       expect(provider.pathnamePrefix()).toBe("");
       expect(await provider.headers()).toEqual({});
-      expect(await provider.buildHeadersForPath("/resource")).toEqual({});
+      expect(
+        new Headers(await provider.buildHeadersForPath("/resource")),
+      ).toEqual(new Headers());
       expect(provider.getStaticModels()).toBeUndefined();
       expect(provider.aiGatewayPath("/models")).toBe("/models");
       const response = new Response("streamed");
@@ -206,8 +208,11 @@ describe("provider contracts", () => {
 
       expect(fetchMock).toHaveBeenCalledWith("https://example.com/resource", {
         method: "POST",
-        headers: {},
+        headers: expect.any(Headers),
       });
+      expect(new Headers(fetchMock.mock.calls[0][1]?.headers)).toEqual(
+        new Headers(),
+      );
       expect(response.status).toBe(202);
       expect(await response.text()).toBe("proxied");
     });
@@ -423,32 +428,44 @@ describe("provider contracts", () => {
         "Content-Type": "application/json",
         "x-goog-api-key": "key-1",
       });
-      await expect(
-        provider.buildHeadersForPath(
-          "/v1beta/openai/chat/completions",
-          undefined,
-          1,
+      expect(
+        new Headers(
+          await provider.buildHeadersForPath(
+            "/v1beta/openai/chat/completions",
+            undefined,
+            1,
+          ),
         ),
-      ).resolves.toEqual({
-        authorization: "Bearer key-1",
-        "content-type": "application/json",
-      });
-      await expect(
-        provider.buildHeadersForPath("/v1beta/models", undefined, 1),
-      ).resolves.toEqual({
-        "content-type": "application/json",
-        "x-goog-api-key": "key-1",
-      });
+      ).toEqual(
+        new Headers({
+          authorization: "Bearer key-1",
+          "content-type": "application/json",
+        }),
+      );
+      expect(
+        new Headers(
+          await provider.buildHeadersForPath("/v1beta/models", undefined, 1),
+        ),
+      ).toEqual(
+        new Headers({
+          "content-type": "application/json",
+          "x-goog-api-key": "key-1",
+        }),
+      );
       vi.mocked(Secrets.getAll).mockReturnValue([]);
-      await expect(
-        provider.buildHeadersForPath(
-          "/v1beta/openai/chat/completions",
-          undefined,
-          0,
+      expect(
+        new Headers(
+          await provider.buildHeadersForPath(
+            "/v1beta/openai/chat/completions",
+            undefined,
+            0,
+          ),
         ),
-      ).resolves.toEqual({
-        "content-type": "application/json",
-      });
+      ).toEqual(
+        new Headers({
+          "content-type": "application/json",
+        }),
+      );
       vi.mocked(Secrets.getAll).mockReturnValue(["key-0", "key-1"]);
       await provider.fetch(
         "/v1beta/openai/chat/completions",

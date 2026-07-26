@@ -77,7 +77,7 @@ describe("proxy", () => {
       {
         method: mockRequest.method,
         body: mockRequest.body,
-        headers: {},
+        headers: expect.any(Headers),
         signal: mockRequest.signal,
       },
       0,
@@ -153,7 +153,7 @@ describe("proxy", () => {
       {
         method: mockRequest.method,
         body: mockRequest.body,
-        headers: {},
+        headers: expect.any(Headers),
         signal: mockRequest.signal,
       },
       0,
@@ -346,7 +346,9 @@ describe("proxy", () => {
     await handleProviderProxyRequest({ request } as any, providerName, "/test");
 
     const init = mockProviderClass.fetch.mock.calls[0][1];
-    expect(init.headers).toEqual({ "x-client-header": "preserved" });
+    expect(new Headers(init.headers)).toEqual(
+      new Headers({ "x-client-header": "preserved" }),
+    );
     expect(init.signal).toBe(request.signal);
   });
 });

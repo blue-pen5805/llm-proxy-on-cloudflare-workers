@@ -116,9 +116,14 @@ export async function handleUniversalEndpointRequest(
   const gatewayHeaders = stripProxyAuthorizationHeaders(request.headers, {
     preserveAiGatewayHeaders: true,
   });
-  const clientGatewayHeaders = Object.fromEntries(
-    [...gatewayHeaders.entries()].filter(([key]) => key.startsWith("cf-aig-")),
-  );
+  const clientGatewayHeaders: Record<string, string> = {};
+  let hasClientGatewayHeaders = false;
+  gatewayHeaders.forEach((value, key) => {
+    if (key.startsWith("cf-aig-")) {
+      clientGatewayHeaders[key] = value;
+      hasClientGatewayHeaders = true;
+    }
+  });
 
   const gatewaySteps: CloudflareAIGatewayUniversalEndpointData =
     await Promise.all(
@@ -202,9 +207,7 @@ export async function handleUniversalEndpointRequest(
 
   const [requestInfo, requestInit] = aiGateway.buildUniversalEndpointRequest({
     data: gatewaySteps,
-    ...(Object.keys(clientGatewayHeaders).length > 0
-      ? { headers: clientGatewayHeaders }
-      : {}),
+    ...(hasClientGatewayHeaders ? { headers: clientGatewayHeaders } : {}),
   });
   return fetchWithLogging(requestInfo, {
     ...requestInit,

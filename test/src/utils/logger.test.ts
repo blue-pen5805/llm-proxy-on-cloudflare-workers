@@ -183,6 +183,30 @@ describe("RequestLogger", () => {
 
     expect(consoleInfo).toHaveBeenCalledTimes(2);
   });
+
+  it("shares a query-free log path and complete routed request path", () => {
+    const request = new Request(
+      "https://example.com/v1/models?refresh=true#fragment",
+    );
+
+    RequestLogger.run(request, () => {
+      expect(RequestLogger.requestFields()).toEqual({
+        method: "GET",
+        path: "/v1/models",
+      });
+      expect(RequestLogger.requestPath()).toBe(
+        "/v1/models?refresh=true#fragment",
+      );
+    });
+
+    RequestLogger.run(
+      new Request("https://example.com/v1/models#fragment"),
+      () => {
+        expect(RequestLogger.requestFields().path).toBe("/v1/models");
+        expect(RequestLogger.requestPath()).toBe("/v1/models#fragment");
+      },
+    );
+  });
 });
 
 describe("redactLogText", () => {

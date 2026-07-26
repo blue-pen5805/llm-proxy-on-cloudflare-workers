@@ -98,7 +98,7 @@ export async function handleProviderProxyRequest(
         aiGatewayProvider,
       ),
       body: request.body,
-      headers: Object.fromEntries(providerHeaders.entries()),
+      headers: providerHeaders,
     });
     const response = await RequestLogger.withFields(keyLogFields, () =>
       fetchWithLogging(requestInfo, { ...requestInit, signal: request.signal }),
@@ -119,7 +119,7 @@ export async function handleProviderProxyRequest(
       {
         method: request.method,
         body: request.body,
-        headers: Object.fromEntries(sanitizedHeaders.entries()),
+        headers: sanitizedHeaders,
         signal: request.signal,
       },
       apiKeyIndex,

@@ -8,7 +8,7 @@ import { ProviderBase } from "~/src/providers/provider";
 import { ProviderRegistry } from "~/src/providers/registry";
 import { isRequestAuthorized } from "~/src/utils/authorization";
 import { Environments } from "~/src/utils/environments";
-import { maskSensitiveUrl } from "~/src/utils/helpers";
+import { getRequestPath, maskSensitiveUrl } from "~/src/utils/helpers";
 import { Secrets } from "~/src/utils/secrets";
 
 const chatBody = JSON.stringify({
@@ -39,12 +39,20 @@ describe("request hot paths", () => {
     });
   });
 
+  bench("filter supported chat parameters", () => {
+    provider.filterSupportedChatParameters(parsedChatBody);
+  });
+
   bench("match a provider route", () => {
     registry.match("/internal.v2/v1/chat/completions?stream=true");
   });
 
   bench("mask a logged subrequest URL", () => {
     maskSensitiveUrl(loggedUrl);
+  });
+
+  bench("extract a normalized request path", () => {
+    getRequestPath(authorizedRequest);
   });
 });
 

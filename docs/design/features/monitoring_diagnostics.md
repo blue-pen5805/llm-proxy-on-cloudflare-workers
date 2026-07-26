@@ -15,9 +15,10 @@ The Worker exposes two authenticated health routes:
 The handler constructs every built-in and custom provider instance. For each
 configured credential, it calls the provider's model-list path, either directly
 or through the active AI Gateway. Checks run concurrently with an individual
-five-second timeout. All configured credentials are checked in batches of five;
-the concurrency bound limits simultaneous upstream load without leaving later
-credential slots unexamined solely because of their configuration order.
+five-second timeout. Every configured credential check starts immediately
+without an application-level concurrency cap. Each result remains isolated, so
+one slow or failed check does not prevent the other credential slots from being
+examined.
 
 The status handler shares the model-list Gateway capability decision with the
 normal model aggregation route. A provider that sets

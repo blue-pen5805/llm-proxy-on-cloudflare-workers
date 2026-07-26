@@ -130,12 +130,14 @@ describe("handleResponsesRequest", () => {
     expect(handleChatCompletionsRequest).toHaveBeenCalledWith(
       expect.objectContaining({ request: expect.any(Request) }),
       gateway,
+      expect.objectContaining({ responseMetadataEnabled: true }),
     );
-    const chatRequest = vi.mocked(handleChatCompletionsRequest).mock.calls[0][0]
-      .request;
-    expect(chatRequest.headers.get("content-length")).toBeNull();
-    expect(chatRequest.headers.get("x-client")).toBe("retained");
-    expect(await chatRequest.json()).toEqual({
+    const preparedRequest = vi.mocked(handleChatCompletionsRequest).mock
+      .calls[0][2]!;
+    const chatHeaders = new Headers(preparedRequest.headers);
+    expect(chatHeaders.get("content-length")).toBeNull();
+    expect(chatHeaders.get("x-client")).toBe("retained");
+    expect(preparedRequest.body).toEqual({
       model: "virtual/fast",
       messages: [
         { role: "system", content: "Be concise" },
@@ -285,9 +287,9 @@ describe("handleResponsesRequest", () => {
       }),
     } as never);
 
-    const chatRequest = vi.mocked(handleChatCompletionsRequest).mock.calls[0][0]
-      .request;
-    expect(await chatRequest.json()).toMatchObject({
+    const preparedRequest = vi.mocked(handleChatCompletionsRequest).mock
+      .calls[0][2]!;
+    expect(preparedRequest.body).toMatchObject({
       messages: [
         {
           role: "system",
@@ -438,9 +440,9 @@ describe("handleResponsesRequest", () => {
         gateway: "production",
       },
     });
-    const chatRequest = vi.mocked(handleChatCompletionsRequest).mock.calls[0][0]
-      .request;
-    expect(await chatRequest.json()).toMatchObject({
+    const preparedRequest = vi.mocked(handleChatCompletionsRequest).mock
+      .calls[0][2]!;
+    expect(preparedRequest.body).toMatchObject({
       stream: true,
       stream_options: { include_usage: true },
     });
@@ -616,9 +618,9 @@ describe("handleResponsesRequest", () => {
     await handleResponsesRequest({
       request: request({ model: "openai/model", ...body }),
     } as never);
-    const chatRequest = vi.mocked(handleChatCompletionsRequest).mock.calls[0][0]
-      .request;
-    expect(await chatRequest.json()).toMatchObject(expected);
+    const preparedRequest = vi.mocked(handleChatCompletionsRequest).mock
+      .calls[0][2]!;
+    expect(preparedRequest.body).toMatchObject(expected);
   });
 
   it.each([

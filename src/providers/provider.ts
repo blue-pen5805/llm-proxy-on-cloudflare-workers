@@ -206,12 +206,12 @@ export interface ProviderDefinition {
 export function mergeHeaders(
   baseHeaders: HeadersInit | undefined,
   overridingHeaders: HeadersInit,
-): Record<string, string> {
+): Headers {
   const headers = new Headers(baseHeaders);
   new Headers(overridingHeaders).forEach((value, key) => {
     headers.set(key, value);
   });
-  return Object.fromEntries(headers.entries());
+  return headers;
 }
 
 export type ProviderConstructor<
@@ -416,13 +416,18 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
       supportedChatParameters ??= new Set(
         this.CHAT_COMPLETIONS_SUPPORTED_PARAMETERS,
       );
-      return Object.fromEntries(
-        Object.entries(data).filter(([key]) =>
-          supportedChatParameters?.has(
+      const filteredData: Record<string, unknown> = {};
+      for (const key in data) {
+        if (
+          Object.prototype.hasOwnProperty.call(data, key) &&
+          supportedChatParameters.has(
             key as keyof OpenAIChatCompletionsRequestBody,
-          ),
-        ),
-      );
+          )
+        ) {
+          filteredData[key] = data[key];
+        }
+      }
+      return filteredData;
     },
 
     async buildModelsRequest(apiKeyIndex) {

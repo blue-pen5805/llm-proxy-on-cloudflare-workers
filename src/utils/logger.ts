@@ -7,6 +7,7 @@ export type LogFields = Record<string, LogValue>;
 interface RequestLogContext {
   method: string;
   path: string;
+  requestPath: string;
   providers: Set<string>;
   requestId: string;
   startedAt: number;
@@ -85,17 +86,16 @@ const SENSITIVE_LABELED_VALUE_PATTERN = new RegExp(
   "gi",
 );
 
-function omitUndefinedLogFields(
+function assignDefinedLogFields(
+  target: Record<string, LogValue>,
   fields: LogFields,
-): Record<string, Exclude<LogValue, undefined>> {
-  const definedFields: Record<string, Exclude<LogValue, undefined>> = {};
+): void {
   for (const fieldName of Object.keys(fields)) {
     const value = fields[fieldName];
     if (value !== undefined) {
-      definedFields[fieldName] = value;
+      target[fieldName] = value;
     }
   }
-  return definedFields;
 }
 
 export function redactLogText(value: string): string {
@@ -128,10 +128,13 @@ function summarizeLogMessage(
   message: string,
   fields: LogFields,
 ): string {
-  const details = (LOG_MESSAGE_FIELDS[event] ?? []).flatMap((fieldName) => {
+  const details: string[] = [];
+  for (const fieldName of LOG_MESSAGE_FIELDS[event] ?? []) {
     const value = fields[fieldName];
-    return value === undefined ? [] : [`${fieldName}=${String(value)}`];
-  });
+    if (value !== undefined) {
+      details.push(`${fieldName}=${String(value)}`);
+    }
+  }
   return details.length === 0 ? message : `${message}: ${details.join(", ")}`;
 }
 
@@ -140,26 +143,39 @@ function logRecord(
   message: string,
   fields: LogFields,
 ): Record<string, LogValue> {
-  const record: Record<string, LogValue> = {
-    ...omitUndefinedLogFields(scopedLogFields.getStore() ?? {}),
-    event,
-    request_id: requestLogContext.getStore()?.requestId ?? null,
-    ...omitUndefinedLogFields(fields),
-  };
+  const record: Record<string, LogValue> = {};
+  assignDefinedLogFields(record, scopedLogFields.getStore() ?? {});
+  record.event = event;
+  record.request_id = requestLogContext.getStore()?.requestId ?? null;
+  assignDefinedLogFields(record, fields);
   const logContext = requestLogContext.getStore();
   if (logContext && typeof record.provider === "string") {
     logContext.providers.add(record.provider);
   }
-  return { ...record, message: summarizeLogMessage(event, message, record) };
+  record.message = summarizeLogMessage(event, message, record);
+  return record;
 }
 
 export class RequestLogger {
   static run<T>(request: Request, callback: () => T): T {
-    const requestUrl = new URL(request.url);
+    // Request.url is already normalized by the runtime, so extracting its path
+    // by delimiters avoids another URL parser invocation on every request.
+    const authorityStart = request.url.indexOf("://") + 3;
+    const pathStart = request.url.indexOf("/", authorityStart);
+    const requestPath = request.url.slice(pathStart);
+    const queryIndex = requestPath.indexOf("?");
+    const fragmentIndex = requestPath.indexOf("#");
+    let pathEnd = requestPath.length;
+    if (queryIndex !== -1) pathEnd = queryIndex;
+    if (fragmentIndex !== -1 && fragmentIndex < pathEnd) {
+      pathEnd = fragmentIndex;
+    }
+    const path = requestPath.slice(0, pathEnd);
     return requestLogContext.run(
       {
         method: request.method,
-        path: requestUrl.pathname,
+        path,
+        requestPath,
         providers: new Set<string>(),
         requestId: request.headers.get("cf-ray") ?? crypto.randomUUID(),
         startedAt: performance.now(),
@@ -173,13 +189,11 @@ export class RequestLogger {
   }
 
   static withFields<T>(fields: LogFields, callback: () => T): T {
-    return scopedLogFields.run(
-      {
-        ...scopedLogFields.getStore(),
-        ...omitUndefinedLogFields(fields),
-      },
-      callback,
-    );
+    const scopedFields: LogFields = {
+      ...(scopedLogFields.getStore() ?? {}),
+    };
+    assignDefinedLogFields(scopedFields, fields);
+    return scopedLogFields.run(scopedFields, callback);
   }
 
   static warn(event: string, message: string, fields: LogFields = {}): void {
@@ -199,13 +213,31 @@ export class RequestLogger {
 
   static requestFields(): LogFields {
     const logContext = requestLogContext.getStore();
-    const providers = [...(logContext?.providers ?? [])];
+    const providers = logContext?.providers;
+    if (!providers || providers.size === 0) {
+      return {
+        method: logContext?.method,
+        path: logContext?.path,
+      };
+    }
+    const providerIterator = providers.values();
+    const firstProvider = providerIterator.next().value;
+    if (providers.size === 1) {
+      return {
+        method: logContext?.method,
+        path: logContext?.path,
+        provider: firstProvider,
+      };
+    }
     return {
       method: logContext?.method,
       path: logContext?.path,
-      ...(providers.length === 1 ? { provider: providers[0] } : {}),
-      ...(providers.length > 1 ? { providers: providers.join(",") } : {}),
+      providers: [firstProvider, ...providerIterator].join(","),
     };
+  }
+
+  static requestPath(): string | undefined {
+    return requestLogContext.getStore()?.requestPath;
   }
 
   static requestDurationMs(): number {

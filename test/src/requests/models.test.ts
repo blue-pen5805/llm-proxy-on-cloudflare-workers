@@ -388,6 +388,7 @@ describe("models", () => {
       headers: {
         "cf-aig-collect-log": "false",
         "cf-connecting-ip": "203.0.113.1",
+        "x-client": "retained-outside-gateway-controls",
       },
     });
     await handleModelsRequest({ request } as any, mockAIGateway as any);
@@ -406,6 +407,7 @@ describe("models", () => {
     );
     expect(headers.get("Content-Type")).toBe("application/json");
     expect(headers.get("cf-aig-collect-log")).toBe("false");
+    expect(headers.has("x-client")).toBe(false);
     expect(headers.has("cf-connecting-ip")).toBe(false);
     expect(helpers.fetchWithLogging).toHaveBeenCalled();
   });

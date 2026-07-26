@@ -4,10 +4,7 @@ import { BUILT_IN_PROVIDER_CONSTRUCTORS } from "~/src/providers";
 import { getAllProviderInstances } from "~/src/providers";
 import { CustomOpenAI } from "~/src/providers/custom-openai";
 import { ProviderNotSupportedError } from "~/src/providers/provider";
-import {
-  handleStatusRequest,
-  STATUS_CONNECTIVITY_CONCURRENCY,
-} from "~/src/requests/status";
+import { handleStatusRequest } from "~/src/requests/status";
 import { Config } from "~/src/utils/config";
 import { Environments } from "~/src/utils/environments";
 import { fetchWithLogging, withTimeout } from "~/src/utils/helpers";
@@ -448,7 +445,7 @@ describe("status", () => {
     expect(Object.keys(body.providers)).toEqual(["first", "second"]);
   });
 
-  it("checks every configured credential while limiting concurrency", async () => {
+  it("starts every configured credential check without a concurrency cap", async () => {
     const apiKeyCount = 34;
     let activeChecks = 0;
     let maximumActiveChecks = 0;
@@ -465,7 +462,7 @@ describe("status", () => {
 
     const body = await (await handleStatusRequest()).json();
     expect(mockProviderClass.fetch).toHaveBeenCalledTimes(apiKeyCount);
-    expect(maximumActiveChecks).toBe(STATUS_CONNECTIVITY_CONCURRENCY);
+    expect(maximumActiveChecks).toBe(apiKeyCount);
     expect(body.providers.openai.keys.at(-1)).toEqual({
       slot: apiKeyCount - 1,
       status: "valid",

@@ -82,7 +82,7 @@ export const AzureOpenAI = defineProvider({
       {
         method: "POST",
         body: JSON.stringify(body),
-        headers: Object.fromEntries(gatewayHeaders.entries()),
+        headers: gatewayHeaders,
       },
     ];
   },

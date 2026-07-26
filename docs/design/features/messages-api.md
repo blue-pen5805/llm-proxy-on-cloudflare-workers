@@ -35,7 +35,9 @@ The converted request is passed to `handleChatCompletionsRequest`. Consequently,
 Messages accepts the same real providers, named credential profiles, `default`,
 virtual models, `/key/...` selection, and `/g/<gateway>` selection as Chat
 Completions. Each provider filters Chat fields according to its declared
-capability.
+capability. The converted object and sanitized headers are passed directly,
+without serializing an intermediate request or parsing the converted JSON a
+second time.
 
 ## Response conversion
 

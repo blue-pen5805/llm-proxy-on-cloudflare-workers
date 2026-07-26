@@ -306,14 +306,16 @@ function convertMessagesRequest(body: unknown): {
   const system = convertSystem(body.system);
   const tools = convertTools(body.tools);
   const choice = convertToolChoice(body.tool_choice);
+  const messages: JsonObject[] = [];
+  if (system) messages.push(system);
+  for (const message of body.messages) {
+    messages.push(...convertMessage(message));
+  }
   return {
     request: body as MessagesRequest,
     chat: {
       model: body.model,
-      messages: [
-        ...(system ? [system] : []),
-        ...body.messages.flatMap(convertMessage),
-      ],
+      messages,
       max_completion_tokens: body.max_tokens,
       ...(body.stream === undefined ? {} : { stream: body.stream }),
       ...(body.stream === true
@@ -695,19 +697,15 @@ export async function handleMessagesRequest(
   headers.delete("content-length");
   headers.delete("anthropic-version");
   headers.delete("anthropic-beta");
-  const chatRequest = new Request(context.request.url, {
-    method: "POST",
+  const responseMetadataEnabled = Config.chatResponseMetadataEnabled();
+  const chatResponse = await handleChatCompletionsRequest(context, aiGateway, {
+    body: converted.chat,
     headers,
-    body: JSON.stringify(converted.chat),
-    signal: context.request.signal,
+    responseMetadataEnabled,
   });
-  const chatResponse = await handleChatCompletionsRequest(
-    { ...context, request: chatRequest },
-    aiGateway,
-  );
   return convertChatResponse(
     chatResponse,
     converted.request,
-    Config.chatResponseMetadataEnabled(),
+    responseMetadataEnabled,
   );
 }

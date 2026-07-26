@@ -18,7 +18,7 @@ export const authMiddleware: Middleware = async (context, next) => {
     );
   }
 
-  if (isRequestAuthorized(context.request) === false) {
+  if (isRequestAuthorized(context.request, configuredKeys) === false) {
     throw new UnauthorizedError();
   }
 

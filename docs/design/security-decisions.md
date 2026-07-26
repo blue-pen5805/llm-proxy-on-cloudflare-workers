@@ -31,7 +31,8 @@ every key slot).
 **Rationale.** These routes are best-effort diagnostics, not transactional
 guarantees, and both require a valid `PROXY_API_KEY`. `/models` starts every
 configured provider concurrently with a 30-second per-provider timeout, while
-`/status` checks credentials in batches of five with a five-second timeout.
+`/status` starts every configured credential check concurrently with an
+individual five-second timeout.
 Validated provider configuration limits, per-provider response-size caps, and a
 4 MB aggregate cap bound `/models`; see `src/requests/models.ts` and
 `src/requests/status.ts`. For `/models`, the short-lived response cache

@@ -409,8 +409,10 @@ describe("handleChatCompletionsRequest", () => {
     ).not.toHaveBeenCalled();
     const gatewayHeaders =
       mockAIGateway.buildChatCompletionsRequests.mock.calls[0][0].headers;
-    expect(gatewayHeaders["cf-aig-skip-cache"]).toBe("true");
-    expect(gatewayHeaders["x-provider-auth"]).toBe("provider-header");
+    expect(new Headers(gatewayHeaders).get("cf-aig-skip-cache")).toBe("true");
+    expect(new Headers(gatewayHeaders).get("x-provider-auth")).toBe(
+      "provider-header",
+    );
     expect(mockAIGateway.buildChatCompletionsRequests).toHaveBeenCalledWith({
       provider: "openai",
       body: "",
@@ -944,6 +946,36 @@ describe("handleChatCompletionsRequest", () => {
       expect(response.status).toBe(200);
       expect(await response.text()).toBe("ok");
       expect(mockProviderClass.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("resolves a virtual model key without a provider separator", async () => {
+      vi.mocked(Config.virtualModels).mockReturnValue({
+        fast: [{ model: "openai/gpt-4", retries: 0 }],
+      });
+      mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
+        "/chat/completions",
+        { method: "POST", body: "{}" },
+      ]);
+      mockProviderClass.fetch.mockResolvedValue(
+        new Response("ok", { status: 200 }),
+      );
+
+      const response = await handleChatCompletionsRequest({
+        request: buildRequest("fast"),
+      } as any);
+
+      expect(response.status).toBe(200);
+    });
+
+    it("rejects a non-provider model without a separator", async () => {
+      vi.mocked(Config.virtualModels).mockReturnValue(undefined);
+
+      const response = await handleChatCompletionsRequest({
+        request: buildRequest("missing"),
+      } as any);
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: "Invalid provider." });
     });
 
     it("prefers a real provider over a colliding virtual model key", async () => {

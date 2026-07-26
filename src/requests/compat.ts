@@ -10,11 +10,9 @@ export async function handleCompatibilityRequest(
     preserveAiGatewayHeaders: true,
   });
 
-  const sanitizedHeaders = Object.fromEntries(strippedHeaders.entries());
-
   const [requestInfo, requestInit] =
     aiGateway.buildCompatibilityEndpointRequest({
-      headers: sanitizedHeaders,
+      headers: strippedHeaders,
       body: request.body,
       signal: request.signal,
     });

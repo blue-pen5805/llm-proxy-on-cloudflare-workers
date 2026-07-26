@@ -171,13 +171,14 @@ export async function handleModelsRequest(
           preserveAiGatewayHeaders: true,
         })
       : undefined;
-  const clientGatewayHeaders = sanitizedGatewayHeaders
-    ? Object.fromEntries(
-        [...sanitizedGatewayHeaders.entries()].filter(([key]) =>
-          key.startsWith("cf-aig-"),
-        ),
-      )
-    : undefined;
+  const clientGatewayHeaders: Record<string, string> = {};
+  let hasClientGatewayTuning = false;
+  sanitizedGatewayHeaders?.forEach((value, key) => {
+    if (key.startsWith("cf-aig-")) {
+      clientGatewayHeaders[key] = value;
+      hasClientGatewayTuning = true;
+    }
+  });
   // The provider fan-out is expensive (one upstream request per provider), so
   // successful aggregates are cached briefly. Requests carrying per-request
   // Gateway tuning (`cf-aig-*`) or `Cache-Control: no-store` bypass the cache
@@ -185,9 +186,6 @@ export async function handleModelsRequest(
   const cacheTtlSeconds = Config.modelsCacheTtlSeconds();
   const requestCacheControl =
     context.request?.headers.get("Cache-Control")?.toLowerCase() ?? "";
-  const hasClientGatewayTuning =
-    clientGatewayHeaders !== undefined &&
-    Object.keys(clientGatewayHeaders).length > 0;
   const cacheEnabled =
     cacheTtlSeconds > 0 &&
     !hasClientGatewayTuning &&
@@ -247,7 +245,7 @@ export async function handleModelsRequest(
         provider,
         context.apiKeyIndex,
         aiGateway,
-        clientGatewayHeaders,
+        hasClientGatewayTuning ? clientGatewayHeaders : undefined,
       ),
     ),
   );

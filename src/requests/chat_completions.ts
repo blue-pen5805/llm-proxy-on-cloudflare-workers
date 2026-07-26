@@ -45,18 +45,27 @@ function invalidRequestResponse(message: string, status = 400): Response {
   });
 }
 
+export interface PreparedChatCompletionsRequest {
+  body: Record<string, unknown> & { model: string };
+  headers: HeadersInit;
+  responseMetadataEnabled: boolean;
+}
+
 export async function handleChatCompletionsRequest(
   context: MiddlewareContext,
   aiGateway: CloudflareAIGateway | undefined = undefined,
+  preparedRequest?: PreparedChatCompletionsRequest,
 ) {
   const { request } = context;
-  const responseMetadataEnabled = Config.chatResponseMetadataEnabled();
+  const responseMetadataEnabled =
+    preparedRequest?.responseMetadataEnabled ??
+    Config.chatResponseMetadataEnabled();
   const startedAt = responseMetadataEnabled ? new Date().toISOString() : "";
   const startedAtPerformance = responseMetadataEnabled ? performance.now() : 0;
   // Validate Request Data Structure
-  const parsedRequestBody = parseJsonOrReturnText(
-    await readRequestText(request),
-  );
+  const parsedRequestBody =
+    preparedRequest?.body ??
+    parseJsonOrReturnText(await readRequestText(request));
   if (
     typeof parsedRequestBody !== "object" ||
     parsedRequestBody === null ||
@@ -93,6 +102,7 @@ export async function handleChatCompletionsRequest(
         requestedModel,
         virtualModels,
         new Set(),
+        preparedRequest?.headers ?? request.headers,
       );
       return result.route && responseMetadataEnabled
         ? enrichChatResponseWithMetadata({
@@ -112,6 +122,8 @@ export async function handleChatCompletionsRequest(
     aiGateway,
     chatRequestBody,
     requestedModel,
+    preparedRequest?.headers ?? request.headers,
+    undefined,
   );
   return result.route && responseMetadataEnabled
     ? enrichChatResponseWithMetadata({
@@ -132,15 +144,21 @@ async function attemptResolvedChatCompletion(
   requestedModel: string,
   virtualModels: VirtualModels,
   resolving: ReadonlySet<string>,
+  requestHeaders: HeadersInit,
   inheritedTimeout?: number,
 ): Promise<ChatCompletionAttemptResult> {
-  const [providerSelector] = requestedModel.split("/");
+  const separatorIndex = requestedModel.indexOf("/");
+  const providerSelector =
+    separatorIndex === -1
+      ? requestedModel
+      : requestedModel.slice(0, separatorIndex);
   if (resolveProvider(context, providerSelector)) {
     return attemptChatCompletion(
       context,
       aiGateway,
       chatRequestBody,
       requestedModel,
+      requestHeaders,
       inheritedTimeout,
     );
   }
@@ -152,6 +170,7 @@ async function attemptResolvedChatCompletion(
       aiGateway,
       chatRequestBody,
       requestedModel,
+      requestHeaders,
       inheritedTimeout,
     );
   }
@@ -173,6 +192,7 @@ async function attemptResolvedChatCompletion(
         candidateModel,
         virtualModels,
         nextResolving,
+        requestHeaders,
         timeout ?? inheritedTimeout,
       ),
   );
@@ -183,6 +203,7 @@ async function attemptChatCompletion(
   aiGateway: CloudflareAIGateway | undefined,
   chatRequestBody: Record<string, unknown> & { model: string },
   requestedModel: string,
+  requestHeaders: HeadersInit,
   timeout?: number,
 ): Promise<ChatCompletionAttemptResult> {
   const { request, apiKeyIndex: contextApiKeyIndex } = context;
@@ -191,8 +212,13 @@ async function attemptChatCompletion(
   ) => fetchWithCandidateTimeout(request.signal, timeout, fetchAttempt);
 
   // Split model into provider and model name
-  const [providerSelector, ...modelParts] = requestedModel.split("/");
-  const model = modelParts.join("/");
+  const separatorIndex = requestedModel.indexOf("/");
+  const providerSelector =
+    separatorIndex === -1
+      ? requestedModel
+      : requestedModel.slice(0, separatorIndex);
+  const model =
+    separatorIndex === -1 ? "" : requestedModel.slice(separatorIndex + 1);
   const parsedSelector = parseProviderSelector(providerSelector);
 
   // Validate provider name
@@ -233,7 +259,7 @@ async function attemptChatCompletion(
       : undefined;
   // Retain request-level Gateway controls only when this provider will use
   // AI Gateway. Direct provider requests must not receive Cloudflare metadata.
-  const sanitizedHeaders = stripProxyAuthorizationHeaders(request.headers, {
+  const sanitizedHeaders = stripProxyAuthorizationHeaders(requestHeaders, {
     preserveAiGatewayHeaders: Boolean(
       aiGateway &&
       (aiGateway.alwaysUse ||

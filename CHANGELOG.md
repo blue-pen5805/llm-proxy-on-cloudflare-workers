@@ -12,6 +12,13 @@ update is explicitly approved.
 
 ### 2026-07-26
 
+- Reduced Worker CPU work across request setup, provider forwarding, converted
+  Responses and Messages requests, structured logging, virtual-model retries,
+  and status checks. Converted requests now enter the Chat handler as parsed
+  objects instead of being serialized into and reparsed from an intermediate
+  `Request`; provider headers remain as `Headers`, URL/path sanitization avoids
+  redundant parsing on normalized hot paths, and status connectivity checks
+  start every configured credential subrequest without a local concurrency cap.
 - Changed aggregated model discovery to query all configured providers
   concurrently and extended each provider's timeout from 5 to 30 seconds.
 

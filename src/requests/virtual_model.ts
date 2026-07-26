@@ -65,23 +65,42 @@ export async function runVirtualModelChainAttempt(
   candidates: readonly VirtualModelCandidate[],
   attempt: ChatCompletionAttempt,
 ): Promise<ChatCompletionAttemptResult> {
-  const attempts = candidates.flatMap((candidate) =>
-    Array<VirtualModelCandidate>(candidate.retries + 1).fill(candidate),
-  );
+  let totalAttempts = 0;
+  for (const candidate of candidates) totalAttempts += candidate.retries + 1;
+  let attemptIndex = 0;
 
-  for (const [attemptIndex, candidate] of attempts.entries()) {
-    const isLastAttempt = attemptIndex === attempts.length - 1;
+  for (const candidate of candidates) {
+    for (
+      let candidateAttempt = 0;
+      candidateAttempt <= candidate.retries;
+      candidateAttempt++, attemptIndex++
+    ) {
+      const isLastAttempt = attemptIndex === totalAttempts - 1;
 
-    try {
-      const result = await (candidate.timeout === undefined
-        ? attempt(candidate.model)
-        : attempt(candidate.model, candidate.timeout));
-      const { response, retryable } = result;
+      try {
+        const result = await (candidate.timeout === undefined
+          ? attempt(candidate.model)
+          : attempt(candidate.model, candidate.timeout));
+        const { response, retryable } = result;
 
-      if (!retryable || isLastAttempt) {
-        RequestLogger.info(
-          "virtual_model.selected",
-          "Virtual model candidate selected",
+        if (!retryable || isLastAttempt) {
+          RequestLogger.info(
+            "virtual_model.selected",
+            "Virtual model candidate selected",
+            {
+              virtual_model: virtualModel,
+              candidate: candidate.model,
+              attempt: attemptIndex,
+              status: response.status,
+              timeout_ms: candidate.timeout,
+            },
+          );
+          return result;
+        }
+
+        RequestLogger.warn(
+          "virtual_model.retry",
+          "Virtual model candidate failed, trying the next attempt",
           {
             virtual_model: virtualModel,
             candidate: candidate.model,
@@ -90,35 +109,22 @@ export async function runVirtualModelChainAttempt(
             timeout_ms: candidate.timeout,
           },
         );
-        return result;
+        await response.body?.cancel().catch(() => undefined);
+      } catch (error) {
+        if (isLastAttempt) {
+          throw error;
+        }
+        RequestLogger.warn(
+          "virtual_model.retry",
+          "Virtual model candidate threw, trying the next attempt",
+          {
+            virtual_model: virtualModel,
+            candidate: candidate.model,
+            attempt: attemptIndex,
+            timeout_ms: candidate.timeout,
+          },
+        );
       }
-
-      RequestLogger.warn(
-        "virtual_model.retry",
-        "Virtual model candidate failed, trying the next attempt",
-        {
-          virtual_model: virtualModel,
-          candidate: candidate.model,
-          attempt: attemptIndex,
-          status: response.status,
-          timeout_ms: candidate.timeout,
-        },
-      );
-      await response.body?.cancel().catch(() => undefined);
-    } catch (error) {
-      if (isLastAttempt) {
-        throw error;
-      }
-      RequestLogger.warn(
-        "virtual_model.retry",
-        "Virtual model candidate threw, trying the next attempt",
-        {
-          virtual_model: virtualModel,
-          candidate: candidate.model,
-          attempt: attemptIndex,
-          timeout_ms: candidate.timeout,
-        },
-      );
     }
   }
 

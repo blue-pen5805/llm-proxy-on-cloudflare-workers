@@ -50,14 +50,15 @@ describe("compat", () => {
 
     const callArgs = vi.mocked(aiGateway.buildCompatibilityEndpointRequest).mock
       .calls[0][0];
+    const headers = new Headers(callArgs.headers);
     expect(callArgs.body).toBe(request.body);
-    expect(callArgs.headers.authorization).toBeUndefined();
-    expect(callArgs.headers["x-api-key"]).toBeUndefined();
-    expect(callArgs.headers["x-goog-api-key"]).toBeUndefined();
-    expect(callArgs.headers["cf-aig-authorization"]).toBeUndefined();
-    expect(callArgs.headers["cf-aig-byok-alias"]).toBeUndefined();
-    expect(callArgs.headers["cf-aig-skip-cache"]).toBe("true");
-    expect(callArgs.headers["x-client-header"]).toBe("preserved");
+    expect(headers.has("authorization")).toBe(false);
+    expect(headers.has("x-api-key")).toBe(false);
+    expect(headers.has("x-goog-api-key")).toBe(false);
+    expect(headers.has("cf-aig-authorization")).toBe(false);
+    expect(headers.has("cf-aig-byok-alias")).toBe(false);
+    expect(headers.get("cf-aig-skip-cache")).toBe("true");
+    expect(headers.get("x-client-header")).toBe("preserved");
     expect(callArgs.signal).toBe(request.signal);
 
     expect(fetchWithLogging).toHaveBeenCalledWith(

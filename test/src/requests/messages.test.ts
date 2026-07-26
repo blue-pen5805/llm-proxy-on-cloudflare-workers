@@ -137,13 +137,15 @@ describe("handleMessagesRequest", () => {
     expect(handleChatCompletionsRequest).toHaveBeenCalledWith(
       expect.objectContaining({ request: expect.any(Request) }),
       gateway,
+      expect.objectContaining({ responseMetadataEnabled: true }),
     );
-    const chatRequest = vi.mocked(handleChatCompletionsRequest).mock.calls[0][0]
-      .request;
-    expect(chatRequest.headers.get("anthropic-version")).toBeNull();
-    expect(chatRequest.headers.get("anthropic-beta")).toBeNull();
-    expect(chatRequest.headers.get("x-client")).toBe("retained");
-    expect(await chatRequest.json()).toEqual({
+    const preparedRequest = vi.mocked(handleChatCompletionsRequest).mock
+      .calls[0][2]!;
+    const chatHeaders = new Headers(preparedRequest.headers);
+    expect(chatHeaders.get("anthropic-version")).toBeNull();
+    expect(chatHeaders.get("anthropic-beta")).toBeNull();
+    expect(chatHeaders.get("x-client")).toBe("retained");
+    expect(preparedRequest.body).toEqual({
       model: "virtual/claude",
       messages: [
         { role: "system", content: [{ type: "text", text: "Be concise" }] },
@@ -273,9 +275,9 @@ describe("handleMessagesRequest", () => {
         tool_choice: { type: "any" },
       }),
     } as never);
-    let chatRequest = vi.mocked(handleChatCompletionsRequest).mock.calls[0][0]
-      .request;
-    expect(await chatRequest.json()).toMatchObject({
+    let preparedRequest = vi.mocked(handleChatCompletionsRequest).mock
+      .calls[0][2]!;
+    expect(preparedRequest.body).toMatchObject({
       stream: false,
       messages: [
         { role: "system", content: "System" },
@@ -305,9 +307,8 @@ describe("handleMessagesRequest", () => {
       }),
     } as never);
     expect((await filtered.json()).stop_reason).toBe("refusal");
-    chatRequest = vi.mocked(handleChatCompletionsRequest).mock.calls[1][0]
-      .request;
-    expect(await chatRequest.json()).toMatchObject({
+    preparedRequest = vi.mocked(handleChatCompletionsRequest).mock.calls[1][2]!;
+    expect(preparedRequest.body).toMatchObject({
       tool_choice: "none",
       parallel_tool_calls: true,
     });
@@ -402,9 +403,9 @@ describe("handleMessagesRequest", () => {
       usage: { input_tokens: 3, output_tokens: 2 },
       llm_proxy: { provider: "anthropic" },
     });
-    const chatRequest = vi.mocked(handleChatCompletionsRequest).mock.calls[0][0]
-      .request;
-    expect(await chatRequest.json()).toMatchObject({
+    const preparedRequest = vi.mocked(handleChatCompletionsRequest).mock
+      .calls[0][2]!;
+    expect(preparedRequest.body).toMatchObject({
       stream: true,
       stream_options: { include_usage: true },
     });

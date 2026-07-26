@@ -165,6 +165,32 @@ describe("maskSensitiveUrl", () => {
     expect(result).toBe("https://api.example.com/v1/chat");
   });
 
+  it("removes fragments and credentials embedded in URL user info", () => {
+    expect(
+      maskSensitiveUrl(
+        "https://user:password@api.example.com/v1/chat?key=secret#fragment",
+      ),
+    ).toBe("https://api.example.com/v1/chat");
+    expect(maskSensitiveUrl("https://api.example.com/v1/chat#fragment")).toBe(
+      "https://api.example.com/v1/chat",
+    );
+    expect(maskSensitiveUrl("http://localhost:8787/v1/chat?key=secret")).toBe(
+      "http://localhost:8787/v1/chat",
+    );
+    expect(maskSensitiveUrl("https://api.example.com?key=secret")).toBe(
+      "https://api.example.com",
+    );
+    expect(maskSensitiveUrl("https://api.example.com#fragment")).toBe(
+      "https://api.example.com",
+    );
+    expect(maskSensitiveUrl("https://例.jp/v1?key=secret")).toBe(
+      "https://xn--fsq.jp/v1",
+    );
+    expect(maskSensitiveUrl("https://api.example.com\\v1?key=secret")).toBe(
+      "https://api.example.com/v1",
+    );
+  });
+
   it("should handle invalid URLs gracefully", () => {
     const url = "not a valid url?param=value";
     const result = maskSensitiveUrl(url);

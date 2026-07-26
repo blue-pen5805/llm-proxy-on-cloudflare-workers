@@ -98,7 +98,12 @@ or stable derived identifiers.
 
 Ordinary request paths preserve streaming and propagate cancellation. Buffering
 occurs only when routing or conversion requires the body. Aggregated and
-diagnostic work has explicit byte, item, concurrency, attempt, and time limits.
+diagnostic work has explicit byte, item, attempt, and time limits.
+
+Independent subrequests start concurrently without an application-level
+concurrency cap by default. Add a cap only when a documented platform or
+upstream contract requires one or concrete production evidence shows that
+unrestricted fan-out is unsafe.
 
 Fan-out operations such as model discovery and status checks isolate provider
 failures and return partial results when their public contract allows it. A slow

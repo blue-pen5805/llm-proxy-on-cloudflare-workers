@@ -7,6 +7,42 @@ const MAX_BUFFERED_BODY_BYTES = 10 * 1024 * 1024;
 const MAX_BUFFERED_RESPONSE_BYTES = 5 * 1024 * 1024;
 
 export function maskSensitiveUrl(url: string): string {
+  // Provider URLs normally arrive as already normalized absolute HTTP(S)
+  // strings. Strip query and fragment delimiters with a bounded scan on that
+  // hot path; unusual authorities still go through URL for validation and
+  // user-info removal.
+  const schemeLength = url.startsWith("https://")
+    ? 8
+    : url.startsWith("http://")
+      ? 7
+      : 0;
+  if (schemeLength > 0 && !url.includes("\\")) {
+    let authorityEnd = url.length;
+    const pathStart = url.indexOf("/", schemeLength);
+    const queryStart = url.indexOf("?", schemeLength);
+    const fragmentStart = url.indexOf("#", schemeLength);
+    if (pathStart !== -1) authorityEnd = pathStart;
+    if (queryStart !== -1 && queryStart < authorityEnd) {
+      authorityEnd = queryStart;
+    }
+    if (fragmentStart !== -1 && fragmentStart < authorityEnd) {
+      authorityEnd = fragmentStart;
+    }
+    const authority = url.slice(schemeLength, authorityEnd);
+    if (
+      authority.length > 0 &&
+      !authority.includes("@") &&
+      /^(?:[A-Za-z0-9._-]+|\[[0-9A-Fa-f:.]+\])(?::\d+)?$/.test(authority)
+    ) {
+      let pathEnd = url.length;
+      if (queryStart !== -1) pathEnd = queryStart;
+      if (fragmentStart !== -1 && fragmentStart < pathEnd) {
+        pathEnd = fragmentStart;
+      }
+      return url.slice(0, pathEnd);
+    }
+  }
+
   try {
     const parsedUrl = new URL(url);
     return `${parsedUrl.origin}${parsedUrl.pathname}`;
@@ -126,8 +162,10 @@ export async function readResponseJson(
 }
 
 export function getRequestPath(request: Request): string {
-  const requestUrl = new URL(request.url);
-  return `${requestUrl.pathname}${requestUrl.search}${requestUrl.hash}`;
+  // Request.url is already an absolute, runtime-normalized URL.
+  const authorityStart = request.url.indexOf("://") + 3;
+  const pathStart = request.url.indexOf("/", authorityStart);
+  return request.url.slice(pathStart);
 }
 
 export function shuffleArray<T>(array: T[]): T[] {
