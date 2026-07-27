@@ -36,6 +36,12 @@ export const errorMiddleware: Middleware = async (context, next) => {
       ? anthropicErrorResponse(message, status)
       : openAIErrorResponse(message, status);
     response.headers.set("Cache-Control", "no-store");
+    // RFC 9110 requires a challenge on every 401. The scheme alone is the whole
+    // contract here; no realm is advertised because it would name the
+    // deployment without helping any client choose a credential.
+    if (status === 401) {
+      response.headers.set("WWW-Authenticate", "Bearer");
+    }
     return addCorsHeaders(context.request, response);
   }
 };

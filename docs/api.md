@@ -541,3 +541,6 @@ Unexpected errors use the applicable local envelope with a generic HTTP 500
 message; details are written only to Worker logs.
 Requests whose decoded body exceeds 10 MiB return HTTP 413 before JSON parsing,
 including Responses and Messages requests.
+Proxy-issued HTTP 401 responses carry `WWW-Authenticate: Bearer` without a
+realm. An upstream 401 forwarded from a provider keeps that provider's own
+headers.

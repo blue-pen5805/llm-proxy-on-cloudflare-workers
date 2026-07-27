@@ -8,6 +8,9 @@ declare global {
     JSON_OBJECT: string;
     JSON_ARRAY: string;
     JSON_NUMBER: string;
+    JSON_LITERAL: string;
+    QUOTED_STRING: string;
+    MALFORMED_ARRAY: string;
     COMMA_SEPARATED: string;
     PLAIN_STRING: string;
   }
@@ -19,6 +22,9 @@ vi.mock("node:process", () => ({
     JSON_OBJECT: '{"key": "value"}',
     JSON_ARRAY: "[1, 2, 3]",
     JSON_NUMBER: "123",
+    JSON_LITERAL: "true",
+    QUOTED_STRING: '"quoted"',
+    MALFORMED_ARRAY: "[not-json",
     COMMA_SEPARATED: "a, b, c",
     PLAIN_STRING: "plain string",
   },
@@ -99,9 +105,23 @@ describe("Environments", () => {
       expect(result).toEqual([1, 2, 3]);
     });
 
-    test("should parse JSON numbers", () => {
+    test("keeps a numeric value as one opaque secret", () => {
+      // A credential of digits alone must stay a string. Coercing it to a
+      // number made the credential readers discard it, silently disabling a
+      // correctly configured provider.
       const result = Environments.get("JSON_NUMBER", true);
-      expect(result).toBe(123);
+      expect(result).toBe("123");
+    });
+
+    test("keeps scalar JSON literals as opaque secrets", () => {
+      // Only an array or an object carries structure. Everything else is a
+      // single credential and must reach the readers as the configured text.
+      expect(Environments.get("JSON_LITERAL", true)).toBe("true");
+      expect(Environments.get("QUOTED_STRING", true)).toBe('"quoted"');
+    });
+
+    test("keeps a malformed structured value as one opaque secret", () => {
+      expect(Environments.get("MALFORMED_ARRAY", true)).toBe("[not-json");
     });
 
     test("should keep a comma-containing value as one opaque secret", () => {

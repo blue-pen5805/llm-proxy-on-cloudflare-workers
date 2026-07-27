@@ -156,14 +156,16 @@ function enrichEventStream(
  * buffering when enrichment is abandoned. Instead the body is read directly:
  * if it outgrows the budget, the bytes already read are replayed ahead of the
  * untouched remainder so the caller can still forward the response unchanged.
+ *
+ * A body that decodes as strict UTF-8 is returned as text alone. The decoder
+ * retains a byte order mark, so re-encoding that text reproduces the upstream
+ * bytes exactly and the buffered chunks can be released before the far more
+ * expensive parse and re-serialization run.
  */
 async function readBoundedResponseBody(
   body: ReadableStream<Uint8Array>,
   maximumBytes: number,
-): Promise<{
-  text?: string;
-  body: ReadableStream<Uint8Array>;
-}> {
+): Promise<{ text: string } | { body: ReadableStream<Uint8Array> }> {
   const reader = body.getReader();
   const chunks: Uint8Array[] = [];
   let receivedBytes = 0;
@@ -196,24 +198,25 @@ async function readBoundedResponseBody(
   }
 
   reader.releaseLock();
-  const replayBody = new ReadableStream<Uint8Array>({
-    start(controller) {
-      for (const chunk of chunks) controller.enqueue(chunk);
-      controller.close();
-    },
-  });
   const decoder = new TextDecoder("utf-8", {
     fatal: true,
-    ignoreBOM: false,
+    ignoreBOM: true,
   });
   try {
     let text = "";
     for (const chunk of chunks) text += decoder.decode(chunk, { stream: true });
-    return { text: text + decoder.decode(), body: replayBody };
+    return { text: text + decoder.decode() };
   } catch {
     // Metadata is optional. Preserve malformed UTF-8 byte-for-byte instead of
     // replacing invalid sequences while attempting to parse JSON.
-    return { body: replayBody };
+    return {
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const chunk of chunks) controller.enqueue(chunk);
+          controller.close();
+        },
+      }),
+    };
   }
 }
 
@@ -241,18 +244,23 @@ export async function enrichChatResponseWithMetadata(
       statusText: response.statusText,
       headers: responseHeaders(response.headers),
     });
-  if (read.text === undefined) {
+  if (!("text" in read)) {
     return forwardUnchanged(read.body);
   }
 
+  // The decoder retains a byte order mark so the text stays byte-exact when it
+  // is forwarded unchanged; JSON.parse must not see it.
+  const { text } = read;
+  const jsonText = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+
   let body: unknown;
   try {
-    body = JSON.parse(read.text) as unknown;
+    body = JSON.parse(jsonText) as unknown;
   } catch {
-    return forwardUnchanged(read.body);
+    return forwardUnchanged(text);
   }
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
-    return forwardUnchanged(read.body);
+    return forwardUnchanged(text);
   }
 
   return forwardUnchanged(

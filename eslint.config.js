@@ -25,7 +25,19 @@ export default [
       },
     },
     rules: {
+      // Type-aware rules. The project service is already configured for these
+      // paths, so these cost nothing extra to run and cover the mistakes this
+      // codebase is most exposed to: unawaited work in the request pipeline and
+      // checks that silently never fire.
+      // Two rules are deliberately omitted. `require-await`: a provider hook
+      // must match the Promise-returning ProviderDefinition signature even when
+      // its implementation has nothing to await. `no-unnecessary-type-assertion`:
+      // this program is type-checked with the Node globals while the Worker runs
+      // with the Cloudflare ones, so assertions that are required at runtime
+      // (Response.json(), the generated Env) look redundant to that rule.
       "@typescript-eslint/no-floating-promises": "error",
+      "@typescript-eslint/no-misused-promises": "error",
+      "@typescript-eslint/await-thenable": "error",
     },
   },
   {

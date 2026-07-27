@@ -1044,6 +1044,28 @@ describe("models", () => {
       expect(hitResponse.headers.get("X-Proxy-Models-Cache")).toBe("HIT");
     });
 
+    it("retrieves one model from a cached aggregate", async () => {
+      // A cache hit carries no per-model fragments, so retrieval falls back to
+      // reading the stored aggregate body.
+      const context = { apiKeyIndex: 21 } as any;
+      await handleModelsRequest(context);
+
+      const found = await handleModelRetrieveRequest(context, "openai/gpt-4");
+      expect(found.headers.get("X-Proxy-Models-Cache")).toBe("HIT");
+      await expect(found.json()).resolves.toMatchObject({
+        id: "openai/gpt-4",
+      });
+
+      const missing = await handleModelRetrieveRequest(
+        context,
+        "openai/absent",
+      );
+      expect(missing.status).toBe(404);
+      await expect(missing.json()).resolves.toEqual({
+        error: expect.objectContaining({ code: "model_not_found" }),
+      });
+    });
+
     it("bypasses the cache when the client sends Cache-Control: no-store", async () => {
       const bypassResponse = await handleModelsRequest({
         apiKeyIndex: 13,

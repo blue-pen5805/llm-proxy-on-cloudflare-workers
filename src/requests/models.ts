@@ -222,10 +222,28 @@ async function fetchProviderModels(
   );
 }
 
+/**
+ * A served aggregate plus, on the uncached path, the per-model JSON fragments
+ * it was assembled from and their ids in the same order.
+ * `/v1/models/<model>` reuses those fragments so it never re-parses the
+ * aggregate it just serialized.
+ */
+interface AggregatedModels {
+  response: Response;
+  models?: { ids: string[]; serialized: string[] };
+}
+
 export async function handleModelsRequest(
   context: MiddlewareContext,
   aiGateway: CloudflareAIGateway | undefined = undefined,
-) {
+): Promise<Response> {
+  return (await aggregateModels(context, aiGateway)).response;
+}
+
+async function aggregateModels(
+  context: MiddlewareContext,
+  aiGateway: CloudflareAIGateway | undefined,
+): Promise<AggregatedModels> {
   const allProviderEntries = Object.entries(
     context.providers?.all() ?? getAllProviderInstances(Environments.all()),
   );
@@ -233,7 +251,7 @@ export async function handleModelsRequest(
     context.request,
     new Set(allProviderEntries.map(([providerName]) => providerName)),
   );
-  if (providerFilter instanceof Response) return providerFilter;
+  if (providerFilter instanceof Response) return { response: providerFilter };
   const providerFilterSet =
     providerFilter === undefined ? undefined : new Set(providerFilter);
   const sanitizedGatewayHeaders =
@@ -287,9 +305,11 @@ export async function handleModelsRequest(
               PRIVATE_NO_STORE_HEADERS["Cache-Control"],
             );
             cachedHeaders.set("X-Proxy-Models-Cache", "HIT");
-            return new Response(cachedResponse.body, {
-              headers: cachedHeaders,
-            });
+            return {
+              response: new Response(cachedResponse.body, {
+                headers: cachedHeaders,
+              }),
+            };
           }
         } catch {
           reportModelsCacheUnavailable("match");
@@ -309,8 +329,11 @@ export async function handleModelsRequest(
       providerFilterSet === undefined || providerFilterSet.has(providerName),
   );
   // Models are kept as their serialized JSON so the byte budget and the final
-  // response body reuse one JSON.stringify pass per model.
+  // response body reuse one JSON.stringify pass per model. Their ids are kept
+  // alongside, in the same order, so a single-model retrieval can locate one
+  // fragment without parsing the aggregate.
   const serializedModels: string[] = [];
+  const modelIds: string[] = [];
   let aggregatedBytes = 0;
   let truncated = false;
   let providerFailed = false;
@@ -334,6 +357,7 @@ export async function handleModelsRequest(
         owned_by: VIRTUAL_MODEL_PROVIDER_NAME,
       });
       serializedModels.push(serializedModel);
+      modelIds.push(virtualModelId);
       aggregatedBytes += utf8ByteLength(serializedModel);
     }
   }
@@ -382,8 +406,9 @@ export async function handleModelsRequest(
       0,
       MAX_MODELS_PER_PROVIDER,
     )) {
+      const qualifiedModelId = `${providerName}/${id}`;
       const serializedModel = JSON.stringify({
-        id: `${providerName}/${id}`,
+        id: qualifiedModelId,
         ...model,
       });
       const modelBytes = utf8ByteLength(serializedModel);
@@ -392,6 +417,7 @@ export async function handleModelsRequest(
         break;
       }
       serializedModels.push(serializedModel);
+      modelIds.push(qualifiedModelId);
       aggregatedBytes += modelBytes;
     }
     if (truncated) break;
@@ -415,7 +441,10 @@ export async function handleModelsRequest(
   };
 
   if (modelsCache === undefined) {
-    return new Response(responseBody, { headers: responseHeaders });
+    return {
+      response: new Response(responseBody, { headers: responseHeaders }),
+      models: { ids: modelIds, serialized: serializedModels },
+    };
   }
 
   // Degraded aggregates (a failed provider or a truncated list) are served but
@@ -439,9 +468,12 @@ export async function handleModelsRequest(
     }
   }
 
-  return new Response(responseBody, {
-    headers: { ...responseHeaders, "X-Proxy-Models-Cache": "MISS" },
-  });
+  return {
+    response: new Response(responseBody, {
+      headers: { ...responseHeaders, "X-Proxy-Models-Cache": "MISS" },
+    }),
+    models: { ids: modelIds, serialized: serializedModels },
+  };
 }
 
 export async function handleModelRetrieveRequest(
@@ -449,17 +481,35 @@ export async function handleModelRetrieveRequest(
   modelId: string,
   aiGateway: CloudflareAIGateway | undefined = undefined,
 ): Promise<Response> {
-  const modelsResponse = await handleModelsRequest(context, aiGateway);
+  const { response: modelsResponse, models } = await aggregateModels(
+    context,
+    aiGateway,
+  );
   if (!modelsResponse.ok) return modelsResponse;
-  const models = (await modelsResponse.json()) as OpenAIModelsListResponseBody;
-  const model = models.data.find((candidate) => candidate.id === modelId);
-  if (!model) {
-    return openAIErrorResponse(`Model '${modelId}' not found.`, 404, {
-      code: "model_not_found",
-      param: "model",
-    });
-  }
+
   const headers = new Headers(modelsResponse.headers);
   headers.delete("X-Proxy-Models-Truncated");
+
+  // The aggregate was just assembled from these fragments, so the matching one
+  // is returned directly instead of parsing back the list that was serialized a
+  // moment earlier. A cache hit carries no fragments and reads the stored body.
+  if (models) {
+    const modelIndex = models.ids.indexOf(modelId);
+    if (modelIndex === -1) return modelNotFound(modelId);
+    headers.set("Content-Type", "application/json");
+    return new Response(models.serialized[modelIndex], { headers });
+  }
+
+  const cachedModels =
+    (await modelsResponse.json()) as OpenAIModelsListResponseBody;
+  const model = cachedModels.data.find((candidate) => candidate.id === modelId);
+  if (!model) return modelNotFound(modelId);
   return Response.json(model, { headers });
+}
+
+function modelNotFound(modelId: string): Response {
+  return openAIErrorResponse(`Model '${modelId}' not found.`, 404, {
+    code: "model_not_found",
+    param: "model",
+  });
 }

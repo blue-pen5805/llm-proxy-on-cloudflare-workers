@@ -18,8 +18,18 @@ export default defineConfig({
     onConsoleLog: () => false,
     coverage: {
       provider: "istanbul",
-      reporter: ["text", "json-summary"],
-      include: ["src/**/*.ts", "scripts/*.ts"],
+      // `skipFull` is passed to the text reporter so a passing run still lists
+      // every measured file. Without it the CI log prints an empty table and a
+      // summary, which cannot show that a file left the report entirely.
+      reporter: [
+        ["text", { skipFull: false }],
+        ["json-summary", {}],
+      ],
+      reportOnFailure: true,
+      // `scripts/**` rather than `scripts/*`: the deployment tooling has
+      // subdirectories (locale message tables) that are part of the 100%
+      // coverage contract.
+      include: ["src/**/*.ts", "scripts/**/*.ts"],
       exclude: ["src/**/*.d.ts"],
       thresholds: {
         statements: 100,

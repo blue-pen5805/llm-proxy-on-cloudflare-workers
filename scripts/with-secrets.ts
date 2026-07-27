@@ -139,6 +139,15 @@ export async function runCommandWithSecretsCli() {
     shell: process.platform === "win32", // Use shell only on Windows to resolve commands like 'wrangler'
   });
 
+  // Without an "error" listener, a command that cannot be spawned (for example
+  // a missing `wrangler` on PATH) turns into an unhandled 'error' event and a
+  // raw stack trace.
+  childProcess.on("error", (error) => {
+    console.error(`❌ Failed to run ${commandName}: ${getErrorMessage(error)}`);
+    removeGeneratedDevVarsFile(devVarsPath);
+    process.exit(1);
+  });
+
   childProcess.on("close", (exitCode) => {
     removeGeneratedDevVarsFile(devVarsPath);
     process.exit(exitCode ?? 0);

@@ -24,4 +24,22 @@ describe("script utilities", () => {
       }`),
     ).toEqual({ url: "https://example.com/*literal*/" });
   });
+
+  it("preserves a credential containing a comma before a closing brace", () => {
+    // Stripping trailing commas with a regular expression rewrote this value
+    // to "abc }", so a correct credential was deployed corrupted.
+    expect(parseJsonc('{"PROXY_API_KEY": "abc, }"}')).toEqual({
+      PROXY_API_KEY: "abc, }",
+    });
+    expect(parseJsonc('{"DEFAULT_MODEL": "a, ]"}')).toEqual({
+      DEFAULT_MODEL: "a, ]",
+    });
+  });
+
+  it("rejects malformed JSONC and non-object documents", () => {
+    expect(() => parseJsonc("{")).toThrow("not valid JSONC");
+    expect(() => parseJsonc('{"a": 1,, }')).toThrow("not valid JSONC");
+    expect(() => parseJsonc("[1, 2]")).toThrow("must be a JSON object");
+    expect(() => parseJsonc('"text"')).toThrow("must be a JSON object");
+  });
 });

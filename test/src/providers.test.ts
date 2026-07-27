@@ -161,6 +161,21 @@ describe("provider registry", () => {
     expect(() => registry.all()).toThrow("profile discovery failed");
   });
 
+  it("enumerates a custom endpoint named __proto__", () => {
+    // The configured name charset allows "__proto__". Accumulating it on an
+    // ordinary object literal replaced the prototype instead of adding an own
+    // entry, dropping the endpoint from /models and /status while routing
+    // still resolved it.
+    const registry = new ProviderRegistry({}, [
+      { name: "__proto__", baseUrl: "https://endpoint.example/v1" },
+    ]);
+
+    expect(registry.names()).toEqual(["__proto__"]);
+    expect(registry.get("__proto__")).toBeDefined();
+    expect(Object.keys(registry.allSettled().providers)).toEqual(["__proto__"]);
+    expect(Object.keys(registry.all())).toEqual(["__proto__"]);
+  });
+
   it("reuses registries across requests with an unchanged configuration", () => {
     const withoutEndpoints = vi
       .spyOn(Config, "customOpenAIEndpoints")

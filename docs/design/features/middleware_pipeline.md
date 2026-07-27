@@ -24,10 +24,13 @@ The order in `src/index.ts` is behaviorally significant:
 3. `corsMiddleware` answers preflight requests immediately and adds CORS headers
    to actual cross-origin responses.
 4. `requestMiddleware` initializes the path, including its query string.
-5. `apiKeyPathMiddleware` extracts a `/key/...` prefix.
-6. `authMiddleware` removes credential-like query parameters and authenticates
+5. `authMiddleware` removes credential-like query parameters and authenticates
    header credentials unless development mode is enabled on a locally running
    Worker.
+6. `apiKeyPathMiddleware` extracts a `/key/...` prefix. It runs after
+   authentication so a malformed selection cannot return HTTP 400 to an
+   unauthenticated client, which would distinguish that prefix from any other
+   unauthenticated path.
 7. `providerRegistryMiddleware` validates custom endpoint configuration and
    creates the request-scoped provider registry.
 8. `aiGatewayMiddleware` selects the default or path-specific Gateway and

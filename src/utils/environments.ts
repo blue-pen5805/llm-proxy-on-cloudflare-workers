@@ -3,8 +3,11 @@ import * as process from "node:process";
 
 const requestEnvironment = new AsyncLocalStorage<Env | Partial<Env>>();
 
-type ParsedEnvironmentValue =
-  string | Array<unknown> | object | number | undefined;
+type ParsedEnvironmentValue = string | Array<unknown> | object | undefined;
+
+// Only an explicit JSON array or object carries structure: an array configures
+// multiple credentials and an object configures named credential profiles.
+const STRUCTURED_JSON_PATTERN = /^\s*[[{]/;
 
 // Bindings are immutable for one deployed Env object. Keying by that object
 // and setting name avoids retaining credential text as a Map key.
@@ -103,25 +106,25 @@ export class Environments {
   static get(key: keyof Env, parse: false): string | undefined;
 
   /**
-   * Gets a specific environment variable by key and parses it as JSON.
-   * A value that is not valid JSON is returned unchanged, so a credential is
-   * never split or coerced: multiple values are configured explicitly as a
-   * JSON array and profiles as a JSON object.
+   * Gets a specific environment variable by key and parses it as structured
+   * JSON. Anything that is not an explicit JSON array or object is returned
+   * unchanged, so a credential is never split or coerced: multiple values are
+   * configured explicitly as a JSON array and profiles as a JSON object.
    *
    * @param {keyof Env} key - The environment variable key to retrieve
    * @param {boolean} [parse=true] - Whether to parse the value
-   * @returns {string | Array<unknown> | Object | number | undefined} The environment variable value,
+   * @returns {string | Array<unknown> | Object | undefined} The environment variable value,
    * parsed according to the parse parameter
    */
   static get(
     key: keyof Env,
     parse?: boolean,
-  ): string | Array<unknown> | object | number | undefined;
+  ): string | Array<unknown> | object | undefined;
 
   static get(
     key: keyof Env,
     parse: boolean = true,
-  ): string | Array<unknown> | object | number | undefined {
+  ): string | Array<unknown> | object | undefined {
     const env = this.all();
     const configuredValue = env[key] as string | undefined;
 
@@ -138,9 +141,12 @@ export class Environments {
       return environmentCache.get(key);
     }
 
-    // A value that is not valid JSON is a single opaque secret. It must not be
-    // split on any separator: provider credentials legitimately contain commas.
-    const jsonValue = this.parseJson(configuredValue);
+    // Anything that is not structured JSON is a single opaque secret. It must
+    // not be split on any separator (provider credentials legitimately contain
+    // commas) and must not be coerced to another JSON type: a credential such
+    // as "12345" or "true" would otherwise parse to a number or boolean, which
+    // the credential readers discard, silently disabling a configured provider.
+    const jsonValue = this.parseStructuredJson(configuredValue);
     const parsedValue = jsonValue !== undefined ? jsonValue : configuredValue;
 
     if (!environmentCache) {
@@ -152,17 +158,23 @@ export class Environments {
   }
 
   /**
-   * Attempts to parse a string as JSON.
+   * Attempts to parse a string as a JSON array or object.
    *
    * @private
    * @param {string} value - The string to parse
-   * @returns {Array<unknown> | Object | number | undefined} The parsed JSON value or undefined if parsing fails
+   * @returns {Array<unknown> | Object | undefined} The parsed JSON array or
+   * object, or undefined when the value is not one
    */
-  private static parseJson(
+  private static parseStructuredJson(
     value: string,
-  ): Array<unknown> | object | number | undefined {
+  ): Array<unknown> | object | undefined {
+    if (!STRUCTURED_JSON_PATTERN.test(value)) {
+      return undefined;
+    }
     try {
-      return JSON.parse(value);
+      // A leading `[` or `{` can only begin an array or an object, so a
+      // successful parse never yields a scalar here.
+      return JSON.parse(value) as Array<unknown> | object;
     } catch {
       return undefined;
     }

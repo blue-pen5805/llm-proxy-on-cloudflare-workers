@@ -126,11 +126,18 @@ export class ProviderRegistry {
    * a profile-discovery failure cannot leave a misleading partial description.
    */
   allSettled(): ProviderEnumerationResult {
-    const providerInstances: Record<string, ProviderBase> = {};
+    // Null-prototype maps: a configured endpoint may legitimately be named
+    // "__proto__", and assigning that key on an ordinary object literal
+    // replaces the prototype instead of creating an own entry, which would
+    // drop the endpoint from every enumeration while routing still resolved it.
+    const providerInstances = Object.create(null) as Record<
+      string,
+      ProviderBase
+    >;
     const failures: ProviderEnumerationResult["failures"] = [];
     for (const providerName of this.providerNames) {
       try {
-        const instances: Record<string, ProviderBase> = {};
+        const instances = Object.create(null) as Record<string, ProviderBase>;
         const defaultProvider = this.get(providerName);
         /* istanbul ignore next -- names() contains only constructible registry entries */
         if (!defaultProvider) {

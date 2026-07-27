@@ -3,11 +3,9 @@
     /* Visit https://aka.ms/tsconfig.json to read more about this file */
 
     /* Set the JavaScript language version for emitted JavaScript and include compatible library declarations. */
-    "target": "es2021",
+    "target": "es2023",
     /* Specify a set of bundled library declaration files that describe the target runtime environment. */
-    "lib": ["es2021"],
-    /* Specify what JSX code is generated. */
-    "jsx": "react-jsx",
+    "lib": ["es2023"],
 
     /* Specify what module code is generated. */
     "module": "es2022",
@@ -18,11 +16,6 @@
     "types": ["node"],
     /* Enable importing .json files */
     "resolveJsonModule": true,
-
-    /* Allow JavaScript files to be a part of your program. Use the `checkJS` option to get errors from these files. */
-    "allowJs": true,
-    /* Enable error reporting in type-checked JavaScript files. */
-    "checkJs": false,
 
     /* Disable emitting files from a compilation. */
     "noEmit": true,
@@ -36,6 +29,10 @@
 
     /* Enable all strict type-checking options. */
     "strict": true,
+    /* Require an explicit `override` when a member replaces a base member. */
+    "noImplicitOverride": true,
+    /* Reject a switch case that falls through into the next one. */
+    "noFallthroughCasesInSwitch": true,
 
     /* Skip type checking all .d.ts files. */
     "skipLibCheck": true

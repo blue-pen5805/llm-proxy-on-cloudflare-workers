@@ -12,6 +12,31 @@ update is explicitly approved.
 
 ### 2026-07-27
 
+- Fixed configuration reading so a credential containing `", }"` or `", ]"` is
+  no longer silently rewritten before being written to `.dev.vars` or deployed
+  as a Worker secret.
+- Fixed provider credential parsing so a quoted string such as `"12345"`,
+  `"true"`, or `"null"` is kept as the configured text instead of being read as
+  another JSON type and discarded, which left a configured provider reporting
+  itself as unavailable. Only an explicit JSON array or object still carries
+  structure, and the bare literal `null` still means secret deletion.
+- Rejected configuration that the Worker's own readers refuse before
+  `npm run secrets:deploy` deploys any secret, instead of deploying it and
+  failing every subsequent request with HTTP 503. The check evaluates the
+  configuration the deployment results in, so documented no-op empty values are
+  not rejected, and `CUSTOM_OPENAI_ENDPOINTS` and `VIRTUAL_MODELS` must now
+  change together because a setting that is not deployed keeps its deployed
+  value. Deleting `VIRTUAL_MODELS` removes the graph entirely and is still
+  accepted on its own.
+- Authenticated requests before parsing a `/key/<selection>` prefix, so an
+  unauthenticated client receives HTTP 401 rather than HTTP 400 for a malformed
+  selection.
+- Added `WWW-Authenticate: Bearer` to proxy-issued HTTP 401 responses.
+- Listed a custom OpenAI endpoint named `__proto__` in `/v1/models` and
+  `/status`; it was previously reachable only through its routes.
+- Reduced the work of `GET /v1/models/<model>` and of chat response metadata by
+  removing an aggregate serialize-and-reparse round trip and a duplicated
+  in-memory copy of the upstream body.
 - Added English and Japanese localization to the interactive `npm run secrets`
   editor, with language selection as its first prompt.
 - Added exact-origin CORS allowlisting, authenticated proxy-key slot logging,

@@ -93,12 +93,15 @@ export async function handleChatCompletionsRequest(
   // virtual model map, whose keys are then tried as an ordered candidate list.
   // "virtual/<name>" is the recommended convention for these keys (no real
   // provider is named "virtual"), but any configured key resolves here.
-  const [providerSelector] = requestedModel.split("/");
+  const modelSeparatorIndex = requestedModel.indexOf("/");
+  const providerSelector =
+    modelSeparatorIndex === -1
+      ? requestedModel
+      : requestedModel.slice(0, modelSeparatorIndex);
   const parsedProviderSelector = parseProviderSelector(providerSelector);
   const providerInstance = resolveProvider(context, providerSelector);
   const virtualModels = providerInstance ? undefined : Config.virtualModels();
   const candidates = virtualModels?.[requestedModel];
-  const modelSeparatorIndex = requestedModel.indexOf("/");
   RequestLogger.start({
     endpoint,
     provider: providerInstance
@@ -381,7 +384,7 @@ async function attemptChatCompletion(
     // would be discarded) is skipped; only its header merge is reproduced.
     // Providers reaching this path use the default builder, which layers
     // provider-computed headers over the sanitized client headers.
-    const gatewayRequests = await aiGateway.buildChatCompletionsRequests({
+    const gatewayRequests = aiGateway.buildChatCompletionsRequests({
       provider: aiGatewayProvider,
       body: "",
       parsedBody: supportedRequestBody as {

@@ -14,7 +14,13 @@ so proxy credentials do not enter URL logs. Candidate and configured values are
 SHA-256 hashed and compared at fixed length without an early return across
 configured keys.
 The matching zero-based slot is retained in request scope and logged as
-`proxy_key_index`; credential values and fingerprints are never logged.
+`proxy_key_index`; credential values and fingerprints are never logged. A
+rejected request receives `WWW-Authenticate: Bearer`, advertising the scheme
+without a realm that would name the deployment.
+
+Authentication precedes `/key/<selection>` parsing. Were the order reversed, a
+malformed selection would answer an unauthenticated client with HTTP 400 while
+every other path answered HTTP 401, confirming that the prefix exists.
 
 Authentication is bypassed only when `DEV` is explicitly `true` **and** the
 Worker is running locally, determined by the absence of the edge-supplied
@@ -73,6 +79,43 @@ Local `.dev.vars` generation omits `null` and missing top-level values rather
 than materializing empty bindings. Runtime secret lookup also ignores empty and
 whitespace-only string entries, so they cannot make a provider appear
 configured.
+
+Operator files are read with a JSONC tokenizer rather than by stripping
+comments and trailing commas textually. A text transformation cannot separate a
+comma inside a string value from a trailing comma, which silently rewrote
+credentials before they reached Wrangler. The interactive editor writes files
+with the same parser, so the reader and the writer agree on every value.
+
+A configured value is treated as structured only when it is an explicit JSON
+array or object. Every other value stays the exact configured text, so a
+credential that looks like another JSON type is neither coerced nor discarded.
+Only the bare literal `null` retains its separate meaning as a deletion.
+
+Deployment additionally evaluates the Worker's own configuration readers
+against the configuration the deployment produces. The JSON Schema cannot
+express endpoint name uniqueness, exact-origin form, or an acyclic virtual-model
+graph within the attempt limit, so without this a schema-valid file deploys and
+then fails every request with HTTP 503. Two properties make that check
+meaningful. Empty values that the deployment drops as no-ops are excluded, so
+the check never rejects a file that changes nothing. And because a setting that
+is not deployed keeps its deployed value, which this command cannot read back,
+`CUSTOM_OPENAI_ENDPOINTS` and `VIRTUAL_MODELS` must change together: the
+validity of a virtual-model reference depends on which endpoint names exist, so
+neither half alone describes the resulting configuration.
+
+Both properties are decided by each setting's effective operation rather than
+by the presence of its key, because those two definitions disagree exactly where
+it matters. An empty value is present but deploys nothing, so a presence test
+would accept `CUSTOM_OPENAI_ENDPOINTS` deleted alongside an empty
+`VIRTUAL_MODELS` as a complete declaration while leaving the deployed virtual
+models untouched — reintroducing the partial update the requirement exists to
+prevent.
+
+The requirement is one-directional because the dependency is. Deleting
+`VIRTUAL_MODELS` leaves no reference that could name an endpoint, and cycles and
+the attempt limit are properties of that graph alone, so that deletion is
+verifiable on its own whatever endpoints remain deployed. Every other one-sided
+change leaves the retained half unknown and is refused.
 
 `create-config.ts` provides the create-and-edit terminal interface for these
 operator-owned files. It applies field changes to JSONC without reconstructing

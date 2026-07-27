@@ -16,12 +16,12 @@ User-facing commands and endpoint examples live in the
 ```mermaid
 flowchart LR
   Client --> Logging[Lifecycle logging]
-  Logging --> CORS[CORS handling]
-  CORS --> Error[Error boundary]
-  Error --> Request[Request parsing]
-  Request --> Key[Key-prefix parsing]
-  Key --> Auth[Proxy authentication]
-  Auth --> Registry[Provider registry]
+  Logging --> Error[Error boundary]
+  Error --> CORS[CORS handling]
+  CORS --> Request[Request parsing]
+  Request --> Auth[Proxy authentication]
+  Auth --> Key[Key-prefix parsing]
+  Key --> Registry[Provider registry]
   Registry --> Gateway[AI Gateway selection]
   Gateway --> Router[Route dispatch]
   Router --> OpenAI[OpenAI-compatible handlers]

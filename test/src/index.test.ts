@@ -177,6 +177,25 @@ describe("fetch", () => {
     expect(response.status).toBe(401);
   });
 
+  it("challenges an unauthenticated request with WWW-Authenticate", async () => {
+    vi.mocked(getAuthorizedProxyKeyIndex).mockReturnValue(undefined);
+
+    const response = await SELF.fetch("https://example.com/ping");
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("WWW-Authenticate")).toBe("Bearer");
+  });
+
+  it("rejects an unauthenticated malformed key selection with 401, not 400", async () => {
+    // Key-selection parsing runs after authentication, so a malformed prefix
+    // cannot be distinguished from any other path without a valid credential.
+    vi.mocked(getAuthorizedProxyKeyIndex).mockReturnValue(undefined);
+
+    const response = await SELF.fetch("https://example.com/key/nope/v1/models");
+
+    expect(response.status).toBe(401);
+  });
+
   it("should add CORS headers to authentication errors", async () => {
     vi.mocked(getAuthorizedProxyKeyIndex).mockReturnValue(undefined);
 

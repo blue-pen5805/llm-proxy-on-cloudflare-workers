@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { BUILT_IN_PROVIDER_NAME_SET } from "../src/providers/names.ts";
+import { Config } from "../src/utils/config.ts";
+import { Environments } from "../src/utils/environments.ts";
 import {
   exceedsVirtualModelAttemptLimit,
   hasVirtualModelCycle,
@@ -45,6 +47,125 @@ export const MAX_WORKER_SECRET_BYTES = 5 * 1024;
 // Worker therefore has no DEV binding and always runs authenticated.
 export const DEVELOPMENT_ONLY_KEYS = new Set(["DEV"]);
 export const DEPRECATED_CONFIG_KEYS = new Set(["ENABLE_GLOBAL_ROUND_ROBIN"]);
+
+// Whether a VIRTUAL_MODELS reference names a real provider depends on
+// CUSTOM_OPENAI_ENDPOINTS, so neither setting can be validated without the
+// other's final value.
+const CUSTOM_ENDPOINTS_KEY = "CUSTOM_OPENAI_ENDPOINTS";
+const VIRTUAL_MODELS_KEY = "VIRTUAL_MODELS";
+const INTERDEPENDENT_CONFIG_KEYS = [
+  CUSTOM_ENDPOINTS_KEY,
+  VIRTUAL_MODELS_KEY,
+] as const;
+
+/**
+ * The effect this file has on one deployed setting.
+ *
+ * Presence in the file is not the same as change: an empty string, array, or
+ * object is dropped as a no-op and leaves the deployed value in place, exactly
+ * as omitting the key does.
+ */
+function configOperation(
+  config: Record<string, unknown>,
+  key: string,
+): "set" | "delete" | "unchanged" {
+  if (!Object.prototype.hasOwnProperty.call(config, key)) return "unchanged";
+  const secretValue = serializeSecretValue(config[key]);
+  if (secretValue === null) return "delete";
+  return secretValue === "" ? "unchanged" : "set";
+}
+
+/**
+ * Require the interdependent settings to change together.
+ *
+ * A setting this file leaves alone keeps whatever is already deployed, and this
+ * command cannot read deployed secret values back, so validating the file alone
+ * describes the resulting configuration only when both halves of the pair are
+ * known. Deleting CUSTOM_OPENAI_ENDPOINTS on its own, for example, would
+ * otherwise pass while turning a retained VIRTUAL_MODELS entry that referenced
+ * that endpoint into a self-reference the Worker rejects with HTTP 503.
+ *
+ * The test is the effective operation rather than key presence, because an
+ * empty value satisfies presence while deploying nothing, which would reopen
+ * exactly that gap.
+ *
+ * The dependency runs one way, so the pairing is not symmetric. Deleting
+ * VIRTUAL_MODELS leaves no reference that could name an endpoint, and both
+ * cycles and the attempt limit are properties of that graph alone, so the
+ * result is verifiable whatever CUSTOM_OPENAI_ENDPOINTS holds. Every other
+ * one-sided change leaves the retained half unknown.
+ */
+function assertInterdependentConfigIsComplete(
+  config: Record<string, unknown>,
+): void {
+  if (configOperation(config, VIRTUAL_MODELS_KEY) === "delete") return;
+
+  const changing = INTERDEPENDENT_CONFIG_KEYS.filter(
+    (key) => configOperation(config, key) !== "unchanged",
+  );
+  if (
+    changing.length === 0 ||
+    changing.length === INTERDEPENDENT_CONFIG_KEYS.length
+  ) {
+    return;
+  }
+  const unchanged = INTERDEPENDENT_CONFIG_KEYS.filter(
+    (key) => !changing.includes(key),
+  );
+  throw new Error(
+    `${changing.join(", ")} cannot be deployed while ${unchanged.join(", ")} ` +
+      `is left unchanged, whether by omitting it or by giving it an empty ` +
+      `value that deploys nothing. A setting that is not deployed keeps its ` +
+      `deployed value, which cannot be read back, so give both their final ` +
+      `value or null for the resulting configuration to be verifiable.`,
+  );
+}
+
+/**
+ * The configuration this deployment actually installs.
+ *
+ * Metadata, local-only keys, deprecated keys, and the empty values that
+ * `filterSecretsForDeployment` treats as no-ops are removed, and a null
+ * deletion contributes nothing to the resulting Worker configuration. Runtime
+ * validation must see this rather than the raw file, so a value that is never
+ * deployed is never rejected.
+ */
+export function deployableConfig(
+  config: Record<string, unknown>,
+): Record<string, unknown> {
+  const deployable: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(config)) {
+    if (
+      key === "$schema" ||
+      DEVELOPMENT_ONLY_KEYS.has(key) ||
+      DEPRECATED_CONFIG_KEYS.has(key)
+    ) {
+      continue;
+    }
+    const secretValue = serializeSecretValue(value);
+    if (secretValue === "" || secretValue === null) continue;
+    deployable[key] = value;
+  }
+
+  return deployable;
+}
+
+/**
+ * Run the Worker's own configuration readers against the resulting
+ * configuration before any secret is deployed.
+ *
+ * The JSON Schema cannot express these rules, so a configuration that passes
+ * schema validation can still make every request fail with HTTP 503 the moment
+ * the Worker first reads it. Evaluating them here turns that into a deployment
+ * error the operator sees immediately.
+ */
+function validateRuntimeConfig(config: Record<string, unknown>): void {
+  Environments.runWithConfig(config, () => {
+    Config.customOpenAIEndpoints();
+    Config.allowedOrigins();
+  });
+}
 
 function validateVirtualModelGraph(config: Record<string, unknown>): void {
   const rawVirtualModels = config.VIRTUAL_MODELS;
@@ -385,7 +506,13 @@ export async function deploySecrets(
     const parsedConfig = parseJsonc(configFileContent);
     const warnings = deprecatedConfigWarnings(parsedConfig);
 
-    validateVirtualModelGraph(parsedConfig);
+    // Validate the configuration this deployment results in, not the file's
+    // literal contents: no-op empty values are excluded, and the interdependent
+    // settings must be declared together for that result to be knowable.
+    assertInterdependentConfigIsComplete(parsedConfig);
+    const resultingConfig = deployableConfig(parsedConfig);
+    validateVirtualModelGraph(resultingConfig);
+    validateRuntimeConfig(resultingConfig);
 
     const deployableSecrets = filterSecretsForDeployment(parsedConfig);
 

@@ -196,6 +196,42 @@ describe("with-secrets", () => {
     expect(exit).toHaveBeenCalledTimes(4);
   });
 
+  it("cleans up and reports when the command cannot be spawned", async () => {
+    process.argv = ["node", "with-secrets.ts", "--", "missing-tool"];
+    mocks.generateDevVars.mockReturnValue({ success: true, messages: [] });
+    mocks.getConfigAndDevVarsPaths.mockReturnValue({
+      devVarsPath: "/repo/.dev.vars",
+    });
+    mocks.existsSync.mockReturnValue(true);
+
+    const childHandlers = new Map<string, (value: unknown) => void>();
+    mocks.spawn.mockReturnValue({
+      on: vi.fn((event: string, handler: (value: unknown) => void) => {
+        childHandlers.set(event, handler);
+      }),
+    });
+    vi.spyOn(process, "on").mockImplementation(() => process);
+    const exit = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => undefined) as never);
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+
+    await runCommandWithSecretsCli();
+
+    // Without this handler Node turns a missing executable into an unhandled
+    // 'error' event and a raw stack trace.
+    childHandlers.get("error")?.(new Error("spawn ENOENT"));
+
+    expect(error).toHaveBeenCalledWith(
+      "❌ Failed to run missing-tool: spawn ENOENT",
+    );
+    expect(mocks.unlinkSync).toHaveBeenCalledWith("/repo/.dev.vars");
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
   it("exits with a diagnostic when arguments are invalid", async () => {
     process.argv = ["node", "with-secrets.ts", "--bad"];
     const consoleError = vi

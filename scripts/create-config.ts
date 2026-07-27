@@ -6,6 +6,7 @@ import type { CreateConfigMessages } from "./locales/create-config/types.ts";
 import {
   getErrorMessage,
   parseEnvironmentCliArguments,
+  parseJsonc,
   validateEnvironmentName,
 } from "./utils.ts";
 import {
@@ -21,7 +22,7 @@ import {
   text,
 } from "@clack/prompts";
 import Ajv, { type ErrorObject } from "ajv";
-import { applyEdits, modify, parse, type ParseError } from "jsonc-parser";
+import { applyEdits, modify } from "jsonc-parser";
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -572,20 +573,11 @@ export async function discoverCloudflareAccounts(
 }
 
 export function parseConfigSource(source: string): Config {
-  const errors: ParseError[] = [];
-  const config = parse(source, errors, {
-    allowTrailingComma: true,
-    disallowComments: false,
-  }) as unknown;
-  if (
-    errors.length > 0 ||
-    typeof config !== "object" ||
-    config === null ||
-    Array.isArray(config)
-  ) {
+  try {
+    return parseJsonc(source);
+  } catch {
     throw new Error("The configuration file is not valid JSONC.");
   }
-  return config as Config;
 }
 
 function updateConfigSource(

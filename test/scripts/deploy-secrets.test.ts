@@ -364,6 +364,7 @@ describe("deploy-secrets", () => {
     it("accepts an acyclic virtual-model reference graph during dry-run", async () => {
       const mockFs = createMockFsOps({
         "/root/config.jsonc": JSON.stringify({
+          CUSTOM_OPENAI_ENDPOINTS: null,
           VIRTUAL_MODELS: {
             "virtual/front": ["virtual/fallback"],
             "virtual/fallback": ["openai/gpt-4o-mini"],
@@ -381,11 +382,7 @@ describe("deploy-secrets", () => {
       const mockFs = createMockFsOps({
         "/root/config.jsonc": JSON.stringify({
           CUSTOM_OPENAI_ENDPOINTS: [
-            null,
-            "invalid",
-            {},
-            { name: 42 },
-            { name: "custom" },
+            { name: "custom", baseUrl: "https://custom.example/v1" },
           ],
           VIRTUAL_MODELS: { "custom/model": ["custom/model"] },
         }),
@@ -397,9 +394,193 @@ describe("deploy-secrets", () => {
       expect(result.messages).toContain("   - VIRTUAL_MODELS: [set]");
     });
 
+    it("rejects configuration the Worker's own readers refuse", async () => {
+      // The JSON Schema cannot express these rules, so without this check the
+      // configuration deploys and then fails every request with HTTP 503.
+      const mockFs = createMockFsOps({
+        "/root/config.jsonc": JSON.stringify({
+          CUSTOM_OPENAI_ENDPOINTS: [
+            null,
+            "invalid",
+            {},
+            { name: 42 },
+            { name: "custom" },
+          ],
+          VIRTUAL_MODELS: { "custom/model": ["custom/model"] },
+        }),
+      });
+
+      await expect(
+        deploySecrets("/root", undefined, true, mockFs),
+      ).resolves.toEqual({
+        success: false,
+        messages: [
+          "❌ Error processing config.jsonc: Invalid configuration for CUSTOM_OPENAI_ENDPOINTS.",
+        ],
+      });
+    });
+
+    it.each([
+      ["omitted partner", { CUSTOM_OPENAI_ENDPOINTS: null }],
+      [
+        "omitted partner, reversed",
+        { VIRTUAL_MODELS: { "virtual/a": ["openai/gpt-4"] } },
+      ],
+      // An empty value satisfies key presence while deploying nothing, so
+      // testing presence rather than the effective operation would let a
+      // partial update through under the guise of a complete declaration.
+      [
+        "partner present but empty",
+        { CUSTOM_OPENAI_ENDPOINTS: null, VIRTUAL_MODELS: {} },
+      ],
+      [
+        "partner present but an empty array",
+        { CUSTOM_OPENAI_ENDPOINTS: null, VIRTUAL_MODELS: [] },
+      ],
+      [
+        "partner present but an empty string",
+        {
+          CUSTOM_OPENAI_ENDPOINTS: [
+            { name: "custom", baseUrl: "https://custom.example/v1" },
+          ],
+          VIRTUAL_MODELS: "",
+        },
+      ],
+    ])(
+      "requires the interdependent settings to change together: %s",
+      async (_name, config) => {
+        // A setting this file does not deploy keeps its deployed value, which
+        // this command cannot read back. Deleting CUSTOM_OPENAI_ENDPOINTS on
+        // its own would otherwise pass while turning a retained VIRTUAL_MODELS
+        // entry that referenced that endpoint into a self-reference, so every
+        // request would fail with HTTP 503 after a successful deployment.
+        const mockFs = createMockFsOps({
+          "/root/config.jsonc": JSON.stringify(config),
+        });
+
+        const result = await deploySecrets("/root", undefined, true, mockFs);
+
+        expect(result.success).toBe(false);
+        expect(result.messages[0]).toContain("is left unchanged");
+      },
+    );
+
+    it("accepts deleting both interdependent settings together", async () => {
+      const mockFs = createMockFsOps({
+        "/root/config.jsonc": JSON.stringify({
+          CUSTOM_OPENAI_ENDPOINTS: null,
+          VIRTUAL_MODELS: null,
+        }),
+      });
+
+      const result = await deploySecrets("/root", undefined, true, mockFs);
+
+      expect(result.success).toBe(true);
+      expect(result.messages).toContain(
+        "   - CUSTOM_OPENAI_ENDPOINTS: [delete]",
+      );
+      expect(result.messages).toContain("   - VIRTUAL_MODELS: [delete]");
+    });
+
+    it.each([
+      ["on its own", { VIRTUAL_MODELS: null }],
+      [
+        "with an untouched endpoint setting",
+        { VIRTUAL_MODELS: null, CUSTOM_OPENAI_ENDPOINTS: {} },
+      ],
+    ])("accepts deleting the virtual models %s", async (_name, config) => {
+      // The dependency runs one way. Deleting VIRTUAL_MODELS leaves no
+      // reference that could name an endpoint, and both cycles and the
+      // attempt limit are properties of that graph alone, so the result is
+      // verifiable whatever CUSTOM_OPENAI_ENDPOINTS still holds.
+      const mockFs = createMockFsOps({
+        "/root/config.jsonc": JSON.stringify(config),
+      });
+
+      const result = await deploySecrets("/root", undefined, true, mockFs);
+
+      expect(result.success).toBe(true);
+      expect(result.messages).toContain("   - VIRTUAL_MODELS: [delete]");
+    });
+
+    it("still rejects changing the endpoints on their own", async () => {
+      // The reverse direction stays unverifiable: a retained virtual model may
+      // reference an endpoint this deployment adds or removes.
+      const mockFs = createMockFsOps({
+        "/root/config.jsonc": JSON.stringify({
+          CUSTOM_OPENAI_ENDPOINTS: [
+            { name: "custom", baseUrl: "https://custom.example/v1" },
+          ],
+        }),
+      });
+
+      const result = await deploySecrets("/root", undefined, true, mockFs);
+
+      expect(result.success).toBe(false);
+      expect(result.messages[0]).toContain("is left unchanged");
+    });
+
+    it("detects the cycle that deleting a custom endpoint would create", async () => {
+      const mockFs = createMockFsOps({
+        "/root/config.jsonc": JSON.stringify({
+          CUSTOM_OPENAI_ENDPOINTS: null,
+          VIRTUAL_MODELS: { "custom/model": ["custom/model"] },
+        }),
+      });
+
+      const result = await deploySecrets("/root", undefined, true, mockFs);
+
+      expect(result.success).toBe(false);
+      expect(result.messages[0]).toContain("circular reference");
+    });
+
+    it.each([
+      ["an empty allowed-origin string", { ALLOWED_ORIGINS: "" }],
+      ["an empty endpoint object", { CUSTOM_OPENAI_ENDPOINTS: {} }],
+      ["an empty virtual-model array", { VIRTUAL_MODELS: [] }],
+      [
+        "both interdependent settings empty",
+        { CUSTOM_OPENAI_ENDPOINTS: {}, VIRTUAL_MODELS: [] },
+      ],
+    ])("does not validate %s that is never deployed", async (_name, config) => {
+      // These values are documented no-ops that filterSecretsForDeployment
+      // drops. A file built only from them deploys nothing, so it must be
+      // accepted rather than validated as Worker configuration. No partner
+      // key is added here: null would be a real deletion and would stop this
+      // from testing a file that changes nothing.
+      const mockFs = createMockFsOps({
+        "/root/config.jsonc": JSON.stringify(config),
+      });
+
+      const result = await deploySecrets("/root", undefined, true, mockFs);
+
+      expect(result.success).toBe(true);
+      expect(result.messages).toContain(
+        "⚠️  No secret operations found in config.jsonc",
+      );
+    });
+
+    it("rejects an invalid allowed-origin list before deployment", async () => {
+      const mockFs = createMockFsOps({
+        "/root/config.jsonc": JSON.stringify({
+          ALLOWED_ORIGINS: ["https://client.example/path"],
+        }),
+      });
+
+      await expect(
+        deploySecrets("/root", undefined, true, mockFs),
+      ).resolves.toEqual({
+        success: false,
+        messages: [
+          "❌ Error processing config.jsonc: Invalid configuration for ALLOWED_ORIGINS.",
+        ],
+      });
+    });
+
     it("rejects malformed virtual models before deployment", async () => {
       const mockFs = createMockFsOps({
-        "/root/config.jsonc": '{"VIRTUAL_MODELS":{"virtual/route":[]}}',
+        "/root/config.jsonc":
+          '{"CUSTOM_OPENAI_ENDPOINTS":null,"VIRTUAL_MODELS":{"virtual/route":[]}}',
       });
 
       await expect(
@@ -426,7 +607,10 @@ describe("deploy-secrets", () => {
       "rejects a virtual-model cycle before deployment: %j",
       async (models) => {
         const mockFs = createMockFsOps({
-          "/root/config.jsonc": JSON.stringify({ VIRTUAL_MODELS: models }),
+          "/root/config.jsonc": JSON.stringify({
+            CUSTOM_OPENAI_ENDPOINTS: null,
+            VIRTUAL_MODELS: models,
+          }),
         });
 
         const result = await deploySecrets("/root", undefined, true, mockFs);
@@ -444,6 +628,7 @@ describe("deploy-secrets", () => {
     it("rejects a cycle before a real deployment invokes Wrangler", async () => {
       const mockFs = createMockFsOps({
         "/root/config.jsonc": JSON.stringify({
+          CUSTOM_OPENAI_ENDPOINTS: null,
           VIRTUAL_MODELS: { "virtual/self": ["virtual/self"] },
         }),
       });
@@ -459,6 +644,7 @@ describe("deploy-secrets", () => {
     it("rejects a nested graph above the expanded attempt limit", async () => {
       const mockFs = createMockFsOps({
         "/root/config.jsonc": JSON.stringify({
+          CUSTOM_OPENAI_ENDPOINTS: null,
           VIRTUAL_MODELS: {
             "virtual/leaf": Array.from({ length: 16 }, (_, index) => ({
               model: `openai/model-${index}`,

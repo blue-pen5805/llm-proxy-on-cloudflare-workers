@@ -4,8 +4,8 @@
   // declarations for shared globals such as URL.
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "target": "es2022",
-    "lib": ["es2022"],
+    "target": "es2023",
+    "lib": ["es2023"],
     "paths": {
       "~/src/*": ["../../src/*"],
       "~/scripts/*": ["../../scripts/*"]

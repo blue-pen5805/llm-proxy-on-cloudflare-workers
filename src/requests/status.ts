@@ -205,7 +205,8 @@ export async function handleStatusRequest(
   const providerEntries = Object.entries(
     providerEnumeration?.providers ?? getAllProviderInstances(env),
   );
-  const providersStatus: Record<string, ProviderStatus> = {};
+  // A configured endpoint may be named "__proto__"; see ProviderRegistry.
+  const providersStatus = Object.create(null) as Record<string, ProviderStatus>;
   const connectivityTasks: (() => Promise<void>)[] = [];
 
   for (const { providerName, error } of providerEnumeration?.failures ?? []) {

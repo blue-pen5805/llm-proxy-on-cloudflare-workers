@@ -20,8 +20,11 @@ const middlewareChain = composeMiddleware([
   errorMiddleware,
   corsMiddleware,
   requestMiddleware,
-  apiKeyPathMiddleware,
+  // Authentication precedes key-selection parsing so an unauthenticated client
+  // always receives HTTP 401 and never a parse error that would confirm the
+  // existence of the `/key/<selection>` prefix.
   authMiddleware,
+  apiKeyPathMiddleware,
   providerRegistryMiddleware,
   aiGatewayMiddleware,
   routerMiddleware,

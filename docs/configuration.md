@@ -48,6 +48,33 @@ You can instead copy `config.example.jsonc` and edit it directly.
 The `$schema` path for a file in the repository root is
 `schemas/config-schema.json`.
 
+Before deploying anything, `npm run secrets:deploy` evaluates the Worker's own
+configuration readers against the configuration the deployment produces.
+`CUSTOM_OPENAI_ENDPOINTS`, `ALLOWED_ORIGINS`, and the `VIRTUAL_MODELS` reference
+graph carry rules the JSON Schema cannot express, such as endpoint name
+uniqueness, exact-origin form, and an acyclic candidate graph within the attempt
+limit. A file that violates one of them is rejected with an explanatory error
+instead of deploying and then failing every request with HTTP 503. Values that
+this command drops as no-ops are excluded from the check, so a file that changes
+nothing is never rejected. `--dry-run` runs the same checks.
+
+Because a setting this file does not deploy keeps its deployed value, which this
+command cannot read back, `CUSTOM_OPENAI_ENDPOINTS` and `VIRTUAL_MODELS` must
+change together whenever either one changes. Give each its final value or
+`null`. Whether a virtual-model candidate names a real provider depends on the
+configured endpoint names, so deleting the endpoints alone would otherwise
+deploy successfully and leave a retained virtual model referencing a provider
+that no longer exists.
+
+The requirement follows the effective operation, not the presence of the key.
+An empty value is a no-op, so writing one as the counterpart does not satisfy
+it. A file in which both settings are no-ops changes neither and is accepted.
+
+Setting `VIRTUAL_MODELS` to `null` is the one exception. It removes the graph
+entirely, so no reference survives that could name an endpoint, and the file is
+accepted on its own. The reverse is not exempt: changing
+`CUSTOM_OPENAI_ENDPOINTS` alone still requires `VIRTUAL_MODELS` alongside it.
+
 `npm run secrets:deploy` treats a top-level `null` as an explicit deletion of
 that deployed Worker secret. A setting omitted from the file is left unchanged,
 while empty strings, empty arrays, and empty objects are ignored. Dry-run output
@@ -97,9 +124,14 @@ Each provider key accepts a string, an array of strings, a profile object, or
 `null` deletes the corresponding deployed secret on the next secrets
 deployment.
 
-A value that is not valid JSON is treated as one opaque credential and is never
-split on any separator, so a key that contains a comma stays intact. Multiple
-credentials are always expressed as a JSON array and profiles as a JSON object.
+Multiple credentials are always expressed as a JSON array and profiles as a
+JSON object. Only those two forms carry structure: every other value is one
+opaque credential, is never split on a separator, and is never converted to
+another type. A key that contains a comma stays intact, and a quoted string
+such as `"12345"`, `"true"`, or `"null"` reaches the provider as exactly that
+text rather than being read as a number, a boolean, or an absent value and
+discarded. Only the bare literal `null`, which is not a string, means the
+deletion described above.
 
 | Route name         | Setting                                           |
 | ------------------ | ------------------------------------------------- |

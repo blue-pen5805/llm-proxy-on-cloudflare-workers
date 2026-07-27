@@ -25,7 +25,11 @@ function expandAccessOrder(
   resolving: ReadonlySet<string>,
 ): VirtualModelAccessOrderEntry[] {
   return candidates.map((candidate, index) => {
-    const [providerSelector] = candidate.model.split("/");
+    // Configuration validation guarantees a separator inside every candidate.
+    const providerSelector = candidate.model.slice(
+      0,
+      candidate.model.indexOf("/"),
+    );
     const referencedCandidates = resolveProvider(context, providerSelector)
       ? undefined
       : virtualModels[candidate.model];

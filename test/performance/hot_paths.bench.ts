@@ -4,11 +4,16 @@ import {
   createProviderRegistry,
 } from "~/src/providers";
 import { GoogleVertexAi } from "~/src/providers/google-vertex-ai";
+import { OpenAI } from "~/src/providers/openai";
 import { ProviderBase } from "~/src/providers/provider";
 import { ProviderRegistry } from "~/src/providers/registry";
 import { enrichChatResponseWithMetadata } from "~/src/requests/chat_response_metadata";
 import { convertStreamingResponse as convertMessagesStream } from "~/src/requests/messages";
 import { convertStreamingResponse as convertResponsesStream } from "~/src/requests/responses";
+import {
+  recordApiKeyOutcome,
+  selectApiKeyIndex,
+} from "~/src/utils/api_key_selection";
 import { isRequestAuthorized } from "~/src/utils/authorization";
 import { Environments } from "~/src/utils/environments";
 import { getRequestPath, maskSensitiveUrl } from "~/src/utils/helpers";
@@ -25,6 +30,7 @@ const chatBody = JSON.stringify({
 });
 
 const provider = new ProviderBase();
+const openAiProvider = new OpenAI();
 const parsedChatBody = JSON.parse(chatBody) as Record<string, unknown>;
 const registry = new ProviderRegistry(BUILT_IN_PROVIDER_CONSTRUCTORS, [
   { name: "internal.v2", baseUrl: "https://internal.example" },
@@ -78,9 +84,30 @@ const authorizedRequest = new Request("https://proxy.example/v1/models", {
   headers: { Authorization: "Bearer proxy-key-15-" + "x".repeat(24) },
 });
 
+// Authentication compares every configured slot so the matching position is
+// not observable, which makes its cost scale with the configured key count.
+// This is the documented maximum.
+const maximumProxyKeysEnv = {
+  PROXY_API_KEY: JSON.stringify(
+    Array.from(
+      { length: 64 },
+      (_, index) => `proxy-key-${index}-${"x".repeat(24)}`,
+    ),
+  ),
+} as unknown as Env;
+const lastSlotRequest = new Request("https://proxy.example/v1/models", {
+  headers: { Authorization: "Bearer proxy-key-63-" + "x".repeat(24) },
+});
+
 describe("per-request setup paths", () => {
   bench("authenticate a proxied request", () => {
     Environments.run(requestEnv, () => isRequestAuthorized(authorizedRequest));
+  });
+
+  bench("authenticate against the maximum configured proxy keys", () => {
+    Environments.run(maximumProxyKeysEnv, () =>
+      isRequestAuthorized(lastSlotRequest),
+    );
   });
 
   bench("resolve the provider registry", () => {
@@ -89,6 +116,15 @@ describe("per-request setup paths", () => {
 
   bench("read a rotated provider secret list", () => {
     Environments.run(requestEnv, () => Secrets.getAll("OPENAI_API_KEY"));
+  });
+
+  bench("select a provider credential under cooldown", async () => {
+    await Environments.run(requestEnv, async () => {
+      // A cooled slot forces the eligibility scan and the forward search for
+      // the next healthy slot, which the uncooled path skips entirely.
+      recordApiKeyOutcome("openai", 3, 8, 429);
+      await selectApiKeyIndex(openAiProvider, undefined, "rotate", "openai");
+    });
   });
 });
 

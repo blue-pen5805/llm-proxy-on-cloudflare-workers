@@ -123,6 +123,37 @@ describe("enrichChatResponseWithMetadata", () => {
     await expect(response.arrayBuffer()).resolves.toEqual(body.buffer);
   });
 
+  it("enriches a JSON body that begins with a byte order mark", async () => {
+    const upstream = new Response(`﻿{"id":"chatcmpl-bom"}`, {
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const response = await enrichChatResponseWithMetadata(
+      metadataArguments(upstream),
+    );
+
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body.id).toBe("chatcmpl-bom");
+    expect(body.llm_proxy).toMatchObject({ provider: "openai" });
+  });
+
+  it("keeps the byte order mark when a marked body is forwarded unchanged", async () => {
+    // The decoder retains the mark so a body that cannot be enriched is
+    // returned byte-for-byte, as the documented pass-through contract requires.
+    // The bytes are compared directly because reading a Response as text
+    // strips a leading mark.
+    const body = new TextEncoder().encode(`﻿[1,2,3]`);
+    const upstream = new Response(body, {
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const response = await enrichChatResponseWithMetadata(
+      metadataArguments(upstream),
+    );
+
+    await expect(response.arrayBuffer()).resolves.toEqual(body.buffer);
+  });
+
   it("forwards a JSON body larger than the metadata budget unchanged", async () => {
     const oversized = `{"padding":"${"x".repeat(6 * 1024 * 1024)}"}`;
     const upstream = new Response(oversized, {
