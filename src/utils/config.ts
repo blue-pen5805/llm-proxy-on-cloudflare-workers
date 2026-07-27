@@ -40,7 +40,7 @@ function isStringArray(value: unknown): value is string[] {
   );
 }
 
-interface CustomOpenAIEndpoint {
+export interface CustomOpenAIEndpointConfig {
   name: string;
   baseUrl: string;
   apiKeys?: ProfiledSecret;
@@ -74,7 +74,9 @@ function isValidProfiledSecret(value: unknown): value is ProfiledSecret {
   );
 }
 
-function isSafeCustomEndpoint(value: unknown): value is CustomOpenAIEndpoint {
+function isSafeCustomEndpoint(
+  value: unknown,
+): value is CustomOpenAIEndpointConfig {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return false;
   }
@@ -143,7 +145,7 @@ const cachedProxyApiKeys = new WeakMap<
   string[] | undefined
 >();
 let cachedCustomEndpointsRaw: unknown;
-let cachedCustomEndpoints: CustomOpenAIEndpoint[] | undefined;
+let cachedCustomEndpoints: CustomOpenAIEndpointConfig[] | undefined;
 let cachedVirtualModelsRaw: unknown;
 let cachedVirtualModels: VirtualModels | undefined;
 
@@ -374,7 +376,7 @@ export class Config {
       throw new ConfigurationError("CUSTOM_OPENAI_ENDPOINTS");
     }
 
-    const validatedEndpoints = parsedEndpoints as CustomOpenAIEndpoint[];
+    const validatedEndpoints = parsedEndpoints as CustomOpenAIEndpointConfig[];
     const endpointNames = validatedEndpoints.map((endpoint) => endpoint.name);
     if (new Set(endpointNames).size !== endpointNames.length) {
       throw new ConfigurationError("CUSTOM_OPENAI_ENDPOINTS");

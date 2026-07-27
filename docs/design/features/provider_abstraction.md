@@ -109,41 +109,19 @@ The incoming abort signal is attached to the provider or Gateway subrequest so
 client cancellation can stop avoidable work. The Worker enables the
 `enable_request_signal` compatibility flag.
 
-## OpenAI-compatible Responses flow
+## Converted compatibility flows
 
-1. Parse and validate a Responses body of at most 10 MiB.
-2. Convert supported input items, function tools, structured output, and common
-   generation controls to Chat Completions.
-3. Invoke the ordinary OpenAI-compatible chat flow, including virtual models,
-   provider filtering, key policy, and AI Gateway routing.
-4. Convert a successful Chat JSON response into typed Responses output items,
-   bounded to 5 MiB, or convert Chat SSE chunks incrementally into Responses
-   lifecycle, text-delta, and function-call events.
-5. Preserve upstream errors and reject Responses features that cannot retain
-   their semantics through Chat Completions.
+Responses and Messages validate their protocol-specific request, convert it to
+Chat Completions, and invoke the ordinary chat flow. They therefore derive
+compatibility from each provider's declared Chat capability rather than
+provider-native Responses, Messages, or pass-through support.
 
-Responses compatibility is derived from each provider's declared Chat
-capability rather than provider-native Responses support. See
-[OpenAI-compatible Responses](responses-api.md) for the supported mapping and
-explicit exclusions.
-
-## Anthropic-compatible Messages flow
-
-1. Parse and validate a Messages body of at most 10 MiB.
-2. Convert supported system, message, image, tool-use, tool-result, tool-choice,
-   and generation fields to Chat Completions.
-3. Invoke the ordinary OpenAI-compatible chat flow, including virtual models,
-   provider filtering, key policy, and AI Gateway routing.
-4. Convert a successful Chat JSON response into Anthropic message content and
-   usage, bounded to 5 MiB, or convert Chat SSE chunks incrementally into
-   Anthropic message and content-block events.
-5. Preserve upstream errors and reject Messages features that cannot retain
-   their semantics through Chat Completions.
-
-Messages compatibility is derived from each provider's Chat capability, not
-from its provider-native pass-through support. See
-[Anthropic-compatible Messages](messages-api.md) for the supported mapping and
-explicit exclusions.
+Successful JSON and SSE responses are converted back to the selected public
+protocol. Both streaming converters share the bounded Chat Completions SSE
+decoder and implement only their protocol-specific state and event output.
+Upstream errors pass through. The complete mappings, limits, and explicit
+exclusions live in [OpenAI-compatible Responses](responses-api.md) and
+[Anthropic-compatible Messages](messages-api.md).
 
 ## Model aggregation flow
 

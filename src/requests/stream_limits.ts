@@ -8,10 +8,10 @@ import { utf8ByteLength } from "../utils/helpers";
  */
 export const MAX_SSE_RECORD_BYTES = 1 * 1024 * 1024;
 export const MAX_STREAM_TEXT_BYTES = 4 * 1024 * 1024;
-export const MAX_STREAM_TOOL_CALLS = 64;
+const MAX_STREAM_TOOL_CALLS = 64;
 export const MAX_STREAM_TOOL_ARGUMENT_BYTES = 4 * 1024 * 1024;
 export const MAX_STREAM_TOOL_METADATA_BYTES = 64 * 1024;
-export const MAX_STREAM_OUTPUT_ITEMS = 64;
+const MAX_STREAM_OUTPUT_ITEMS = 64;
 
 export type StreamingLimit =
   | "sse_record_bytes"

@@ -24,7 +24,6 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
-export { parseJsonc, validateEnvironmentName } from "./utils.ts";
 export type { FileSystemOperations } from "./utils.ts";
 
 const __filename = fileURLToPath(import.meta.url);

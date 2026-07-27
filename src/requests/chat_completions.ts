@@ -51,6 +51,24 @@ export interface PreparedChatCompletionsRequest {
   responseMetadataEnabled: boolean;
 }
 
+function finalizeChatResponse(
+  result: ChatCompletionAttemptResult,
+  responseMetadataEnabled: boolean,
+  requestedModel: string,
+  startedAt: string,
+  startedAtPerformance: number,
+): Response | Promise<Response> {
+  if (!result.route || !responseMetadataEnabled) return result.response;
+  return enrichChatResponseWithMetadata({
+    response: result.response,
+    route: result.route,
+    requestedModel,
+    requestId: RequestLogger.requestId(),
+    startedAt,
+    startedAtPerformance,
+  });
+}
+
 export async function handleChatCompletionsRequest(
   context: MiddlewareContext,
   aiGateway: CloudflareAIGateway | undefined = undefined,
@@ -135,16 +153,13 @@ export async function handleChatCompletionsRequest(
         new Set(),
         preparedRequest?.headers ?? request.headers,
       );
-      return result.route && responseMetadataEnabled
-        ? enrichChatResponseWithMetadata({
-            response: result.response,
-            route: result.route,
-            requestedModel,
-            requestId: RequestLogger.requestId(),
-            startedAt,
-            startedAtPerformance,
-          })
-        : result.response;
+      return finalizeChatResponse(
+        result,
+        responseMetadataEnabled,
+        requestedModel,
+        startedAt,
+        startedAtPerformance,
+      );
     }
   }
 
@@ -157,16 +172,13 @@ export async function handleChatCompletionsRequest(
     endpoint,
     undefined,
   );
-  return result.route && responseMetadataEnabled
-    ? enrichChatResponseWithMetadata({
-        response: result.response,
-        route: result.route,
-        requestedModel,
-        requestId: RequestLogger.requestId(),
-        startedAt,
-        startedAtPerformance,
-      })
-    : result.response;
+  return finalizeChatResponse(
+    result,
+    responseMetadataEnabled,
+    requestedModel,
+    startedAt,
+    startedAtPerformance,
+  );
 }
 
 async function attemptResolvedChatCompletion(

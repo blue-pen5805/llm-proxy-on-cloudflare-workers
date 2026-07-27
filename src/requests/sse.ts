@@ -1,6 +1,12 @@
 import { utf8ByteLength } from "../utils/helpers";
 import { StreamingResponseBudget } from "./stream_limits";
 
+export type JsonObject = Record<string, unknown>;
+
+export function isJsonObject(value: unknown): value is JsonObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 interface SseRecordTransformOptions {
   budget: StreamingResponseBudget;
   onRecord: (
@@ -110,4 +116,73 @@ export function sseData(block: string): string | undefined {
     data = data === undefined ? value : `${data}\n${value}`;
   }
   return data;
+}
+
+interface ChatCompletionSseTransformOptions {
+  budget: StreamingResponseBudget;
+  onChunk: (
+    chunk: JsonObject,
+    controller: TransformStreamDefaultController<Uint8Array>,
+  ) => void;
+  onDone: (controller: TransformStreamDefaultController<Uint8Array>) => void;
+  onError: (
+    error: Error,
+    controller: TransformStreamDefaultController<Uint8Array>,
+  ) => void;
+  isFinished: () => boolean;
+}
+
+/**
+ * Decode bounded Chat Completions SSE records while leaving protocol-specific
+ * output generation to the caller.
+ */
+export function createChatCompletionSseTransform({
+  budget,
+  onChunk,
+  onDone,
+  onError,
+  isFinished,
+}: ChatCompletionSseTransformOptions): TransformStream<Uint8Array, Uint8Array> {
+  const processData = (
+    data: string,
+    controller: TransformStreamDefaultController<Uint8Array>,
+  ): void => {
+    if (data === "[DONE]") {
+      onDone(controller);
+      return;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(data) as unknown;
+    } catch {
+      onError(
+        new Error("Upstream returned an invalid streaming chunk."),
+        controller,
+      );
+      return;
+    }
+    if (isJsonObject(parsed)) onChunk(parsed, controller);
+  };
+
+  return createSseRecordTransform({
+    budget,
+    onRecord(block, _separator, controller) {
+      const data = sseData(block);
+      if (data !== undefined) processData(data, controller);
+    },
+    onError,
+    onEnd(pending, controller) {
+      if (pending.trim()) {
+        const data = sseData(pending);
+        if (data !== undefined) processData(data, controller);
+      }
+      if (isFinished()) return;
+      onError(
+        new Error("Upstream stream ended without a terminal event."),
+        controller,
+      );
+    },
+    isFinished,
+  });
 }

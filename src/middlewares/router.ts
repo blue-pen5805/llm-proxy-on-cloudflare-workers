@@ -1,5 +1,8 @@
 import { CloudflareAIGateway } from "../ai_gateway";
-import { isCloudflareAIGatewayRestApiPath } from "../ai_gateway/utils";
+import {
+  isCloudflareAIGatewayRestApiPath,
+  isCloudflareAiPath,
+} from "../ai_gateway/utils";
 import { Middleware, MiddlewareContext } from "../middleware";
 import { createProviderRegistry } from "../providers";
 import { handleAiGatewayRestRequest } from "../requests/ai_gateway_rest";
@@ -22,8 +25,6 @@ import { BadRequestError, NotFoundError } from "../utils/error";
 import { RequestLogger } from "../utils/logger";
 
 const COMPAT_PATH_PATTERN = /^\/compat(?:$|\/|\?)/;
-const AI_PATH_PATTERN = /^\/ai(?:$|\/|\?)/;
-
 export async function handleRouting(
   context: MiddlewareContext,
   aiGateway?: CloudflareAIGateway,
@@ -76,7 +77,7 @@ export async function handleRouting(
     throw new NotFoundError();
   }
 
-  if (AI_PATH_PATTERN.test(pathname)) {
+  if (isCloudflareAiPath(pathname)) {
     rejectUnsupportedKeySelection();
     if (
       request.method === "POST" &&

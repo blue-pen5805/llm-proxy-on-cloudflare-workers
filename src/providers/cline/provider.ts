@@ -1,3 +1,4 @@
+import { headersForRewrittenBody } from "../../requests/response";
 import { readResponseJson } from "../../utils/helpers";
 import { OpenAIModelsListResponseBody } from "../openai/types";
 import { defineProvider } from "../provider";
@@ -25,20 +26,6 @@ function isWrappedChatCompletion(
     (value as { data?: unknown }).data !== null &&
     !Array.isArray((value as { data?: unknown }).data)
   );
-}
-
-function headersForTransformedBody(source: Headers): Headers {
-  const headers = new Headers(source);
-  for (const staleHeader of [
-    "content-encoding",
-    "content-length",
-    "content-md5",
-    "digest",
-    "etag",
-  ]) {
-    headers.delete(staleHeader);
-  }
-  return headers;
 }
 
 export const Cline = defineProvider({
@@ -71,7 +58,7 @@ export const Cline = defineProvider({
     return new Response(JSON.stringify(body.data), {
       status: response.status,
       statusText: response.statusText,
-      headers: headersForTransformedBody(response.headers),
+      headers: headersForRewrittenBody(response.headers),
     });
   },
 

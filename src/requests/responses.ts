@@ -6,7 +6,12 @@ import { readRequestText, readResponseJson } from "../utils/helpers";
 import { RequestLogger } from "../utils/logger";
 import { handleChatCompletionsRequest } from "./chat_completions";
 import { openAIErrorResponse } from "./error_response";
-import { createSseRecordTransform, sseData } from "./sse";
+import { headersForRewrittenBody } from "./response";
+import {
+  createChatCompletionSseTransform,
+  isJsonObject as isObject,
+  type JsonObject,
+} from "./sse";
 import { StreamingResponseBudget } from "./stream_limits";
 
 const MAX_CONVERTED_RESPONSE_BYTES = 5 * 1024 * 1024;
@@ -34,8 +39,6 @@ const SUPPORTED_REQUEST_FIELDS = new Set([
   "truncation",
   "user",
 ]);
-
-type JsonObject = Record<string, unknown>;
 
 interface ResponsesRequest extends JsonObject {
   model: string;
@@ -66,10 +69,6 @@ interface ChatUsage extends JsonObject {
   total_tokens?: unknown;
   prompt_tokens_details?: unknown;
   completion_tokens_details?: unknown;
-}
-
-function isObject(value: unknown): value is JsonObject {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function invalidRequest(message: string): Response {
@@ -358,20 +357,6 @@ function profileFor(request: ResponsesRequest): ResponseProfile {
   };
 }
 
-function convertedResponseHeaders(headers: Headers): Headers {
-  const converted = new Headers(headers);
-  for (const field of [
-    "content-encoding",
-    "content-length",
-    "content-md5",
-    "digest",
-    "etag",
-  ]) {
-    converted.delete(field);
-  }
-  return converted;
-}
-
 function responseId(): string {
   return `resp_${crypto.randomUUID().replaceAll("-", "")}`;
 }
@@ -515,7 +500,7 @@ async function convertJsonResponse(
   return new Response(JSON.stringify(converted), {
     status: response.status,
     statusText: response.statusText,
-    headers: convertedResponseHeaders(response.headers),
+    headers: headersForRewrittenBody(response.headers),
   });
 }
 
@@ -682,27 +667,11 @@ export function convertStreamingResponse(
     });
     controller.terminate();
   };
-  const processData = (
-    data: string,
+  const processChunk = (
+    chunk: JsonObject,
     controller: TransformStreamDefaultController<Uint8Array>,
   ) => {
     start(controller);
-    if (data === "[DONE]") {
-      finish(controller);
-      controller.terminate();
-      return;
-    }
-    let chunk: unknown;
-    try {
-      chunk = JSON.parse(data) as unknown;
-    } catch {
-      fail(
-        controller,
-        new Error("Upstream returned an invalid streaming chunk."),
-      );
-      return;
-    }
-    if (!isObject(chunk)) return;
     if (responseMetadataEnabled && isObject(chunk.llm_proxy)) {
       proxyMetadata = chunk.llm_proxy;
     }
@@ -793,30 +762,20 @@ export function convertStreamingResponse(
     }
   };
   const body = response.body.pipeThrough(
-    createSseRecordTransform({
+    createChatCompletionSseTransform({
       budget,
-      onRecord(block, _separator, controller) {
-        const data = sseData(block);
-        if (data !== undefined) processData(data, controller);
+      onChunk: processChunk,
+      onDone(controller) {
+        finish(controller);
+        controller.terminate();
       },
       onError(error, controller) {
         fail(controller, error);
       },
-      onEnd(pending, controller) {
-        if (pending.trim()) {
-          const data = sseData(pending);
-          if (data !== undefined) processData(data, controller);
-        }
-        if (finished) return;
-        fail(
-          controller,
-          new Error("Upstream stream ended without a terminal event."),
-        );
-      },
       isFinished: () => finished,
     }),
   );
-  const headers = convertedResponseHeaders(response.headers);
+  const headers = headersForRewrittenBody(response.headers);
   headers.set("content-type", "text/event-stream; charset=utf-8");
   return new Response(body, {
     status: response.status,

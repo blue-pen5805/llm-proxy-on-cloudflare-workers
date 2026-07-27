@@ -1,3 +1,4 @@
+import { headersForRewrittenBody } from "./response";
 import { createSseRecordTransform, sseData } from "./sse";
 import { StreamingResponseBudget } from "./stream_limits";
 
@@ -41,20 +42,6 @@ function elapsedMilliseconds(startedAtPerformance: number): number {
     0,
     Math.round((performance.now() - startedAtPerformance) * 100) / 100,
   );
-}
-
-function responseHeaders(source: Headers): Headers {
-  const headers = new Headers(source);
-  for (const staleHeader of [
-    "content-encoding",
-    "content-length",
-    "content-md5",
-    "digest",
-    "etag",
-  ]) {
-    headers.delete(staleHeader);
-  }
-  return headers;
 }
 
 function createMetadata(
@@ -145,7 +132,7 @@ function enrichEventStream(
   return new Response(body, {
     status: response.status,
     statusText: response.statusText,
-    headers: responseHeaders(response.headers),
+    headers: headersForRewrittenBody(response.headers),
   });
 }
 
@@ -242,7 +229,7 @@ export async function enrichChatResponseWithMetadata(
     new Response(body, {
       status: response.status,
       statusText: response.statusText,
-      headers: responseHeaders(response.headers),
+      headers: headersForRewrittenBody(response.headers),
     });
   if (!("text" in read)) {
     return forwardUnchanged(read.body);

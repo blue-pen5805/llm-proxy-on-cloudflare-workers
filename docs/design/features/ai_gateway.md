@@ -157,22 +157,15 @@ Gateway's compatibility endpoint.
 OpenRouter is included in this subset under a tested operational contract for
 the Compatibility Endpoint.
 
-### OpenAI-compatible Responses
+### Converted compatibility APIs
 
-The public Responses compatibility route first converts its request to Chat
-Completions. The converted request then follows the same Compatibility Endpoint,
-provider-native chat, or strict Custom Provider path as a direct Chat
-Completions request. AI Gateway therefore receives Chat Completions format; the
-Worker converts the returned JSON or SSE chunks back to Responses format.
-
-### Anthropic-compatible Messages
-
-The public Messages compatibility route also converts through Chat
-Completions. Its converted request follows the same Compatibility Endpoint,
-provider-native chat, or strict Custom Provider path. AI Gateway receives Chat
-Completions format, and the Worker converts successful JSON or SSE back to
-Anthropic Messages format. The provider-native
-`/<provider>/v1/messages` pass-through route has a separate contract.
+The public Responses and Messages compatibility routes convert through Chat
+Completions before routing. Their requests therefore follow the same
+Compatibility Endpoint, provider-native chat, or strict Custom Provider path as
+direct Chat Completions, and AI Gateway receives Chat Completions format. The
+Worker converts successful JSON or SSE back to the requested public protocol.
+Provider-native paths such as `/<provider>/v1/messages` remain separate
+pass-through contracts.
 
 ### Universal Endpoint and compatibility pass-through
 

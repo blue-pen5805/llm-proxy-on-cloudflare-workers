@@ -230,6 +230,13 @@ function hasBrand(value: unknown, brand: symbol): boolean {
   );
 }
 
+function configuredApiKeys(provider: Provider): string[] {
+  if (!provider.apiKeyName) return [];
+  return provider.credentialProfile === "default"
+    ? Secrets.getAll(provider.apiKeyName)
+    : Secrets.getAll(provider.apiKeyName, false, provider.credentialProfile);
+}
+
 /** Build one provider by composing common behavior with explicit hooks. */
 export function createProvider(definition: ProviderDefinition = {}): Provider {
   let supportedChatParameters:
@@ -273,11 +280,7 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
 
     getApiKeys() {
       if (definition.getApiKeys) return definition.getApiKeys.call(this);
-      return this.apiKeyName
-        ? this.credentialProfile === "default"
-          ? Secrets.getAll(this.apiKeyName)
-          : Secrets.getAll(this.apiKeyName, false, this.credentialProfile)
-        : [];
+      return configuredApiKeys(this);
     },
 
     getCredentialProfiles() {
@@ -291,11 +294,7 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
       if (definition.getAiGatewayApiKeys) {
         return definition.getAiGatewayApiKeys.call(this);
       }
-      return this.apiKeyName
-        ? this.credentialProfile === "default"
-          ? Secrets.getAll(this.apiKeyName)
-          : Secrets.getAll(this.apiKeyName, false, this.credentialProfile)
-        : [];
+      return configuredApiKeys(this);
     },
 
     configurationError() {

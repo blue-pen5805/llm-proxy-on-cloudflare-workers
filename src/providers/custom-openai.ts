@@ -1,20 +1,13 @@
+import type { CustomOpenAIEndpointConfig } from "../utils/config";
 import {
   DEFAULT_PROVIDER_PROFILE,
   PROVIDER_PROFILE_PATTERN,
-  type ProfiledSecret,
   Secrets,
 } from "../utils/secrets";
 import { OpenAIModelsListResponseBody } from "./openai/types";
 import { defineProvider, Provider, ProviderConstructor } from "./provider";
 
-export interface CustomOpenAIEndpointConfig {
-  name: string;
-  baseUrl: string;
-  apiKeys?: ProfiledSecret;
-  models?: string[];
-  chatCompletionPath?: string;
-  modelsPath?: string;
-}
+export type { CustomOpenAIEndpointConfig } from "../utils/config";
 
 export type CustomOpenAI = Provider & { readonly name: string };
 

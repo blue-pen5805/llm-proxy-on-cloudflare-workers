@@ -1,10 +1,11 @@
 import { CloudflareAIGateway } from "../ai_gateway";
-import { isSafeCloudflareAIGatewayId } from "../ai_gateway/utils";
+import {
+  isCloudflareAiPath,
+  isSafeCloudflareAIGatewayId,
+} from "../ai_gateway/utils";
 import { Middleware } from "../middleware";
 import { Config } from "../utils/config";
 import { BadRequestError, ConfigurationError } from "../utils/error";
-
-const AI_PATH_PATTERN = /^\/ai(?:$|\/|\?)/;
 
 export const aiGatewayMiddleware: Middleware = async (context, next) => {
   const {
@@ -47,7 +48,7 @@ export const aiGatewayMiddleware: Middleware = async (context, next) => {
     );
   } else if (
     accountId &&
-    (alwaysUse || defaultGatewayId || AI_PATH_PATTERN.test(context.pathname))
+    (alwaysUse || defaultGatewayId || isCloudflareAiPath(context.pathname))
   ) {
     context.aiGateway = new CloudflareAIGateway(
       accountId,

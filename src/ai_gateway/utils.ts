@@ -17,6 +17,7 @@ const OPENAI_COMPATIBLE_PROVIDER_SET: ReadonlySet<string> = new Set(
 const CLOUDFLARE_AI_GATEWAY_REST_API_PATH_SET: ReadonlySet<string> = new Set(
   CLOUDFLARE_AI_GATEWAY_REST_API_PATHS,
 );
+const CLOUDFLARE_AI_PATH_PATTERN = /^\/ai(?:$|\/|\?)/;
 
 export function isSafeCloudflareAccountId(accountId: string): boolean {
   return /^[A-Za-z0-9_-]{1,128}$/.test(accountId);
@@ -48,4 +49,8 @@ export function isCloudflareAIGatewayRestApiPath(
   path: string,
 ): path is CloudflareAIGatewayRestApiPath {
   return CLOUDFLARE_AI_GATEWAY_REST_API_PATH_SET.has(path);
+}
+
+export function isCloudflareAiPath(path: string): boolean {
+  return CLOUDFLARE_AI_PATH_PATTERN.test(path);
 }

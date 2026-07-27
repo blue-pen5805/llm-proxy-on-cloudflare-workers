@@ -60,16 +60,12 @@ chunk with `choices: []` and `llm_proxy` immediately before `data: [DONE]`. If a
 provider closes a valid event stream without a done marker, the chunk is emitted
 at the end. Provider chunks are otherwise forwarded unchanged.
 
-The Responses compatibility layer preserves the JSON `llm_proxy` object on the
-converted top-level Responses object. For streaming output, it consumes the
-Chat metadata chunk and includes the object in the final
-`response.completed` or `response.incomplete` event's `response`. Earlier
-Responses lifecycle events omit it because completion timing is not yet known.
-
-The Messages compatibility layer likewise preserves `llm_proxy` at the top
-level of converted JSON. For streaming output, it consumes the Chat metadata
-chunk and adds the object to the final `message_delta` event; earlier Messages
-events omit it.
+The Responses and Messages compatibility layers preserve `llm_proxy` at the top
+level of converted JSON. Their streaming converters consume the Chat metadata
+chunk and place the object on the protocol-specific final response update;
+earlier lifecycle events omit it because completion timing is not yet known.
+The precise event placement is part of the
+[Responses](responses-api.md) and [Messages](messages-api.md) design contracts.
 
 The metadata chunk's `duration_ms` and `completed_at` therefore describe stream
 completion rather than response-header arrival; `headers_received_ms` separately

@@ -27,6 +27,12 @@ describe("handleUniversalEndpointRequest", () => {
   const mockProviderRegistry = {
     get: vi.fn((providerName: string) => providerInstances[providerName]),
   };
+  const handleUniversalRequest = (request: Request) =>
+    handleUniversalEndpointRequest(
+      request,
+      mockAIGateway as any,
+      mockProviderRegistry as any,
+    );
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -71,11 +77,7 @@ describe("handleUniversalEndpointRequest", () => {
       { method: "POST", body: JSON.stringify([]) },
     ]);
 
-    await handleUniversalEndpointRequest(
-      request,
-      mockAIGateway as any,
-      mockProviderRegistry as any,
-    );
+    await handleUniversalRequest(request);
 
     expect(mockAIGateway.buildUniversalEndpointRequest).toHaveBeenCalledWith({
       data: [
@@ -122,11 +124,7 @@ describe("handleUniversalEndpointRequest", () => {
       ]),
     });
 
-    await handleUniversalEndpointRequest(
-      request,
-      mockAIGateway as any,
-      mockProviderRegistry as any,
-    );
+    await handleUniversalRequest(request);
 
     expect(mockProviderRegistry.get).toHaveBeenCalledWith("openai:paid");
     expect(
@@ -152,15 +150,13 @@ describe("handleUniversalEndpointRequest", () => {
       { method: "POST" },
     ]);
 
-    await handleUniversalEndpointRequest(
+    await handleUniversalRequest(
       new Request("https://example.com", {
         method: "POST",
         body: JSON.stringify([
           { provider: "openai:paid", query: { model: "gpt-4o" } },
         ]),
       }),
-      mockAIGateway as any,
-      mockProviderRegistry as any,
     );
 
     expect(profiledProvider.getNextApiKeyIndex).toHaveBeenCalledOnce();
@@ -208,11 +204,7 @@ describe("handleUniversalEndpointRequest", () => {
       { method: "POST", body: JSON.stringify([]) },
     ]);
 
-    await handleUniversalEndpointRequest(
-      request,
-      mockAIGateway as any,
-      mockProviderRegistry as any,
-    );
+    await handleUniversalRequest(request);
 
     expect(mockAIGateway.buildUniversalEndpointRequest).toHaveBeenCalledWith({
       data: [
@@ -268,11 +260,7 @@ describe("handleUniversalEndpointRequest", () => {
       { method: "POST", body: JSON.stringify([]) },
     ]);
 
-    await handleUniversalEndpointRequest(
-      request,
-      mockAIGateway as any,
-      mockProviderRegistry as any,
-    );
+    await handleUniversalRequest(request);
 
     expect(mockAIGateway.buildUniversalEndpointRequest).toHaveBeenCalledWith({
       data: [
@@ -319,11 +307,7 @@ describe("handleUniversalEndpointRequest", () => {
       { method: "POST", body: JSON.stringify([]) },
     ]);
 
-    await handleUniversalEndpointRequest(
-      request,
-      mockAIGateway as any,
-      mockProviderRegistry as any,
-    );
+    await handleUniversalRequest(request);
 
     expect(mockAIGateway.buildUniversalEndpointRequest).toHaveBeenCalledWith({
       data: [
@@ -361,13 +345,9 @@ describe("handleUniversalEndpointRequest", () => {
       headers: { "Content-Type": "application/json" },
     });
 
-    await expect(
-      handleUniversalEndpointRequest(
-        request,
-        mockAIGateway as any,
-        mockProviderRegistry as any,
-      ),
-    ).rejects.toThrow("Each Universal Endpoint step requires a provider.");
+    await expect(handleUniversalRequest(request)).rejects.toThrow(
+      "Each Universal Endpoint step requires a provider.",
+    );
   });
 
   it("should throw error when provider is not supported", async () => {
@@ -387,13 +367,9 @@ describe("handleUniversalEndpointRequest", () => {
       headers: { "Content-Type": "application/json" },
     });
 
-    await expect(
-      handleUniversalEndpointRequest(
-        request,
-        mockAIGateway as any,
-        mockProviderRegistry as any,
-      ),
-    ).rejects.toThrow("Provider unsupported-provider is not supported.");
+    await expect(handleUniversalRequest(request)).rejects.toThrow(
+      "Provider unsupported-provider is not supported.",
+    );
   });
 
   it("rejects a malformed provider profile selector", async () => {
@@ -404,13 +380,9 @@ describe("handleUniversalEndpointRequest", () => {
       ]),
     });
 
-    await expect(
-      handleUniversalEndpointRequest(
-        request,
-        mockAIGateway as any,
-        mockProviderRegistry as any,
-      ),
-    ).rejects.toThrow("Provider openai:bad/profile is not supported.");
+    await expect(handleUniversalRequest(request)).rejects.toThrow(
+      "Provider openai:bad/profile is not supported.",
+    );
   });
 
   it("rejects a Gateway provider that has no local adapter", async () => {
@@ -420,11 +392,7 @@ describe("handleUniversalEndpointRequest", () => {
       headers: { "Content-Type": "application/json" },
     });
 
-    const result = handleUniversalEndpointRequest(
-      request,
-      mockAIGateway as any,
-      mockProviderRegistry as any,
-    );
+    const result = handleUniversalRequest(request);
 
     await expect(result).rejects.toMatchObject({
       name: BadRequestError.name,
@@ -457,11 +425,7 @@ describe("handleUniversalEndpointRequest", () => {
       { method: "POST", body: JSON.stringify([]) },
     ]);
 
-    await handleUniversalEndpointRequest(
-      request,
-      mockAIGateway as any,
-      mockProviderRegistry as any,
-    );
+    await handleUniversalRequest(request);
 
     expect(mockAIGateway.buildUniversalEndpointRequest).toHaveBeenCalledWith({
       data: [
@@ -495,10 +459,8 @@ describe("handleUniversalEndpointRequest", () => {
     ]);
 
     await expect(
-      handleUniversalEndpointRequest(
+      handleUniversalRequest(
         new Request("https://example.com", { method: "POST" }),
-        mockAIGateway as any,
-        mockProviderRegistry as any,
       ),
     ).rejects.toThrow("safe relative path");
     expect(mockAIGateway.buildUniversalEndpointRequest).not.toHaveBeenCalled();
@@ -539,11 +501,7 @@ describe("handleUniversalEndpointRequest", () => {
       { method: "POST", body: JSON.stringify([]) },
     ]);
 
-    await handleUniversalEndpointRequest(
-      request,
-      mockAIGateway as any,
-      mockProviderRegistry as any,
-    );
+    await handleUniversalRequest(request);
 
     expect(mockAIGateway.buildUniversalEndpointRequest).toHaveBeenCalledWith({
       data: [
@@ -573,10 +531,8 @@ describe("handleUniversalEndpointRequest", () => {
     );
 
     await expect(
-      handleUniversalEndpointRequest(
+      handleUniversalRequest(
         new Request("https://example.com", { method: "POST" }),
-        mockAIGateway as any,
-        mockProviderRegistry as any,
       ),
     ).rejects.toThrow(`at most ${MAX_UNIVERSAL_ENDPOINT_STEPS} steps`);
     expect(mockAIGateway.buildUniversalEndpointRequest).not.toHaveBeenCalled();
@@ -595,10 +551,8 @@ describe("handleUniversalEndpointRequest", () => {
   ])("rejects malformed Universal Endpoint input", async (body, message) => {
     vi.mocked(helpers.readJsonRequest).mockResolvedValueOnce(body);
     await expect(
-      handleUniversalEndpointRequest(
+      handleUniversalRequest(
         new Request("https://example.com", { method: "POST" }),
-        mockAIGateway as any,
-        mockProviderRegistry as any,
       ),
     ).rejects.toThrow(message);
   });
