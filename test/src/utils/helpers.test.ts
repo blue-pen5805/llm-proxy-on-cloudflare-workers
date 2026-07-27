@@ -129,40 +129,17 @@ describe("utf8ByteLength", () => {
 });
 
 describe("maskSensitiveUrl", () => {
-  it("removes query strings containing long credential values", () => {
-    const url = "https://api.example.com/v1/chat?apiKey=sk-1234567890abcdef";
-    const result = maskSensitiveUrl(url);
-    expect(result).toBe("https://api.example.com/v1/chat");
-  });
-
-  it("removes query strings containing short credential values", () => {
-    const url = "https://api.example.com/v1/chat?key=short";
-    const result = maskSensitiveUrl(url);
-    expect(result).toBe("https://api.example.com/v1/chat");
-  });
-
-  it("removes empty query parameters", () => {
-    const url = "https://api.example.com/v1/chat?key=";
+  // The whole query string is dropped regardless of parameter name, so one
+  // table covers credential, customer-content, and empty parameters alike.
+  it.each([
+    "https://api.example.com/v1/chat",
+    "https://api.example.com/v1/chat?apiKey=sk-1234567890abcdef",
+    "https://api.example.com/v1/chat?key=short",
+    "https://api.example.com/v1/chat?key=",
+    "https://api.example.com/v1/chat?model=gpt-4&temperature=0.7",
+    "https://api.example.com/v1/chat?apiKey=sk-1234567890&model=gpt-4&token=abc123456789&temperature=0.7",
+  ])("keeps only the path of %s", (url) => {
     expect(maskSensitiveUrl(url)).toBe("https://api.example.com/v1/chat");
-  });
-
-  it("removes non-sensitive query parameters as customer content", () => {
-    const url = "https://api.example.com/v1/chat?model=gpt-4&temperature=0.7";
-    const result = maskSensitiveUrl(url);
-    expect(result).toBe("https://api.example.com/v1/chat");
-  });
-
-  it("removes mixed query strings without retaining credential fragments", () => {
-    const url =
-      "https://api.example.com/v1/chat?apiKey=sk-1234567890&model=gpt-4&token=abc123456789&temperature=0.7";
-    const result = maskSensitiveUrl(url);
-    expect(result).toBe("https://api.example.com/v1/chat");
-  });
-
-  it("should handle URLs without query parameters", () => {
-    const url = "https://api.example.com/v1/chat";
-    const result = maskSensitiveUrl(url);
-    expect(result).toBe("https://api.example.com/v1/chat");
   });
 
   it("removes fragments and credentials embedded in URL user info", () => {
@@ -191,22 +168,12 @@ describe("maskSensitiveUrl", () => {
     );
   });
 
-  it("should handle invalid URLs gracefully", () => {
-    const url = "not a valid url?param=value";
-    const result = maskSensitiveUrl(url);
-    expect(result).toBe("[invalid-url]");
-  });
-
-  it("should handle invalid URLs without a query string", () => {
-    expect(maskSensitiveUrl("not a valid url")).toBe("[invalid-url]");
-  });
-
-  it("removes query strings with various sensitive parameter names", () => {
-    const url =
-      "https://api.example.com/v1?api_key=key1&access_token=token12345678901&password=pass1&secret=sec1";
-    const result = maskSensitiveUrl(url);
-    expect(result).toBe("https://api.example.com/v1");
-  });
+  it.each(["not a valid url?param=value", "not a valid url"])(
+    "should handle the invalid URL %j gracefully",
+    (url) => {
+      expect(maskSensitiveUrl(url)).toBe("[invalid-url]");
+    },
+  );
 });
 
 describe("fetchWithLogging", () => {

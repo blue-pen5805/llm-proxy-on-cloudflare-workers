@@ -1,5 +1,6 @@
 import {
   getErrorMessage,
+  parseEnvironmentCliArguments,
   parseJsonc,
   validateEnvironmentName,
 } from "../../scripts/utils";
@@ -14,6 +15,56 @@ describe("script utilities", () => {
   it("validates safe environment suffixes", () => {
     expect(validateEnvironmentName("prod-blue_2")).toBe(true);
     expect(validateEnvironmentName("prod.blue")).toBe(false);
+    expect(validateEnvironmentName("prod blue")).toBe(false);
+    expect(validateEnvironmentName("")).toBe(false);
+  });
+
+  // Every CLI parses its options through this one function, so the shared
+  // option grammar is asserted here instead of once per command.
+  describe("parseEnvironmentCliArguments", () => {
+    it("parses environment, help, and declared boolean flags", () => {
+      expect(parseEnvironmentCliArguments([])).toEqual({ flags: new Set() });
+      expect(parseEnvironmentCliArguments(["--env", "staging"])).toEqual({
+        env: "staging",
+        flags: new Set(),
+      });
+      expect(parseEnvironmentCliArguments(["--help"])).toEqual({
+        help: true,
+        flags: new Set(),
+      });
+      expect(parseEnvironmentCliArguments(["-h"])).toEqual({
+        help: true,
+        flags: new Set(),
+      });
+      expect(
+        parseEnvironmentCliArguments(
+          ["--env", "prod", "--dry-run", "--help"],
+          ["--dry-run"],
+        ),
+      ).toEqual({
+        env: "prod",
+        help: true,
+        flags: new Set(["--dry-run"]),
+      });
+    });
+
+    it("rejects unknown options, stray arguments, and a valueless --env", () => {
+      expect(() => parseEnvironmentCliArguments(["--invalid"])).toThrow(
+        "Unknown option: --invalid",
+      );
+      expect(() => parseEnvironmentCliArguments(["--dry-run"])).toThrow(
+        "Unknown option: --dry-run",
+      );
+      expect(() => parseEnvironmentCliArguments(["config.jsonc"])).toThrow(
+        "Unexpected argument: config.jsonc",
+      );
+      expect(() => parseEnvironmentCliArguments(["--env"])).toThrow(
+        "--env option requires a value",
+      );
+      expect(() => parseEnvironmentCliArguments(["--env", "--help"])).toThrow(
+        "--env option requires a value",
+      );
+    });
   });
 
   it("parses comments and trailing commas without corrupting strings", () => {

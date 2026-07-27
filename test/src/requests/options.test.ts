@@ -127,6 +127,7 @@ describe("handleOptions", () => {
     const response = await handleOptions(request);
 
     expect(response.status).toBe(200);
+    expect(await response.text()).toBe("");
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
     expect(response.headers.get("Access-Control-Allow-Methods")).toBe(
       "GET,HEAD,POST,OPTIONS",
@@ -137,33 +138,21 @@ describe("handleOptions", () => {
     );
   });
 
-  it("should handle standard OPTIONS request", async () => {
-    const request = new Request("https://example.com", {
-      method: "OPTIONS",
-      headers: {},
-    });
-
-    const response = await handleOptions(request);
+  // A preflight needs both an Origin and a requested method; anything else is
+  // answered as a plain OPTIONS request.
+  it.each([
+    ["no CORS headers", {}],
+    ["only an Origin", { Origin: "https://example.com" }],
+    ["only a requested method", { "Access-Control-Request-Method": "POST" }],
+  ])("should handle an OPTIONS request with %s", async (_name, headers) => {
+    const response = await handleOptions(
+      new Request("https://example.com", { method: "OPTIONS", headers }),
+    );
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Allow")).toBe("GET, HEAD, POST, OPTIONS");
     expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
     expect(response.headers.get("Access-Control-Allow-Methods")).toBeNull();
-  });
-
-  it("should handle OPTIONS request with Origin but no other CORS headers", async () => {
-    const request = new Request("https://example.com", {
-      method: "OPTIONS",
-      headers: {
-        Origin: "https://example.com",
-      },
-    });
-
-    const response = await handleOptions(request);
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get("Allow")).toBe("GET, HEAD, POST, OPTIONS");
-    expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
   });
 
   it("should handle preflight without requested headers", async () => {
@@ -179,58 +168,5 @@ describe("handleOptions", () => {
 
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
     expect(response.headers.get("Access-Control-Allow-Headers")).toBeNull();
-  });
-
-  it("should handle OPTIONS request with Access-Control-Request-Method but no Origin", async () => {
-    const request = new Request("https://example.com", {
-      method: "OPTIONS",
-      headers: {
-        "Access-Control-Request-Method": "POST",
-      },
-    });
-
-    const response = await handleOptions(request);
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get("Allow")).toBe("GET, HEAD, POST, OPTIONS");
-    expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
-  });
-
-  it("should handle preflight CORS request with different requested headers", async () => {
-    const request = new Request("https://example.com", {
-      method: "OPTIONS",
-      headers: {
-        Origin: "https://example.com",
-        "Access-Control-Request-Method": "PUT",
-        "Access-Control-Request-Headers": "x-custom-header,user-agent",
-      },
-    });
-
-    const response = await handleOptions(request);
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
-    expect(response.headers.get("Access-Control-Allow-Methods")).toBe(
-      "GET,HEAD,POST,OPTIONS",
-    );
-    expect(response.headers.get("Access-Control-Allow-Headers")).toBe(
-      "x-custom-header,user-agent",
-    );
-  });
-
-  it("should return body as null for all OPTIONS requests", async () => {
-    const request = new Request("https://example.com", {
-      method: "OPTIONS",
-      headers: {
-        Origin: "https://example.com",
-        "Access-Control-Request-Method": "POST",
-        "Access-Control-Request-Headers": "content-type",
-      },
-    });
-
-    const response = await handleOptions(request);
-    const body = await response.text();
-
-    expect(body).toBe("");
   });
 });

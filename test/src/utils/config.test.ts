@@ -11,54 +11,20 @@ describe("Config", () => {
   });
 
   describe("isDevelopment", () => {
-    it("should return true when DEV is true", () => {
+    it("enables development mode only for the exact value 'true'", () => {
       vi.mocked(Environments.get).mockReturnValue("true");
 
-      const result = Config.isDevelopment();
-
-      expect(result).toBe(true);
+      expect(Config.isDevelopment()).toBe(true);
       expect(Environments.get).toHaveBeenCalledWith("DEV", false);
     });
 
-    it("should return true when DEV is 'true'", () => {
-      vi.mocked(Environments.get).mockReturnValue("true");
-
-      const result = Config.isDevelopment();
-
-      expect(result).toBe(true);
-    });
-
-    it("should return false when DEV is 'false'", () => {
-      vi.mocked(Environments.get).mockReturnValue("false");
-
-      const result = Config.isDevelopment();
-
-      expect(result).toBe(false);
-    });
-
-    it("should return false when DEV is 'False'", () => {
-      vi.mocked(Environments.get).mockReturnValue("False");
-
-      const result = Config.isDevelopment();
-
-      expect(result).toBe(false);
-    });
-
-    it("should return false when DEV is undefined", () => {
-      vi.mocked(Environments.get).mockReturnValue(undefined);
-
-      const result = Config.isDevelopment();
-
-      expect(result).toBe(false);
-    });
-
-    it("should return false when DEV is any other string", () => {
-      vi.mocked(Environments.get).mockReturnValue("development");
-
-      const result = Config.isDevelopment();
-
-      expect(result).toBe(false);
-    });
+    it.each(["false", "False", "development", undefined])(
+      "does not enable development mode for %j",
+      (value) => {
+        vi.mocked(Environments.get).mockReturnValue(value);
+        expect(Config.isDevelopment()).toBe(false);
+      },
+    );
   });
 
   describe("apiKeys", () => {

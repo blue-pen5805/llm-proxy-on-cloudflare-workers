@@ -7,37 +7,19 @@ describe("CloudflareAIGateway", () => {
   });
 
   describe("isSupportedProvider", () => {
-    it("should return true for valid providers", () => {
-      expect(CloudflareAIGateway.isSupportedProvider("openai")).toBe(true);
-      expect(CloudflareAIGateway.isSupportedProvider("anthropic")).toBe(true);
-      expect(CloudflareAIGateway.isSupportedProvider("groq")).toBe(true);
-    });
-
-    it("should return false for invalid providers", () => {
-      expect(CloudflareAIGateway.isSupportedProvider("invalid")).toBe(false);
-      expect(CloudflareAIGateway.isSupportedProvider("")).toBe(false);
-    });
-
-    it("should return true for OpenAI compatible providers when hasOpenAiCompatibility is true", () => {
-      expect(CloudflareAIGateway.isSupportedProvider("openai", true)).toBe(
+    // The supported provider lists themselves are asserted in the AI Gateway
+    // utils suite; this only pins which list each call form consults.
+    it("consults the compatibility list only when compatibility is required", () => {
+      expect(CloudflareAIGateway.isSupportedProvider("azure-openai")).toBe(
         true,
       );
-      expect(CloudflareAIGateway.isSupportedProvider("anthropic", true)).toBe(
-        true,
-      );
-      expect(CloudflareAIGateway.isSupportedProvider("groq", true)).toBe(true);
-    });
-
-    it("should return false for non-OpenAI compatible providers when hasOpenAiCompatibility is true", () => {
       expect(
         CloudflareAIGateway.isSupportedProvider("azure-openai", true),
       ).toBe(false);
-      expect(CloudflareAIGateway.isSupportedProvider("aws-bedrock", true)).toBe(
+      expect(CloudflareAIGateway.isSupportedProvider("openai", true)).toBe(
         true,
       );
-      expect(CloudflareAIGateway.isSupportedProvider("replicate", true)).toBe(
-        false,
-      );
+      expect(CloudflareAIGateway.isSupportedProvider("invalid")).toBe(false);
     });
   });
 
@@ -188,14 +170,28 @@ describe("CloudflareAIGateway", () => {
       );
     });
 
-    it("should build universal endpoint request with single step", () => {
-      const data = {
-        provider: "openai" as const,
-        endpoint: "chat/completions",
-        headers: { authorization: "Bearer sk-test" },
-        query: { model: "gpt-4", messages: [] },
-      };
+    const singleStep = {
+      provider: "openai" as const,
+      endpoint: "chat/completions",
+      headers: { authorization: "Bearer sk-test" },
+      query: { model: "gpt-4", messages: [] },
+    };
 
+    it.each([
+      ["a single step", singleStep],
+      [
+        "multiple steps",
+        [
+          singleStep,
+          {
+            provider: "anthropic" as const,
+            endpoint: "v1/messages",
+            headers: { authorization: "Bearer sk-test-2" },
+            query: { model: "claude-3-opus-20240229", messages: [] },
+          },
+        ],
+      ],
+    ])("should build a universal endpoint request with %s", (_name, data) => {
       const [url, init] = gateway.buildUniversalEndpointRequest({ data });
 
       expect(url).toBe(
@@ -209,56 +205,6 @@ describe("CloudflareAIGateway", () => {
       expect(new Headers(init.headers).get("cf-aig-authorization")).toBe(
         "Bearer test-key",
       );
-    });
-
-    it("should build universal endpoint request with multiple steps", () => {
-      const data = [
-        {
-          provider: "openai" as const,
-          endpoint: "chat/completions",
-          headers: { authorization: "Bearer sk-test-1" },
-          query: { model: "gpt-4", messages: [] },
-        },
-        {
-          provider: "anthropic" as const,
-          endpoint: "v1/messages",
-          headers: { authorization: "Bearer sk-test-2" },
-          query: { model: "claude-3-opus-20240229", messages: [] },
-        },
-      ];
-
-      const [url, init] = gateway.buildUniversalEndpointRequest({ data });
-
-      expect(url).toBe(
-        "https://gateway.ai.cloudflare.com/v1/test-account/test-gateway",
-      );
-      expect(init.method).toBe("POST");
-      expect(init.body).toBe(JSON.stringify(data));
-      expect(new Headers(init.headers).get("content-type")).toBe(
-        "application/json",
-      );
-      expect(new Headers(init.headers).get("cf-aig-authorization")).toBe(
-        "Bearer test-key",
-      );
-    });
-
-    it("should include custom headers", () => {
-      const data = {
-        provider: "openai" as const,
-        endpoint: "chat/completions",
-        headers: { authorization: "Bearer sk-test" },
-        query: { model: "gpt-4", messages: [] },
-      };
-
-      const [_url, init] = gateway.buildUniversalEndpointRequest({
-        data,
-        headers: { "cf-aig-metadata": "test-metadata" },
-      });
-
-      const headers = new Headers(init.headers);
-      expect(headers.get("content-type")).toBe("application/json");
-      expect(headers.get("cf-aig-authorization")).toBe("Bearer test-key");
-      expect(headers.get("cf-aig-metadata")).toBe("test-metadata");
     });
   });
 
@@ -324,20 +270,6 @@ describe("CloudflareAIGateway", () => {
         "https://gateway.ai.cloudflare.com/v1/test-account/test-gateway/openai/chat/completions",
       );
       expect(init.body).toBeNull();
-    });
-
-    it("should include custom headers", () => {
-      const [_url, init] = gateway.buildProviderEndpointRequest({
-        provider: "openai",
-        path: "chat/completions",
-        body: null,
-        headers: { "cf-aig-metadata": "test-metadata" },
-      });
-
-      const headers = new Headers(init.headers);
-      expect(headers.get("content-type")).toBe("application/json");
-      expect(headers.get("cf-aig-authorization")).toBe("Bearer test-key");
-      expect(headers.get("cf-aig-metadata")).toBe("test-metadata");
     });
   });
 

@@ -8,9 +8,7 @@ import {
   getConfigPath,
   runDeploySecretsCli,
   parseDeploySecretsArguments,
-  parseJsonc,
   showHelp,
-  validateEnvironmentName,
   serializeSecretValue,
   type FileSystemOperations,
 } from "../../scripts/deploy-secrets";
@@ -90,70 +88,13 @@ describe("deploy-secrets", () => {
   });
 
   describe("parseDeploySecretsArguments", () => {
-    it("should parse empty arguments", () => {
-      const result = parseDeploySecretsArguments([]);
-      expect(result).toEqual({});
-    });
-
-    it("should parse --env argument", () => {
-      const result = parseDeploySecretsArguments(["--env", "production"]);
-      expect(result).toEqual({ env: "production" });
-    });
-
-    it("should parse --dry-run argument", () => {
-      const result = parseDeploySecretsArguments(["--dry-run"]);
-      expect(result).toEqual({ dryRun: true });
-    });
-
-    it("should parse --help argument", () => {
-      const result = parseDeploySecretsArguments(["--help"]);
-      expect(result).toEqual({ help: true });
-    });
-
-    it("should parse multiple arguments", () => {
-      const result = parseDeploySecretsArguments([
-        "--env",
-        "prod",
-        "--dry-run",
-      ]);
-      expect(result).toEqual({
-        env: "prod",
-        dryRun: true,
-      });
-    });
-
-    it("should throw error for unknown option", () => {
-      expect(() => parseDeploySecretsArguments(["--unknown"])).toThrow(
-        "Unknown option: --unknown",
-      );
-    });
-
-    it("should throw error for unexpected positional arguments", () => {
-      expect(() => parseDeploySecretsArguments(["config.jsonc"])).toThrow(
-        "Unexpected argument: config.jsonc",
-      );
-    });
-
-    it("should throw error for missing env value", () => {
-      expect(() => parseDeploySecretsArguments(["--env"])).toThrow(
-        "--env option requires a value",
-      );
-    });
-  });
-
-  describe("validateEnvironmentName", () => {
-    it("should validate valid environment names", () => {
-      expect(validateEnvironmentName("production")).toBe(true);
-      expect(validateEnvironmentName("staging")).toBe(true);
-      expect(validateEnvironmentName("dev-env")).toBe(true);
-      expect(validateEnvironmentName("test_env")).toBe(true);
-      expect(validateEnvironmentName("env123")).toBe(true);
-    });
-
-    it("should reject invalid environment names", () => {
-      expect(validateEnvironmentName("env with spaces")).toBe(false);
-      expect(validateEnvironmentName("env@special")).toBe(false);
-      expect(validateEnvironmentName("env.dot")).toBe(false);
+    // The shared option grammar is covered by the scripts/utils suite; only the
+    // mapping onto this command's own argument shape is asserted here.
+    it("maps the shared options onto deployment arguments", () => {
+      expect(parseDeploySecretsArguments([])).toEqual({});
+      expect(
+        parseDeploySecretsArguments(["--env", "prod", "--dry-run", "--help"]),
+      ).toEqual({ env: "prod", dryRun: true, help: true });
     });
   });
 
@@ -166,56 +107,6 @@ describe("deploy-secrets", () => {
     it("should return environment-specific config path", () => {
       const result = getConfigPath("/root", "production");
       expect(result).toBe("/root/config.production.jsonc");
-    });
-  });
-
-  describe("parseJsonc", () => {
-    it("should parse valid JSON", () => {
-      const json = '{"key": "value"}';
-      const result = parseJsonc(json);
-      expect(result).toEqual({ key: "value" });
-    });
-
-    it("should parse JSONC with line comments", () => {
-      const jsonc = `{
-        "key": "value", // This is a comment
-        "another": "test"
-      }`;
-      const result = parseJsonc(jsonc);
-      expect(result).toEqual({ key: "value", another: "test" });
-    });
-
-    it("should parse JSONC with block comments", () => {
-      const jsonc = `{
-        "key": "value", /* This is a
-        multi-line comment */
-        "another": "test"
-      }`;
-      const result = parseJsonc(jsonc);
-      expect(result).toEqual({ key: "value", another: "test" });
-    });
-
-    it("should parse JSONC with trailing commas", () => {
-      const jsonc = `{
-        "key": "value",
-        "another": "test",
-      }`;
-      const result = parseJsonc(jsonc);
-      expect(result).toEqual({ key: "value", another: "test" });
-    });
-
-    it("should parse JSON with URLs containing // and /* */", () => {
-      const jsonString = `{
-        "url1": "https://example.com",
-        "url2": "http://test.com/path",
-        "text": "This is not a /* block comment */"
-      }`;
-      const result = parseJsonc(jsonString);
-      expect(result).toEqual({
-        url1: "https://example.com",
-        url2: "http://test.com/path",
-        text: "This is not a /* block comment */",
-      });
     });
   });
 

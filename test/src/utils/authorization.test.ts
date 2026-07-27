@@ -22,6 +22,36 @@ describe("isRequestAuthorized", () => {
     expect(isRequestAuthorized(request)).toBe(false);
   });
 
+  it.each([
+    ["a Bearer Authorization header", { Authorization: "Bearer valid-key" }],
+    [
+      "repeated whitespace after Bearer",
+      { Authorization: "Bearer    valid-key" },
+    ],
+    ["an x-api-key header", { "x-api-key": "valid-key" }],
+    ["an x-goog-api-key header", { "x-goog-api-key": "valid-key" }],
+  ])("accepts a configured key sent through %s", (_name, headers) => {
+    expect(
+      isRequestAuthorized(new Request("https://example.com", { headers })),
+    ).toBe(true);
+  });
+
+  it.each([
+    ["a non-Bearer scheme", { Authorization: "Basic valid-key" }],
+    ["an unconfigured key", { Authorization: "Bearer invalid-key" }],
+    ["no credential at all", {}],
+  ])("rejects a request with %s", (_name, headers) => {
+    expect(
+      isRequestAuthorized(new Request("https://example.com", { headers })),
+    ).toBe(false);
+  });
+
+  it("rejects query-string credentials", () => {
+    const request = new Request("https://example.com?key=valid-key");
+
+    expect(isRequestAuthorized(request)).toBe(false);
+  });
+
   it("reuses cached configured-key digests across repeated requests", () => {
     const request = new Request("https://example.com", {
       headers: {
@@ -33,45 +63,6 @@ describe("isRequestAuthorized", () => {
     expect(isRequestAuthorized(request)).toBe(true);
   });
 
-  // Test when API key is set and authentication succeeds with Authorization header
-  it("should return true when valid Authorization header is provided", () => {
-    const request = new Request("https://example.com", {
-      headers: {
-        Authorization: "Bearer valid-key",
-      },
-    });
-
-    expect(isRequestAuthorized(request)).toBe(true);
-  });
-
-  it("should tolerate repeated whitespace in an Authorization header", () => {
-    const request = new Request("https://example.com", {
-      headers: {
-        Authorization: "Bearer    valid-key",
-      },
-    });
-
-    expect(isRequestAuthorized(request)).toBe(true);
-  });
-
-  it("rejects a non-Bearer authorization scheme", () => {
-    const request = new Request("https://example.com", {
-      headers: { Authorization: "Basic valid-key" },
-    });
-    expect(isRequestAuthorized(request)).toBe(false);
-  });
-
-  it("should isRequestAuthorized any configured key", () => {
-    vi.mocked(Config.apiKeys).mockReturnValue(["first-key", "valid-key"]);
-    const request = new Request("https://example.com", {
-      headers: {
-        Authorization: "Bearer valid-key",
-      },
-    });
-
-    expect(isRequestAuthorized(request)).toBe(true);
-  });
-
   it("returns the matching configured slot without exposing key material", () => {
     const request = new Request("https://example.com", {
       headers: { Authorization: "Bearer second-key" },
@@ -79,52 +70,6 @@ describe("isRequestAuthorized", () => {
     expect(
       getAuthorizedProxyKeyIndex(request, ["first-key", "second-key"]),
     ).toBe(1);
-  });
-
-  // Test when API key is set and authentication succeeds with x-api-key header
-  it("should return true when valid x-api-key header is provided", () => {
-    const request = new Request("https://example.com", {
-      headers: {
-        "x-api-key": "valid-key",
-      },
-    });
-
-    expect(isRequestAuthorized(request)).toBe(true);
-  });
-
-  // Test when API key is set and authentication succeeds with x-goog-api-key header
-  it("should return true when valid x-goog-api-key header is provided", () => {
-    const request = new Request("https://example.com", {
-      headers: {
-        "x-goog-api-key": "valid-key",
-      },
-    });
-
-    expect(isRequestAuthorized(request)).toBe(true);
-  });
-
-  it("rejects query-string credentials", () => {
-    const request = new Request("https://example.com?key=valid-key");
-
-    expect(isRequestAuthorized(request)).toBe(false);
-  });
-
-  // Test when authentication fails due to missing headers
-  it("should return false when no authorization header or query key is provided", () => {
-    const request = new Request("https://example.com");
-
-    expect(isRequestAuthorized(request)).toBe(false);
-  });
-
-  // Test when authentication fails due to incorrect API key
-  it("should return false when invalid API key is provided", () => {
-    const request = new Request("https://example.com", {
-      headers: {
-        Authorization: "Bearer invalid-key",
-      },
-    });
-
-    expect(isRequestAuthorized(request)).toBe(false);
   });
 });
 

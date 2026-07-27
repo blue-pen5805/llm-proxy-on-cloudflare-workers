@@ -105,28 +105,18 @@ describe("Environments", () => {
       expect(result).toEqual([1, 2, 3]);
     });
 
-    test("keeps a numeric value as one opaque secret", () => {
-      // A credential of digits alone must stay a string. Coercing it to a
-      // number made the credential readers discard it, silently disabling a
-      // correctly configured provider.
-      const result = Environments.get("JSON_NUMBER", true);
-      expect(result).toBe("123");
-    });
-
-    test("keeps scalar JSON literals as opaque secrets", () => {
-      // Only an array or an object carries structure. Everything else is a
-      // single credential and must reach the readers as the configured text.
-      expect(Environments.get("JSON_LITERAL", true)).toBe("true");
-      expect(Environments.get("QUOTED_STRING", true)).toBe('"quoted"');
-    });
-
-    test("keeps a malformed structured value as one opaque secret", () => {
-      expect(Environments.get("MALFORMED_ARRAY", true)).toBe("[not-json");
-    });
-
-    test("should keep a comma-containing value as one opaque secret", () => {
-      const result = Environments.get("COMMA_SEPARATED", true);
-      expect(result).toBe("a, b, c");
+    // Only an array or an object carries structure. Everything else is a
+    // single credential and must reach the readers as the configured text: a
+    // credential of digits alone that was coerced to a number got discarded by
+    // the credential readers, silently disabling a configured provider.
+    test.each([
+      ["JSON_NUMBER", "123"],
+      ["JSON_LITERAL", "true"],
+      ["QUOTED_STRING", '"quoted"'],
+      ["MALFORMED_ARRAY", "[not-json"],
+      ["COMMA_SEPARATED", "a, b, c"],
+    ])("keeps %s as one opaque secret", (name, value) => {
+      expect(Environments.get(name as keyof Env, true)).toBe(value);
     });
 
     test("should memoize parsed values by raw value", () => {

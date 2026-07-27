@@ -1,13 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Anthropic } from "~/src/providers/anthropic/provider";
+import { Cerebras } from "~/src/providers/cerebras/provider";
 import { Cline } from "~/src/providers/cline/provider";
 import { Cohere } from "~/src/providers/cohere/provider";
 import { CustomOpenAI } from "~/src/providers/custom-openai";
+import { DeepSeek } from "~/src/providers/deepseek/provider";
 import { GoogleAiStudio } from "~/src/providers/google-ai-studio/provider";
 import { Grok } from "~/src/providers/grok/provider";
 import { Groq } from "~/src/providers/groq/provider";
 import { HuggingFace } from "~/src/providers/huggingface/provider";
 import { Mistral } from "~/src/providers/mistral/provider";
+import { NvidiaNim } from "~/src/providers/nvidia-nim/provider";
+import { Ollama } from "~/src/providers/ollama/provider";
 import { OpenAI } from "~/src/providers/openai/provider";
 import { OpenRouter } from "~/src/providers/openrouter/provider";
 import { PerplexityAi } from "~/src/providers/perplexity-ai/provider";
@@ -248,39 +252,208 @@ describe("provider contracts", () => {
     });
   });
 
-  describe("provider-specific behavior", () => {
-    it.each([
-      [new Anthropic(), "/v1/chat/completions", "/v1/models"],
+  describe("built-in provider declarations", () => {
+    // Every built-in provider is described by the same five values, so they are
+    // asserted from one table instead of a near-identical file per provider.
+    const declarations: [
+      name: string,
+      provider: ProviderBase,
+      declaration: {
+        apiKeyName: string;
+        baseUrl: string;
+        pathnamePrefix?: string;
+        chatCompletionPath?: string;
+        modelsPath?: string;
+      },
+    ][] = [
       [
+        "anthropic",
+        new Anthropic(),
+        {
+          apiKeyName: "ANTHROPIC_API_KEY",
+          baseUrl: "https://api.anthropic.com",
+          chatCompletionPath: "/v1/chat/completions",
+          modelsPath: "/v1/models",
+        },
+      ],
+      [
+        "cerebras",
+        new Cerebras(),
+        {
+          apiKeyName: "CEREBRAS_API_KEY",
+          baseUrl: "https://api.cerebras.ai/v1",
+        },
+      ],
+      [
+        "cline",
+        new Cline(),
+        {
+          apiKeyName: "CLINE_API_KEY",
+          baseUrl: "https://api.cline.bot/api/v1",
+          modelsPath: "/ai/cline/recommended-models",
+        },
+      ],
+      [
+        "cohere",
         new Cohere(),
-        "/compatibility/v1/chat/completions",
-        "/v1/models?page_size=100&endpoint=chat",
+        {
+          apiKeyName: "COHERE_API_KEY",
+          baseUrl: "https://api.cohere.com",
+          chatCompletionPath: "/compatibility/v1/chat/completions",
+          modelsPath: "/v1/models?page_size=100&endpoint=chat",
+        },
       ],
-      [new Cline(), "/chat/completions", "/ai/cline/recommended-models"],
       [
+        "deepseek",
+        new DeepSeek(),
+        {
+          apiKeyName: "DEEPSEEK_API_KEY",
+          baseUrl: "https://api.deepseek.com",
+        },
+      ],
+      [
+        "google-ai-studio",
         new GoogleAiStudio(),
-        "/v1beta/openai/chat/completions",
-        "/v1beta/models",
+        {
+          apiKeyName: "GEMINI_API_KEY",
+          baseUrl: "https://generativelanguage.googleapis.com",
+          chatCompletionPath: "/v1beta/openai/chat/completions",
+          modelsPath: "/v1beta/models",
+        },
       ],
-      [new Grok(), "/v1/chat/completions", "/v1/models"],
-      [new HuggingFace(), "", ""],
-      [new Mistral(), "/v1/chat/completions", "/v1/models"],
-      [new OpenRouter(), "/v1/chat/completions", "/v1/models"],
-      [new PerplexityAi(), "/v1/chat/completions", "/v1/models"],
-      [new Replicate(), "", ""],
       [
-        new WorkersAi(),
-        "/v1/chat/completions",
-        "/models/search?task=Text Generation",
+        "grok",
+        new Grok(),
+        {
+          apiKeyName: "GROK_API_KEY",
+          baseUrl: "https://api.x.ai",
+          chatCompletionPath: "/v1/chat/completions",
+          modelsPath: "/v1/models",
+        },
       ],
-    ])(
-      "exposes the expected endpoint paths for %s",
-      (provider, chat, models) => {
-        expect(provider.chatCompletionPath).toBe(chat);
-        expect(provider.modelsPath).toBe(models);
+      [
+        "groq",
+        new Groq(),
+        {
+          apiKeyName: "GROQ_API_KEY",
+          baseUrl: "https://api.groq.com/openai/v1",
+        },
+      ],
+      [
+        "huggingface",
+        new HuggingFace(),
+        {
+          apiKeyName: "HUGGINGFACE_API_KEY",
+          baseUrl: "https://api-inference.huggingface.co/models",
+          chatCompletionPath: "",
+          modelsPath: "",
+        },
+      ],
+      [
+        "mistral",
+        new Mistral(),
+        {
+          apiKeyName: "MISTRAL_API_KEY",
+          baseUrl: "https://api.mistral.ai",
+          chatCompletionPath: "/v1/chat/completions",
+          modelsPath: "/v1/models",
+        },
+      ],
+      [
+        "nvidia-nim",
+        new NvidiaNim(),
+        {
+          apiKeyName: "NVIDIA_NIM_API_KEY",
+          baseUrl: "https://integrate.api.nvidia.com",
+          pathnamePrefix: "/v1",
+        },
+      ],
+      [
+        "ollama",
+        new Ollama(),
+        {
+          apiKeyName: "OLLAMA_API_KEY",
+          baseUrl: "https://ollama.com",
+          pathnamePrefix: "/v1",
+        },
+      ],
+      [
+        "openai",
+        new OpenAI(),
+        {
+          apiKeyName: "OPENAI_API_KEY",
+          baseUrl: "https://api.openai.com/v1",
+        },
+      ],
+      [
+        "openrouter",
+        new OpenRouter(),
+        {
+          apiKeyName: "OPENROUTER_API_KEY",
+          baseUrl: "https://openrouter.ai/api",
+          chatCompletionPath: "/v1/chat/completions",
+          modelsPath: "/v1/models",
+        },
+      ],
+      [
+        "perplexity-ai",
+        new PerplexityAi(),
+        {
+          apiKeyName: "PERPLEXITYAI_API_KEY",
+          baseUrl: "https://api.perplexity.ai",
+          chatCompletionPath: "/v1/chat/completions",
+          modelsPath: "/v1/models",
+        },
+      ],
+      [
+        "replicate",
+        new Replicate(),
+        {
+          apiKeyName: "REPLICATE_API_KEY",
+          baseUrl: "https://api.replicate.com/v1",
+          chatCompletionPath: "",
+          modelsPath: "",
+        },
+      ],
+      [
+        "workers_ai",
+        new WorkersAi(),
+        {
+          apiKeyName: "CLOUDFLARE_API_KEY",
+          baseUrl:
+            "https://api.cloudflare.com/client/v4/accounts/account-id/ai",
+          chatCompletionPath: "/v1/chat/completions",
+          modelsPath: "/models/search?task=Text Generation",
+        },
+      ],
+    ];
+
+    it.each(declarations)(
+      "declares the credential and endpoints of %s",
+      (_name, provider, declaration) => {
+        expect(provider.apiKeyName).toBe(declaration.apiKeyName);
+        expect(provider.baseUrl()).toBe(declaration.baseUrl);
+        expect(provider.pathnamePrefix()).toBe(
+          declaration.pathnamePrefix ?? "",
+        );
+        expect(provider.chatCompletionPath).toBe(
+          declaration.chatCompletionPath ?? "/chat/completions",
+        );
+        expect(provider.modelsPath).toBe(declaration.modelsPath ?? "/models");
       },
     );
 
+    it.each(declarations)(
+      "reports the credential availability of %s",
+      (_name, provider) => {
+        expect(provider.available()).toBe(true);
+        vi.mocked(Secrets.getAll).mockReturnValue([]);
+        expect(provider.available()).toBe(false);
+      },
+    );
+  });
+
+  describe("provider-specific behavior", () => {
     it("builds Anthropic headers and converts model timestamps", async () => {
       const provider = new Anthropic();
       await expect(provider.headers(1)).resolves.toEqual({
@@ -425,6 +598,10 @@ describe("provider contracts", () => {
         .mockResolvedValue(new Response());
       const provider = new GoogleAiStudio();
 
+      await expect(provider.headers()).resolves.toEqual({
+        "Content-Type": "application/json",
+        "x-goog-api-key": "key-0",
+      });
       await expect(provider.headers(1)).resolves.toEqual({
         "Content-Type": "application/json",
         "x-goog-api-key": "key-1",
@@ -454,6 +631,9 @@ describe("provider contracts", () => {
         }),
       );
       vi.mocked(Secrets.getAll).mockReturnValue([]);
+      await expect(provider.headers()).resolves.toEqual({
+        "Content-Type": "application/json",
+      });
       expect(
         new Headers(
           await provider.buildHeadersForPath(
@@ -536,6 +716,19 @@ describe("provider contracts", () => {
         name === "CLOUDFLARE_ACCOUNT_ID" ? [] : ["api-key"],
       );
       expect(provider.available()).toBe(false);
+    });
+
+    it("rejects an unsafe Cloudflare account identifier", () => {
+      expect(new WorkersAi().configurationError()).toBeUndefined();
+      vi.mocked(Secrets.get).mockReturnValue("");
+      expect(new WorkersAi().configurationError()).toBeUndefined();
+
+      vi.mocked(Secrets.get).mockImplementation((name) =>
+        name === "CLOUDFLARE_ACCOUNT_ID" ? "../other-account" : "key-0",
+      );
+      const provider = new WorkersAi();
+      expect(provider.configurationError()).toContain("invalid");
+      expect(() => provider.baseUrl()).toThrow("missing or invalid");
     });
 
     it.each([

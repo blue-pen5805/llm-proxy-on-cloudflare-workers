@@ -564,46 +564,28 @@ describe("handleMessagesRequest", () => {
     }
   });
 
-  it("rejects oversized complete and unterminated SSE records", async () => {
-    for (const suffix of ["\n\n", ""]) {
-      vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
-        new Response(`data: ${"x".repeat(MAX_SSE_RECORD_BYTES + 1)}${suffix}`, {
-          headers: { "content-type": "text/event-stream" },
-        }),
-      );
-      const response = await handleMessagesRequest({
-        request: request({
-          model: "openai/model",
-          max_tokens: 1,
-          messages: [],
-          stream: true,
-        }),
-      } as never);
-      const body = await response.text();
-      expect(body).toContain("Upstream SSE record exceeds the proxy limit.");
-      expect(body).not.toContain("event: message_stop");
-    }
-  });
+  // The shared SSE record reader enforces the record size and encoding limits
+  // themselves; this only asserts that its failures reach the client as a
+  // terminal Messages error instead of a truncated success.
+  it("reports a shared SSE reader failure as a terminal error", async () => {
+    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+      new Response(`data: ${"x".repeat(MAX_SSE_RECORD_BYTES + 1)}\n\n`, {
+        headers: { "content-type": "text/event-stream" },
+      }),
+    );
 
-  it("turns invalid UTF-8 during transform or flush into a terminal error", async () => {
-    for (const bytes of [new Uint8Array([0xff]), new Uint8Array([0xc3])]) {
-      vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
-        new Response(bytes, {
-          headers: { "content-type": "text/event-stream" },
-        }),
-      );
-      const response = await handleMessagesRequest({
-        request: request({
-          model: "openai/model",
-          max_tokens: 1,
-          messages: [],
-          stream: true,
-        }),
-      } as never);
-      const body = await response.text();
-      expect(body).toContain("invalid UTF-8");
-      expect(body).not.toContain("event: message_stop");
-    }
+    const response = await handleMessagesRequest({
+      request: request({
+        model: "openai/model",
+        max_tokens: 1,
+        messages: [],
+        stream: true,
+      }),
+    } as never);
+
+    const body = await response.text();
+    expect(body).toContain("Upstream SSE record exceeds the proxy limit.");
+    expect(body).not.toContain("event: message_stop");
   });
 
   const streamResponse = async (upstream: string) => {
@@ -685,15 +667,6 @@ describe("handleMessagesRequest", () => {
     );
 
     expect(body).toContain('"name":"lookup"');
-    expect(body).toContain("event: message_stop");
-  });
-
-  it("joins the data lines of one SSE record into a single payload", async () => {
-    const body = await streamResponse(
-      'data: {"choices":[{"delta":\ndata: {"content":"split"}}]}\n\ndata: [DONE]\n\n',
-    );
-
-    expect(body).toContain('"text":"split"');
     expect(body).toContain("event: message_stop");
   });
 

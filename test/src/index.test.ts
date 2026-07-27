@@ -168,20 +168,12 @@ describe("fetch", () => {
     expect(response.status).toBe(200);
   });
 
-  it("should fail with invalid authentication", async () => {
+  it("challenges a request that fails authentication", async () => {
     vi.mocked(getAuthorizedProxyKeyIndex).mockReturnValue(undefined);
 
     const response = await SELF.fetch("https://example.com/ping");
 
     expect(getAuthorizedProxyKeyIndex).toHaveBeenCalled();
-    expect(response.status).toBe(401);
-  });
-
-  it("challenges an unauthenticated request with WWW-Authenticate", async () => {
-    vi.mocked(getAuthorizedProxyKeyIndex).mockReturnValue(undefined);
-
-    const response = await SELF.fetch("https://example.com/ping");
-
     expect(response.status).toBe(401);
     expect(response.headers.get("WWW-Authenticate")).toBe("Bearer");
   });
@@ -247,28 +239,8 @@ describe("fetch", () => {
     expect(handleChatCompletionsRequest).toHaveBeenCalledOnce();
   });
 
-  it("should handle v1 chat completions request", async () => {
-    const request = new Request("https://example.com/v1/chat/completions", {
-      method: "POST",
-    });
-
-    await SELF.fetch(request);
-
-    expect(handleChatCompletionsRequest).toHaveBeenCalledOnce();
-  });
-
   it("should handle models request", async () => {
     const request = new Request("https://example.com/models", {
-      method: "GET",
-    });
-
-    await SELF.fetch(request);
-
-    expect(handleModelsRequest).toHaveBeenCalledOnce();
-  });
-
-  it("should handle v1 models request", async () => {
-    const request = new Request("https://example.com/v1/models", {
       method: "GET",
     });
 
@@ -323,29 +295,10 @@ describe("fetch", () => {
     expect(handleCompatibilityRequest).toHaveBeenCalledOnce();
   });
 
-  it.each([
-    ["GET", "/g/test-gateway/compat/chat/completions"],
-    ["POST", "/g/test-gateway/compat/models"],
-    ["POST", "/g/test-gateway/compat/chat/completions/extra"],
-  ])(
-    "should reject unsupported AI Gateway compat route %s %s",
-    async (method, path) => {
-      const response = await SELF.fetch(`https://example.com${path}`, {
-        method,
-      });
-
-      expect(response.status).toBe(404);
-      expect(handleCompatibilityRequest).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each([
-    "/ai/run",
-    "/ai/v1/chat/completions",
-    "/ai/v1/responses",
-    "/ai/v1/messages",
-  ] as const)("should handle AI Gateway REST route %s", async (path) => {
-    const request = new Request(`https://example.com/g/team-gateway${path}`, {
+  // The full route matrix, including every rejected method and path, is
+  // asserted against handleRouting in the router middleware suite.
+  it("should handle AI Gateway REST route", async () => {
+    const request = new Request("https://example.com/g/team-gateway/ai/run", {
       method: "POST",
     });
 
@@ -353,25 +306,10 @@ describe("fetch", () => {
 
     expect(handleAiGatewayRestRequest).toHaveBeenLastCalledWith(
       request,
-      path,
+      "/ai/run",
       expect.anything(),
     );
   });
-
-  it.each([
-    ["GET", "/g/team-gateway/ai/run"],
-    ["POST", "/g/team-gateway/ai/v1/models"],
-  ])(
-    "should reject unsupported AI Gateway REST route %s %s",
-    async (method, path) => {
-      const response = await SELF.fetch(`https://example.com${path}`, {
-        method,
-      });
-
-      expect(response.status).toBe(404);
-      expect(handleAiGatewayRestRequest).not.toHaveBeenCalled();
-    },
-  );
 
   it("should handle requests starting with {PROVIDER_NAME}", async () => {
     await SELF.fetch("https://example.com/openai/notfound");

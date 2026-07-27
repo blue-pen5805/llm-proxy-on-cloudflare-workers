@@ -5,10 +5,8 @@ import {
   getConfigAndDevVarsPaths,
   runGenerateDevVarsCli,
   parseGenerateDevVarsArguments,
-  parseJsonc,
   quoteEnvironmentValueForDotenv,
   showHelp,
-  validateEnvironmentName,
   serializeEnvironmentValue,
   type FileSystemOperations,
 } from "../../scripts/generate-dev-vars";
@@ -31,56 +29,14 @@ const createMockFileSystem = (files: Record<string, string> = {}) => {
 };
 
 describe("parseGenerateDevVarsArguments", () => {
-  it("should parse empty arguments", () => {
-    const result = parseGenerateDevVarsArguments([]);
-    expect(result).toEqual({});
-  });
-
-  it("should parse --env argument", () => {
-    const result = parseGenerateDevVarsArguments(["--env", "staging"]);
-    expect(result).toEqual({ env: "staging" });
-  });
-
-  it("should parse --help argument", () => {
-    const result = parseGenerateDevVarsArguments(["--help"]);
-    expect(result).toEqual({ help: true });
-  });
-
-  it("should parse -h argument", () => {
-    const result = parseGenerateDevVarsArguments(["-h"]);
-    expect(result).toEqual({ help: true });
-  });
-
-  it("should parse multiple arguments", () => {
-    const result = parseGenerateDevVarsArguments(["--env", "prod", "--help"]);
-    expect(result).toEqual({ env: "prod", help: true });
-  });
-
-  it("should throw error for unknown options", () => {
-    expect(() => parseGenerateDevVarsArguments(["--invalid"])).toThrow(
-      "Unknown option: --invalid",
-    );
-    expect(() => parseGenerateDevVarsArguments(["--unknown", "value"])).toThrow(
-      "Unknown option: --unknown",
-    );
-  });
-
-  it("should throw error for unexpected arguments", () => {
-    expect(() => parseGenerateDevVarsArguments(["somearg"])).toThrow(
-      "Unexpected argument: somearg",
-    );
-    expect(() => parseGenerateDevVarsArguments(["arg1", "arg2"])).toThrow(
-      "Unexpected argument: arg1",
-    );
-  });
-
-  it("should throw error for --env without value", () => {
-    expect(() => parseGenerateDevVarsArguments(["--env"])).toThrow(
-      "--env option requires a value",
-    );
-    expect(() => parseGenerateDevVarsArguments(["--env", "--help"])).toThrow(
-      "--env option requires a value",
-    );
+  // The shared option grammar is covered by the scripts/utils suite; only the
+  // mapping onto this command's own argument shape is asserted here.
+  it("maps the shared options onto generation arguments", () => {
+    expect(parseGenerateDevVarsArguments([])).toEqual({});
+    expect(parseGenerateDevVarsArguments(["--env", "prod", "--help"])).toEqual({
+      env: "prod",
+      help: true,
+    });
   });
 });
 
@@ -91,80 +47,6 @@ describe("showHelp", () => {
     expect(helpMessage).toContain("--env <name>");
     expect(helpMessage).toContain("--help, -h");
     expect(helpMessage).toContain("Examples:");
-  });
-});
-
-describe("parseJsonc", () => {
-  it("should parse valid JSON", () => {
-    const jsonString = '{"key": "value"}';
-    const result = parseJsonc(jsonString);
-    expect(result).toEqual({ key: "value" });
-  });
-
-  it("should parse JSON with single-line comments", () => {
-    const jsonString = `{
-      // This is a comment
-      "key": "value"
-    }`;
-    const result = parseJsonc(jsonString);
-    expect(result).toEqual({ key: "value" });
-  });
-
-  it("should parse JSON with multi-line comments", () => {
-    const jsonString = `{
-      /* This is a
-         multi-line comment */
-      "key": "value"
-    }`;
-    const result = parseJsonc(jsonString);
-    expect(result).toEqual({ key: "value" });
-  });
-
-  it("should parse JSON with trailing commas", () => {
-    const jsonString = `{
-      "key1": "value1",
-      "key2": "value2",
-    }`;
-    const result = parseJsonc(jsonString);
-    expect(result).toEqual({ key1: "value1", key2: "value2" });
-  });
-
-  it("should parse complex JSONC", () => {
-    const jsonString = `{
-      // Configuration file
-      "$schema": "./config-schema.json",
-      "API_KEY": "test-key", // API key
-      "FEATURES": ["feature1", "feature2"],
-      /* Multi-line
-         comment */
-      "DEBUG": true,
-    }`;
-    const result = parseJsonc(jsonString);
-    expect(result).toEqual({
-      $schema: "./config-schema.json",
-      API_KEY: "test-key",
-      FEATURES: ["feature1", "feature2"],
-      DEBUG: true,
-    });
-  });
-
-  it("should parse JSON with URLs containing // and /* */", () => {
-    const jsonString = `{
-      "url1": "https://example.com",
-      "url2": "http://test.com/path",
-      "text": "This is not a /* block comment */"
-    }`;
-    const result = parseJsonc(jsonString);
-    expect(result).toEqual({
-      url1: "https://example.com",
-      url2: "http://test.com/path",
-      text: "This is not a /* block comment */",
-    });
-  });
-
-  it("should throw error for invalid JSON", () => {
-    const invalidJson = "{ invalid json }";
-    expect(() => parseJsonc(invalidJson)).toThrow();
   });
 });
 
@@ -355,24 +237,6 @@ describe("quoteEnvironmentValueForDotenv", () => {
     expect(() =>
       quoteEnvironmentValueForDotenv(" both-'and-`quotes\\n "),
     ).toThrow("cannot be represented losslessly");
-  });
-});
-
-describe("validateEnvironmentName", () => {
-  it("should accept valid environment names", () => {
-    expect(validateEnvironmentName("staging")).toBe(true);
-    expect(validateEnvironmentName("prod")).toBe(true);
-    expect(validateEnvironmentName("test_env")).toBe(true);
-    expect(validateEnvironmentName("test-env")).toBe(true);
-    expect(validateEnvironmentName("test123")).toBe(true);
-  });
-
-  it("should reject invalid environment names", () => {
-    expect(validateEnvironmentName("test.env")).toBe(false);
-    expect(validateEnvironmentName("test/env")).toBe(false);
-    expect(validateEnvironmentName("test env")).toBe(false);
-    expect(validateEnvironmentName("test@env")).toBe(false);
-    expect(validateEnvironmentName("")).toBe(false);
   });
 });
 
