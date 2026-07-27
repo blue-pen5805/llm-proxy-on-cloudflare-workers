@@ -66,14 +66,17 @@ git clone https://github.com/blue-pen5805/llm-proxy-on-cloudflare-workers.git
 cd llm-proxy-on-cloudflare-workers
 npm ci
 npm run cf:login
-npm run secrets:create
+npm run secrets
 npm run deploy
 npm run secrets:deploy
 ```
 
-`npm run secrets:create` creates the ignored `config.jsonc`. Set a strong,
-unique `PROXY_API_KEY` and at least one provider credential before deploying.
-You can instead copy and edit `config.example.jsonc`.
+`npm run secrets` opens a terminal UI that creates or edits the ignored
+`config.jsonc`, with credential values hidden. It obtains the default
+Cloudflare Account ID from `wrangler whoami --json`; you can select another
+reported account or overwrite the value manually. Set a strong, unique
+`PROXY_API_KEY` and at least one provider credential before deploying. You can
+instead copy and edit `config.example.jsonc`.
 
 For verification steps, named environments, and security notes, follow the
 [initial setup guide](docs/initial-setup.md).

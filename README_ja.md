@@ -63,14 +63,16 @@ git clone https://github.com/blue-pen5805/llm-proxy-on-cloudflare-workers.git
 cd llm-proxy-on-cloudflare-workers
 npm ci
 npm run cf:login
-npm run secrets:create
+npm run secrets
 npm run deploy
 npm run secrets:deploy
 ```
 
-`npm run secrets:create` は Git 対象外の `config.jsonc` を作成します。デプロイ前に、十分に
-長く一意な `PROXY_API_KEY` と、1つ以上のプロバイダー認証情報を設定してください。
-`config.example.jsonc` をコピーして手動で編集することもできます。
+`npm run secrets` はターミナル UI を開き、Git 対象外の `config.jsonc` を作成または
+編集します。認証情報の値は UI 上で伏せられます。Cloudflare アカウント ID の初期値は
+`wrangler whoami --json` から取得され、別のアカウントの選択や手動上書きもできます。
+デプロイ前に、十分に長く一意な `PROXY_API_KEY` と、1つ以上のプロバイダー認証情報を
+設定してください。`config.example.jsonc` をコピーして手動で編集することもできます。
 
 検証手順、名前付き環境、セキュリティ上の注意点は
 [初期セットアップ](docs/initial-setup_ja.md) に記載しています。

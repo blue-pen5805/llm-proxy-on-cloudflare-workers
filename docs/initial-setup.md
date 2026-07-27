@@ -32,11 +32,19 @@ before the first deployment if necessary.
 Use the interactive helper:
 
 ```bash
-npm run secrets:create
+npm run secrets
 ```
 
-Alternatively, copy `config.example.jsonc` to `config.jsonc` and edit it. Set a
-strong, unique `PROXY_API_KEY` and at least one provider key:
+The terminal UI creates `config.jsonc` or edits it when it already exists. It
+loads `CLOUDFLARE_ACCOUNT_ID` from `wrangler whoami --json` by default; choose
+an account when more than one is available, or replace the detected ID in the
+AI Gateway section. Credential input and saved secret values remain hidden in
+the UI.
+
+For a named environment, run
+`npm run secrets -- --env <environment>`. Alternatively, copy
+`config.example.jsonc` to `config.jsonc` and edit it. Set a strong, unique
+`PROXY_API_KEY` and at least one provider key:
 
 ```jsonc
 {

@@ -3,9 +3,9 @@
 ## Deployment checklist
 
 1. Run `npm ci` on a clean checkout.
-2. Create or update the target `config[.<env>].jsonc` outside version control.
-   For a named environment, first declare the matching environment in
-   `wrangler.jsonc`.
+2. Create or update the target `config[.<env>].jsonc` outside version control
+   with `npm run secrets -- [--env <env>]`. For a named environment,
+   first declare the matching environment in `wrangler.jsonc`.
 3. Preview settings with `npm run secrets:deploy -- --dry-run [--env <env>]`.
    Values, prefixes, and lengths are redacted; each operation is shown as
    `[set]` or `[delete]`. The preview also rejects circular virtual-model

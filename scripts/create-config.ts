@@ -1,34 +1,414 @@
 #!/usr/bin/env tsx
-import { getErrorMessage } from "./utils.ts";
-import { chmodSync, readFileSync, writeFileSync, existsSync } from "fs";
-import { createInterface, Interface } from "readline";
+import configSchema from "../schemas/config-schema.json";
+import {
+  getErrorMessage,
+  parseEnvironmentCliArguments,
+  validateEnvironmentName,
+} from "./utils.ts";
+import {
+  cancel,
+  confirm,
+  intro,
+  isCancel,
+  multiline,
+  note,
+  outro,
+  password,
+  select,
+  text,
+} from "@clack/prompts";
+import Ajv, { type ErrorObject } from "ajv";
+import { applyEdits, modify, parse, type ParseError } from "jsonc-parser";
+import { execFile } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import type { Readable } from "node:stream";
+import { promisify } from "node:util";
 
+const execFileAsync = promisify(execFile);
 const CONFIG_EXAMPLE_PATH = "config.example.jsonc";
-const CONFIG_OUTPUT_PATH = "config.jsonc";
 
-// Configuration: Required fields (must be provided by user)
-const REQUIRED_FIELDS = ["PROXY_API_KEY"];
+type Config = Record<string, unknown>;
+export type FieldKey = Exclude<keyof typeof configSchema.properties, "$schema">;
 
-// Configuration: Fields to ignore (won't be prompted for)
-const IGNORED_FIELDS = [
-  "$schema",
-  "CLOUDFLARE_ACCOUNT_ID",
-  "AI_GATEWAY_NAME",
-  "ALWAYS_USE_AI_GATEWAY",
+interface FieldGroup {
+  id: string;
+  label: string;
+  fields: readonly FieldKey[];
+}
+
+interface ProviderField {
+  key: FieldKey;
+  label: string;
+}
+
+interface ProviderGroup {
+  id: string;
+  label: string;
+  fields: readonly ProviderField[];
+}
+
+export interface CloudflareAccount {
+  id: string;
+  name: string;
+}
+
+export interface ConfigTuiArguments {
+  env?: string;
+  help?: boolean;
+}
+
+interface SelectOption {
+  value: string;
+  label: string;
+  hint?: string;
+  disabled?: boolean;
+}
+
+export interface ConfigTuiPrompts {
+  intro: (message: string) => void;
+  outro: (message: string) => void;
+  cancel: (message: string) => void;
+  note: (message: string, title?: string) => void;
+  isCancel: (value: unknown) => value is symbol;
+  isBack: (value: unknown) => value is symbol;
+  select: (options: {
+    message: string;
+    options: SelectOption[];
+    initialValue?: string;
+    maxItems?: number;
+  }) => Promise<string | symbol>;
+  text: (options: {
+    message: string;
+    initialValue?: string;
+    placeholder?: string;
+    validate?: (value: string | undefined) => string | undefined;
+  }) => Promise<string | symbol>;
+  password: (options: {
+    message: string;
+    mask?: string;
+    validate?: (value: string | undefined) => string | undefined;
+  }) => Promise<string | symbol>;
+  multiline: (options: {
+    message: string;
+    initialValue?: string;
+    placeholder?: string;
+    validate?: (value: string | undefined) => string | undefined;
+  }) => Promise<string | symbol>;
+  confirm: (options: {
+    message: string;
+    initialValue?: boolean;
+  }) => Promise<boolean | symbol>;
+}
+
+export interface ConfigTuiFileSystem {
+  existsSync: (filePath: string) => boolean;
+  readFileSync: (filePath: string, encoding: BufferEncoding) => string;
+  writeFileSync: (
+    filePath: string,
+    content: string,
+    options: { mode: number },
+  ) => void;
+  chmodSync: (filePath: string, mode: number) => void;
+}
+
+export interface ConfigTuiDependencies {
+  prompts?: ConfigTuiPrompts;
+  fileSystem?: ConfigTuiFileSystem;
+  discoverAccounts?: () => Promise<CloudflareAccount[]>;
+  repositoryRoot?: string;
+}
+
+export const CONFIG_TUI_BACK = Symbol("config-tui:back");
+
+interface KeypressInput extends Readable {
+  prependListener(
+    event: "keypress",
+    listener: (character: string, key: { name?: string }) => void,
+  ): this;
+  removeListener(
+    event: "keypress",
+    listener: (character: string, key: { name?: string }) => void,
+  ): this;
+}
+
+export async function mapEscapeToBack<T>(
+  runPrompt: () => Promise<T | symbol>,
+  input: KeypressInput,
+  isPromptCancel: (value: unknown) => boolean,
+): Promise<T | symbol> {
+  let escapePressed = false;
+  const handleKeypress = (_character: string, key: { name?: string }): void => {
+    if (key.name === "escape") escapePressed = true;
+  };
+  input.prependListener("keypress", handleKeypress);
+  try {
+    const result = await runPrompt();
+    return escapePressed && isPromptCancel(result) ? CONFIG_TUI_BACK : result;
+  } finally {
+    input.removeListener("keypress", handleKeypress);
+  }
+}
+
+/* istanbul ignore next -- thin adapter to the interactive terminal runtime */
+function interactiveSelect(
+  options: Parameters<ConfigTuiPrompts["select"]>[0],
+): ReturnType<ConfigTuiPrompts["select"]> {
+  return mapEscapeToBack(() => select(options), process.stdin, isCancel);
+}
+
+/* istanbul ignore next -- thin adapter to the interactive terminal runtime */
+function interactiveText(
+  options: Parameters<ConfigTuiPrompts["text"]>[0],
+): ReturnType<ConfigTuiPrompts["text"]> {
+  return mapEscapeToBack(() => text(options), process.stdin, isCancel);
+}
+
+/* istanbul ignore next -- thin adapter to the interactive terminal runtime */
+function interactivePassword(
+  options: Parameters<ConfigTuiPrompts["password"]>[0],
+): ReturnType<ConfigTuiPrompts["password"]> {
+  return mapEscapeToBack(() => password(options), process.stdin, isCancel);
+}
+
+/* istanbul ignore next -- thin adapter to the interactive terminal runtime */
+function interactiveMultiline(
+  options: Parameters<ConfigTuiPrompts["multiline"]>[0],
+): ReturnType<ConfigTuiPrompts["multiline"]> {
+  return mapEscapeToBack(() => multiline(options), process.stdin, isCancel);
+}
+
+/* istanbul ignore next -- thin adapter to the interactive terminal runtime */
+function interactiveConfirm(
+  options: Parameters<ConfigTuiPrompts["confirm"]>[0],
+): ReturnType<ConfigTuiPrompts["confirm"]> {
+  return mapEscapeToBack(() => confirm(options), process.stdin, isCancel);
+}
+
+/* istanbul ignore next -- thin adapter to the interactive terminal runtime */
+function interactiveIsBack(value: unknown): value is symbol {
+  return value === CONFIG_TUI_BACK;
+}
+
+const DEFAULT_PROMPTS: ConfigTuiPrompts = {
+  intro,
+  outro,
+  cancel,
+  note,
+  isCancel,
+  isBack: interactiveIsBack,
+  select: interactiveSelect,
+  text: interactiveText,
+  password: interactivePassword,
+  multiline: interactiveMultiline,
+  confirm: interactiveConfirm,
+};
+
+export const FIELD_GROUPS: readonly FieldGroup[] = [
+  {
+    id: "authentication",
+    label: "Proxy authentication",
+    fields: ["PROXY_API_KEY", "ALLOWED_ORIGINS"],
+  },
+  {
+    id: "custom-endpoints",
+    label: "Custom endpoints",
+    fields: ["CUSTOM_OPENAI_ENDPOINTS"],
+  },
+  {
+    id: "virtual-models",
+    label: "Virtual models",
+    fields: ["VIRTUAL_MODELS"],
+  },
+  {
+    id: "gateway",
+    label: "Cloudflare AI Gateway",
+    fields: [
+      "CLOUDFLARE_ACCOUNT_ID",
+      "AI_GATEWAY_NAME",
+      "ALWAYS_USE_AI_GATEWAY",
+      "CF_AIG_TOKEN",
+      "CLOUDFLARE_API_TOKEN",
+    ],
+  },
+  {
+    id: "behavior",
+    label: "Behavior",
+    fields: [
+      "DEFAULT_MODEL",
+      "CHAT_RESPONSE_METADATA_ENABLED",
+      "API_KEY_COOLDOWN_SECONDS",
+      "MODELS_CACHE_TTL_SECONDS",
+      "STATUS_CACHE_TTL_SECONDS",
+    ],
+  },
+] as const;
+
+export const PROVIDER_GROUPS: readonly ProviderGroup[] = [
+  {
+    id: "openai",
+    label: "OpenAI",
+    fields: [{ key: "OPENAI_API_KEY", label: "API_KEY" }],
+  },
+  {
+    id: "google-ai-studio",
+    label: "Google AI Studio",
+    fields: [{ key: "GEMINI_API_KEY", label: "API_KEY" }],
+  },
+  {
+    id: "xai",
+    label: "xAI",
+    fields: [{ key: "GROK_API_KEY", label: "API_KEY" }],
+  },
+  {
+    id: "anthropic",
+    label: "Anthropic",
+    fields: [{ key: "ANTHROPIC_API_KEY", label: "API_KEY" }],
+  },
+  {
+    id: "cerebras",
+    label: "Cerebras",
+    fields: [{ key: "CEREBRAS_API_KEY", label: "API_KEY" }],
+  },
+  {
+    id: "cohere",
+    label: "Cohere",
+    fields: [{ key: "COHERE_API_KEY", label: "API_KEY" }],
+  },
+  {
+    id: "cline",
+    label: "Cline",
+    fields: [{ key: "CLINE_API_KEY", label: "API_KEY" }],
+  },
+  {
+    id: "deepseek",
+    label: "DeepSeek",
+    fields: [{ key: "DEEPSEEK_API_KEY", label: "API_KEY" }],
+  },
+  {
+    id: "groq",
+    label: "Groq",
+    fields: [{ key: "GROQ_API_KEY", label: "API_KEY" }],
+  },
+  {
+    id: "mistral",
+    label: "Mistral",
+    fields: [{ key: "MISTRAL_API_KEY", label: "API_KEY" }],
+  },
+  {
+    id: "nvidia-nim",
+    label: "NVIDIA NIM",
+    fields: [{ key: "NVIDIA_NIM_API_KEY", label: "API_KEY" }],
+  },
+  {
+    id: "openrouter",
+    label: "OpenRouter",
+    fields: [{ key: "OPENROUTER_API_KEY", label: "API_KEY" }],
+  },
+  {
+    id: "hugging-face",
+    label: "Hugging Face",
+    fields: [{ key: "HUGGINGFACE_API_KEY", label: "API_KEY" }],
+  },
+  {
+    id: "perplexity-ai",
+    label: "Perplexity AI",
+    fields: [{ key: "PERPLEXITYAI_API_KEY", label: "API_KEY" }],
+  },
+  {
+    id: "replicate",
+    label: "Replicate",
+    fields: [{ key: "REPLICATE_API_KEY", label: "API_KEY" }],
+  },
+  {
+    id: "workers-ai",
+    label: "Cloudflare Workers AI",
+    fields: [{ key: "CLOUDFLARE_API_KEY", label: "API_KEY" }],
+  },
+  {
+    id: "ollama",
+    label: "Ollama",
+    fields: [{ key: "OLLAMA_API_KEY", label: "API_KEY" }],
+  },
+  {
+    id: "azure-openai",
+    label: "Azure OpenAI",
+    fields: [
+      { key: "AZURE_OPENAI_API_KEY", label: "API_KEY" },
+      { key: "AZURE_OPENAI_RESOURCE_NAME", label: "Resource name" },
+      { key: "AZURE_OPENAI_API_VERSION", label: "API version" },
+    ],
+  },
+  {
+    id: "google-vertex-ai",
+    label: "Google Vertex AI",
+    fields: [
+      {
+        key: "GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON",
+        label: "Service account JSON",
+      },
+    ],
+  },
+  {
+    id: "aws-bedrock",
+    label: "AWS Bedrock",
+    fields: [
+      { key: "AWS_BEARER_TOKEN_BEDROCK", label: "Bearer token" },
+      { key: "AWS_BEDROCK_REGION", label: "Region" },
+    ],
+  },
+] as const;
+
+export const MAIN_MENU_ORDER = [
+  "authentication",
+  "__providers",
+  "custom-endpoints",
+  "virtual-models",
+  "gateway",
+  "behavior",
+] as const;
+
+export const TUI_EXCLUDED_FIELDS = new Set<FieldKey>(["DEV"]);
+
+const FIELD_DESCRIPTIONS: Partial<Record<FieldKey, string>> = {
+  PROXY_API_KEY: "Credentials accepted from proxy clients",
+  ALLOWED_ORIGINS: "Exact browser origins allowed by CORS",
+  CLOUDFLARE_ACCOUNT_ID: "Cloudflare account used by AI Gateway",
+  AI_GATEWAY_NAME: "AI Gateway name (default when unset)",
+  ALWAYS_USE_AI_GATEWAY: "Route every provider request through AI Gateway",
+  CF_AIG_TOKEN: "AI Gateway authentication token",
+  CLOUDFLARE_API_TOKEN: "Cloudflare API token for Gateway APIs",
+  GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON:
+    "Vertex AI service-account JSON including region",
+  AZURE_OPENAI_RESOURCE_NAME: "Azure OpenAI resource name",
+  AZURE_OPENAI_API_VERSION: "Azure OpenAI API version",
+  AWS_BEDROCK_REGION: "Amazon Bedrock region",
+  DEFAULT_MODEL: "Default provider-qualified model",
+  CHAT_RESPONSE_METADATA_ENABLED:
+    "Add proxy routing metadata to chat responses",
+  API_KEY_COOLDOWN_SECONDS: "Credential cooldown in seconds",
+  MODELS_CACHE_TTL_SECONDS: "Aggregated model cache TTL in seconds",
+  STATUS_CACHE_TTL_SECONDS: "Status response cache TTL in seconds",
+  CUSTOM_OPENAI_ENDPOINTS: "Custom OpenAI-compatible provider definitions",
+  VIRTUAL_MODELS: "Virtual model routing definitions",
+};
+
+const FIELD_DEFAULT_LABELS: Partial<Record<FieldKey, string>> = {
+  ALLOWED_ORIGINS: "*",
+  AI_GATEWAY_NAME: "default",
+  ALWAYS_USE_AI_GATEWAY: "false",
+  AZURE_OPENAI_API_VERSION: "2024-10-21",
+  AWS_BEDROCK_REGION: "us-east-1",
+  CHAT_RESPONSE_METADATA_ENABLED: "false",
+  API_KEY_COOLDOWN_SECONDS: "60",
+  MODELS_CACHE_TTL_SECONDS: "300",
+  STATUS_CACHE_TTL_SECONDS: "0",
+};
+
+const SENSITIVE_FIELDS = new Set<FieldKey>([
+  "PROXY_API_KEY",
   "CF_AIG_TOKEN",
   "CLOUDFLARE_API_TOKEN",
-  "CUSTOM_OPENAI_ENDPOINTS",
-  "DEV",
-  "ALLOWED_ORIGINS",
-  "DEFAULT_MODEL",
-  "CHAT_RESPONSE_METADATA_ENABLED",
-  "API_KEY_COOLDOWN_SECONDS",
-  "MODELS_CACHE_TTL_SECONDS",
-  "STATUS_CACHE_TTL_SECONDS",
-];
-
-// Configuration: Fields that require at least one to be set
-const API_KEY_FIELDS_GROUP = [
   "OPENAI_API_KEY",
   "GEMINI_API_KEY",
   "ANTHROPIC_API_KEY",
@@ -49,271 +429,689 @@ const API_KEY_FIELDS_GROUP = [
   "AZURE_OPENAI_API_KEY",
   "GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON",
   "AWS_BEARER_TOKEN_BEDROCK",
-];
+  "CUSTOM_OPENAI_ENDPOINTS",
+]);
 
-interface ConfigField {
-  key: string;
-  value: unknown;
-  comment?: string;
+const STRICT_JSON_FIELDS = new Set<FieldKey>([
+  "ALLOWED_ORIGINS",
+  "GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON",
+  "CUSTOM_OPENAI_ENDPOINTS",
+  "VIRTUAL_MODELS",
+]);
+
+const BOOLEAN_FIELDS = new Set<FieldKey>([
+  "ALWAYS_USE_AI_GATEWAY",
+  "CHAT_RESPONSE_METADATA_ENABLED",
+]);
+
+const NUMBER_FIELDS = new Set<FieldKey>([
+  "API_KEY_COOLDOWN_SECONDS",
+  "MODELS_CACHE_TTL_SECONDS",
+  "STATUS_CACHE_TTL_SECONDS",
+]);
+
+const REQUIRED_FIELDS = new Set<FieldKey>(["PROXY_API_KEY"]);
+
+const ajv = new Ajv({ allErrors: true, strict: false });
+const validateCompleteConfig = ajv.compile(configSchema);
+const fieldValidators = new Map<FieldKey, ReturnType<typeof ajv.compile>>();
+
+function validationMessage(error: ErrorObject): string {
+  const location =
+    error.instancePath || error.params.missingProperty || "value";
+  return `${location} ${String(error.message)}`.trim();
 }
 
-function createReadlineInterface(): Interface {
-  return createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-}
-
-function askQuestion(
-  readlineInterface: Interface,
-  promptText: string,
-): Promise<string> {
-  return new Promise((resolve) => {
-    readlineInterface.question(promptText, (answer) => {
-      resolve(answer);
+function validateField(field: FieldKey, value: unknown): string | undefined {
+  let validator = fieldValidators.get(field);
+  if (!validator) {
+    validator = ajv.compile({
+      ...(configSchema.properties[field] as object),
+      definitions: configSchema.definitions,
     });
+    fieldValidators.set(field, validator);
+  }
+  return validator(value)
+    ? undefined
+    : validationMessage(validator.errors?.[0] as ErrorObject);
+}
+
+export function validateConfig(config: Config): string[] {
+  return validateCompleteConfig(config)
+    ? []
+    : validateCompleteConfig.errors!.map(validationMessage);
+}
+
+export function parseConfigTuiArguments(
+  commandLineArguments: string[] = process.argv.slice(2),
+): ConfigTuiArguments {
+  const parsed = parseEnvironmentCliArguments(commandLineArguments);
+  if (parsed.env && !validateEnvironmentName(parsed.env)) {
+    throw new Error(
+      "Environment name may contain only letters, numbers, underscores, and hyphens.",
+    );
+  }
+  return { env: parsed.env, help: parsed.help };
+}
+
+export function configTuiHelp(): string {
+  return `
+Usage: secrets [options]
+
+Create or edit a local JSONC configuration through an interactive terminal UI.
+
+Options:
+  --env <name>    Edit config.<name>.jsonc instead of config.jsonc
+  --help, -h      Show this help message
+
+Examples:
+  npm run secrets
+  npm run secrets -- --env production
+`;
+}
+
+export function getConfigTuiPath(
+  repositoryRoot: string,
+  environmentName?: string,
+): string {
+  return path.join(
+    repositoryRoot,
+    environmentName ? `config.${environmentName}.jsonc` : "config.jsonc",
+  );
+}
+
+export async function discoverCloudflareAccounts(
+  execute?: typeof execFileAsync,
+): Promise<CloudflareAccount[]> {
+  /* istanbul ignore if -- omitted only when the real Wrangler CLI is invoked */
+  if (!execute) execute = execFileAsync;
+  const { stdout } = await execute("wrangler", ["whoami", "--json"], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    maxBuffer: 1024 * 1024,
+  });
+  const parsedOutput = JSON.parse(stdout) as {
+    loggedIn?: unknown;
+    accounts?: unknown;
+  };
+  if (parsedOutput.loggedIn !== true || !Array.isArray(parsedOutput.accounts)) {
+    throw new Error("Wrangler returned an unexpected identity response.");
+  }
+
+  return parsedOutput.accounts.flatMap((account) => {
+    if (
+      typeof account === "object" &&
+      account !== null &&
+      typeof (account as { id?: unknown }).id === "string" &&
+      typeof (account as { name?: unknown }).name === "string"
+    ) {
+      return [
+        {
+          id: (account as { id: string }).id,
+          name: (account as { name: string }).name,
+        },
+      ];
+    }
+    return [];
   });
 }
 
-export function parseConfigTemplate(jsoncText: string): {
-  config: Record<string, unknown>;
-  structure: ConfigField[];
-} {
-  if (!jsoncText || typeof jsoncText !== "string") {
-    throw new Error("Invalid content provided to parseConfigTemplate");
+export function parseConfigSource(source: string): Config {
+  const errors: ParseError[] = [];
+  const config = parse(source, errors, {
+    allowTrailingComma: true,
+    disallowComments: false,
+  }) as unknown;
+  if (
+    errors.length > 0 ||
+    typeof config !== "object" ||
+    config === null ||
+    Array.isArray(config)
+  ) {
+    throw new Error("The configuration file is not valid JSONC.");
   }
-
-  const sourceLines = jsoncText.split("\n");
-  const configFields: ConfigField[] = [];
-  const pendingComments: string[] = [];
-
-  for (const sourceLine of sourceLines) {
-    const trimmedLine = sourceLine.trim();
-
-    if (trimmedLine.startsWith("//")) {
-      const commentText = trimmedLine.substring(2).trim();
-      pendingComments.push(commentText);
-      continue;
-    }
-
-    const propertyMatch = trimmedLine.match(/^"([^"]+)":\s*(.+?),?$/);
-    if (propertyMatch) {
-      const [, fieldName, serializedValue] = propertyMatch;
-      let parsedValue: unknown;
-
-      try {
-        const valueWithoutTrailingComma = serializedValue.replace(/,$/, "");
-        parsedValue = JSON.parse(valueWithoutTrailingComma);
-      } catch {
-        parsedValue = serializedValue.replace(/^"|"$/g, "").replace(/,$/, "");
-      }
-
-      const relevantComment =
-        pendingComments.length > 0
-          ? pendingComments[pendingComments.length - 1]
-          : undefined;
-
-      configFields.push({
-        key: fieldName,
-        value: parsedValue,
-        comment: relevantComment,
-      });
-
-      pendingComments.length = 0;
-    }
-  }
-
-  const config: Record<string, unknown> = {};
-  for (const configField of configFields) {
-    config[configField.key] = configField.value;
-  }
-
-  return { config, structure: configFields };
+  return config as Config;
 }
 
-export function getFieldDescription(key: string, comment?: string): string {
-  if (comment && !comment.includes("---")) {
-    return comment;
-  }
-
-  // Fallback descriptions based on key patterns
-  if (key.includes("API_KEY")) {
-    return `API key for ${key.replace("_API_KEY", "").toLowerCase()}`;
-  }
-
-  return key.replace(/_/g, " ").toLowerCase();
-}
-
-async function promptForValue(
-  readlineInterface: Interface,
-  description: string,
-  isRequired: boolean,
-  currentValue?: unknown,
-): Promise<unknown> {
-  const requiredText = isRequired
-    ? " (required)"
-    : " (optional, press Enter to skip)";
-  const currentText =
-    currentValue !== null && currentValue !== undefined
-      ? ` [current: ${JSON.stringify(currentValue)}]`
-      : "";
-  const promptText = `${description}${currentText}${requiredText}: `;
-
-  let enteredValue: string;
-  do {
-    enteredValue = await askQuestion(readlineInterface, promptText);
-    if (isRequired && !enteredValue.trim()) {
-      console.log("This field is required. Please enter a value.");
-    }
-  } while (isRequired && !enteredValue.trim());
-
-  if (!enteredValue.trim()) {
-    return null; // Return null for empty input instead of currentValue
-  }
-
-  // Try to parse as JSON, otherwise return as string
-  try {
-    return JSON.parse(enteredValue);
-  } catch {
-    return enteredValue;
-  }
-}
-
-export function serializeConfigJsonc(
-  configFields: ConfigField[],
-  config: Record<string, unknown>,
+function updateConfigSource(
+  source: string,
+  field: FieldKey,
+  value: unknown,
 ): string {
-  let jsoncOutput = '{\n  "$schema": "schemas/config-schema.json",\n\n';
-
-  let currentSection = "";
-
-  for (const configField of configFields) {
-    if (IGNORED_FIELDS.includes(configField.key)) {
-      continue;
-    }
-
-    // Skip null values (empty inputs)
-    const configuredValue = config[configField.key];
-    if (configuredValue === null || configuredValue === undefined) {
-      continue;
-    }
-
-    // Add section headers based on comments
-    if (configField.comment && configField.comment.includes("---")) {
-      if (currentSection) {
-        jsoncOutput += "\n";
-      }
-      jsoncOutput += `  // ${configField.comment}\n`;
-      currentSection = configField.comment;
-    } else if (configField.comment && !configField.comment.includes("---")) {
-      jsoncOutput += `  // ${configField.comment}\n`;
-    }
-
-    // Add the key-value pair
-    jsoncOutput += `  "${configField.key}": ${JSON.stringify(configuredValue)},\n`;
-  }
-
-  // Remove trailing comma and close
-  jsoncOutput = jsoncOutput.replace(/,\n$/, "\n");
-  jsoncOutput += "}";
-
-  return jsoncOutput;
+  return applyEdits(
+    source,
+    modify(source, [field], value, {
+      formattingOptions: {
+        insertSpaces: true,
+        tabSize: 2,
+        eol: "\n",
+      },
+    }),
+  );
 }
 
-async function runCreateConfigCli(): Promise<void> {
-  console.log("🚀 Config.jsonc Creation Tool\n");
+function fieldDescription(field: FieldKey): string {
+  return FIELD_DESCRIPTIONS[field] as string;
+}
 
-  if (existsSync(CONFIG_OUTPUT_PATH)) {
-    const overwritePrompt = createReadlineInterface();
-    const overwriteAnswer = await askQuestion(
-      overwritePrompt,
-      `${CONFIG_OUTPUT_PATH} already exists. Overwrite? (y/N): `,
-    );
-    overwritePrompt.close();
+function hasValue(value: unknown): boolean {
+  if (value === null || value === undefined || value === "") return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value).length > 0;
+  return true;
+}
 
-    if (!["y", "yes"].includes(overwriteAnswer.toLowerCase())) {
-      console.log("Cancelled.");
-      process.exit(0);
-      return;
+function fieldStatus(field: FieldKey, value: unknown): string {
+  const defaultLabel = FIELD_DEFAULT_LABELS[field];
+  if (!hasValue(value)) {
+    return defaultLabel
+      ? `not set (effective default: ${defaultLabel})`
+      : "not set";
+  }
+  const status = SENSITIVE_FIELDS.has(field)
+    ? "configured (hidden)"
+    : Array.isArray(value)
+      ? `${value.length} item(s)`
+      : typeof value === "object"
+        ? "configured object"
+        : String(value);
+  return defaultLabel === status ? `${status} (default)` : status;
+}
+
+function parseEnteredValue(field: FieldKey, enteredValue: string): unknown {
+  if (NUMBER_FIELDS.has(field)) return Number(enteredValue);
+  if (STRICT_JSON_FIELDS.has(field)) {
+    return JSON.parse(enteredValue) as unknown;
+  }
+  if (
+    enteredValue.trimStart().startsWith("[") ||
+    enteredValue.trimStart().startsWith("{")
+  ) {
+    try {
+      return JSON.parse(enteredValue) as unknown;
+    } catch {
+      // Provider credentials are opaque strings unless they contain valid JSON.
+      return enteredValue;
     }
   }
+  return enteredValue;
+}
 
-  if (!existsSync(CONFIG_EXAMPLE_PATH)) {
-    console.error(`Error: ${CONFIG_EXAMPLE_PATH} not found.`);
-    process.exit(1);
-    return;
+export function validateConfigFieldInput(
+  field: FieldKey,
+  enteredValue: string,
+): string | undefined {
+  if (enteredValue.trim() === "") return "Enter a value.";
+  try {
+    return validateField(field, parseEnteredValue(field, enteredValue));
+  } catch {
+    return "Enter valid JSON.";
+  }
+}
+
+async function promptForNewValue(
+  prompts: ConfigTuiPrompts,
+  field: FieldKey,
+  currentValue: unknown,
+  displayName?: string,
+): Promise<unknown | symbol> {
+  const message = displayName ?? `${field} — ${fieldDescription(field)}`;
+  if (BOOLEAN_FIELDS.has(field)) {
+    const selectedValue = await prompts.select({
+      message,
+      initialValue:
+        typeof currentValue === "boolean" ? String(currentValue) : "null",
+      options: [
+        { value: "true", label: "Enabled" },
+        {
+          value: "false",
+          label: "Disabled (default)",
+        },
+        {
+          value: "null",
+          label: "Not set (use effective default)",
+        },
+      ],
+    });
+    if (prompts.isCancel(selectedValue) || prompts.isBack(selectedValue)) {
+      return selectedValue;
+    }
+    return selectedValue === "null" ? null : selectedValue === "true";
   }
 
-  const exampleConfigText = readFileSync(CONFIG_EXAMPLE_PATH, "utf8");
-  const { config, structure: configFields } =
-    parseConfigTemplate(exampleConfigText);
+  const validate = (value: string | undefined): string | undefined =>
+    validateConfigFieldInput(field, value ?? "");
 
-  const configurationPrompt = createReadlineInterface();
+  let enteredValue: string | symbol;
+  if (SENSITIVE_FIELDS.has(field)) {
+    enteredValue = await prompts.password({
+      message: `${message} (input is hidden)`,
+      mask: "•",
+      validate,
+    });
+  } else if (STRICT_JSON_FIELDS.has(field)) {
+    enteredValue = await prompts.multiline({
+      message: `${message} (JSON)`,
+      initialValue: hasValue(currentValue)
+        ? JSON.stringify(currentValue, null, 2)
+        : undefined,
+      placeholder: "Enter JSON",
+      validate,
+    });
+  } else {
+    enteredValue = await prompts.text({
+      message,
+      initialValue: hasValue(currentValue) ? String(currentValue) : undefined,
+      placeholder: NUMBER_FIELDS.has(field) ? "Enter a number" : undefined,
+      validate,
+    });
+  }
 
-  try {
-    console.log(
-      "Starting configuration setup. Please enter values for each field.\n",
+  return prompts.isCancel(enteredValue) || prompts.isBack(enteredValue)
+    ? enteredValue
+    : parseEnteredValue(field, enteredValue);
+}
+
+async function chooseInitialAccount(
+  prompts: ConfigTuiPrompts,
+  accounts: CloudflareAccount[],
+): Promise<string | null | symbol> {
+  if (accounts.length === 0) return null;
+  if (accounts.length === 1) return accounts[0].id;
+
+  return prompts.select({
+    message: "Choose the Cloudflare account to use as the default",
+    options: [
+      ...accounts.map((account) => ({
+        value: account.id,
+        label: account.name,
+        hint: account.id,
+      })),
+      {
+        value: "",
+        label: "Do not set an account yet",
+        hint: "You can enter one manually in the AI Gateway section",
+      },
+    ],
+  });
+}
+
+async function editField(
+  prompts: ConfigTuiPrompts,
+  field: FieldKey,
+  currentValue: unknown,
+  requireValue = false,
+  displayName?: string,
+): Promise<{
+  changed: boolean;
+  value?: unknown;
+  cancelled?: boolean;
+  back?: boolean;
+}> {
+  if (requireValue && !hasValue(currentValue)) {
+    const value = await promptForNewValue(
+      prompts,
+      field,
+      currentValue,
+      displayName,
     );
+    if (prompts.isBack(value)) return { changed: false, back: true };
+    return prompts.isCancel(value)
+      ? { changed: false, cancelled: true }
+      : { changed: true, value };
+  }
 
-    // Process all fields from the structure
-    for (const configField of configFields) {
-      if (IGNORED_FIELDS.includes(configField.key)) {
+  while (true) {
+    const action = await prompts.select({
+      message: `${displayName ?? field} is ${fieldStatus(field, currentValue)}`,
+      options: [
+        { value: "change", label: "Change value" },
+        {
+          value: "clear",
+          label: "Set to null",
+          hint: "The next secrets deployment deletes this Worker secret",
+          disabled: REQUIRED_FIELDS.has(field),
+        },
+        {
+          value: "keep",
+          label: "Keep current value (no change)",
+        },
+      ],
+    });
+    if (prompts.isBack(action)) return { changed: false, back: true };
+    if (prompts.isCancel(action)) return { changed: false, cancelled: true };
+    if (action === "keep") return { changed: false };
+    if (action === "clear") return { changed: true, value: null };
+
+    const value = await promptForNewValue(
+      prompts,
+      field,
+      currentValue,
+      displayName,
+    );
+    if (prompts.isBack(value)) continue;
+    return prompts.isCancel(value)
+      ? { changed: false, cancelled: true }
+      : { changed: true, value };
+  }
+}
+
+async function runProviderFields(
+  prompts: ConfigTuiPrompts,
+  provider: ProviderGroup,
+  config: Config,
+  update: (field: FieldKey, value: unknown) => void,
+): Promise<boolean> {
+  while (true) {
+    const selectedField = await prompts.select({
+      message: provider.label,
+      options: [
+        ...provider.fields.map((field) => ({
+          value: field.key,
+          label: field.label,
+          hint: fieldStatus(field.key, config[field.key]),
+        })),
+        { value: "__back", label: "Back to providers" },
+      ],
+    });
+    if (prompts.isBack(selectedField) || selectedField === "__back")
+      return true;
+    if (prompts.isCancel(selectedField)) return false;
+
+    const providerField = provider.fields.find(
+      (field) => field.key === selectedField,
+    );
+    /* istanbul ignore next -- every menu value is constructed from provider.fields */
+    if (!providerField) throw new Error("Unknown provider setting.");
+    const result = await editField(
+      prompts,
+      providerField.key,
+      config[providerField.key],
+      false,
+      `${provider.label} — ${providerField.label}`,
+    );
+    if (result.back) continue;
+    if (result.cancelled) return false;
+    if (result.changed) update(providerField.key, result.value);
+  }
+}
+
+async function runProviderMenu(
+  prompts: ConfigTuiPrompts,
+  config: Config,
+  update: (field: FieldKey, value: unknown) => void,
+): Promise<boolean> {
+  while (true) {
+    const selectedProvider = await prompts.select({
+      message: "Providers",
+      maxItems: 12,
+      options: [
+        ...PROVIDER_GROUPS.map((provider) => ({
+          value: provider.id,
+          label: provider.label,
+          hint: `${provider.fields.filter((field) => hasValue(config[field.key])).length}/${provider.fields.length} configured`,
+        })),
+        { value: "__back", label: "Back to main menu" },
+      ],
+    });
+    if (prompts.isBack(selectedProvider) || selectedProvider === "__back") {
+      return true;
+    }
+    if (prompts.isCancel(selectedProvider)) return false;
+
+    const provider = PROVIDER_GROUPS.find(
+      (candidate) => candidate.id === selectedProvider,
+    );
+    /* istanbul ignore next -- every menu value is constructed from PROVIDER_GROUPS */
+    if (!provider) throw new Error("Unknown provider.");
+    if (!(await runProviderFields(prompts, provider, config, update))) {
+      return false;
+    }
+  }
+}
+
+async function runFieldGroup(
+  prompts: ConfigTuiPrompts,
+  group: FieldGroup,
+  config: Config,
+  update: (field: FieldKey, value: unknown) => void,
+): Promise<boolean> {
+  while (true) {
+    const selectedField = await prompts.select({
+      message: group.label,
+      maxItems: 12,
+      options: [
+        ...group.fields.map((field) => ({
+          value: field,
+          label: field,
+          hint: fieldStatus(field, config[field]),
+        })),
+        { value: "__back", label: "Back to main menu" },
+      ],
+    });
+    if (prompts.isBack(selectedField)) return true;
+    if (prompts.isCancel(selectedField)) return false;
+    if (selectedField === "__back") return true;
+
+    const field = selectedField as FieldKey;
+    const result = await editField(prompts, field, config[field]);
+    if (result.back) continue;
+    if (result.cancelled) return false;
+    if (result.changed) update(field, result.value);
+  }
+}
+
+export async function runConfigTui(
+  arguments_: ConfigTuiArguments,
+  dependencies: ConfigTuiDependencies,
+): Promise<"saved" | "cancelled"> {
+  /* istanbul ignore next -- default prompt implementation belongs to the interactive runtime */
+  const prompts = dependencies.prompts ?? DEFAULT_PROMPTS;
+  /* istanbul ignore next -- default filesystem implementation belongs to the interactive runtime */
+  const fileSystem = dependencies.fileSystem ?? fs;
+  /* istanbul ignore next -- process cwd is supplied by the interactive runtime */
+  const repositoryRoot = dependencies.repositoryRoot ?? process.cwd();
+  const configPath = getConfigTuiPath(repositoryRoot, arguments_.env);
+  const examplePath = path.join(repositoryRoot, CONFIG_EXAMPLE_PATH);
+  const isExistingConfig = fileSystem.existsSync(configPath);
+
+  prompts.intro(
+    `${isExistingConfig ? "Edit" : "Create"} ${path.basename(configPath)}`,
+  );
+  prompts.note(
+    "Esc: go back one level\nCtrl+C: exit without saving",
+    "Keyboard",
+  );
+
+  if (!isExistingConfig && !fileSystem.existsSync(examplePath)) {
+    throw new Error(`${CONFIG_EXAMPLE_PATH} was not found.`);
+  }
+
+  const sourcePath = isExistingConfig ? configPath : examplePath;
+  let configSource = fileSystem.readFileSync(sourcePath, "utf8");
+  const config = parseConfigSource(configSource);
+  let changed = !isExistingConfig;
+
+  const update = (field: FieldKey, value: unknown): void => {
+    config[field] = value;
+    configSource = updateConfigSource(configSource, field, value);
+    changed = true;
+  };
+
+  let accounts: CloudflareAccount[] = [];
+  try {
+    let discoverAccounts = dependencies.discoverAccounts;
+    /* istanbul ignore if -- the default invokes the real Wrangler CLI */
+    if (!discoverAccounts) discoverAccounts = discoverCloudflareAccounts;
+    accounts = await discoverAccounts();
+  } catch {
+    prompts.note(
+      "Wrangler account discovery was unavailable. You can enter CLOUDFLARE_ACCOUNT_ID manually.",
+      "Cloudflare account",
+    );
+  }
+
+  if (!isExistingConfig) {
+    config.PROXY_API_KEY = null;
+
+    while (true) {
+      const proxyResult = await editField(
+        prompts,
+        "PROXY_API_KEY",
+        config.PROXY_API_KEY,
+        true,
+      );
+      if (proxyResult.back || proxyResult.cancelled) {
+        prompts.cancel("No configuration file was written.");
+        return "cancelled";
+      }
+      if (proxyResult.changed) update("PROXY_API_KEY", proxyResult.value);
+
+      const accountId = await chooseInitialAccount(prompts, accounts);
+      if (prompts.isBack(accountId)) continue;
+      if (prompts.isCancel(accountId)) {
+        prompts.cancel("No configuration file was written.");
+        return "cancelled";
+      }
+      if (accountId) update("CLOUDFLARE_ACCOUNT_ID", accountId);
+      break;
+    }
+  } else if (!hasValue(config.CLOUDFLARE_ACCOUNT_ID)) {
+    const accountId = await chooseInitialAccount(prompts, accounts);
+    if (prompts.isCancel(accountId)) {
+      prompts.cancel("No configuration file was written.");
+      return "cancelled";
+    }
+    if (!prompts.isBack(accountId) && accountId) {
+      update("CLOUDFLARE_ACCOUNT_ID", accountId);
+    }
+  } else if (accounts.length > 0) {
+    prompts.note(
+      accounts.map((account) => `${account.name}: ${account.id}`).join("\n"),
+      "Accounts reported by wrangler whoami --json",
+    );
+  }
+
+  while (true) {
+    const action = await prompts.select({
+      message: `${path.basename(configPath)}${changed ? " has unsaved changes" : ""}`,
+      options: [
+        ...MAIN_MENU_ORDER.map((sectionId) => {
+          if (sectionId === "__providers") {
+            const providerFields = PROVIDER_GROUPS.flatMap(
+              (provider) => provider.fields,
+            );
+            return {
+              value: sectionId,
+              label: "Providers",
+              hint: `${providerFields.filter((field) => hasValue(config[field.key])).length}/${providerFields.length} configured`,
+            };
+          }
+          const group = FIELD_GROUPS.find(
+            (candidate) => candidate.id === sectionId,
+          ) as FieldGroup;
+          return {
+            value: group.id,
+            label: group.label,
+            hint: `${group.fields.filter((field) => hasValue(config[field])).length}/${group.fields.length} configured`,
+          };
+        }),
+        { value: "__save", label: "Review and save" },
+        { value: "__cancel", label: "Exit without saving" },
+      ],
+    });
+
+    if (
+      prompts.isBack(action) ||
+      prompts.isCancel(action) ||
+      action === "__cancel"
+    ) {
+      prompts.cancel("No changes were written.");
+      return "cancelled";
+    }
+
+    if (action !== "__save") {
+      if (action === "__providers") {
+        if (!(await runProviderMenu(prompts, config, update))) {
+          prompts.cancel("No changes were written.");
+          return "cancelled";
+        }
         continue;
       }
-
-      const isRequired = REQUIRED_FIELDS.includes(configField.key);
-      const description = getFieldDescription(
-        configField.key,
-        configField.comment,
-      );
-
-      config[configField.key] = await promptForValue(
-        configurationPrompt,
-        description,
-        isRequired,
-        config[configField.key],
-      );
+      const group = FIELD_GROUPS.find((candidate) => candidate.id === action);
+      /* istanbul ignore next -- every menu value is constructed from FIELD_GROUPS */
+      if (!group) throw new Error("Unknown configuration section.");
+      if (!(await runFieldGroup(prompts, group, config, update))) {
+        prompts.cancel("No changes were written.");
+        return "cancelled";
+      }
+      continue;
     }
 
-    // Check if at least one API key is provided
-    const hasConfiguredProviderKey = API_KEY_FIELDS_GROUP.some((fieldName) => {
-      const configuredValue = config[fieldName];
-      return (
-        configuredValue !== null &&
-        configuredValue !== undefined &&
-        configuredValue !== ""
+    const validationErrors = validateConfig(config);
+    if (validationErrors.length > 0) {
+      prompts.note(
+        validationErrors.join("\n"),
+        "Configuration needs attention",
       );
-    });
-
-    if (!hasConfiguredProviderKey) {
-      console.log(
-        "\nWarning: No API keys configured. At least one provider API key is recommended.",
-      );
+      continue;
     }
 
-    const generatedConfigText = serializeConfigJsonc(configFields, config);
-    writeFileSync(CONFIG_OUTPUT_PATH, generatedConfigText, { mode: 0o600 });
-    chmodSync(CONFIG_OUTPUT_PATH, 0o600);
-
-    console.log(`\n✅ ${CONFIG_OUTPUT_PATH} created successfully!`);
-    console.log("\nNext steps:");
-    console.log("1. Run 'npm run deploy' to deploy to Cloudflare Workers");
-    console.log(
-      "2. Run 'npm run secrets:deploy' to register API keys as secrets",
+    prompts.note(
+      [
+        ...FIELD_GROUPS.flatMap((group) =>
+          group.fields
+            .filter((field) => hasValue(config[field]))
+            .map((field) => `${field}: ${fieldStatus(field, config[field])}`),
+        ),
+        ...PROVIDER_GROUPS.flatMap((provider) =>
+          provider.fields
+            .filter((field) => hasValue(config[field.key]))
+            .map(
+              (field) =>
+                `${provider.label} — ${field.label}: ${fieldStatus(field.key, config[field.key])}`,
+            ),
+        ),
+      ].join("\n"),
+      "Values to save",
     );
-  } catch (error) {
-    console.error("\nAn error occurred:", getErrorMessage(error));
-    process.exit(1);
-    return;
-  } finally {
-    configurationPrompt.close();
+    const shouldSave = await prompts.confirm({
+      message: `Save ${path.basename(configPath)} with mode 0600?`,
+      initialValue: true,
+    });
+    if (prompts.isBack(shouldSave)) continue;
+    if (prompts.isCancel(shouldSave)) {
+      prompts.cancel("No changes were written.");
+      return "cancelled";
+    }
+    if (!shouldSave) continue;
+
+    fileSystem.writeFileSync(configPath, configSource, { mode: 0o600 });
+    fileSystem.chmodSync(configPath, 0o600);
+    prompts.outro(
+      `${path.basename(configPath)} ${isExistingConfig ? "updated" : "created"}. Run npm run secrets:deploy when ready.`,
+    );
+    return "saved";
   }
 }
 
-export { runCreateConfigCli };
+export async function runCreateConfigCli(
+  commandLineArguments: string[] = process.argv.slice(2),
+  dependencies: ConfigTuiDependencies = {},
+): Promise<"saved" | "cancelled" | "help"> {
+  const arguments_ = parseConfigTuiArguments(commandLineArguments);
+  if (arguments_.help) {
+    console.log(configTuiHelp());
+    return "help";
+  }
+  return runConfigTui(arguments_, dependencies);
+}
 
 // Run the CLI only when this script is executed directly.
-/* istanbul ignore next -- exercised by the runtime, not module tests */
+/* istanbul ignore next -- exercised by the Node.js CLI runtime */
 if (import.meta.url === `file://${process.argv[1]}`) {
-  void runCreateConfigCli().catch(console.error);
+  void runCreateConfigCli().catch((error: unknown) => {
+    console.error(`Error: ${getErrorMessage(error)}`);
+    process.exitCode = 1;
+  });
 }
