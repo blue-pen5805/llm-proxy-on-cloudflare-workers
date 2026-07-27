@@ -77,6 +77,35 @@ describe("AI Gateway Custom Provider synchronization", () => {
     );
   });
 
+  it("plans one definition per provider regardless of credential profiles", () => {
+    const targets = buildCustomProviderTargets({
+      ...strictConfig,
+      OLLAMA_API_KEY: { default: "ollama-default", second: "ollama-second" },
+      CUSTOM_OPENAI_ENDPOINTS: [
+        {
+          name: "internal",
+          baseUrl: "https://internal.example/v1",
+          apiKeys: { default: "internal-default", staging: "internal-staging" },
+        },
+      ],
+    });
+
+    expect(targets.filter(({ name }) => name.includes("ollama"))).toEqual([
+      expect.objectContaining({
+        name: "LLM Proxy / ollama",
+        slug: "llm-proxy-ollama",
+        baseUrl: "https://ollama.com/v1",
+      }),
+    ]);
+    expect(targets.filter(({ name }) => name.includes("internal"))).toEqual([
+      expect.objectContaining({
+        name: "LLM Proxy / internal",
+        slug: "llm-proxy-internal",
+        baseUrl: "https://internal.example/v1",
+      }),
+    ]);
+  });
+
   it("does not contact Cloudflare when strict mode is disabled", async () => {
     const fetchMock = vi.fn();
     await expect(

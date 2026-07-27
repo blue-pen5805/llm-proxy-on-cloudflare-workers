@@ -4,8 +4,10 @@ import {
 } from "../src/ai_gateway/custom_provider.ts";
 import { CloudflareAIGateway } from "../src/ai_gateway/index.ts";
 import { createProviderRegistry } from "../src/providers.ts";
+import { parseProviderSelector } from "../src/providers/profile.ts";
 import type { Provider } from "../src/providers/provider.ts";
 import { Environments } from "../src/utils/environments.ts";
+import { DEFAULT_PROVIDER_PROFILE } from "../src/utils/secrets.ts";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -104,7 +106,17 @@ export function buildCustomProviderTargets(
   );
   const targets: CustomProviderTarget[] = [];
 
-  for (const [providerName, provider] of Object.entries(providers)) {
+  for (const [providerSelector, provider] of Object.entries(providers)) {
+    // Credential profiles only change which API key is presented per request;
+    // the Custom Provider stores the Base URL, which every profile of a
+    // provider shares. Runtime routing likewise resolves the Custom Provider
+    // from the bare provider name, so profiled selectors would register
+    // duplicate, unreachable definitions such as "LLM Proxy / ollama:paid".
+    const parsedSelector = parseProviderSelector(providerSelector);
+    /* istanbul ignore next -- registry entries always use valid selectors */
+    if (!parsedSelector) continue;
+    const { providerName, profile } = parsedSelector;
+    if (profile !== DEFAULT_PROVIDER_PROFILE) continue;
     if (!needsCustomProvider(providerName, provider)) continue;
 
     // Some provider origins depend on optional deployment metadata. They are
