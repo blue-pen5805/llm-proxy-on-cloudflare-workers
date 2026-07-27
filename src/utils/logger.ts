@@ -10,6 +10,7 @@ interface RequestLogContext {
   requestPath: string;
   providers: Set<string>;
   requestId: string;
+  proxyKeyIndex?: number;
   started: boolean;
   startedAt: number;
 }
@@ -24,6 +25,7 @@ const LOG_MESSAGE_FIELDS: Readonly<Record<string, readonly string[]>> = {
     "provider",
     "credential_profile",
     "model",
+    "proxy_key_index",
   ],
   "request.completed": [
     "method",
@@ -253,6 +255,7 @@ export class RequestLogger {
       return {
         method: logContext?.method,
         path: logContext?.path,
+        proxy_key_index: logContext?.proxyKeyIndex,
       };
     }
     const providerIterator = providers.values();
@@ -262,12 +265,14 @@ export class RequestLogger {
         method: logContext?.method,
         path: logContext?.path,
         provider: firstProvider,
+        proxy_key_index: logContext?.proxyKeyIndex,
       };
     }
     return {
       method: logContext?.method,
       path: logContext?.path,
       providers: [firstProvider, ...providerIterator].join(","),
+      proxy_key_index: logContext?.proxyKeyIndex,
     };
   }
 
@@ -282,6 +287,11 @@ export class RequestLogger {
 
   static requestId(): string | undefined {
     return requestLogContext.getStore()?.requestId;
+  }
+
+  static setProxyKeyIndex(proxyKeyIndex: number): void {
+    const logContext = requestLogContext.getStore();
+    if (logContext) logContext.proxyKeyIndex = proxyKeyIndex;
   }
 
   static durationMs(startedAt: number): number {

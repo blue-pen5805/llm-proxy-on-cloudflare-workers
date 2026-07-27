@@ -82,6 +82,12 @@ Update one dependency or a tightly related group at a time:
    Wrangler, Workers types, or configuration behavior changes.
 6. Run the complete verification workflow below.
 
+If a reported vulnerability cannot be resolved in the same update, record in
+the review or issue: the affected package and dependency path, advisory and
+severity, whether it reaches the deployed Worker bundle, the concrete
+acceptance rationale, compensating controls, an owner, and a `YYYY-MM-DD`
+re-evaluation date. An unowned or undated acceptance is not complete.
+
 Update documentation only when the dependency changes architecture, supported
 runtimes, commands, configuration behavior, or the contributor workflow. If the
 update cannot be made compatible within scope, report the exact failure and
@@ -98,6 +104,7 @@ npm run prettier-ci
 npm run lint
 npm run test
 npm run test:coverage
+npm run bench
 ```
 
 Coverage is a required contract: statements, branches, functions, and lines
@@ -110,6 +117,13 @@ by itself establish that a route behaves under hostile input. When a change
 introduces or touches a name, path, or field that a client controls, add a case
 to `test/src/security/adversarial_inputs.test.ts` asserting the documented
 rejection rather than relying on the coverage percentage.
+
+Test doubles must implement the same callable contract as production provider
+instances, preferably by constructing or extending the real provider
+implementation and overriding only the behavior under test. Do not preserve an
+unreachable implementation branch solely to satisfy coverage, and do not
+invent a partial provider shape to enter such a branch; remove structurally
+unreachable code instead.
 
 `npm run tsc` type-checks three projects: `src` and `scripts` from the root
 `tsconfig.json`, Worker-runtime tests from `test/tsconfig.json`, and Node-based

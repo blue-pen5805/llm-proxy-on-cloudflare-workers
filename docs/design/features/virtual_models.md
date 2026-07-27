@@ -186,7 +186,13 @@ body is logged.
 The successful candidate's concrete provider, model, credential slot, and
 Gateway route are also returned in the optional Chat Completions `llm_proxy`
 extension. The client-requested virtual model remains visible as
-`requested_model`; failed candidate history remains log-only. See
+`requested_model`. When the request uses AI Gateway, that same outer
+client-requested name is added to `cf-aig-metadata` as
+`llm_proxy_virtual_model`, including when candidate resolution traverses nested
+virtual models. The concrete candidate's credential profile and provider key
+slot are included in the scalar `llm_proxy_credentials` tag as
+`<credential-profile>:<provider-key-index>`. Client metadata retains precedence
+on key collisions. Failed candidate history remains log-only. See
 [OpenAI-compatible response metadata](chat-response-metadata.md).
 
 ## References

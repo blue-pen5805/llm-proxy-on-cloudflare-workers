@@ -4,10 +4,12 @@ import { BUILT_IN_PROVIDER_CONSTRUCTORS } from "~/src/providers";
 import { getAllProviderInstances, getProviderByName } from "~/src/providers";
 import { ProviderNotSupportedError } from "~/src/providers/provider";
 import {
+  handleModelRetrieveRequest,
   handleModelsRequest,
   MAX_AGGREGATED_MODELS_BYTES,
   MAX_MODELS_PER_PROVIDER,
 } from "~/src/requests/models";
+import { Config } from "~/src/utils/config";
 import { Environments } from "~/src/utils/environments";
 import * as helpers from "~/src/utils/helpers";
 import { Secrets } from "~/src/utils/secrets";
@@ -175,6 +177,88 @@ describe("models", () => {
       ],
     });
     expect(Secrets.getNext).not.toHaveBeenCalled();
+  });
+
+  it("filters aggregation by a canonical provider query", async () => {
+    const response = await handleModelsRequest({
+      request: new Request(
+        "https://example.com/v1/models?provider=anthropic,anthropic",
+      ),
+    } as any);
+    const body = (await response.json()) as ModelsResponse;
+    expect(body.data.map((model) => model.id)).toEqual(["anthropic/gpt-4"]);
+    expect(mockProviderClass.fetch).toHaveBeenCalledOnce();
+  });
+
+  it("omits virtual models when a real-provider filter is active", async () => {
+    vi.spyOn(Config, "virtualModels").mockReturnValue({
+      "virtual/fast": [{ model: "openai/gpt-4", retries: 0 }],
+    });
+    const response = await handleModelsRequest({
+      request: new Request("https://example.com/v1/models?provider=openai"),
+    } as any);
+    const body = (await response.json()) as ModelsResponse;
+    expect(body.data.some((model) => model.id === "virtual/fast")).toBe(false);
+  });
+
+  it.each([
+    "provider=openai&provider=anthropic",
+    "provider=",
+    "provider=unknown",
+    `provider=${Array.from({ length: 33 }, (_value, index) => `provider-${index}`).join(",")}`,
+  ])("rejects an invalid provider query: %s", async (query) => {
+    const response = await handleModelsRequest({
+      request: new Request(`https://example.com/v1/models?${query}`),
+    } as any);
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: expect.objectContaining({
+        message: expect.any(String),
+        param: "provider",
+      }),
+    });
+  });
+
+  it("retrieves one provider-qualified model", async () => {
+    const response = await handleModelRetrieveRequest(
+      {
+        request: new Request("https://example.com/v1/models/openai%2Fgpt-4"),
+      } as any,
+      "openai/gpt-4",
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      id: "openai/gpt-4",
+      object: "model",
+    });
+  });
+
+  it("returns model_not_found for an absent model", async () => {
+    const response = await handleModelRetrieveRequest(
+      {
+        request: new Request("https://example.com/v1/models/missing"),
+      } as any,
+      "missing",
+    );
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      error: expect.objectContaining({
+        code: "model_not_found",
+        param: "model",
+      }),
+    });
+  });
+
+  it("propagates an aggregate validation error during retrieval", async () => {
+    const response = await handleModelRetrieveRequest(
+      {
+        request: new Request(
+          "https://example.com/v1/models/missing?provider=unknown",
+        ),
+      } as any,
+      "missing",
+    );
+    expect(response.status).toBe(400);
   });
 
   it("lists configured virtual models at the front of the response", async () => {
@@ -940,7 +1024,9 @@ describe("models", () => {
 
       const hitResponse = await handleModelsRequest(context);
       expect(hitResponse.headers.get("X-Proxy-Models-Cache")).toBe("HIT");
-      expect(hitResponse.headers.get("Cache-Control")).toBeNull();
+      expect(hitResponse.headers.get("Cache-Control")).toBe(
+        "private, no-store",
+      );
       expect(hitResponse.headers.get("Content-Type")).toBe("application/json");
       expect(mockProviderClass.fetch.mock.calls.length).toBe(upstreamCalls);
       await expect(hitResponse.json()).resolves.toEqual(
@@ -1095,6 +1181,14 @@ describe("models", () => {
 
       const missResponse = await handleModelsRequest({} as any, aiGateway);
       expect(missResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
+    });
+
+    it("partitions cached aggregates by provider filter", async () => {
+      const filtered = await handleModelsRequest({
+        request: new Request("https://example.com/v1/models?provider=openai"),
+        apiKeyIndex: 51,
+      } as any);
+      expect(filtered.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
     });
 
     it("does not cache aggregates with a failed provider", async () => {

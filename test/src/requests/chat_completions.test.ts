@@ -335,8 +335,10 @@ describe("handleChatCompletionsRequest", () => {
     const response = await handleChatCompletionsRequest({ request } as any);
 
     expect(response.status).toBe(400);
-    const body = (await response.json()) as { error: string };
-    expect(body.error).toBe("Invalid request.");
+    const body = (await response.json()) as {
+      error: { message: string };
+    };
+    expect(body.error.message).toBe("Invalid request.");
   });
 
   it.each([
@@ -351,7 +353,9 @@ describe("handleChatCompletionsRequest", () => {
     } as any);
 
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ error: "Invalid request." });
+    expect(await response.json()).toEqual({
+      error: expect.objectContaining({ message: "Invalid request." }),
+    });
   });
 
   it("should return 400 when the default model is absent", async () => {
@@ -381,8 +385,10 @@ describe("handleChatCompletionsRequest", () => {
     const response = await handleChatCompletionsRequest({ request } as any);
 
     expect(response.status).toBe(400);
-    const body = (await response.json()) as { error: string };
-    expect(body.error).toBe("Invalid provider.");
+    const body = (await response.json()) as {
+      error: { message: string };
+    };
+    expect(body.error.message).toBe("Invalid provider.");
   });
 
   it("rejects a Gateway-only provider when no Gateway is active", async () => {
@@ -406,7 +412,9 @@ describe("handleChatCompletionsRequest", () => {
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
-      error: "google-vertex-ai requires Cloudflare AI Gateway.",
+      error: expect.objectContaining({
+        message: "google-vertex-ai requires Cloudflare AI Gateway.",
+      }),
     });
     expect(gatewayOnlyProvider.fetch).not.toHaveBeenCalled();
   });
@@ -437,7 +445,9 @@ describe("handleChatCompletionsRequest", () => {
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
-      error: "google-vertex-ai requires CF_AIG_TOKEN.",
+      error: expect.objectContaining({
+        message: "google-vertex-ai requires CF_AIG_TOKEN.",
+      }),
     });
     expect(buildChatCompletionsRequests).not.toHaveBeenCalled();
     expect(gatewayOnlyProvider.fetch).not.toHaveBeenCalled();
@@ -498,6 +508,40 @@ describe("handleChatCompletionsRequest", () => {
     );
   });
 
+  it("tags each AI Gateway credential fallback with its actual provider key index", async () => {
+    const request = new Request("https://example.com/chat/completions", {
+      method: "POST",
+      body: JSON.stringify({ model: "openai/gpt-4", messages: [] }),
+    });
+    mockProviderClass.getApiKeys.mockReturnValue(["key-0", "key-1"]);
+    mockAIGateway.buildChatCompletionsRequests.mockImplementation(
+      ({ headers, apiKeys }) =>
+        apiKeys.map((_apiKey: string, index: number) => [
+          `https://gateway.example/attempt-${index}`,
+          { method: "POST", headers: new Headers(headers) },
+        ]),
+    );
+    vi.mocked(helpers.fetchWithLogging)
+      .mockRejectedValueOnce(new Error("network failure"))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    const response = await handleChatCompletionsRequest(
+      { request } as any,
+      mockAIGateway as any,
+    );
+
+    expect(response.status).toBe(200);
+    const providerKeyIndexes = vi
+      .mocked(helpers.fetchWithLogging)
+      .mock.calls.map(([, init]) => {
+        const metadata = JSON.parse(
+          new Headers(init?.headers).get("cf-aig-metadata")!,
+        ) as Record<string, string>;
+        return Number(metadata.llm_proxy_credentials.split(":")[1]);
+      });
+    expect(providerKeyIndexes).toEqual([0, 1]);
+  });
+
   it("uses a Custom Provider without direct fallback in strict mode", async () => {
     const requestBody = { model: "ollama/model-a", messages: [] };
     const request = new Request("https://example.com/chat/completions", {
@@ -510,6 +554,7 @@ describe("handleChatCompletionsRequest", () => {
       chatCompletionPath: "/chat/completions",
       pathnamePrefix: vi.fn(() => "/v1"),
       requiresCustomAiGatewayProvider: false,
+      getApiKeys: vi.fn().mockReturnValue([]),
       buildAiGatewayChatCompletionsRequest: vi.fn(),
     };
     provider.buildChatCompletionsRequest.mockReturnValue([
@@ -544,6 +589,12 @@ describe("handleChatCompletionsRequest", () => {
     );
     expect(provider.fetch).not.toHaveBeenCalled();
     expect(helpers.fetchWithLogging).toHaveBeenCalled();
+    const metadata = JSON.parse(
+      new Headers(
+        provider.buildChatCompletionsRequest.mock.calls[0][0].headers,
+      ).get("cf-aig-metadata")!,
+    ) as Record<string, string>;
+    expect(metadata.llm_proxy_credentials).toBe("default:null");
   });
 
   it("uses a provider-native AI Gateway chat request for Azure OpenAI", async () => {
@@ -861,6 +912,43 @@ describe("handleChatCompletionsRequest", () => {
       expect(fetchSignal?.aborted).toBe(false);
     });
 
+    it("adds the client-requested virtual model to AI Gateway metadata", async () => {
+      vi.mocked(Config.virtualModels).mockReturnValue({
+        "virtual/front": [{ model: "virtual/fallback", retries: 0 }],
+        "virtual/fallback": [{ model: "openai/gpt-4", retries: 0 }],
+      });
+      mockAIGateway.buildChatCompletionsRequests.mockImplementation(
+        ({ headers }) => [
+          [
+            "https://gateway.ai.cloudflare.com/v1/account/gateway/compat/chat/completions",
+            { method: "POST", body: "{}", headers: new Headers(headers) },
+          ],
+        ],
+      );
+
+      await handleChatCompletionsRequest(
+        {
+          request: buildRequest("virtual/front"),
+        } as any,
+        mockAIGateway as any,
+      );
+
+      const headers = new Headers(
+        vi.mocked(helpers.fetchWithLogging).mock.calls[0][1]?.headers,
+      );
+      const metadata = JSON.parse(headers.get("cf-aig-metadata")!) as Record<
+        string,
+        string
+      >;
+      expect(metadata).toMatchObject({
+        llm_proxy_provider: "openai",
+        llm_proxy_model: "gpt-4",
+        llm_proxy_endpoint: "chat_completions",
+        llm_proxy_virtual_model: "virtual/front",
+      });
+      expect(metadata.llm_proxy_credentials).toBe("default:0");
+    });
+
     it("fails over to the next candidate on a retryable status", async () => {
       vi.mocked(Config.virtualModels).mockReturnValue({
         "virtual/fast-tier": [
@@ -970,7 +1058,9 @@ describe("handleChatCompletionsRequest", () => {
       } as any);
 
       expect(response.status).toBe(400);
-      expect(await response.json()).toEqual({ error: "Invalid provider." });
+      expect(await response.json()).toEqual({
+        error: expect.objectContaining({ message: "Invalid provider." }),
+      });
       expect(mockProviderClass.fetch).not.toHaveBeenCalled();
     });
 
@@ -984,7 +1074,9 @@ describe("handleChatCompletionsRequest", () => {
       } as any);
 
       expect(response.status).toBe(400);
-      expect(await response.json()).toEqual({ error: "Invalid provider." });
+      expect(await response.json()).toEqual({
+        error: expect.objectContaining({ message: "Invalid provider." }),
+      });
       expect(mockProviderClass.fetch).not.toHaveBeenCalled();
     });
 
@@ -996,7 +1088,9 @@ describe("handleChatCompletionsRequest", () => {
       } as any);
 
       expect(response.status).toBe(400);
-      expect(await response.json()).toEqual({ error: "Invalid provider." });
+      expect(await response.json()).toEqual({
+        error: expect.objectContaining({ message: "Invalid provider." }),
+      });
     });
 
     it("resolves a virtual model keyed outside the virtual/ convention", async () => {
@@ -1047,7 +1141,9 @@ describe("handleChatCompletionsRequest", () => {
       } as any);
 
       expect(response.status).toBe(400);
-      expect(await response.json()).toEqual({ error: "Invalid provider." });
+      expect(await response.json()).toEqual({
+        error: expect.objectContaining({ message: "Invalid provider." }),
+      });
     });
 
     it("prefers a real provider over a colliding virtual model key", async () => {

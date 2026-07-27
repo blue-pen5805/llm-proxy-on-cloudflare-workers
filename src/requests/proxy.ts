@@ -3,6 +3,7 @@ import {
   gatewayProviderPath,
   resolveGatewayProvider,
 } from "../ai_gateway/custom_provider";
+import { addProxyAiGatewayMetadata } from "../ai_gateway/metadata";
 import { MiddlewareContext } from "../middleware";
 import { parseProviderSelector } from "../providers/profile";
 import {
@@ -83,6 +84,16 @@ export async function handleProviderProxyRequest(
   const sanitizedHeaders = stripProxyAuthorizationHeaders(request.headers, {
     preserveAiGatewayHeaders: aiGatewayProvider !== undefined,
   });
+  if (aiGatewayProvider) {
+    addProxyAiGatewayMetadata(sanitizedHeaders, {
+      provider: providerName,
+      endpoint: "provider_proxy",
+      credentials: {
+        credentialProfile: profile,
+        providerKeyIndex: keyCount === 0 ? null : apiKeyIndex,
+      },
+    });
+  }
 
   // Handle AI Gateway requests
   if (aiGateway && aiGatewayProvider) {

@@ -19,6 +19,12 @@ export const aiGatewayMiddleware: Middleware = async (context, next) => {
     throw new ConfigurationError("ALWAYS_USE_AI_GATEWAY");
   }
 
+  if (context.pathname.startsWith("/g/") && !accountId) {
+    throw new BadRequestError(
+      "AI Gateway routing requires CLOUDFLARE_ACCOUNT_ID.",
+    );
+  }
+
   if (context.pathname.startsWith("/g/") && accountId) {
     const pathSegments = context.pathname.split("/");
     let aiGatewayName: string;

@@ -15,6 +15,8 @@ requests, and explicit Universal Endpoint payloads.
 `AI_GATEWAY_NAME` is also configured, that Gateway becomes the default for
 requests. A leading `/g/<gateway>/` path selects a different Gateway for one
 request and is removed before normal routing.
+Using that prefix without an account ID is a client-visible HTTP 400
+configuration error.
 
 `ALWAYS_USE_AI_GATEWAY=true` enables strict Gateway routing. It requires an
 account ID, selects `AI_GATEWAY_NAME` when present, and otherwise selects the
@@ -184,6 +186,22 @@ alongside normal OpenAI-compatible chat through the Compatibility
 Endpoint. `POST /g/<gateway>/compat/chat/completions` forwards directly to that
 fixed Gateway endpoint after stripping proxy credentials. No other path under
 `/compat` is exposed.
+
+Gateway-bound inference requests add bounded `cf-aig-metadata` tags for the
+resolved provider, requested concrete model when known, the client-requested
+virtual model when one was resolved, the public proxy endpoint, and the
+selected provider credential profile and key slot. The virtual-model tag
+retains the outer client-requested name when resolution passes through nested
+virtual models. `llm_proxy_credentials` is a scalar string in
+`<credential-profile>:<provider-key-index>` form; the index is `null` when AI
+Gateway BYOK supplies the credential. Universal Endpoint requests add the
+endpoint tag but omit credentials because their steps can select different
+providers, profiles, and key slots. Proxy fields are considered in
+virtual-model, endpoint, provider, concrete-model, and credentials order.
+Existing client metadata wins on collisions. Invalid client JSON is preserved,
+and proxy tags fill only unused entries within Cloudflare's five-entry metadata
+limit. No credential value, authenticated proxy-key slot, or derived
+fingerprint is included. See [Cloudflare custom metadata](https://developers.cloudflare.com/ai-gateway/observability/custom-metadata/).
 
 ## Provider support contract
 

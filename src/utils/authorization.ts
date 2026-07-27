@@ -46,13 +46,14 @@ export function stripProxyAuthorizationHeaders(
   { preserveAiGatewayHeaders = false } = {},
 ): Headers {
   const sanitizedHeaders = new Headers(headers);
-  for (const key of [...sanitizedHeaders.keys()]) {
+  let headersToDelete: string[] | undefined;
+  for (const key of sanitizedHeaders.keys()) {
     const normalizedKey = key.toLowerCase();
     // Gateway authentication and stored-credential selection belong to the
     // operator-controlled configuration. Never accept either from a client,
     // even when request-level Gateway tuning controls are retained.
     if (OPERATOR_CONTROLLED_AI_GATEWAY_HEADERS.has(normalizedKey)) {
-      sanitizedHeaders.delete(key);
+      (headersToDelete ??= []).push(key);
       continue;
     }
     if (preserveAiGatewayHeaders && normalizedKey.startsWith("cf-aig-")) {
@@ -64,9 +65,10 @@ export function stripProxyAuthorizationHeaders(
       normalizedKey.startsWith("x-forwarded-") ||
       normalizedKey.startsWith("sec-")
     ) {
-      sanitizedHeaders.delete(key);
+      (headersToDelete ??= []).push(key);
     }
   }
+  for (const key of headersToDelete ?? []) sanitizedHeaders.delete(key);
   return sanitizedHeaders;
 }
 
@@ -88,18 +90,26 @@ function getConfiguredKeyHashes(configuredKeys: string[]): Uint8Array[] {
   return configuredHashes;
 }
 
-function matchesApiKey(candidate: string, configuredKeys: string[]): boolean {
+function matchingApiKeyIndex(
+  candidate: string,
+  configuredKeys: string[],
+): number | undefined {
   const candidateHash = hashApiKey(candidate);
-  let matched = false;
+  let matchedIndex: number | undefined;
 
   // Compare every configured key so the matching key's position is not exposed
   // through an early return. Hashing also gives timingSafeEqual fixed-size input.
-  for (const configuredHash of getConfiguredKeyHashes(configuredKeys)) {
-    matched =
-      crypto.subtle.timingSafeEqual(candidateHash, configuredHash) || matched;
+  for (const [index, configuredHash] of getConfiguredKeyHashes(
+    configuredKeys,
+  ).entries()) {
+    const matches = crypto.subtle.timingSafeEqual(
+      candidateHash,
+      configuredHash,
+    );
+    if (matches && matchedIndex === undefined) matchedIndex = index;
   }
 
-  return matched;
+  return matchedIndex;
 }
 
 /**
@@ -116,9 +126,17 @@ export function isRequestAuthorized(
   request: Request,
   configuredApiKeys: string[] | undefined = Config.apiKeys(),
 ): boolean {
+  return getAuthorizedProxyKeyIndex(request, configuredApiKeys) !== undefined;
+}
+
+/** Return only the zero-based configured slot that authenticated the request. */
+export function getAuthorizedProxyKeyIndex(
+  request: Request,
+  configuredApiKeys: string[] | undefined = Config.apiKeys(),
+): number | undefined {
   const apiKeys = configuredApiKeys;
   if (!apiKeys || apiKeys.length === 0) {
-    return false;
+    return undefined;
   }
 
   const authorizationValue = request.headers.get(AUTHORIZATION_KEYS[0]);
@@ -130,8 +148,8 @@ export function isRequestAuthorized(
       )?.trim() || null;
 
   if (!apiKey) {
-    return false;
+    return undefined;
   }
 
-  return matchesApiKey(apiKey, apiKeys);
+  return matchingApiKeyIndex(apiKey, apiKeys);
 }

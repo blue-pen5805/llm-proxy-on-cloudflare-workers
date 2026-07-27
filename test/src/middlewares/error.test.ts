@@ -10,6 +10,7 @@ describe("errorMiddleware", () => {
     vi.resetAllMocks();
     context = {
       request: new Request("http://localhost/"),
+      pathname: "/",
     } as MiddlewareContext;
   });
 
@@ -22,7 +23,8 @@ describe("errorMiddleware", () => {
     expect(response.status).toBe(400);
     const body = (await response.json()) as any;
     expect(body.error.message).toBe("Bad Request");
-    expect(body.error.status).toBe(400);
+    expect(body.error.type).toBe("invalid_request_error");
+    expect(body.error.code).toBeNull();
   });
 
   it("uses the default AppError status", async () => {
@@ -91,7 +93,12 @@ describe("errorMiddleware", () => {
 
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({
-      error: { message: "Internal Server Error", status: 500 },
+      error: {
+        message: "Internal Server Error",
+        type: "server_error",
+        param: null,
+        code: null,
+      },
     });
     expect(consoleSpy).toHaveBeenCalledWith({
       event: "request.unhandled_error",
@@ -100,6 +107,34 @@ describe("errorMiddleware", () => {
       error_message: "Non-Error value thrown",
       message:
         "Request failed with an unhandled error: error_name=NonError, error_message=Non-Error value thrown",
+    });
+  });
+
+  it("uses the Anthropic envelope on Messages routes", async () => {
+    context.pathname = "/v1/messages";
+    const response = await errorMiddleware(
+      context,
+      vi.fn().mockRejectedValue(new AppError("Messages failed", 400)),
+    );
+    await expect(response.json()).resolves.toEqual({
+      type: "error",
+      error: {
+        type: "invalid_request_error",
+        message: "Messages failed",
+      },
+    });
+  });
+
+  it("uses Anthropic api_error and the request URL fallback", async () => {
+    context.pathname = "";
+    context.request = new Request("https://proxy.example/v1/messages");
+    const response = await errorMiddleware(
+      context,
+      vi.fn().mockRejectedValue(new AppError("Messages failed", 503)),
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      type: "error",
+      error: { type: "api_error", message: "Messages failed" },
     });
   });
 });

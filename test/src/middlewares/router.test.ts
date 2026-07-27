@@ -4,6 +4,7 @@ import { handleRouting } from "~/src/middlewares/router";
 import { handleAiGatewayRestRequest } from "~/src/requests/ai_gateway_rest";
 import { handleCompatibilityRequest } from "~/src/requests/compat";
 import { handleMessagesRequest } from "~/src/requests/messages";
+import { handleModelRetrieveRequest } from "~/src/requests/models";
 import { handleProviderProxyRequest } from "~/src/requests/proxy";
 import { handleResponsesRequest } from "~/src/requests/responses";
 import { handleVirtualModelsRequest } from "~/src/requests/virtual_models";
@@ -22,6 +23,9 @@ vi.mock("~/src/requests/ai_gateway_rest", () => ({
 }));
 vi.mock("~/src/requests/models", () => ({
   handleModelsRequest: vi.fn(() => Promise.resolve(new Response("models"))),
+  handleModelRetrieveRequest: vi.fn(() =>
+    Promise.resolve(new Response("model")),
+  ),
 }));
 vi.mock("~/src/requests/messages", () => ({
   handleMessagesRequest: vi.fn(() => Promise.resolve(new Response("messages"))),
@@ -98,6 +102,58 @@ describe("handleRouting", () => {
     expect(await response.text()).toBe("models");
   });
 
+  it("routes a filtered models query without treating it as pass-through", async () => {
+    const filteredRequest = new Request(
+      "http://localhost/v1/models?provider=openai",
+    );
+    const response = await handleRouting({
+      request: filteredRequest,
+      pathname: "/v1/models?provider=openai",
+    } as any);
+    expect(await response.text()).toBe("models");
+  });
+
+  it("routes model retrieval and decodes its model identifier", async () => {
+    const modelRequest = new Request(
+      "http://localhost/v1/models/openai%2Fgpt-4.1",
+    );
+    const response = await handleRouting({
+      request: modelRequest,
+      pathname: "/v1/models/openai%2Fgpt-4.1",
+    } as any);
+    expect(await response.text()).toBe("model");
+    expect(handleModelRetrieveRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ request: modelRequest }),
+      "openai/gpt-4.1",
+      undefined,
+    );
+  });
+
+  it("rejects a malformed encoded model identifier", async () => {
+    const modelRequest = new Request("http://localhost/v1/models/%25");
+    await expect(
+      handleRouting({
+        request: modelRequest,
+        pathname: "/v1/models/%",
+      } as any),
+    ).rejects.toThrow(BadRequestError);
+  });
+
+  it.each(["/ping", "/status", "/virtual-models", "/v1/models"])(
+    "supports bodyless HEAD %s",
+    async (pathname) => {
+      const headRequest = new Request(`http://localhost${pathname}`, {
+        method: "HEAD",
+      });
+      const response = await handleRouting({
+        request: headRequest,
+        pathname,
+      } as any);
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe("");
+    },
+  );
+
   it.each(["/responses", "/v1/responses"])(
     "should route POST %s to Responses",
     async (pathname) => {
@@ -133,6 +189,27 @@ describe("handleRouting", () => {
         expect.objectContaining({ request: postRequest }),
         undefined,
       );
+    },
+  );
+
+  it.each(["/messages/count_tokens", "/v1/messages/count_tokens"])(
+    "returns an Anthropic error for unsupported POST %s",
+    async (pathname) => {
+      const postRequest = new Request(`http://localhost${pathname}`, {
+        method: "POST",
+      });
+      const response = await handleRouting({
+        request: postRequest,
+        pathname,
+      } as any);
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toEqual({
+        type: "error",
+        error: expect.objectContaining({
+          type: "invalid_request_error",
+          message: expect.stringContaining("not supported"),
+        }),
+      });
     },
   );
 

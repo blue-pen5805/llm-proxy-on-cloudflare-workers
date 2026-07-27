@@ -3,6 +3,7 @@ import {
   gatewayProviderPath,
   resolveGatewayProvider,
 } from "../ai_gateway/custom_provider";
+import { addProxyAiGatewayMetadata } from "../ai_gateway/metadata";
 import { MiddlewareContext } from "../middleware";
 import { parseProviderSelector } from "../providers/profile";
 import { mergeHeaders } from "../providers/provider";
@@ -27,6 +28,7 @@ import {
   enrichChatResponseWithMetadata,
 } from "./chat_response_metadata";
 import { fetchCompatibilityFallback } from "./compatibility_fallback";
+import { openAIErrorResponse } from "./error_response";
 import {
   createProviderConfigurationErrorResponse,
   resolveProvider,
@@ -39,10 +41,7 @@ import {
 } from "./virtual_model";
 
 function invalidRequestResponse(message: string, status = 400): Response {
-  return new Response(JSON.stringify({ error: message }), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
+  return openAIErrorResponse(message, status);
 }
 
 export interface PreparedChatCompletionsRequest {
@@ -128,6 +127,8 @@ export async function handleChatCompletionsRequest(
         chatRequestBody,
         requestedModel,
         virtualModels,
+        requestedModel,
+        endpoint,
         new Set(),
         preparedRequest?.headers ?? request.headers,
       );
@@ -150,6 +151,7 @@ export async function handleChatCompletionsRequest(
     chatRequestBody,
     requestedModel,
     preparedRequest?.headers ?? request.headers,
+    endpoint,
     undefined,
   );
   return result.route && responseMetadataEnabled
@@ -170,6 +172,8 @@ async function attemptResolvedChatCompletion(
   chatRequestBody: Record<string, unknown> & { model: string },
   requestedModel: string,
   virtualModels: VirtualModels,
+  virtualModel: string,
+  endpoint: PreparedChatCompletionsRequest["endpoint"] | "chat_completions",
   resolving: ReadonlySet<string>,
   requestHeaders: HeadersInit,
   inheritedTimeout?: number,
@@ -186,7 +190,9 @@ async function attemptResolvedChatCompletion(
       chatRequestBody,
       requestedModel,
       requestHeaders,
+      endpoint,
       inheritedTimeout,
+      virtualModel,
     );
   }
 
@@ -198,7 +204,9 @@ async function attemptResolvedChatCompletion(
       chatRequestBody,
       requestedModel,
       requestHeaders,
+      endpoint,
       inheritedTimeout,
+      virtualModel,
     );
   }
   // Config validation rejects cycles before this point. Keep a request-local
@@ -218,6 +226,8 @@ async function attemptResolvedChatCompletion(
         chatRequestBody,
         candidateModel,
         virtualModels,
+        virtualModel,
+        endpoint,
         nextResolving,
         requestHeaders,
         timeout ?? inheritedTimeout,
@@ -231,7 +241,9 @@ async function attemptChatCompletion(
   chatRequestBody: Record<string, unknown> & { model: string },
   requestedModel: string,
   requestHeaders: HeadersInit,
+  endpoint: PreparedChatCompletionsRequest["endpoint"] | "chat_completions",
   timeout?: number,
+  virtualModel?: string,
 ): Promise<ChatCompletionAttemptResult> {
   const { request, apiKeyIndex: contextApiKeyIndex } = context;
   const fetchWithTimeout = (
@@ -287,14 +299,23 @@ async function attemptChatCompletion(
       : undefined;
   // Retain request-level Gateway controls only when this provider will use
   // AI Gateway. Direct provider requests must not receive Cloudflare metadata.
+  const willUseAiGateway = Boolean(
+    aiGateway &&
+    (aiGateway.alwaysUse ||
+      (!providerInstance.requiresCustomAiGatewayProvider &&
+        CloudflareAIGateway.isSupportedProvider(providerName))),
+  );
   const sanitizedHeaders = stripProxyAuthorizationHeaders(requestHeaders, {
-    preserveAiGatewayHeaders: Boolean(
-      aiGateway &&
-      (aiGateway.alwaysUse ||
-        (!providerInstance.requiresCustomAiGatewayProvider &&
-          CloudflareAIGateway.isSupportedProvider(providerName))),
-    ),
+    preserveAiGatewayHeaders: willUseAiGateway,
   });
+  if (willUseAiGateway) {
+    addProxyAiGatewayMetadata(sanitizedHeaders, {
+      provider: providerName,
+      model,
+      endpoint,
+      virtualModel,
+    });
+  }
   const configuredApiKeys = providerInstance.getApiKeys();
   const gatewayApiKeys =
     providerInstance.getAiGatewayApiKeys?.() ?? configuredApiKeys;
@@ -338,10 +359,12 @@ async function attemptChatCompletion(
   // If AI Gateway is enabled and the provider supports it, use AI Gateway
   if (aiGateway && aiGatewayProvider) {
     let selectedApiKeyIndex = apiKeyIndex;
-    const eligibleApiKeyIndexes = getEligibleApiKeyIndexes(
-      providerSelector,
-      configuredApiKeys.length,
-    );
+    const eligibleApiKeyIndexes =
+      getEligibleApiKeyIndexes(providerSelector, configuredApiKeys.length) ??
+      Array.from(
+        { length: configuredApiKeys.length },
+        (_value, index) => index,
+      );
     const remainingApiKeyIndexes = shuffleArray(
       eligibleApiKeyIndexes.filter(
         (candidateIndex) => candidateIndex !== apiKeyIndex,
@@ -374,6 +397,20 @@ async function attemptChatCompletion(
           gatewayApiKeys[candidateIndex] ?? configuredApiKeys[candidateIndex],
       ),
     });
+    gatewayRequests.forEach(([, requestInit], attemptIndex) => {
+      const headers = new Headers(requestInit.headers);
+      addProxyAiGatewayMetadata(headers, {
+        credentials: {
+          credentialProfile: profile,
+          providerKeyIndex:
+            configuredApiKeys.length === 0
+              ? null
+              : // Gateway requests and credential indexes are built one-to-one.
+                gatewayApiKeyIndexes[attemptIndex]!,
+        },
+      });
+      requestInit.headers = headers;
+    });
     const response = await transformResponse(
       fetchWithTimeout((signal) =>
         fetchCompatibilityFallback(
@@ -402,6 +439,15 @@ async function attemptChatCompletion(
       retryable: isRetryableCandidateStatus(response.status),
       route: routeMetadata(true, selectedApiKeyIndex),
     };
+  }
+
+  if (willUseAiGateway) {
+    addProxyAiGatewayMetadata(sanitizedHeaders, {
+      credentials: {
+        credentialProfile: profile,
+        providerKeyIndex: configuredApiKeys.length === 0 ? null : apiKeyIndex,
+      },
+    });
   }
 
   const [requestInfo, requestInit] =

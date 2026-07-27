@@ -10,6 +10,9 @@ The Worker exposes two authenticated health routes:
   checks. It is an operator diagnostic, not a low-cost liveness probe. Its
   response is serialized as compact JSON to avoid diagnostic-only whitespace.
 
+All three proxy-generated health surfaces (`/ping`, `/status`, and
+`/virtual-models`) use `Cache-Control: no-store`.
+
 ## Status algorithm
 
 The handler constructs every built-in and custom provider instance. For each
@@ -26,6 +29,11 @@ descriptions and checks fail independently: unexamined slots stay `unknown`,
 and an unreadable provider reports `available: false` with no key slots and a
 `provider.status.failed` log. Subrequest-limit exceptions also leave the
 affected slot `unknown`. Many `unknown` slots indicate an incomplete scan.
+
+`STATUS_CACHE_TTL_SECONDS` optionally caches a complete compact status response
+in the per-datacenter Cache API. The default `0` preserves live checks.
+`Cache-Control: no-cache` refreshes the entry, `no-store` bypasses it, and
+client responses remain `no-store` regardless of the internal TTL.
 
 The status handler shares the model-list Gateway capability decision with the
 normal model aggregation route. A provider that sets

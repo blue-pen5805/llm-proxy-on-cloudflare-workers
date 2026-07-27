@@ -18,6 +18,8 @@ const MAX_CUSTOM_OPENAI_ENDPOINTS = 16;
 const MAX_PROXY_API_KEYS = 64;
 const DEFAULT_MODELS_CACHE_TTL_SECONDS = 300;
 const MAX_MODELS_CACHE_TTL_SECONDS = 86400;
+const DEFAULT_STATUS_CACHE_TTL_SECONDS = 0;
+const MAX_STATUS_CACHE_TTL_SECONDS = 86400;
 const DEFAULT_API_KEY_COOLDOWN_SECONDS = 60;
 const MAX_API_KEY_COOLDOWN_SECONDS = 86400;
 const MAX_CUSTOM_ENDPOINT_KEYS = 32;
@@ -136,8 +138,10 @@ function isSafeCustomEndpoint(value: unknown): value is CustomOpenAIEndpoint {
 // result is memoized to keep repeated per-request reads off the JSON parser
 // and the endpoint validator. A single entry suffices because configuration
 // only changes between deployments.
-let cachedProxyApiKeysRaw: string | undefined;
-let cachedProxyApiKeys: string[] | undefined;
+const cachedProxyApiKeys = new WeakMap<
+  Env | Partial<Env>,
+  string[] | undefined
+>();
 let cachedCustomEndpointsRaw: unknown;
 let cachedCustomEndpoints: CustomOpenAIEndpoint[] | undefined;
 let cachedVirtualModelsRaw: unknown;
@@ -212,11 +216,14 @@ export class Config {
       return undefined;
     }
 
-    if (rawValue !== cachedProxyApiKeysRaw) {
-      cachedProxyApiKeys = parseProxyApiKeys(rawValue);
-      cachedProxyApiKeysRaw = rawValue;
+    const environment = Environments.getEnv();
+    if (!environment) {
+      return parseProxyApiKeys(rawValue);
     }
-    return cachedProxyApiKeys;
+    if (!cachedProxyApiKeys.has(environment)) {
+      cachedProxyApiKeys.set(environment, parseProxyApiKeys(rawValue));
+    }
+    return cachedProxyApiKeys.get(environment);
   }
 
   static aiGateway(): {
@@ -255,6 +262,34 @@ export class Config {
   }
 
   /**
+   * Exact browser origins allowed by CORS. `undefined` preserves the
+   * backward-compatible wildcard behavior.
+   */
+  static allowedOrigins(): string[] | undefined {
+    const value = Environments.get("ALLOWED_ORIGINS");
+    if (value === undefined || value === null) return undefined;
+    if (
+      !Array.isArray(value) ||
+      value.length > 64 ||
+      !value.every((origin) => {
+        if (typeof origin !== "string") return false;
+        try {
+          const url = new URL(origin);
+          return (
+            (url.protocol === "https:" || url.protocol === "http:") &&
+            url.origin === origin
+          );
+        } catch {
+          return false;
+        }
+      })
+    ) {
+      throw new ConfigurationError("ALLOWED_ORIGINS");
+    }
+    return value as string[];
+  }
+
+  /**
    * TTL for the aggregated `/models` response cache, in seconds.
    * `0` disables caching. Misconfigured values fall back to the default so a
    * typo never turns the diagnostic fan-out into an uncached hot path.
@@ -270,6 +305,20 @@ export class Config {
       return DEFAULT_MODELS_CACHE_TTL_SECONDS;
     }
     return Math.min(ttl, MAX_MODELS_CACHE_TTL_SECONDS);
+  }
+
+  /** Opt-in TTL for the authenticated `/status` diagnostic cache. */
+  static statusCacheTtlSeconds(): number {
+    const rawValue = Environments.get("STATUS_CACHE_TTL_SECONDS", false);
+    const trimmedValue = rawValue?.trim();
+    if (trimmedValue === undefined || trimmedValue === "") {
+      return DEFAULT_STATUS_CACHE_TTL_SECONDS;
+    }
+    const ttl = Number(trimmedValue);
+    if (!Number.isInteger(ttl) || ttl < 0) {
+      return DEFAULT_STATUS_CACHE_TTL_SECONDS;
+    }
+    return Math.min(ttl, MAX_STATUS_CACHE_TTL_SECONDS);
   }
 
   /**

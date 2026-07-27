@@ -3,6 +3,7 @@ import { Config, VIRTUAL_MODEL_PROVIDER_NAME } from "../utils/config";
 import type { VirtualModelCandidate, VirtualModels } from "../utils/config";
 import { ConfigurationError } from "../utils/error";
 import { resolveProvider } from "./provider_request";
+import { NO_STORE_HEADERS } from "./response";
 
 interface VirtualModelAccessOrderEntry {
   position: number;
@@ -60,19 +61,22 @@ export function handleVirtualModelsRequest(
 ): Response {
   const virtualModels = Config.virtualModels() ?? {};
 
-  return Response.json({
-    object: "list",
-    data: Object.entries(virtualModels).map(([id, candidates]) => ({
-      id,
-      object: "model",
-      created: 0,
-      owned_by: VIRTUAL_MODEL_PROVIDER_NAME,
-      access_order: expandAccessOrder(
-        context,
-        virtualModels,
-        candidates,
-        new Set([id]),
-      ),
-    })),
-  });
+  return Response.json(
+    {
+      object: "list",
+      data: Object.entries(virtualModels).map(([id, candidates]) => ({
+        id,
+        object: "model",
+        created: 0,
+        owned_by: VIRTUAL_MODEL_PROVIDER_NAME,
+        access_order: expandAccessOrder(
+          context,
+          virtualModels,
+          candidates,
+          new Set([id]),
+        ),
+      })),
+    },
+    { headers: NO_STORE_HEADERS },
+  );
 }

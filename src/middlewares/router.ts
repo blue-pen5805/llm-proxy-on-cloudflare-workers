@@ -5,9 +5,14 @@ import { createProviderRegistry } from "../providers";
 import { handleAiGatewayRestRequest } from "../requests/ai_gateway_rest";
 import { handleChatCompletionsRequest } from "../requests/chat_completions";
 import { handleCompatibilityRequest } from "../requests/compat";
+import { anthropicErrorResponse } from "../requests/error_response";
 import { handleMessagesRequest } from "../requests/messages";
-import { handleModelsRequest } from "../requests/models";
+import {
+  handleModelRetrieveRequest,
+  handleModelsRequest,
+} from "../requests/models";
 import { handleProviderProxyRequest } from "../requests/proxy";
+import { NO_STORE_HEADERS, withoutBodyForHead } from "../requests/response";
 import { handleResponsesRequest } from "../requests/responses";
 import { handleStatusRequest } from "../requests/status";
 import { handleUniversalEndpointRequest } from "../requests/universal_endpoint";
@@ -24,6 +29,8 @@ export async function handleRouting(
   aiGateway?: CloudflareAIGateway,
 ): Promise<Response> {
   const { request, pathname } = context;
+  const routePath = pathname.split("?")[0];
+  const isGetOrHead = request.method === "GET" || request.method === "HEAD";
   const rejectUnsupportedKeySelection = (): void => {
     if (context.apiKeyIndex !== undefined) {
       throw new BadRequestError(
@@ -34,22 +41,28 @@ export async function handleRouting(
   // Example: /ping
   //          /status
   //          /g/{AI_GATEWAY_NAME}/status
-  if (request.method === "GET" && pathname === "/ping") {
+  if (isGetOrHead && routePath === "/ping") {
     rejectUnsupportedKeySelection();
     RequestLogger.start({ endpoint: "ping" });
-    return new Response("Pong", { status: 200 });
+    return withoutBodyForHead(
+      request,
+      new Response("Pong", { status: 200, headers: NO_STORE_HEADERS }),
+    );
   }
 
-  if (request.method === "GET" && pathname === "/status") {
+  if (isGetOrHead && routePath === "/status") {
     rejectUnsupportedKeySelection();
     RequestLogger.start({ endpoint: "status" });
-    return await handleStatusRequest(aiGateway, context.providers);
+    return withoutBodyForHead(
+      request,
+      await handleStatusRequest(aiGateway, context.providers, context),
+    );
   }
 
-  if (request.method === "GET" && pathname === "/virtual-models") {
+  if (isGetOrHead && routePath === "/virtual-models") {
     rejectUnsupportedKeySelection();
     RequestLogger.start({ endpoint: "virtual_models" });
-    return handleVirtualModelsRequest(context);
+    return withoutBodyForHead(request, handleVirtualModelsRequest(context));
   }
 
   if (aiGateway && COMPAT_PATH_PATTERN.test(pathname)) {
@@ -115,16 +128,45 @@ export async function handleRouting(
     return await handleMessagesRequest(context, aiGateway);
   }
 
+  if (
+    request.method === "POST" &&
+    (routePath === "/messages/count_tokens" ||
+      routePath === "/v1/messages/count_tokens")
+  ) {
+    rejectUnsupportedKeySelection();
+    RequestLogger.start({ endpoint: "messages_count_tokens" });
+    return anthropicErrorResponse(
+      "Messages count_tokens is not supported by this compatibility endpoint.",
+      400,
+      "invalid_request_error",
+    );
+  }
+
   // Models - https://platform.openai.com/docs/api-reference/models
   // Example: /models
   //          /v1/models
   //          /g/{AI_GATEWAY_NAME}/models
-  if (
-    request.method === "GET" &&
-    (pathname === "/models" || pathname === "/v1/models")
-  ) {
+  if (isGetOrHead && (routePath === "/models" || routePath === "/v1/models")) {
     RequestLogger.start({ endpoint: "models" });
-    return await handleModelsRequest(context, aiGateway);
+    return withoutBodyForHead(
+      request,
+      await handleModelsRequest(context, aiGateway),
+    );
+  }
+
+  const modelRetrieveMatch = routePath.match(/^\/(?:v1\/)?models\/(.+)$/);
+  if (isGetOrHead && modelRetrieveMatch) {
+    RequestLogger.start({ endpoint: "model_retrieve" });
+    let modelId: string;
+    try {
+      modelId = decodeURIComponent(modelRetrieveMatch[1]);
+    } catch {
+      throw new BadRequestError("Invalid model identifier.");
+    }
+    return withoutBodyForHead(
+      request,
+      await handleModelRetrieveRequest(context, modelId, aiGateway),
+    );
   }
 
   // Proxy

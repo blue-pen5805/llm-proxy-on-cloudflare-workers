@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
+  getAuthorizedProxyKeyIndex,
   isRequestAuthorized,
   stripProxyAuthorizationHeaders,
 } from "~/src/utils/authorization";
@@ -69,6 +70,15 @@ describe("isRequestAuthorized", () => {
     });
 
     expect(isRequestAuthorized(request)).toBe(true);
+  });
+
+  it("returns the matching configured slot without exposing key material", () => {
+    const request = new Request("https://example.com", {
+      headers: { Authorization: "Bearer second-key" },
+    });
+    expect(
+      getAuthorizedProxyKeyIndex(request, ["first-key", "second-key"]),
+    ).toBe(1);
   });
 
   // Test when API key is set and authentication succeeds with x-api-key header

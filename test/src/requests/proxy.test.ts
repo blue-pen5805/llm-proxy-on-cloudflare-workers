@@ -186,7 +186,9 @@ describe("proxy", () => {
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
-      error: "google-vertex-ai requires Cloudflare AI Gateway.",
+      error: expect.objectContaining({
+        message: "google-vertex-ai requires Cloudflare AI Gateway.",
+      }),
     });
     expect(gatewayOnlyProvider.fetch).not.toHaveBeenCalled();
   });
@@ -258,6 +260,12 @@ describe("proxy", () => {
     expect(gatewayHeaders.get("Authorization")).toBe("Bearer test-key");
     expect(gatewayHeaders.get("X-Request")).toBe("value");
     expect(gatewayHeaders.get("cf-aig-max-attempts")).toBe("3");
+    const metadata = JSON.parse(
+      gatewayHeaders.get("cf-aig-metadata")!,
+    ) as Record<string, string>;
+    expect(metadata.llm_proxy_endpoint).toBe("provider_proxy");
+    expect(metadata.llm_proxy_credentials).toBe("default:0");
+    expect(metadata).not.toHaveProperty("llm_proxy_key_index");
     expect(fetchWithLogging).toHaveBeenCalledWith(
       "https://gateway.example/openai/models",
       { method: "GET", signal: request.signal },
@@ -297,6 +305,12 @@ describe("proxy", () => {
       ...mockProviderClass,
       pathnamePrefix: vi.fn(() => "/v1"),
       requiresCustomAiGatewayProvider: false,
+      getApiKeys: vi.fn().mockReturnValue([]),
+      buildHeadersForPath: vi
+        .fn()
+        .mockImplementation(async (_pathname, headers) =>
+          Object.fromEntries(new Headers(headers).entries()),
+        ),
     };
     vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(false);
     const buildProviderEndpointRequest = vi
@@ -325,6 +339,12 @@ describe("proxy", () => {
         path: "/v1/models",
       }),
     );
+    const metadata = JSON.parse(
+      new Headers(buildProviderEndpointRequest.mock.calls[0][0].headers).get(
+        "cf-aig-metadata",
+      )!,
+    ) as Record<string, string>;
+    expect(metadata.llm_proxy_credentials).toBe("default:null");
     expect(provider.fetch).not.toHaveBeenCalled();
   });
 

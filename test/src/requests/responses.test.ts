@@ -716,6 +716,11 @@ describe("handleResponsesRequest", () => {
     expect(body).not.toContain("event: response.output_item.added");
   });
 
+  it("ignores a final non-data record before reporting truncation", async () => {
+    const body = await streamResponse("event: ping");
+    expect(body).toContain("Upstream stream ended without a terminal event.");
+  });
+
   it("fails a stream that ends before its terminal event", async () => {
     const body = await streamResponse(
       `data: ${JSON.stringify({
@@ -936,7 +941,9 @@ describe("handleResponsesRequest", () => {
     } as never);
     expect(response.status).toBe(502);
     expect(await response.json()).toEqual({
-      error: "Upstream returned an invalid Chat Completions response.",
+      error: expect.objectContaining({
+        message: "Upstream returned an invalid Chat Completions response.",
+      }),
     });
   });
 
@@ -1138,7 +1145,10 @@ describe("handleResponsesRequest", () => {
     } as never);
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
-      error: expect.any(String),
+      error: expect.objectContaining({
+        message: expect.any(String),
+        type: "invalid_request_error",
+      }),
     });
     expect(handleChatCompletionsRequest).not.toHaveBeenCalled();
   });

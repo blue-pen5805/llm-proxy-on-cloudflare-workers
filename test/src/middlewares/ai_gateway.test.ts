@@ -102,6 +102,22 @@ describe("aiGatewayMiddleware", () => {
     expect(next).not.toHaveBeenCalled();
   });
 
+  it("explains a /g route that has no account ID", async () => {
+    vi.spyOn(Config, "aiGateway").mockReturnValue({
+      accountId: undefined,
+      name: undefined,
+      token: undefined,
+      restApiToken: undefined,
+      alwaysUse: false,
+    });
+    context.pathname = "/g/team/v1/models";
+
+    await expect(aiGatewayMiddleware(context, next)).rejects.toThrow(
+      "AI Gateway routing requires CLOUDFLARE_ACCOUNT_ID.",
+    );
+    expect(next).not.toHaveBeenCalled();
+  });
+
   it("should create a REST context that reports a missing token", async () => {
     vi.spyOn(Config, "aiGateway").mockReturnValue({
       accountId: "test-account",

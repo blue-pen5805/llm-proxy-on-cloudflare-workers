@@ -4,6 +4,7 @@ import { getProviderByName } from "../providers";
 import type { ProviderBase } from "../providers/provider";
 import { Environments } from "../utils/environments";
 import { RequestLogger } from "../utils/logger";
+import { openAIErrorResponse } from "./error_response";
 
 /** Resolve a provider from the request-scoped registry or the legacy fallback. */
 export function resolveProvider(
@@ -53,8 +54,5 @@ export function createProviderConfigurationErrorResponse(
     return undefined;
   }
 
-  return new Response(JSON.stringify({ error }), {
-    status: 400,
-    headers: { "Content-Type": "application/json" },
-  });
+  return openAIErrorResponse(error, 400);
 }

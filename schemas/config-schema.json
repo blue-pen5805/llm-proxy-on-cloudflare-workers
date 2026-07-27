@@ -414,6 +414,23 @@
         }
       ]
     },
+    "ALLOWED_ORIGINS": {
+      "description": "Exact browser origins allowed by CORS. Omit to allow every origin.",
+      "oneOf": [
+        {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^https?://[^/]+$"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "DEFAULT_MODEL": {
       "oneOf": [
         {
@@ -448,6 +465,18 @@
       ]
     },
     "MODELS_CACHE_TTL_SECONDS": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 86400
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "STATUS_CACHE_TTL_SECONDS": {
       "oneOf": [
         {
           "type": "integer",

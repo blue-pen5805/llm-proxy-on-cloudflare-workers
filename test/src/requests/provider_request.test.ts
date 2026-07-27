@@ -24,7 +24,9 @@ describe("provider request configuration", () => {
 
     expect(response?.status).toBe(400);
     expect(await response?.json()).toEqual({
-      error: "openai is not configured.",
+      error: expect.objectContaining({
+        message: "openai is not configured.",
+      }),
     });
   });
 

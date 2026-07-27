@@ -3,6 +3,7 @@ import {
   CloudflareAIGatewayUniversalEndpointData,
   CloudflareAIGatewayUniversalEndpointStep,
 } from "../ai_gateway/const";
+import { addProxyAiGatewayMetadata } from "../ai_gateway/metadata";
 import { isCloudflareAIGatewayProvider } from "../ai_gateway/utils";
 import type { ProviderRegistry } from "../providers";
 import { parseProviderSelector } from "../providers/profile";
@@ -11,7 +12,6 @@ import { stripProxyAuthorizationHeaders } from "../utils/authorization";
 import { BadRequestError } from "../utils/error";
 import { fetchWithLogging, readJsonRequest } from "../utils/helpers";
 import { RequestLogger } from "../utils/logger";
-import { Secrets } from "../utils/secrets";
 
 type UniversalEndpointRequest = {
   provider?: string;
@@ -118,12 +118,13 @@ export async function handleUniversalEndpointRequest(
   const gatewayHeaders = stripProxyAuthorizationHeaders(request.headers, {
     preserveAiGatewayHeaders: true,
   });
+  addProxyAiGatewayMetadata(gatewayHeaders, {
+    endpoint: "universal_endpoint",
+  });
   const clientGatewayHeaders: Record<string, string> = {};
-  let hasClientGatewayHeaders = false;
   gatewayHeaders.forEach((value, key) => {
     if (key.startsWith("cf-aig-")) {
       clientGatewayHeaders[key] = value;
-      hasClientGatewayHeaders = true;
     }
   });
 
@@ -160,23 +161,8 @@ export async function handleUniversalEndpointRequest(
           const endpointPath = normalizeUniversalEndpointPath(
             endpointRequest.endpoint ?? providerInstance.chatCompletionPath,
           );
-          const apiKeyIndex = providerInstance.getNextApiKeyIndex
-            ? await providerInstance.getNextApiKeyIndex()
-            : profile === "default"
-              ? await Secrets.getNext(providerInstance.apiKeyName as keyof Env)
-              : await Secrets.getNext(
-                  providerInstance.apiKeyName as keyof Env,
-                  profile,
-                );
-          const apiKeys = providerInstance.getApiKeys
-            ? providerInstance.getApiKeys()
-            : profile === "default"
-              ? Secrets.getAll(providerInstance.apiKeyName as keyof Env)
-              : Secrets.getAll(
-                  providerInstance.apiKeyName as keyof Env,
-                  false,
-                  profile,
-                );
+          const apiKeyIndex = await providerInstance.getNextApiKeyIndex();
+          const apiKeys = providerInstance.getApiKeys();
           recordApiKeySelection({
             provider: providerName,
             credentialProfile: profile,
@@ -209,7 +195,7 @@ export async function handleUniversalEndpointRequest(
 
   const [requestInfo, requestInit] = aiGateway.buildUniversalEndpointRequest({
     data: gatewaySteps,
-    ...(hasClientGatewayHeaders ? { headers: clientGatewayHeaders } : {}),
+    headers: clientGatewayHeaders,
   });
   return fetchWithLogging(requestInfo, {
     ...requestInit,

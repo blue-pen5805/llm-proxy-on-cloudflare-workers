@@ -116,6 +116,9 @@
   // so it only takes effect locally via `npm run dev`; deployed Workers always
   // run with authentication enabled.
   "DEV": false,
+  // Exact browser origins allowed by CORS. null preserves the wildcard default.
+  // Example: ["https://console.example.com", "http://localhost:3000"]
+  "ALLOWED_ORIGINS": null,
   "DEFAULT_MODEL": null,
   // Add llm_proxy routing metadata to routed Chat Completions and converted
   // Responses JSON and streaming responses. Disabled by default for strict
@@ -126,5 +129,8 @@
   "API_KEY_COOLDOWN_SECONDS": null,
   // TTL in seconds for the aggregated /models response cache (default: 300).
   // Set to 0 to disable caching.
-  "MODELS_CACHE_TTL_SECONDS": null
+  "MODELS_CACHE_TTL_SECONDS": null,
+  // Opt-in TTL in seconds for the authenticated /status diagnostic cache.
+  // The default 0 preserves live connectivity checks on every request.
+  "STATUS_CACHE_TTL_SECONDS": null
 }

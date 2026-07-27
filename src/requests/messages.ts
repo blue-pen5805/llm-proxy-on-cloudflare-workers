@@ -2,13 +2,11 @@ import { CloudflareAIGateway } from "../ai_gateway";
 import { MiddlewareContext } from "../middleware";
 import { Config } from "../utils/config";
 import { AppError } from "../utils/error";
-import {
-  readRequestText,
-  readResponseJson,
-  utf8ByteLength,
-} from "../utils/helpers";
+import { readRequestText, readResponseJson } from "../utils/helpers";
 import { RequestLogger } from "../utils/logger";
 import { handleChatCompletionsRequest } from "./chat_completions";
+import { anthropicErrorResponse } from "./error_response";
+import { createSseRecordTransform, sseData } from "./sse";
 import { StreamingResponseBudget } from "./stream_limits";
 
 const MAX_CONVERTED_RESPONSE_BYTES = 5 * 1024 * 1024;
@@ -39,10 +37,7 @@ function isObject(value: unknown): value is JsonObject {
 }
 
 function invalidRequest(message: string): Response {
-  return Response.json(
-    { type: "error", error: { type: "invalid_request_error", message } },
-    { status: 400 },
-  );
+  return anthropicErrorResponse(message, 400);
 }
 
 function unsupported(field: string): never {
@@ -479,21 +474,15 @@ interface StreamingTool {
   input: string;
 }
 
-function convertStreamingResponse(
+export function convertStreamingResponse(
   response: Response,
   request: MessagesRequest,
   responseMetadataEnabled: boolean,
 ): Response {
   if (!response.body) return invalidUpstreamResponse();
-  const decoder = new TextDecoder("utf-8", {
-    fatal: true,
-    ignoreBOM: false,
-  });
   const encoder = new TextEncoder();
   const budget = new StreamingResponseBudget();
   const id = messageId();
-  let pending = "";
-  let pendingBytes = 0;
   let started = false;
   let finished = false;
   let finishReason: unknown;
@@ -677,77 +666,28 @@ function convertStreamingResponse(
       }
     }
   };
-  // Per the SSE specification, every `data:` line of one record forms a single
-  // payload joined by newlines. Providers normally send one line per record.
-  const processBlock = (
-    block: string,
-    controller: TransformStreamDefaultController<Uint8Array>,
-  ) => {
-    let data: string | undefined;
-    for (const line of block.split(/\r?\n/)) {
-      if (line.startsWith("data:")) {
-        const value = line.slice(5).trimStart();
-        data = data === undefined ? value : `${data}\n${value}`;
-      }
-    }
-    if (data !== undefined) processData(data, controller);
-  };
-
   const body = response.body.pipeThrough(
-    new TransformStream<Uint8Array, Uint8Array>({
-      transform(chunk, controller) {
-        pendingBytes += chunk.byteLength;
-        try {
-          pending += decoder.decode(chunk, { stream: true });
-        } catch {
-          fail(
-            controller,
-            new Error("Upstream returned invalid UTF-8 in an SSE record."),
-          );
-          return;
-        }
-        let boundary: number;
-        while ((boundary = pending.search(/\r?\n\r?\n/)) >= 0) {
-          const match = pending.slice(boundary).match(/^\r?\n\r?\n/)![0];
-          const block = pending.slice(0, boundary);
-          pending = pending.slice(boundary + match.length);
-          const blockBytes = utf8ByteLength(block);
-          pendingBytes -= blockBytes + utf8ByteLength(match);
-          const limitError = budget.checkSseRecord(blockBytes);
-          if (limitError) {
-            fail(controller, limitError);
-            return;
-          }
-          processBlock(block, controller);
-          if (finished) return;
-        }
-        const limitError = budget.checkSseRecord(pendingBytes);
-        if (limitError) {
-          fail(controller, limitError);
-        }
+    createSseRecordTransform({
+      budget,
+      onRecord(block, _separator, controller) {
+        const data = sseData(block);
+        if (data !== undefined) processData(data, controller);
       },
-      flush(controller) {
-        try {
-          pending += decoder.decode();
-        } catch {
-          fail(
-            controller,
-            new Error("Upstream returned invalid UTF-8 in an SSE record."),
-          );
-          return;
-        }
+      onError(error, controller) {
+        fail(controller, error);
+      },
+      onEnd(pending, controller) {
         if (pending.trim()) {
-          processBlock(pending, controller);
+          const data = sseData(pending);
+          if (data !== undefined) processData(data, controller);
         }
-        // Reaching flush without `[DONE]` means the upstream stream ended
-        // early. Emitting `message_stop` here would present a truncated
-        // generation as a complete message, so fail instead.
         if (finished) return;
         fail(
           controller,
           new Error("Upstream stream ended without a terminal event."),
         );
       },
+      isFinished: () => finished,
     }),
   );
   const headers = convertedResponseHeaders(response.headers);

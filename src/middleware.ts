@@ -9,6 +9,7 @@ export interface MiddlewareContext {
   pathname: string;
   aiGateway?: CloudflareAIGateway;
   apiKeyIndex?: number | { start?: number; end?: number };
+  proxyKeyIndex?: number;
   providers?: ProviderRegistry;
 }
 

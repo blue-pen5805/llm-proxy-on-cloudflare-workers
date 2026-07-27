@@ -10,6 +10,23 @@ dated section; when multiple changes share a date, put the newest change first.
 Planned version: `1.0.0`. The package remains at `0.2.1` until the version
 update is explicitly approved.
 
+### 2026-07-27
+
+- Added exact-origin CORS allowlisting, authenticated proxy-key slot logging,
+  and client-priority AI Gateway metadata tags for resolved routes, public
+  proxy endpoints, selected provider credential slots, and client-requested
+  virtual models without exposing credential values.
+- Added bodyless `HEAD` support for health and model routes, exact model
+  retrieval, provider-filtered model aggregation, and an explicit Anthropic
+  error for unsupported Messages token counting.
+- Standardized proxy-local OpenAI errors, returned an explanatory error for
+  `/g/...` without an account ID, and disabled HTTP caching of generated
+  diagnostics and model responses.
+- Added opt-in `/status` caching and bounded Worker invocations to 1,000 ms of
+  CPU time.
+- Reduced SSE transformation CPU work by sharing incremental record parsing
+  across Responses, Messages, and response metadata.
+
 ### 2026-07-26
 
 - Rejected inherited `Object.prototype` names in client-supplied provider,

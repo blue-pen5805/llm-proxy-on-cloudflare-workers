@@ -31,7 +31,8 @@ The order in `src/index.ts` is behaviorally significant:
 7. `providerRegistryMiddleware` validates custom endpoint configuration and
    creates the request-scoped provider registry.
 8. `aiGatewayMiddleware` selects the default or path-specific Gateway and
-   removes a `/g/<name>` prefix.
+   removes a `/g/<name>` prefix. A prefix without `CLOUDFLARE_ACCOUNT_ID`
+   fails with an explanatory HTTP 400.
 9. `routerMiddleware` dispatches health, compatibility, OpenAI-compatible,
    provider pass-through, and Universal Endpoint requests. It also rejects an
    extracted key selection with HTTP 400 when the selected route has no key
@@ -63,6 +64,9 @@ created adapter instances.
 Handlers may return upstream responses directly or throw application errors.
 The outer error boundary preserves public messages for known errors. Unknown
 values are logged and converted to a generic HTTP 500 JSON response.
+OpenAI-compatible local failures use the OpenAI error object; Messages routes
+use the Anthropic error object. `HEAD` health/model routes execute their `GET`
+contract and then discard the response body.
 
 ## References
 

@@ -1,5 +1,6 @@
 import { CloudflareAIGateway } from "../ai_gateway";
 import { gatewayProviderPath } from "../ai_gateway/custom_provider";
+import type { MiddlewareContext } from "../middleware";
 import { getAllProviderInstances } from "../providers";
 import type { ProviderRegistry } from "../providers";
 import { parseProviderSelector } from "../providers/profile";
@@ -10,8 +11,10 @@ import { Environments } from "../utils/environments";
 import { fetchWithLogging, withTimeout } from "../utils/helpers";
 import { RequestLogger } from "../utils/logger";
 import { resolveAiGatewayModelsProvider } from "./model_gateway";
+import { NO_STORE_HEADERS } from "./response";
 
 const CONNECTIVITY_CHECK_TIMEOUT_MS = 5000;
+const STATUS_CACHE_NAME = "llm-proxy-status";
 
 type ConnectivityStatus = "valid" | "invalid" | "unknown";
 
@@ -146,7 +149,43 @@ async function checkProviderConnectivity(
 export async function handleStatusRequest(
   aiGateway?: CloudflareAIGateway,
   providerRegistry?: ProviderRegistry,
+  context?: MiddlewareContext,
 ) {
+  const cacheTtlSeconds = Config.statusCacheTtlSeconds();
+  const requestCacheControl =
+    context?.request.headers.get("Cache-Control")?.toLowerCase() ?? "";
+  const cacheEnabled =
+    context !== undefined &&
+    cacheTtlSeconds > 0 &&
+    !requestCacheControl.includes("no-store");
+  let statusCache: { cache: Cache; key: Request } | undefined;
+  if (cacheEnabled) {
+    try {
+      const cache = await caches.open(STATUS_CACHE_NAME);
+      const gatewayScope = aiGateway
+        ? `${aiGateway.accountId}/${aiGateway.gatewayId}/${aiGateway.alwaysUse ? "always" : "auto"}`
+        : "direct";
+      const key = new Request(
+        `https://status-cache.llm-proxy.internal/${gatewayScope}`,
+      );
+      if (!requestCacheControl.includes("no-cache")) {
+        const cached = await cache.match(key);
+        if (cached) {
+          const headers = new Headers(cached.headers);
+          headers.set("Cache-Control", NO_STORE_HEADERS["Cache-Control"]);
+          headers.set("X-Proxy-Status-Cache", "HIT");
+          return new Response(cached.body, { headers });
+        }
+      }
+      statusCache = { cache, key };
+    } catch {
+      RequestLogger.warn(
+        "status.cache.unavailable",
+        "Status cache operation was unavailable; continuing without it",
+      );
+    }
+  }
+
   const aiGatewayConfig = Config.aiGateway();
   const configurationStatus = {
     DEV: Config.isDevelopment(),
@@ -158,6 +197,7 @@ export async function handleStatusRequest(
       restApiToken: aiGatewayConfig.restApiToken ? "***" : undefined,
     },
     API_KEY_COOLDOWN_SECONDS: Config.apiKeyCooldownSeconds(),
+    STATUS_CACHE_TTL_SECONDS: cacheTtlSeconds,
   };
 
   const env = Environments.all();
@@ -232,9 +272,32 @@ export async function handleStatusRequest(
     providers: providersStatus,
   };
 
-  return new Response(JSON.stringify(responseBody), {
+  const responseText = JSON.stringify(responseBody);
+  if (statusCache) {
+    const put = statusCache.cache
+      .put(
+        statusCache.key,
+        new Response(responseText, {
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": `public, max-age=${cacheTtlSeconds}`,
+          },
+        }),
+      )
+      .catch(() => {
+        RequestLogger.warn(
+          "status.cache.unavailable",
+          "Status cache operation was unavailable; continuing without it",
+        );
+      });
+    context?.ctx.waitUntil(put);
+  }
+
+  return new Response(responseText, {
     headers: {
       "Content-Type": "application/json",
+      ...NO_STORE_HEADERS,
+      ...(statusCache ? { "X-Proxy-Status-Cache": "MISS" } : {}),
     },
   });
 }

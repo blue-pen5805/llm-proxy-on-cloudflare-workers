@@ -1,5 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { addCorsHeaders, handleOptions } from "~/src/requests/options";
+import { Config } from "~/src/utils/config";
+
+afterEach(() => vi.restoreAllMocks());
 
 describe("Vary", () => {
   it("marks a preflight response as varying by its CORS request headers", async () => {
@@ -55,6 +58,62 @@ describe("Vary", () => {
 });
 
 describe("handleOptions", () => {
+  it("reflects only an explicitly allowed origin", async () => {
+    vi.spyOn(Config, "allowedOrigins").mockReturnValue([
+      "https://allowed.example",
+    ]);
+    const allowed = await handleOptions(
+      new Request("https://proxy.example", {
+        method: "OPTIONS",
+        headers: {
+          Origin: "https://allowed.example",
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers": "authorization",
+        },
+      }),
+    );
+    expect(allowed.headers.get("Access-Control-Allow-Origin")).toBe(
+      "https://allowed.example",
+    );
+
+    const denied = await handleOptions(
+      new Request("https://proxy.example", {
+        method: "OPTIONS",
+        headers: {
+          Origin: "https://denied.example",
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers": "authorization",
+        },
+      }),
+    );
+    expect(denied.headers.get("Access-Control-Allow-Origin")).toBeNull();
+    expect(denied.headers.get("Access-Control-Allow-Headers")).toBeNull();
+
+    const deniedActual = addCorsHeaders(
+      new Request("https://proxy.example", {
+        headers: { Origin: "https://denied.example" },
+      }),
+      new Response("denied"),
+    );
+    expect(deniedActual.headers.get("Access-Control-Allow-Origin")).toBeNull();
+  });
+
+  it("keeps an error response safe when origin configuration is invalid", () => {
+    vi.spyOn(Config, "allowedOrigins").mockImplementation(() => {
+      throw new Error("invalid configuration");
+    });
+    const response = addCorsHeaders(
+      new Request("https://proxy.example", {
+        headers: { Origin: "https://app.example" },
+      }),
+      new Response("error", {
+        status: 503,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      }),
+    );
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
+  });
+
   it("should handle preflight CORS request", async () => {
     const request = new Request("https://example.com", {
       method: "OPTIONS",

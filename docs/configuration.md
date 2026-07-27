@@ -38,10 +38,11 @@ serialized form must fit within this limit.
 
 ## Authentication
 
-| Setting         | Type               | Required | Meaning                                                                                                                        |
-| --------------- | ------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `PROXY_API_KEY` | string or string[] | Required | Up to 64 credentials accepted from proxy clients. Missing, empty, or excessive values fail closed with HTTP 503.               |
-| `DEV`           | boolean            | No       | Disables proxy authentication only when explicitly `true` **and** the Worker is running locally. Ignored by a deployed Worker. |
+| Setting           | Type               | Required | Meaning                                                                                                                        |
+| ----------------- | ------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `PROXY_API_KEY`   | string or string[] | Required | Up to 64 credentials accepted from proxy clients. Missing, empty, or excessive values fail closed with HTTP 503.               |
+| `DEV`             | boolean            | No       | Disables proxy authentication only when explicitly `true` **and** the Worker is running locally. Ignored by a deployed Worker. |
+| `ALLOWED_ORIGINS` | string[] or null   | No       | Up to 64 exact HTTP(S) browser origins allowed by CORS. `null` or omission preserves the `*` default.                          |
 
 Clients can send a proxy credential as a Bearer token, `x-api-key`, or
 `x-goog-api-key`. Query-string credentials are rejected because URLs are
@@ -220,6 +221,7 @@ it does not contact Cloudflare or expose Base URLs and credentials.
 | `CHAT_RESPONSE_METADATA_ENABLED` | boolean or null | `false` | Adds `llm_proxy` routing and timing metadata to routed Chat Completions and converted Responses or Messages JSON and streaming responses. Disabled by default for strict client compatibility.                                   |
 | `API_KEY_COOLDOWN_SECONDS`       | integer or null | `60`    | Seconds to avoid a multi-key credential slot after HTTP 401, 403, 404, 429, or 5xx. `0` disables cooldowns; values above `86400` are clamped.                                                                                    |
 | `MODELS_CACHE_TTL_SECONDS`       | integer or null | `300`   | TTL of the aggregated `/v1/models` response cache. `0` disables caching; values above `86400` are clamped. Invalid values fall back to the default. Has no effect on a `*.workers.dev` deployment, where the Cache API is inert. |
+| `STATUS_CACHE_TTL_SECONDS`       | integer or null | `0`     | Opt-in TTL for the authenticated `/status` diagnostic cache. `0` runs live checks on every request; values above `86400` are clamped.                                                                                            |
 | `VIRTUAL_MODELS`                 | object or null  | none    | Operator-defined model names (`"virtual/<name>"` by convention, any key allowed), each mapped to an ordered list of `"<provider>/<model>"` candidates. Real providers take precedence. See below.                                |
 
 Each Worker isolate rotates through multiple keys in order from a random

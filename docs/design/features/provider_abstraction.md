@@ -152,6 +152,9 @@ providers return no models. Static lists avoid network access; other providers
 receive a model-list request with a 30-second timeout. Fulfilled results are
 converted to OpenAI model objects and prefixed with their route name. Rejected or
 malformed responses are logged and omitted.
+The optional `provider` query restricts fan-out before requests start and forms
+part of the aggregate cache key. Model retrieval resolves an exact ID from this
+bounded aggregate rather than introducing a separate provider capability.
 
 ## Extension requirements
 

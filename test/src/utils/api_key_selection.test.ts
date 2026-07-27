@@ -83,7 +83,7 @@ describe("API key selection logging", () => {
     await expect(
       selectApiKeyIndex(provider, undefined, "rotate", providerName),
     ).resolves.toBe(1);
-    expect(getEligibleApiKeyIndexes(providerName, 2)).toEqual([0, 1]);
+    expect(getEligibleApiKeyIndexes(providerName, 2)).toBeUndefined();
   });
 
   it("does not cool a single key and clears a cooled slot on success", () => {
@@ -92,15 +92,15 @@ describe("API key selection logging", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
 
     recordApiKeyOutcome(providerName, 0, 1, 429);
-    expect(getEligibleApiKeyIndexes(providerName, 1)).toEqual([0]);
+    expect(getEligibleApiKeyIndexes(providerName, 1)).toBeUndefined();
 
     recordApiKeyOutcome(providerName, 0, 2, 403);
     expect(getEligibleApiKeyIndexes(providerName, 2)).toEqual([1]);
     recordApiKeyOutcome(providerName, 0, 2, 200);
-    expect(getEligibleApiKeyIndexes(providerName, 2)).toEqual([0, 1]);
+    expect(getEligibleApiKeyIndexes(providerName, 2)).toBeUndefined();
 
     recordApiKeyOutcome("never-cooled", 0, 2, 200);
-    expect(getEligibleApiKeyIndexes("never-cooled", 2)).toEqual([0, 1]);
+    expect(getEligibleApiKeyIndexes("never-cooled", 2)).toBeUndefined();
   });
 
   it("removes expired and out-of-range cooldown entries", () => {
@@ -112,10 +112,10 @@ describe("API key selection logging", () => {
     recordApiKeyOutcome(expiredProvider, 0, 2, 429);
     expect(
       getEligibleApiKeyIndexes(expiredProvider, 2, Date.now() + 60_001),
-    ).toEqual([0, 1]);
+    ).toBeUndefined();
 
     recordApiKeyOutcome(resizedProvider, 2, 3, 429);
-    expect(getEligibleApiKeyIndexes(resizedProvider, 2)).toEqual([0, 1]);
+    expect(getEligibleApiKeyIndexes(resizedProvider, 2)).toBeUndefined();
   });
 
   it("does not cool deterministic client errors or when disabled", () => {
@@ -124,11 +124,11 @@ describe("API key selection logging", () => {
       .spyOn(Config, "apiKeyCooldownSeconds")
       .mockReturnValue(60);
     recordApiKeyOutcome(providerName, 0, 2, 400);
-    expect(getEligibleApiKeyIndexes(providerName, 2)).toEqual([0, 1]);
+    expect(getEligibleApiKeyIndexes(providerName, 2)).toBeUndefined();
 
     cooldown.mockReturnValue(0);
     recordApiKeyOutcome(providerName, 0, 2, 429);
-    expect(getEligibleApiKeyIndexes(providerName, 2)).toEqual([0, 1]);
+    expect(getEligibleApiKeyIndexes(providerName, 2)).toBeUndefined();
   });
 
   it("records a safe zero-based key identifier", () => {

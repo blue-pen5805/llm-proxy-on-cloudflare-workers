@@ -13,6 +13,8 @@ token, `x-api-key`, or `x-goog-api-key`. Query-string authentication is rejected
 so proxy credentials do not enter URL logs. Candidate and configured values are
 SHA-256 hashed and compared at fixed length without an early return across
 configured keys.
+The matching zero-based slot is retained in request scope and logged as
+`proxy_key_index`; credential values and fingerprints are never logged.
 
 Authentication is bypassed only when `DEV` is explicitly `true` **and** the
 Worker is running locally, determined by the absence of the edge-supplied
@@ -25,6 +27,8 @@ including authentication and routing errors, receive the matching CORS origin
 header without changing the authentication requirement. Such responses carry
 `Vary: Origin`; the error guard also adds the applicable CORS headers to errors
 raised during CORS handling.
+`ALLOWED_ORIGINS` optionally restricts browser access to exact origins. Its
+absence preserves the wildcard default.
 
 ## Credential isolation
 
@@ -88,6 +92,8 @@ identifiers, and feature flags. `/virtual-models` reveals configured virtual
 model names, candidate model names, failover order, retries, and timeouts, but
 no credential material. Both routes remain behind proxy authentication and
 their output should not be treated as public metadata.
+Proxy-generated diagnostic responses explicitly disable client and shared
+HTTP caching.
 
 ## Non-goals
 

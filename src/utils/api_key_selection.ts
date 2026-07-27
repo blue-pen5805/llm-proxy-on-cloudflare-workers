@@ -15,27 +15,33 @@ function shouldCoolDown(status: number): boolean {
   return COOLDOWN_STATUSES.has(status) || status >= 500;
 }
 
-/** Return non-cooled slots, or every slot when none are currently eligible. */
+/**
+ * Return non-cooled slots. `undefined` means every slot is eligible and avoids
+ * allocating an index array on the ordinary no-cooldown request path.
+ */
 export function getEligibleApiKeyIndexes(
   provider: string,
   keyCount: number,
   now: number = Date.now(),
-): number[] {
-  const allIndexes = Array.from({ length: keyCount }, (_value, index) => index);
-  if (keyCount <= 1) return allIndexes;
+): number[] | undefined {
+  if (keyCount <= 1) return undefined;
 
   const providerCooldowns = apiKeyCooldowns.get(provider);
-  if (!providerCooldowns) return allIndexes;
+  if (!providerCooldowns) return undefined;
 
   for (const [index, expiresAt] of providerCooldowns) {
     if (index >= keyCount || expiresAt <= now) providerCooldowns.delete(index);
   }
-  if (providerCooldowns.size === 0) apiKeyCooldowns.delete(provider);
+  if (providerCooldowns.size === 0) {
+    apiKeyCooldowns.delete(provider);
+    return undefined;
+  }
 
-  const eligible = allIndexes.filter(
-    (index) => (providerCooldowns.get(index) ?? 0) <= now,
-  );
-  return eligible.length > 0 ? eligible : allIndexes;
+  const eligible: number[] = [];
+  for (let index = 0; index < keyCount; index++) {
+    if ((providerCooldowns.get(index) ?? 0) <= now) eligible.push(index);
+  }
+  return eligible.length > 0 ? eligible : undefined;
 }
 
 /** Record an attributable upstream response without reading credential data. */
@@ -161,14 +167,16 @@ export async function selectApiKeyIndex(
   const selectedIndex = await provider.getNextApiKeyIndex();
   if (!providerName) return selectedIndex;
   const eligibleIndexes = getEligibleApiKeyIndexes(providerName, keyCount);
-  if (eligibleIndexes.includes(selectedIndex)) return selectedIndex;
+  if (!eligibleIndexes) return selectedIndex;
+  const eligibleIndexSet = new Set(eligibleIndexes);
+  if (eligibleIndexSet.has(selectedIndex)) return selectedIndex;
 
   // Preserve the selected rotation phase and move forward to the next healthy
-  // slot. If every key is cooling, getEligibleApiKeyIndexes returned all slots
-  // and the original selection would already have been accepted above.
+  // slot. If every key is cooling, getEligibleApiKeyIndexes returns undefined
+  // and the original selection is accepted above.
   for (let offset = 1; offset < keyCount; offset++) {
     const candidateIndex = (selectedIndex + offset) % keyCount;
-    if (eligibleIndexes.includes(candidateIndex)) return candidateIndex;
+    if (eligibleIndexSet.has(candidateIndex)) return candidateIndex;
   }
   /* istanbul ignore next -- eligible indexes come from the same complete [0, keyCount) range, so the loop must find one */
   return selectedIndex;

@@ -122,12 +122,14 @@ configured, including with `ALWAYS_USE_AI_GATEWAY=true`. Check `/status` and
 Worker logs. For a custom endpoint, set `models` to a static list if its model
 endpoint is missing or slow.
 
-### `/g/<name>/...` returns 404 or bypasses Gateway
+### `/g/<name>/...` returns 400 or a provider route fails
 
 The dynamic Gateway prefix requires `CLOUDFLARE_ACCOUNT_ID`. The default Gateway
 also requires `AI_GATEWAY_NAME`. Confirm that the provider is in the supported
 AI Gateway set and that the path follows the patterns in [HTTP API and
 routing](api.md).
+When the account ID is absent, the proxy returns HTTP 400 with an explicit
+configuration message before provider routing.
 
 With `ALWAYS_USE_AI_GATEWAY=true`, an absent `AI_GATEWAY_NAME` intentionally
 selects `default`. If a `custom-llm-proxy-*` route returns 404, rerun

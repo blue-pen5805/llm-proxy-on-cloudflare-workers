@@ -13,7 +13,7 @@ import { handleModelsRequest } from "~/src/requests/models";
 import { handleOptions } from "~/src/requests/options";
 import { handleProviderProxyRequest } from "~/src/requests/proxy";
 import { handleUniversalEndpointRequest } from "~/src/requests/universal_endpoint";
-import { isRequestAuthorized } from "~/src/utils/authorization";
+import { getAuthorizedProxyKeyIndex } from "~/src/utils/authorization";
 import { Config } from "~/src/utils/config";
 import { Environments } from "~/src/utils/environments";
 import { ConfigurationError } from "~/src/utils/error";
@@ -95,6 +95,7 @@ vi.mock("~/src/requests/ai_gateway_rest", () => ({
 }));
 vi.mock("~/src/requests/models", () => ({
   handleModelsRequest: vi.fn(async () => new Response()),
+  handleModelRetrieveRequest: vi.fn(async () => new Response()),
 }));
 vi.mock("~/src/requests/universal_endpoint", () => ({
   handleUniversalEndpointRequest: vi.fn(async () => new Response()),
@@ -103,17 +104,22 @@ vi.mock("~/src/requests/compat", () => ({
   handleCompatibilityRequest: vi.fn(async () => new Response()),
 }));
 vi.mock("~/src/utils/authorization", () => ({
-  isRequestAuthorized: vi.fn(),
+  getAuthorizedProxyKeyIndex: vi.fn(),
 }));
 vi.mock("~/src/utils/config", () => ({
-  Config: { isDevelopment: vi.fn(), apiKeys: vi.fn(), aiGateway: vi.fn() },
+  Config: {
+    isDevelopment: vi.fn(),
+    apiKeys: vi.fn(),
+    aiGateway: vi.fn(),
+    allowedOrigins: vi.fn(),
+  },
 }));
 
 describe("fetch", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    vi.mocked(isRequestAuthorized).mockReturnValue(true);
+    vi.mocked(getAuthorizedProxyKeyIndex).mockReturnValue(0);
     vi.mocked(Config.isDevelopment).mockReturnValue(false);
     vi.mocked(Config.apiKeys).mockReturnValue(["test-key"]);
     vi.mocked(Config.aiGateway).mockReturnValue({
@@ -151,28 +157,28 @@ describe("fetch", () => {
     });
 
     expect(handleOptions).toHaveBeenCalledOnce();
-    expect(isRequestAuthorized).not.toHaveBeenCalled();
+    expect(getAuthorizedProxyKeyIndex).not.toHaveBeenCalled();
     expect(response.status).toBe(200);
   });
 
   it("should succeed with authentication", async () => {
     const response = await SELF.fetch("https://example.com/ping");
 
-    expect(isRequestAuthorized).toHaveBeenCalled();
+    expect(getAuthorizedProxyKeyIndex).toHaveBeenCalled();
     expect(response.status).toBe(200);
   });
 
   it("should fail with invalid authentication", async () => {
-    vi.mocked(isRequestAuthorized).mockReturnValue(false);
+    vi.mocked(getAuthorizedProxyKeyIndex).mockReturnValue(undefined);
 
     const response = await SELF.fetch("https://example.com/ping");
 
-    expect(isRequestAuthorized).toHaveBeenCalled();
+    expect(getAuthorizedProxyKeyIndex).toHaveBeenCalled();
     expect(response.status).toBe(401);
   });
 
   it("should add CORS headers to authentication errors", async () => {
-    vi.mocked(isRequestAuthorized).mockReturnValue(false);
+    vi.mocked(getAuthorizedProxyKeyIndex).mockReturnValue(undefined);
 
     const response = await SELF.fetch("https://example.com/ping", {
       headers: { Origin: "https://client.example" },
@@ -195,7 +201,9 @@ describe("fetch", () => {
     expect(await response.json()).toEqual({
       error: {
         message: "Invalid configuration for CUSTOM_OPENAI_ENDPOINTS.",
-        status: 503,
+        type: "server_error",
+        param: null,
+        code: null,
       },
     });
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
@@ -206,7 +214,7 @@ describe("fetch", () => {
 
     const response = await SELF.fetch("https://example.com/ping");
 
-    expect(isRequestAuthorized).not.toHaveBeenCalled();
+    expect(getAuthorizedProxyKeyIndex).not.toHaveBeenCalled();
     expect(response.status).toBe(200);
   });
 
@@ -375,7 +383,9 @@ describe("fetch", () => {
     await expect(response.json()).resolves.toEqual({
       error: {
         message: "API key selection is not supported for this route.",
-        status: 400,
+        type: "invalid_request_error",
+        param: null,
+        code: null,
       },
     });
   });

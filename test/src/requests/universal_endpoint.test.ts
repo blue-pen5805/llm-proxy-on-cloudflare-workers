@@ -5,16 +5,19 @@ import {
 } from "~/src/requests/universal_endpoint";
 import { BadRequestError } from "~/src/utils/error";
 import * as helpers from "~/src/utils/helpers";
-import { Secrets } from "~/src/utils/secrets";
 
 vi.mock("~/src/ai_gateway");
 vi.mock("~/src/utils/helpers");
-vi.mock("~/src/utils/secrets");
 
 describe("handleUniversalEndpointRequest", () => {
+  const universalMetadataHeaders = {
+    "cf-aig-metadata": '{"llm_proxy_endpoint":"universal_endpoint"}',
+  };
   const mockProviderClass = {
     chatCompletionPath: "/chat/completions",
     headers: vi.fn(),
+    getNextApiKeyIndex: vi.fn(),
+    getApiKeys: vi.fn(),
   };
 
   const mockAIGateway = {
@@ -39,8 +42,8 @@ describe("handleUniversalEndpointRequest", () => {
       "Content-Type": "application/json",
       Authorization: "Bearer sk-test",
     });
-    vi.mocked(Secrets.getAll).mockReturnValue(["test-key"]);
-    vi.mocked(Secrets.getNext).mockResolvedValue(0);
+    mockProviderClass.getApiKeys.mockReturnValue(["test-key"]);
+    mockProviderClass.getNextApiKeyIndex.mockResolvedValue(0);
   });
 
   it("should handle single provider request", async () => {
@@ -89,7 +92,10 @@ describe("handleUniversalEndpointRequest", () => {
           },
         },
       ],
-      headers: { "cf-aig-metadata": '{"tenant":"example"}' },
+      headers: {
+        "cf-aig-metadata":
+          '{"tenant":"example","llm_proxy_endpoint":"universal_endpoint"}',
+      },
     });
     expect(helpers.fetchWithLogging).toHaveBeenCalled();
     expect(helpers.fetchWithLogging).toHaveBeenCalledWith(
@@ -101,7 +107,8 @@ describe("handleUniversalEndpointRequest", () => {
   it("uses a named provider profile while emitting the base Gateway provider", async () => {
     providerInstances["openai:paid"] = {
       ...mockProviderClass,
-      apiKeyName: "OPENAI_API_KEY",
+      getNextApiKeyIndex: vi.fn().mockResolvedValue(0),
+      getApiKeys: vi.fn().mockReturnValue(["paid-key"]),
       headers: vi.fn().mockResolvedValue({ Authorization: "Bearer paid-key" }),
     } as never;
     mockAIGateway.buildUniversalEndpointRequest.mockReturnValue([
@@ -122,14 +129,13 @@ describe("handleUniversalEndpointRequest", () => {
     );
 
     expect(mockProviderRegistry.get).toHaveBeenCalledWith("openai:paid");
-    expect(Secrets.getNext).toHaveBeenCalledWith("OPENAI_API_KEY", "paid");
-    expect(Secrets.getAll).toHaveBeenCalledWith(
-      "OPENAI_API_KEY",
-      false,
-      "paid",
-    );
+    expect(
+      providerInstances["openai:paid"].getNextApiKeyIndex,
+    ).toHaveBeenCalledOnce();
+    expect(providerInstances["openai:paid"].getApiKeys).toHaveBeenCalledOnce();
     expect(mockAIGateway.buildUniversalEndpointRequest).toHaveBeenCalledWith({
       data: [expect.objectContaining({ provider: "openai" })],
+      headers: universalMetadataHeaders,
     });
   });
 
@@ -164,6 +170,8 @@ describe("handleUniversalEndpointRequest", () => {
   it("should handle multiple provider requests", async () => {
     const anthropicProviderClass = {
       chatCompletionPath: "/v1/messages",
+      getNextApiKeyIndex: vi.fn().mockResolvedValue(0),
+      getApiKeys: vi.fn().mockReturnValue(["sk-ant-test"]),
       headers: vi.fn().mockReturnValue({
         "Content-Type": "application/json",
         Authorization: "Bearer sk-ant-test",
@@ -233,6 +241,7 @@ describe("handleUniversalEndpointRequest", () => {
           },
         },
       ],
+      headers: universalMetadataHeaders,
     });
   });
 
@@ -280,6 +289,7 @@ describe("handleUniversalEndpointRequest", () => {
           },
         },
       ],
+      headers: universalMetadataHeaders,
     });
   });
 
@@ -331,6 +341,7 @@ describe("handleUniversalEndpointRequest", () => {
           },
         },
       ],
+      headers: universalMetadataHeaders,
     });
   });
 
@@ -467,6 +478,7 @@ describe("handleUniversalEndpointRequest", () => {
           },
         },
       ],
+      headers: universalMetadataHeaders,
     });
   });
 
@@ -495,6 +507,8 @@ describe("handleUniversalEndpointRequest", () => {
   it("should handle provider without explicit chatCompletionPath", async () => {
     const customProviderClass = {
       chatCompletionPath: "/v1/chat/completions",
+      getNextApiKeyIndex: vi.fn().mockResolvedValue(0),
+      getApiKeys: vi.fn().mockReturnValue(["test-key"]),
       headers: vi.fn().mockReturnValue({
         "Content-Type": "application/json",
         "X-API-Key": "test-key",
@@ -546,6 +560,7 @@ describe("handleUniversalEndpointRequest", () => {
           },
         },
       ],
+      headers: universalMetadataHeaders,
     });
   });
 

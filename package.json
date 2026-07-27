@@ -5,6 +5,9 @@
   "version": "0.2.1",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "deploy": "wrangler deploy",
     "dev": "tsx scripts/with-secrets.ts --env develop -- wrangler dev --env-file .dev.vars.develop",

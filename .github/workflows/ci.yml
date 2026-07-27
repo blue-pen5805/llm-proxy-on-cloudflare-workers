@@ -5,6 +5,9 @@ permissions:
 
 on:
   push:
+    branches:
+      - main
+      - dev
   pull_request:
 
 jobs:
@@ -26,5 +29,7 @@ jobs:
         run: npm run test
       - if: matrix.node-version == '24.x'
         run: npm run test:coverage
+      - if: matrix.node-version == '24.x'
+        run: npm run bench
       - run: npm run lint
       - run: npm run prettier-ci

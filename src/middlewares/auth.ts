@@ -1,5 +1,5 @@
 import { Middleware } from "../middleware";
-import { isRequestAuthorized } from "../utils/authorization";
+import { getAuthorizedProxyKeyIndex } from "../utils/authorization";
 import { Config } from "../utils/config";
 import { ServiceUnavailableError, UnauthorizedError } from "../utils/error";
 import { removeAuthorizationQueryParameters } from "../utils/helpers";
@@ -39,9 +39,15 @@ export const authMiddleware: Middleware = async (context, next) => {
     );
   }
 
-  if (isRequestAuthorized(context.request, configuredKeys) === false) {
+  const proxyKeyIndex = getAuthorizedProxyKeyIndex(
+    context.request,
+    configuredKeys,
+  );
+  if (proxyKeyIndex === undefined) {
     throw new UnauthorizedError();
   }
+  context.proxyKeyIndex = proxyKeyIndex;
+  RequestLogger.setProxyKeyIndex(proxyKeyIndex);
 
   return await next();
 };

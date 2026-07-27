@@ -103,14 +103,15 @@ observability; bypassed responses carry no cache header.
 
 The cache key is built exclusively from operator-validated values — AI Gateway
 account and gateway ids (charset-checked at construction), the `alwaysUse`
-mode, and the parsed `/key/...` selection — so clients cannot create arbitrary
-cache partitions or poison another scope. Requests that carry `cf-aig-*`
+mode, the parsed `/key/...` selection, and a validated normalized provider
+filter — so clients cannot create arbitrary cache partitions or poison another
+scope. Requests that carry `cf-aig-*`
 Gateway tuning headers or `Cache-Control: no-store` bypass the cache entirely;
 `Cache-Control: no-cache` skips the read but refreshes the entry. Aggregates
 with a failed provider or a truncated result are served but never stored, so a
 transient upstream outage cannot pin a degraded list for the full TTL. The
-stored copy's `Cache-Control` header only encodes the internal TTL and is
-stripped before the response is served, keeping responses issued under
+stored copy's `Cache-Control` header only encodes the internal TTL. Served
+responses replace it with `private, no-store`, keeping responses issued under
 `Authorization` out of shared HTTP caches. Cache writes ride
 `ctx.waitUntil`, keeping the store off the response's critical path.
 
@@ -137,15 +138,24 @@ or scan custom endpoint configuration for each lookup.
 
 ## Benchmarking
 
-Run `npm run bench` to exercise the CPU-only request-building and routing hot
-paths. Benchmarks are diagnostic rather than correctness gates because absolute
-results vary by machine. Results are comparable only for the same benchmark,
-runtime version, input, and machine. The Worker-runtime test suite and coverage
-thresholds enforce correctness.
+Run `npm run bench` to exercise the CPU-only request-building, routing, and
+Responses/Messages/metadata SSE transformation hot paths. The streaming
+benchmarks use approximately 1 KiB across 2,000 input records. SSE boundary
+search retains an offset and revisits at most three trailing characters when a
+record spans chunks, avoiding repeated scans of the whole pending record.
+
+Benchmarks are diagnostic rather than correctness gates because absolute
+results vary by machine. Record the command, Node version, machine, benchmark
+name, mean, and variance when using a result for a performance decision.
+Compare only the same input and environment. CI executes the suite on Node 24;
+the Worker-runtime tests and coverage thresholds enforce correctness.
 
 Production evaluation uses Workers CPU time rather than handler latency alone:
 handler latency includes upstream wait time and can move independently of local
 CPU consumption.
+`wrangler.jsonc` sets `limits.cpu_ms` to 1,000 ms as an invocation guardrail;
+network wait time does not consume that CPU budget. Sustained limit errors must
+be investigated with Workers CPU metrics and profiling before raising it.
 
 ## References
 

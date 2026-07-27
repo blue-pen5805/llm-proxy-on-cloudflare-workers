@@ -20,7 +20,9 @@ import {
   withTimeout,
 } from "../utils/helpers";
 import { RequestLogger } from "../utils/logger";
+import { openAIErrorResponse } from "./error_response";
 import { resolveAiGatewayModelsProvider } from "./model_gateway";
+import { PRIVATE_NO_STORE_HEADERS } from "./response";
 
 // Timeout for individual provider model fetch operations (milliseconds)
 const PROVIDER_FETCH_TIMEOUT_MS = 30_000;
@@ -66,6 +68,7 @@ async function putModelsCache(
 function buildModelsCacheKey(
   apiKeySelection: MiddlewareContext["apiKeyIndex"],
   aiGateway?: CloudflareAIGateway,
+  providerFilter?: readonly string[],
 ): Request {
   const gatewayScope = aiGateway
     ? `${aiGateway.accountId}/${aiGateway.gatewayId}/${aiGateway.alwaysUse ? "always" : "auto"}`
@@ -76,10 +79,46 @@ function buildModelsCacheKey(
       : typeof apiKeySelection === "number"
         ? `index-${apiKeySelection}`
         : `range-${apiKeySelection.start ?? ""}-${apiKeySelection.end ?? ""}`;
+  const providerScope =
+    providerFilter === undefined
+      ? "all"
+      : `providers-${providerFilter.map(encodeURIComponent).join(",")}`;
   return new Request(
-    `https://models-cache.llm-proxy.internal/${gatewayScope}/${keyScope}`,
+    `https://models-cache.llm-proxy.internal/${gatewayScope}/${keyScope}/${providerScope}`,
     { method: "GET" },
   );
+}
+
+function requestedProviders(
+  request: Request | undefined,
+  availableProviders: ReadonlySet<string>,
+): string[] | Response | undefined {
+  if (!request) return undefined;
+  const values = new URL(request.url).searchParams.getAll("provider");
+  if (values.length === 0) return undefined;
+  if (values.length !== 1) {
+    return openAIErrorResponse("provider must be specified once.", 400, {
+      param: "provider",
+    });
+  }
+  const providers = [
+    ...new Set(values[0].split(",").map((value) => value.trim())),
+  ];
+  if (
+    providers.length === 0 ||
+    providers.length > 32 ||
+    providers.some(
+      (provider) =>
+        provider === "" ||
+        (provider !== VIRTUAL_MODEL_PROVIDER_NAME &&
+          !availableProviders.has(provider)),
+    )
+  ) {
+    return openAIErrorResponse("Invalid provider filter.", 400, {
+      param: "provider",
+    });
+  }
+  return providers.sort();
 }
 
 async function fetchProviderModels(
@@ -187,6 +226,16 @@ export async function handleModelsRequest(
   context: MiddlewareContext,
   aiGateway: CloudflareAIGateway | undefined = undefined,
 ) {
+  const allProviderEntries = Object.entries(
+    context.providers?.all() ?? getAllProviderInstances(Environments.all()),
+  );
+  const providerFilter = requestedProviders(
+    context.request,
+    new Set(allProviderEntries.map(([providerName]) => providerName)),
+  );
+  if (providerFilter instanceof Response) return providerFilter;
+  const providerFilterSet =
+    providerFilter === undefined ? undefined : new Set(providerFilter);
   const sanitizedGatewayHeaders =
     aiGateway && context.request
       ? stripProxyAuthorizationHeaders(context.request.headers, {
@@ -218,7 +267,11 @@ export async function handleModelsRequest(
       const cache = await caches.open(MODELS_CACHE_NAME);
       const candidate = {
         cache,
-        key: buildModelsCacheKey(context.apiKeyIndex, aiGateway),
+        key: buildModelsCacheKey(
+          context.apiKeyIndex,
+          aiGateway,
+          providerFilter,
+        ),
       };
       let cacheUsable = true;
       if (!requestCacheControl.includes("no-cache")) {
@@ -229,7 +282,10 @@ export async function handleModelsRequest(
             // The stored Cache-Control only encodes the internal TTL; it must
             // not let a response served under Authorization enter shared HTTP
             // caches.
-            cachedHeaders.delete("Cache-Control");
+            cachedHeaders.set(
+              "Cache-Control",
+              PRIVATE_NO_STORE_HEADERS["Cache-Control"],
+            );
             cachedHeaders.set("X-Proxy-Models-Cache", "HIT");
             return new Response(cachedResponse.body, {
               headers: cachedHeaders,
@@ -248,8 +304,9 @@ export async function handleModelsRequest(
     }
   }
 
-  const providerEntries = Object.entries(
-    context.providers?.all() ?? getAllProviderInstances(Environments.all()),
+  const providerEntries = allProviderEntries.filter(
+    ([providerName]) =>
+      providerFilterSet === undefined || providerFilterSet.has(providerName),
   );
   // Models are kept as their serialized JSON so the byte budget and the final
   // response body reuse one JSON.stringify pass per model.
@@ -264,7 +321,11 @@ export async function handleModelsRequest(
   // are counted against the aggregate budget. A malformed VIRTUAL_MODELS value
   // fails closed here exactly as it does on a chat request.
   const virtualModels = Config.virtualModels();
-  if (virtualModels) {
+  if (
+    virtualModels &&
+    (providerFilterSet === undefined ||
+      providerFilterSet.has(VIRTUAL_MODEL_PROVIDER_NAME))
+  ) {
     for (const virtualModelId of Object.keys(virtualModels)) {
       const serializedModel = JSON.stringify({
         id: virtualModelId,
@@ -349,6 +410,7 @@ export async function handleModelsRequest(
   const responseBody = `{"data":[${serializedModels.join(",")}],"object":"list"}`;
   const responseHeaders: Record<string, string> = {
     "Content-Type": "application/json",
+    ...PRIVATE_NO_STORE_HEADERS,
     ...(truncated ? { "X-Proxy-Models-Truncated": "true" } : {}),
   };
 
@@ -380,4 +442,24 @@ export async function handleModelsRequest(
   return new Response(responseBody, {
     headers: { ...responseHeaders, "X-Proxy-Models-Cache": "MISS" },
   });
+}
+
+export async function handleModelRetrieveRequest(
+  context: MiddlewareContext,
+  modelId: string,
+  aiGateway: CloudflareAIGateway | undefined = undefined,
+): Promise<Response> {
+  const modelsResponse = await handleModelsRequest(context, aiGateway);
+  if (!modelsResponse.ok) return modelsResponse;
+  const models = (await modelsResponse.json()) as OpenAIModelsListResponseBody;
+  const model = models.data.find((candidate) => candidate.id === modelId);
+  if (!model) {
+    return openAIErrorResponse(`Model '${modelId}' not found.`, 404, {
+      code: "model_not_found",
+      param: "model",
+    });
+  }
+  const headers = new Headers(modelsResponse.headers);
+  headers.delete("X-Proxy-Models-Truncated");
+  return Response.json(model, { headers });
 }

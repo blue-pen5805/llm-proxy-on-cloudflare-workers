@@ -81,6 +81,9 @@ provider-executed features without a direct Chat Completions equivalent.
 Clients that require the complete Anthropic wire contract use the provider
 pass-through route. The compatibility endpoint includes only direct, tested
 mappings that preserve semantics and require no proxy state or tool execution.
+`POST /v1/messages/count_tokens` is explicitly rejected with an
+Anthropic-shaped HTTP 400 response; the proxy does not invent a tokenizer or
+approximate provider-specific token counts.
 
 ## References
 

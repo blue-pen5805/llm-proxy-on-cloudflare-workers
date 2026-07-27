@@ -55,6 +55,7 @@ describe("status", () => {
     });
     vi.mocked(Config.apiKeyCooldownSeconds).mockReturnValue(60);
     vi.mocked(Config.chatResponseMetadataEnabled).mockReturnValue(false);
+    vi.mocked(Config.statusCacheTtlSeconds).mockReturnValue(0);
 
     vi.mocked(Environments.getEnv).mockReturnValue({} as Env);
     vi.mocked(Environments.all).mockReturnValue({} as any);
@@ -109,6 +110,7 @@ describe("status", () => {
         alwaysUse: false,
       },
       API_KEY_COOLDOWN_SECONDS: 60,
+      STATUS_CACHE_TTL_SECONDS: 0,
     });
 
     expect(body.providers.openai).toBeDefined();
@@ -586,5 +588,134 @@ describe("status", () => {
         openai: { available: true, keys: [{ slot: 0, status: "unknown" }] },
       },
     });
+  });
+
+  it("serves an enabled status-cache hit with no-store headers", async () => {
+    vi.mocked(Config.statusCacheTtlSeconds).mockReturnValue(30);
+    const cache = {
+      match: vi
+        .fn()
+        .mockResolvedValue(
+          Response.json(
+            { config: { cached: true }, providers: {} },
+            { headers: { "Cache-Control": "public, max-age=30" } },
+          ),
+        ),
+      put: vi.fn(),
+    } as unknown as Cache;
+    vi.spyOn(caches, "open").mockResolvedValue(cache);
+    const context = {
+      request: new Request("https://proxy.example/status"),
+      ctx: { waitUntil: vi.fn() },
+    } as any;
+
+    const response = await handleStatusRequest(
+      {
+        accountId: "acc",
+        gatewayId: "cached",
+        alwaysUse: false,
+      } as CloudflareAIGateway,
+      undefined,
+      context,
+    );
+    expect(response.headers.get("X-Proxy-Status-Cache")).toBe("HIT");
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(cache.put).not.toHaveBeenCalled();
+  });
+
+  it("partitions status cache for strict Gateway routing", async () => {
+    vi.mocked(Config.statusCacheTtlSeconds).mockReturnValue(30);
+    vi.mocked(getAllProviderInstances).mockReturnValue({});
+    const cache = {
+      match: vi.fn().mockResolvedValue(undefined),
+      put: vi.fn().mockResolvedValue(undefined),
+    } as unknown as Cache;
+    vi.spyOn(caches, "open").mockResolvedValue(cache);
+    const context = {
+      request: new Request("https://proxy.example/status"),
+      ctx: { waitUntil: vi.fn() },
+    } as any;
+    await handleStatusRequest(
+      {
+        accountId: "acc",
+        gatewayId: "strict",
+        alwaysUse: true,
+      } as CloudflareAIGateway,
+      undefined,
+      context,
+    );
+    expect(cache.match).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: expect.stringContaining("/acc/strict/always"),
+      }),
+    );
+  });
+
+  it("writes a status-cache miss in waitUntil", async () => {
+    vi.mocked(Config.statusCacheTtlSeconds).mockReturnValue(30);
+    vi.mocked(getAllProviderInstances).mockReturnValue({});
+    const cache = {
+      match: vi.fn().mockResolvedValue(undefined),
+      put: vi.fn().mockResolvedValue(undefined),
+    } as unknown as Cache;
+    vi.spyOn(caches, "open").mockResolvedValue(cache);
+    const waitUntil = vi.fn();
+    const context = {
+      request: new Request("https://proxy.example/status", {
+        headers: { "Cache-Control": "no-cache" },
+      }),
+      ctx: { waitUntil },
+    } as any;
+
+    const response = await handleStatusRequest(undefined, undefined, context);
+    expect(response.headers.get("X-Proxy-Status-Cache")).toBe("MISS");
+    expect(cache.match).not.toHaveBeenCalled();
+    expect(cache.put).toHaveBeenCalledOnce();
+    expect(waitUntil).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a live response when the status-cache write rejects", async () => {
+    vi.mocked(Config.statusCacheTtlSeconds).mockReturnValue(30);
+    vi.mocked(getAllProviderInstances).mockReturnValue({});
+    const cache = {
+      match: vi.fn().mockResolvedValue(undefined),
+      put: vi.fn().mockRejectedValue(new Error("write failed")),
+    } as unknown as Cache;
+    vi.spyOn(caches, "open").mockResolvedValue(cache);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const waitUntil = vi.fn();
+    const response = await handleStatusRequest(undefined, undefined, {
+      request: new Request("https://proxy.example/status"),
+      ctx: { waitUntil },
+    } as any);
+    expect(response.status).toBe(200);
+    await expect(waitUntil.mock.calls[0][0]).resolves.toBeUndefined();
+  });
+
+  it("bypasses or survives an unavailable status cache", async () => {
+    vi.mocked(Config.statusCacheTtlSeconds).mockReturnValue(30);
+    vi.mocked(getAllProviderInstances).mockReturnValue({});
+    const open = vi
+      .spyOn(caches, "open")
+      .mockRejectedValue(new Error("unavailable"));
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const baseContext = {
+      ctx: { waitUntil: vi.fn() },
+    };
+
+    const unavailable = await handleStatusRequest(undefined, undefined, {
+      ...baseContext,
+      request: new Request("https://proxy.example/status"),
+    } as any);
+    expect(unavailable.status).toBe(200);
+
+    const bypassed = await handleStatusRequest(undefined, undefined, {
+      ...baseContext,
+      request: new Request("https://proxy.example/status", {
+        headers: { "Cache-Control": "no-store" },
+      }),
+    } as any);
+    expect(bypassed.status).toBe(200);
+    expect(open).toHaveBeenCalledOnce();
   });
 });

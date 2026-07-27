@@ -124,6 +124,14 @@ describe("Config", () => {
       vi.mocked(Environments.get).mockReturnValue('["memo1","memo2"]');
       const first = Config.apiKeys();
       expect(first).toEqual(["memo1", "memo2"]);
+      expect(Config.apiKeys()).toEqual(first);
+    });
+
+    it("memoizes by the request environment identity", () => {
+      const environment = {} as Env;
+      vi.mocked(Environments.get).mockReturnValue('["cached"]');
+      vi.mocked(Environments.getEnv).mockReturnValue(environment);
+      const first = Config.apiKeys();
       expect(Config.apiKeys()).toBe(first);
     });
   });
@@ -258,6 +266,56 @@ describe("Config", () => {
       expect(Config.modelsCacheTtlSeconds()).toBe(expected);
       expect(Environments.get).toHaveBeenCalledWith(
         "MODELS_CACHE_TTL_SECONDS",
+        false,
+      );
+    });
+  });
+
+  describe("allowedOrigins", () => {
+    it.each([undefined, null])("maps %j to wildcard behavior", (value) => {
+      vi.mocked(Environments.get).mockReturnValue(value as never);
+      expect(Config.allowedOrigins()).toBeUndefined();
+    });
+
+    it("accepts exact HTTP and HTTPS origins", () => {
+      vi.mocked(Environments.get).mockReturnValue([
+        "https://app.example",
+        "http://localhost:3000",
+      ]);
+      expect(Config.allowedOrigins()).toEqual([
+        "https://app.example",
+        "http://localhost:3000",
+      ]);
+    });
+
+    it.each([
+      ["not an array", "https://app.example"],
+      ["non-string", [1]],
+      ["unsupported scheme", ["ftp://app.example"]],
+      ["path", ["https://app.example/path"]],
+      ["malformed URL", ["::::"]],
+      ["too many", Array.from({ length: 65 }, () => "https://app.example")],
+    ])("rejects %s", (_name, value) => {
+      vi.mocked(Environments.get).mockReturnValue(value);
+      expect(() => Config.allowedOrigins()).toThrow(ConfigurationError);
+    });
+  });
+
+  describe("statusCacheTtlSeconds", () => {
+    it.each([
+      [undefined, 0],
+      ["", 0],
+      ["0", 0],
+      [" 120 ", 120],
+      ["-1", 0],
+      ["1.5", 0],
+      ["abc", 0],
+      ["100000", 86400],
+    ])("maps %j to %d", (value, expected) => {
+      vi.mocked(Environments.get).mockReturnValue(value);
+      expect(Config.statusCacheTtlSeconds()).toBe(expected);
+      expect(Environments.get).toHaveBeenCalledWith(
+        "STATUS_CACHE_TTL_SECONDS",
         false,
       );
     });

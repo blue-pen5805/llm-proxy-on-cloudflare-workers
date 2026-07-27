@@ -8,23 +8,25 @@ OpenAI-compatible Chat Completions and converted Responses or Messages output.
 
 ## Route summary
 
-| Method    | Path                                   | Purpose                                           |
-| --------- | -------------------------------------- | ------------------------------------------------- |
-| `OPTIONS` | any                                    | CORS preflight                                    |
-| `GET`     | `/ping`                                | Lightweight liveness response (`Pong`)            |
-| `GET`     | `/status`                              | Configuration and provider credential diagnostics |
-| `GET`     | `/virtual-models`                      | Virtual models and ordered failover candidates    |
-| `POST`    | `/v1/chat/completions`                 | OpenAI-compatible chat translation                |
-| `POST`    | `/v1/responses`                        | Experimental Responses-to-Chat conversion         |
-| `POST`    | `/v1/messages`                         | Experimental Messages-to-Chat conversion          |
-| `GET`     | `/v1/models`                           | Best-effort aggregate model list                  |
-| any       | `/<provider>[:<profile>]/<path>`       | Provider pass-through                             |
-| `POST`    | `/g/<gateway>/ai/run`                  | AI Gateway REST API: Workers AI native format     |
-| `POST`    | `/g/<gateway>/ai/v1/chat/completions`  | AI Gateway REST API: Chat Completions             |
-| `POST`    | `/g/<gateway>/ai/v1/responses`         | AI Gateway REST API: Responses                    |
-| `POST`    | `/g/<gateway>/ai/v1/messages`          | AI Gateway REST API: Messages                     |
-| `POST`    | `/g/<gateway>/`                        | AI Gateway Universal Endpoint                     |
-| `POST`    | `/g/<gateway>/compat/chat/completions` | AI Gateway compatibility pass-through             |
+| Method        | Path                                   | Purpose                                           |
+| ------------- | -------------------------------------- | ------------------------------------------------- |
+| `OPTIONS`     | any                                    | CORS preflight                                    |
+| `GET`, `HEAD` | `/ping`                                | Lightweight liveness response (`Pong` for `GET`)  |
+| `GET`, `HEAD` | `/status`                              | Configuration and provider credential diagnostics |
+| `GET`, `HEAD` | `/virtual-models`                      | Virtual models and ordered failover candidates    |
+| `POST`        | `/v1/chat/completions`                 | OpenAI-compatible chat translation                |
+| `POST`        | `/v1/responses`                        | Experimental Responses-to-Chat conversion         |
+| `POST`        | `/v1/messages`                         | Experimental Messages-to-Chat conversion          |
+| `POST`        | `/v1/messages/count_tokens`            | Explicit unsupported-operation error              |
+| `GET`, `HEAD` | `/v1/models`                           | Best-effort aggregate model list                  |
+| `GET`, `HEAD` | `/v1/models/<model>`                   | Retrieve one aggregated model                     |
+| any           | `/<provider>[:<profile>]/<path>`       | Provider pass-through                             |
+| `POST`        | `/g/<gateway>/ai/run`                  | AI Gateway REST API: Workers AI native format     |
+| `POST`        | `/g/<gateway>/ai/v1/chat/completions`  | AI Gateway REST API: Chat Completions             |
+| `POST`        | `/g/<gateway>/ai/v1/responses`         | AI Gateway REST API: Responses                    |
+| `POST`        | `/g/<gateway>/ai/v1/messages`          | AI Gateway REST API: Messages                     |
+| `POST`        | `/g/<gateway>/`                        | AI Gateway Universal Endpoint                     |
+| `POST`        | `/g/<gateway>/compat/chat/completions` | AI Gateway compatibility pass-through             |
 
 `/chat/completions`, `/responses`, `/messages`, and `/models` are aliases of
 their `/v1` forms. Supported routes may be prefixed with `/g/<gateway>` to
@@ -32,6 +34,8 @@ choose a Gateway for that request. OpenAI-compatible chat, Responses,
 Anthropic-compatible Messages, models, and registered provider pass-through
 routes may also use `/key/<selection>` to select provider credentials. When
 both are used, the key prefix comes first: `/key/1/g/team-gateway/v1/models`.
+`HEAD` follows the corresponding `GET` route and returns identical status and
+headers with no response body.
 
 When `ALWAYS_USE_AI_GATEWAY=true`, every provider subrequest made by chat,
 Responses, Messages, models, status, or provider pass-through routing uses AI
@@ -264,6 +268,10 @@ complete provider-native contract is required. See the
 [Messages compatibility design](design/features/messages-api.md) for the exact
 boundary.
 
+`POST /v1/messages/count_tokens` returns an Anthropic-shaped HTTP 400 error.
+Token counting is not approximated because Chat Completions has no equivalent
+operation that preserves Anthropic tokenization.
+
 ## Models
 
 `GET /v1/models` queries configured providers and prefixes each returned ID
@@ -278,6 +286,12 @@ Non-successful upstream responses are discarded before provider-specific model
 conversion. Failures are logged and omitted, so a successful response may be
 partial.
 
+`?provider=openai,anthropic` restricts aggregation to the named registered
+providers. The normalized provider set is part of the cache key. Unknown,
+empty, repeated, or excessive filters return HTTP 400. `GET
+/v1/models/<model>` selects an exact provider-qualified or virtual model ID
+from the same aggregate and returns `model_not_found` when absent.
+
 Successful complete aggregates are cached for `MODELS_CACHE_TTL_SECONDS`
 (default 300, `0` disables) per gateway and key selection, and served with
 `X-Proxy-Models-Cache: HIT` or `MISS`. Partial or truncated aggregates are
@@ -290,6 +304,8 @@ TTL. Cache API `open`, `match`, and `put` are optional optimizations: if an
 operation is unavailable or fails, the request continues with an uncached
 provider fan-out. The cache is ineffective on a `*.workers.dev` deployment;
 use a custom domain to enable it.
+Client-facing model responses always carry `Cache-Control: private, no-store`;
+the public max-age used by the internal Cache API is never exposed.
 
 ## Virtual models
 
@@ -404,6 +420,29 @@ Bedrock paths beginning with `/v1` are automatically prefixed with
 `<resource>/<deployment>/...` form. Vertex pass-through is available only with
 AI Gateway, and its provider-native path already matches the Gateway suffix.
 
+## AI Gateway request metadata
+
+Resolved Chat Completions, Responses, Messages, provider pass-through, and
+Universal Endpoint requests routed through AI Gateway add proxy-owned fields to
+`cf-aig-metadata` when space remains, in the following priority order:
+
+- `llm_proxy_virtual_model`: outer client-requested virtual model, when used;
+- `llm_proxy_endpoint`: public proxy operation, such as `chat_completions`,
+  `responses`, `messages`, `provider_proxy`, or `universal_endpoint`;
+- `llm_proxy_provider`: resolved provider;
+- `llm_proxy_model`: resolved concrete model;
+- `llm_proxy_credentials`: selected credential as
+  `<credential-profile>:<provider-key-index>`, for example `default:0` or
+  `paid:1`. The index is `null` when Gateway BYOK supplies the key, such as
+  `default:null`.
+
+Universal Endpoint requests omit `llm_proxy_credentials` because separate
+steps can use different credentials. Client metadata wins on key collisions;
+the proxy preserves invalid client JSON unchanged and never adds credential
+values or proxy-authentication key slots. Cloudflare stores at most five
+metadata entries, so client entries can leave insufficient room for later
+proxy fields.
+
 ## AI Gateway REST API
 
 The proxy exposes Cloudflare's account-level AI Gateway REST API through exactly
@@ -474,6 +513,11 @@ response reveals configured providers, credential slot counts, default model
 configuration, and AI Gateway identifiers. Keep it authenticated and do not
 publish its output in support tickets without review. The response body uses
 compact JSON without indentation or line breaks.
+All proxy-generated health and diagnostic responses carry `Cache-Control:
+no-store`. When `STATUS_CACHE_TTL_SECONDS` is positive, `/status` reuses an
+internal per-datacenter result and reports `HIT` or `MISS` in
+`X-Proxy-Status-Cache`; request `no-cache` refreshes it and `no-store` bypasses
+it.
 
 Timeouts, unsupported model listing, and non-authentication HTTP failures are
 reported as `unknown`. Authentication failures and unexpected fetch errors are
@@ -486,8 +530,14 @@ described report `available: false` with no key slots.
 
 ## Errors
 
-Known routing and authentication errors use JSON with an HTTP status. Unexpected
-errors return a generic HTTP 500 response and details are written only to Worker
-logs. Provider error bodies and status codes are normally forwarded as received.
+| Route family                                                              | JSON contract                                          |
+| ------------------------------------------------------------------------- | ------------------------------------------------------ |
+| OpenAI-compatible routes, routing, authentication, and proxy-local errors | `{ "error": { "message", "type", "param", "code" } }`  |
+| Messages compatibility, including `count_tokens`                          | `{ "type": "error", "error": { "type", "message" } }`  |
+| Provider and AI Gateway pass-through                                      | Upstream body/status unless rejected before forwarding |
+| Streaming conversion failures                                             | Protocol-specific terminal SSE error event             |
+
+Unexpected errors use the applicable local envelope with a generic HTTP 500
+message; details are written only to Worker logs.
 Requests whose decoded body exceeds 10 MiB return HTTP 413 before JSON parsing,
 including Responses and Messages requests.

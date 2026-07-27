@@ -1,4 +1,8 @@
 import { Middleware } from "../middleware";
+import {
+  anthropicErrorResponse,
+  openAIErrorResponse,
+} from "../requests/error_response";
 import { addCorsHeaders } from "../requests/options";
 import { AppError } from "../utils/error";
 import { RequestLogger } from "../utils/logger";
@@ -25,22 +29,13 @@ export const errorMiddleware: Middleware = async (context, next) => {
     // This middleware wraps CORS handling, so the error response adds the CORS
     // headers itself instead of relying on an inner middleware that was
     // bypassed by the throw.
-    return addCorsHeaders(
-      context.request,
-      new Response(
-        JSON.stringify({
-          error: {
-            message,
-            status,
-          },
-        }),
-        {
-          status,
-          headers: {
-            "Content-Type": "application/json",
-          },
-        },
-      ),
-    );
+    const path = (
+      context.pathname || new URL(context.request.url).pathname
+    ).split("?")[0];
+    const response = /\/(?:v1\/)?messages(?:\/count_tokens)?$/.test(path)
+      ? anthropicErrorResponse(message, status)
+      : openAIErrorResponse(message, status);
+    response.headers.set("Cache-Control", "no-store");
+    return addCorsHeaders(context.request, response);
   }
 };

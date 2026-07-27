@@ -641,6 +641,16 @@ describe("handleMessagesRequest", () => {
     expect(body).not.toContain("event: content_block_stop");
   });
 
+  it("ignores non-data records, including a final unterminated record", async () => {
+    const terminated = await streamResponse("event: ping\n\ndata: [DONE]\n\n");
+    expect(terminated).toContain("event: message_stop");
+
+    const truncated = await streamResponse("event: ping");
+    expect(truncated).toContain(
+      "Upstream stream ended without a terminal event.",
+    );
+  });
+
   it("fails a stream that ends before its terminal event", async () => {
     const body = await streamResponse(
       `data: ${JSON.stringify({

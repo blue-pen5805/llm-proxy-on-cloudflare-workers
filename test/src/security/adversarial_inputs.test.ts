@@ -85,7 +85,7 @@ describe("adversarial provider selectors", () => {
 
       expect(response.status).toBe(400);
       await expect(response.json()).resolves.toEqual({
-        error: "Invalid provider.",
+        error: expect.objectContaining({ message: "Invalid provider." }),
       });
     },
   );
@@ -157,7 +157,7 @@ describe("adversarial virtual model keys", () => {
 
       expect(response.status).toBe(400);
       await expect(response.json()).resolves.toEqual({
-        error: "Invalid provider.",
+        error: expect.objectContaining({ message: "Invalid provider." }),
       });
     },
   );

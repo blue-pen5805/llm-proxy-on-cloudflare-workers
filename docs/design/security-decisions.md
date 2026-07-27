@@ -3,6 +3,21 @@
 This document defines intentional security behavior, accepted risks, rationale,
 and enforced boundaries.
 
+## CORS defaults to a wildcard unless the operator supplies an allowlist
+
+**Behavior.** `ALLOWED_ORIGINS` can contain up to 64 exact HTTP(S) origins.
+Configured matches are reflected in `Access-Control-Allow-Origin`; other
+origins receive no allow-origin header. When the setting is absent, the Worker
+retains the backward-compatible `*` response.
+
+**Rationale.** Proxy authentication remains the security boundary, while an
+origin allowlist reduces browser-based use of a disclosed credential without
+breaking deployments that intentionally serve several browser clients.
+
+**Boundary that _is_ enforced.** Origins are matched as complete URL origins,
+not suffixes or patterns. Preflight remains unauthenticated, responses vary on
+`Origin`, and a denied origin cannot cause requested headers to be reflected.
+
 ## Client-controlled `cf-aig-*` request headers are forwarded to AI Gateway
 
 **Behavior.** When a request is routed through Cloudflare AI Gateway, headers
@@ -13,6 +28,10 @@ client to Gateway.
 **Rationale.** Per-request Gateway tuning is a supported feature: callers
 legitimately tag requests (`cf-aig-metadata`), set cost/logging/caching
 behavior, and control retries.
+
+For valid object-valued `cf-aig-metadata`, the proxy fills unused keys with
+bounded routing metadata. Client values win on collisions; invalid client
+metadata is forwarded unchanged rather than reinterpreted or replaced.
 
 **Boundary that _is_ enforced.** Credential- and isolation-sensitive Gateway
 headers are never accepted from a client and are always removed:

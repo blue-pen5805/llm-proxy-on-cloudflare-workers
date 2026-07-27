@@ -6,6 +6,9 @@ import {
 import { GoogleVertexAi } from "~/src/providers/google-vertex-ai";
 import { ProviderBase } from "~/src/providers/provider";
 import { ProviderRegistry } from "~/src/providers/registry";
+import { enrichChatResponseWithMetadata } from "~/src/requests/chat_response_metadata";
+import { convertStreamingResponse as convertMessagesStream } from "~/src/requests/messages";
+import { convertStreamingResponse as convertResponsesStream } from "~/src/requests/responses";
 import { isRequestAuthorized } from "~/src/utils/authorization";
 import { Environments } from "~/src/utils/environments";
 import { getRequestPath, maskSensitiveUrl } from "~/src/utils/helpers";
@@ -105,5 +108,77 @@ const vertexProvider = new GoogleVertexAi();
 describe("provider credential paths", () => {
   bench("read Vertex AI service-account credentials", () => {
     Environments.run(vertexEnv, () => vertexProvider.getApiKeys());
+  });
+});
+
+const streamEncoder = new TextEncoder();
+const syntheticSseChunks = Array.from({ length: 2_000 }, (_value, index) =>
+  streamEncoder.encode(
+    `data: ${JSON.stringify({
+      id: "bench",
+      choices: [
+        {
+          index: 0,
+          delta: { content: `${index}:${"x".repeat(900)}` },
+          finish_reason: null,
+        },
+      ],
+    })}\n\n`,
+  ),
+);
+const terminalSseChunk = streamEncoder.encode("data: [DONE]\n\n");
+
+function syntheticSseResponse(): Response {
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of syntheticSseChunks) controller.enqueue(chunk);
+        controller.enqueue(terminalSseChunk);
+        controller.close();
+      },
+    }),
+    { headers: { "Content-Type": "text/event-stream" } },
+  );
+}
+
+describe("SSE transformation hot paths", () => {
+  bench("convert a Responses SSE stream", async () => {
+    await convertResponsesStream(
+      syntheticSseResponse(),
+      { model: "openai/bench", input: "benchmark" },
+      false,
+    ).arrayBuffer();
+  });
+
+  bench("convert a Messages SSE stream", async () => {
+    await convertMessagesStream(
+      syntheticSseResponse(),
+      {
+        model: "openai/bench",
+        max_tokens: 2_000,
+        messages: [{ role: "user", content: "benchmark" }],
+      },
+      false,
+    ).arrayBuffer();
+  });
+
+  bench("enrich a Chat Completions SSE stream", async () => {
+    await (
+      await enrichChatResponseWithMetadata({
+        response: syntheticSseResponse(),
+        route: {
+          provider: "openai",
+          model: "bench",
+          credentialProfile: "default",
+          credentialIndex: 0,
+          viaAiGateway: true,
+          gateway: "bench",
+        },
+        requestedModel: "openai/bench",
+        requestId: "benchmark",
+        startedAt: "2026-07-27T00:00:00.000Z",
+        startedAtPerformance: performance.now(),
+      })
+    ).arrayBuffer();
   });
 });

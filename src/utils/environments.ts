@@ -3,13 +3,14 @@ import * as process from "node:process";
 
 const requestEnvironment = new AsyncLocalStorage<Env | Partial<Env>>();
 
-// Parsing is a pure function of the raw value, and the JSON attempt throws for
-// every plain-string secret, so results are memoized by value. Values are
-// operator-controlled configuration, but the cache is still bounded.
-const MAX_PARSED_VALUE_CACHE_ENTRIES = 512;
-const parsedValueCache = new Map<
-  string,
-  string | Array<unknown> | object | number | undefined
+type ParsedEnvironmentValue =
+  string | Array<unknown> | object | number | undefined;
+
+// Bindings are immutable for one deployed Env object. Keying by that object
+// and setting name avoids retaining credential text as a Map key.
+const parsedValueCache = new WeakMap<
+  Env | Partial<Env>,
+  Map<keyof Env, ParsedEnvironmentValue>
 >();
 
 /**
@@ -132,8 +133,9 @@ export class Environments {
       return configuredValue;
     }
 
-    if (parsedValueCache.has(configuredValue)) {
-      return parsedValueCache.get(configuredValue);
+    let environmentCache = parsedValueCache.get(env);
+    if (environmentCache?.has(key)) {
+      return environmentCache.get(key);
     }
 
     // A value that is not valid JSON is a single opaque secret. It must not be
@@ -141,10 +143,11 @@ export class Environments {
     const jsonValue = this.parseJson(configuredValue);
     const parsedValue = jsonValue !== undefined ? jsonValue : configuredValue;
 
-    if (parsedValueCache.size >= MAX_PARSED_VALUE_CACHE_ENTRIES) {
-      parsedValueCache.clear();
+    if (!environmentCache) {
+      environmentCache = new Map();
+      parsedValueCache.set(env, environmentCache);
     }
-    parsedValueCache.set(configuredValue, parsedValue);
+    environmentCache.set(key, parsedValue);
     return parsedValue;
   }
 
