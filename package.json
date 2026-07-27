@@ -48,13 +48,16 @@
   "cloudflare": {
     "bindings": {
       "PROXY_API_KEY": {
-        "description": "API key to authenticate requests to the LLM Proxy server. (Any string can be used)"
+        "description": "Required. Generate a strong, unique value used to authenticate requests to the proxy."
       },
       "OPENAI_API_KEY": {
-        "description": "Your OpenAI API key."
+        "description": "Optional. Your [OpenAI API key](https://platform.openai.com/api-keys). Configure at least one provider key."
       },
       "GEMINI_API_KEY": {
-        "description": "Your Google AI Studio (Gemini) API key."
+        "description": "Optional. Your [Google AI Studio API key](https://aistudio.google.com/app/apikey). Configure at least one provider key."
+      },
+      "ANTHROPIC_API_KEY": {
+        "description": "Optional. Your [Anthropic API key](https://platform.claude.com/settings/keys). Configure at least one provider key."
       }
     }
   }
