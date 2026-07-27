@@ -12,6 +12,8 @@ update is explicitly approved.
 
 ### 2026-07-27
 
+- Added English and Japanese localization to the interactive `npm run secrets`
+  editor, with language selection as its first prompt.
 - Added exact-origin CORS allowlisting, authenticated proxy-key slot logging,
   and client-priority AI Gateway metadata tags for resolved routes, public
   proxy endpoints, selected provider credential slots, and client-requested

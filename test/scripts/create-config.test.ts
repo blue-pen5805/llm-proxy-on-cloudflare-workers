@@ -98,7 +98,9 @@ class PromptHarness implements ConfigTuiPrompts {
     validate?: (value: string | undefined) => string | undefined;
   }): Promise<string | symbol> => {
     this.textMessages.push(options.message);
-    expect(options.validate?.(undefined)).toBe("Enter a value.");
+    expect(options.validate?.(undefined)).toMatch(
+      /^(Enter a value\.|値を入力してください。)$/,
+    );
     const value = this.take(this.answers.texts, "text");
     if (typeof value === "string")
       expect(options.validate?.(value)).toBeUndefined();
@@ -110,7 +112,9 @@ class PromptHarness implements ConfigTuiPrompts {
     validate?: (value: string | undefined) => string | undefined;
   }): Promise<string | symbol> => {
     this.passwordMessages.push(options.message);
-    expect(options.validate?.(undefined)).toBe("Enter a value.");
+    expect(options.validate?.(undefined)).toMatch(
+      /^(Enter a value\.|値を入力してください。)$/,
+    );
     const value = this.take(this.answers.passwords, "password");
     if (typeof value === "string")
       expect(options.validate?.(value)).toBeUndefined();
@@ -122,7 +126,9 @@ class PromptHarness implements ConfigTuiPrompts {
     validate?: (value: string | undefined) => string | undefined;
   }): Promise<string | symbol> => {
     this.multilineMessages.push(options.message);
-    expect(options.validate?.(undefined)).toBe("Enter a value.");
+    expect(options.validate?.(undefined)).toMatch(
+      /^(Enter a value\.|値を入力してください。)$/,
+    );
     const value = this.take(this.answers.multilines, "multiline");
     if (typeof value === "string")
       expect(options.validate?.(value)).toBeUndefined();
@@ -181,6 +187,7 @@ function dependencies(
     fileSystem,
     repositoryRoot: REPOSITORY_ROOT,
     discoverAccounts: vi.fn().mockResolvedValue(accounts),
+    language: "en" as const,
   };
 }
 
@@ -189,6 +196,95 @@ afterEach(() => {
 });
 
 describe("configuration TUI", () => {
+  it("starts with language selection and presents the session in Japanese", async () => {
+    const existing = MINIMAL_TEMPLATE.replace(
+      "YOUR-PROXY-API-KEY",
+      "existing-proxy",
+    ).replace(
+      '"DEV": false',
+      '"CHAT_RESPONSE_METADATA_ENABLED": false,\n  "AZURE_OPENAI_RESOURCE_NAME": "resource",\n  "DEV": false',
+    );
+    const prompts = new PromptHarness({
+      selects: [
+        "ja",
+        "__providers",
+        "azure-openai",
+        "AZURE_OPENAI_RESOURCE_NAME",
+        "keep",
+        "__back",
+        "__back",
+        "behavior",
+        "CHAT_RESPONSE_METADATA_ENABLED",
+        "change",
+        "true",
+        "__back",
+        "__save",
+      ],
+      confirms: [true],
+    });
+    const fileSystem = createFileSystem({
+      [EXAMPLE_PATH]: MINIMAL_TEMPLATE,
+      [CONFIG_PATH]: existing,
+    });
+
+    await expect(
+      runConfigTui(
+        {},
+        {
+          prompts,
+          fileSystem,
+          repositoryRoot: REPOSITORY_ROOT,
+          discoverAccounts: vi.fn().mockResolvedValue([]),
+        },
+      ),
+    ).resolves.toBe("saved");
+
+    expect(prompts.selectMessages[0]).toBe("Language / 言語");
+    expect(prompts.selectOptionLabels[0]).toEqual(["English", "日本語"]);
+    expect(prompts.intros).toEqual(["config.jsonc を編集"]);
+    expect(prompts.selectOptionLabels.flat()).toEqual(
+      expect.arrayContaining([
+        "プロキシ認証",
+        "プロバイダー",
+        "動作設定",
+        "リソース名",
+        "有効",
+        "未設定（実効既定値を使用）",
+        "確認して保存",
+      ]),
+    );
+    expect(prompts.confirmMessages).toEqual([
+      "config.jsonc をモード 0600 で保存しますか？",
+    ]);
+    expect(prompts.notes).toContainEqual(
+      expect.objectContaining({ title: "保存する値" }),
+    );
+    expect(prompts.outros[0]).toContain("config.jsonc を更新しました");
+  });
+
+  it.each([CANCEL, CONFIG_TUI_BACK])(
+    "cancels safely from the initial language selection",
+    async (answer) => {
+      const prompts = new PromptHarness({ selects: [answer] });
+      const fileSystem = createFileSystem({});
+
+      await expect(
+        runConfigTui(
+          {},
+          {
+            prompts,
+            fileSystem,
+            repositoryRoot: REPOSITORY_ROOT,
+            discoverAccounts: vi.fn(),
+          },
+        ),
+      ).resolves.toBe("cancelled");
+      expect(prompts.cancellations).toEqual([
+        "Cancelled. / キャンセルしました。",
+      ]);
+    },
+  );
+
   it("creates a protected config and defaults the account from Wrangler", async () => {
     const prompts = new PromptHarness({
       passwords: ["client-secret"],
@@ -671,6 +767,7 @@ describe("configuration TUI", () => {
         fileSystem,
         repositoryRoot: REPOSITORY_ROOT,
         discoverAccounts: vi.fn().mockRejectedValue(new Error("logged out")),
+        language: "en",
       },
     );
 
@@ -887,6 +984,13 @@ describe("configuration parsing and validation", () => {
     expect(
       validateConfigFieldInput("CLOUDFLARE_ACCOUNT_ID", "invalid/account"),
     ).toContain("pattern");
+    expect(
+      validateConfigFieldInput(
+        "CLOUDFLARE_ACCOUNT_ID",
+        "invalid/account",
+        "ja",
+      ),
+    ).toContain("指定された形式に一致しません");
     expect(validateConfigFieldInput("ALLOWED_ORIGINS", "not-json")).toBe(
       "Enter valid JSON.",
     );
@@ -905,6 +1009,26 @@ describe("configuration parsing and validation", () => {
     expect(
       validateConfigFieldInput("OPENAI_API_KEY", "{opaque-provider-key"),
     ).toBeUndefined();
+
+    expect(validateConfig({ EXTRA: "value" }, "ja")).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("未対応の設定項目です"),
+        expect.stringContaining("必須項目です"),
+      ]),
+    );
+    expect(
+      validateConfig(
+        {
+          $schema: "schemas/config-schema.json",
+          PROXY_API_KEY: "",
+        },
+        "ja",
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("設定値が正しくありません"),
+      ]),
+    );
   });
 });
 

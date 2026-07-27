@@ -1,5 +1,8 @@
 #!/usr/bin/env tsx
 import configSchema from "../schemas/config-schema.json";
+import { ENGLISH_CREATE_CONFIG_MESSAGES } from "./locales/create-config/en.ts";
+import { JAPANESE_CREATE_CONFIG_MESSAGES } from "./locales/create-config/ja.ts";
+import type { CreateConfigMessages } from "./locales/create-config/types.ts";
 import {
   getErrorMessage,
   parseEnvironmentCliArguments,
@@ -30,16 +33,22 @@ const CONFIG_EXAMPLE_PATH = "config.example.jsonc";
 
 type Config = Record<string, unknown>;
 export type FieldKey = Exclude<keyof typeof configSchema.properties, "$schema">;
+export type ConfigTuiLanguage = "en" | "ja";
 
 interface FieldGroup {
   id: string;
-  label: string;
   fields: readonly FieldKey[];
 }
 
 interface ProviderField {
   key: FieldKey;
-  label: string;
+  label:
+    | "apiKey"
+    | "resourceName"
+    | "apiVersion"
+    | "serviceAccountJson"
+    | "bearerToken"
+    | "region";
 }
 
 interface ProviderGroup {
@@ -117,6 +126,7 @@ export interface ConfigTuiDependencies {
   fileSystem?: ConfigTuiFileSystem;
   discoverAccounts?: () => Promise<CloudflareAccount[]>;
   repositoryRoot?: string;
+  language?: ConfigTuiLanguage;
 }
 
 export const CONFIG_TUI_BACK = Symbol("config-tui:back");
@@ -207,22 +217,18 @@ const DEFAULT_PROMPTS: ConfigTuiPrompts = {
 export const FIELD_GROUPS: readonly FieldGroup[] = [
   {
     id: "authentication",
-    label: "Proxy authentication",
     fields: ["PROXY_API_KEY", "ALLOWED_ORIGINS"],
   },
   {
     id: "custom-endpoints",
-    label: "Custom endpoints",
     fields: ["CUSTOM_OPENAI_ENDPOINTS"],
   },
   {
     id: "virtual-models",
-    label: "Virtual models",
     fields: ["VIRTUAL_MODELS"],
   },
   {
     id: "gateway",
-    label: "Cloudflare AI Gateway",
     fields: [
       "CLOUDFLARE_ACCOUNT_ID",
       "AI_GATEWAY_NAME",
@@ -233,7 +239,6 @@ export const FIELD_GROUPS: readonly FieldGroup[] = [
   },
   {
     id: "behavior",
-    label: "Behavior",
     fields: [
       "DEFAULT_MODEL",
       "CHAT_RESPONSE_METADATA_ENABLED",
@@ -248,95 +253,95 @@ export const PROVIDER_GROUPS: readonly ProviderGroup[] = [
   {
     id: "openai",
     label: "OpenAI",
-    fields: [{ key: "OPENAI_API_KEY", label: "API_KEY" }],
+    fields: [{ key: "OPENAI_API_KEY", label: "apiKey" }],
   },
   {
     id: "google-ai-studio",
     label: "Google AI Studio",
-    fields: [{ key: "GEMINI_API_KEY", label: "API_KEY" }],
+    fields: [{ key: "GEMINI_API_KEY", label: "apiKey" }],
   },
   {
     id: "xai",
     label: "xAI",
-    fields: [{ key: "GROK_API_KEY", label: "API_KEY" }],
+    fields: [{ key: "GROK_API_KEY", label: "apiKey" }],
   },
   {
     id: "anthropic",
     label: "Anthropic",
-    fields: [{ key: "ANTHROPIC_API_KEY", label: "API_KEY" }],
+    fields: [{ key: "ANTHROPIC_API_KEY", label: "apiKey" }],
   },
   {
     id: "cerebras",
     label: "Cerebras",
-    fields: [{ key: "CEREBRAS_API_KEY", label: "API_KEY" }],
+    fields: [{ key: "CEREBRAS_API_KEY", label: "apiKey" }],
   },
   {
     id: "cohere",
     label: "Cohere",
-    fields: [{ key: "COHERE_API_KEY", label: "API_KEY" }],
+    fields: [{ key: "COHERE_API_KEY", label: "apiKey" }],
   },
   {
     id: "cline",
     label: "Cline",
-    fields: [{ key: "CLINE_API_KEY", label: "API_KEY" }],
+    fields: [{ key: "CLINE_API_KEY", label: "apiKey" }],
   },
   {
     id: "deepseek",
     label: "DeepSeek",
-    fields: [{ key: "DEEPSEEK_API_KEY", label: "API_KEY" }],
+    fields: [{ key: "DEEPSEEK_API_KEY", label: "apiKey" }],
   },
   {
     id: "groq",
     label: "Groq",
-    fields: [{ key: "GROQ_API_KEY", label: "API_KEY" }],
+    fields: [{ key: "GROQ_API_KEY", label: "apiKey" }],
   },
   {
     id: "mistral",
     label: "Mistral",
-    fields: [{ key: "MISTRAL_API_KEY", label: "API_KEY" }],
+    fields: [{ key: "MISTRAL_API_KEY", label: "apiKey" }],
   },
   {
     id: "nvidia-nim",
     label: "NVIDIA NIM",
-    fields: [{ key: "NVIDIA_NIM_API_KEY", label: "API_KEY" }],
+    fields: [{ key: "NVIDIA_NIM_API_KEY", label: "apiKey" }],
   },
   {
     id: "openrouter",
     label: "OpenRouter",
-    fields: [{ key: "OPENROUTER_API_KEY", label: "API_KEY" }],
+    fields: [{ key: "OPENROUTER_API_KEY", label: "apiKey" }],
   },
   {
     id: "hugging-face",
     label: "Hugging Face",
-    fields: [{ key: "HUGGINGFACE_API_KEY", label: "API_KEY" }],
+    fields: [{ key: "HUGGINGFACE_API_KEY", label: "apiKey" }],
   },
   {
     id: "perplexity-ai",
     label: "Perplexity AI",
-    fields: [{ key: "PERPLEXITYAI_API_KEY", label: "API_KEY" }],
+    fields: [{ key: "PERPLEXITYAI_API_KEY", label: "apiKey" }],
   },
   {
     id: "replicate",
     label: "Replicate",
-    fields: [{ key: "REPLICATE_API_KEY", label: "API_KEY" }],
+    fields: [{ key: "REPLICATE_API_KEY", label: "apiKey" }],
   },
   {
     id: "workers-ai",
     label: "Cloudflare Workers AI",
-    fields: [{ key: "CLOUDFLARE_API_KEY", label: "API_KEY" }],
+    fields: [{ key: "CLOUDFLARE_API_KEY", label: "apiKey" }],
   },
   {
     id: "ollama",
     label: "Ollama",
-    fields: [{ key: "OLLAMA_API_KEY", label: "API_KEY" }],
+    fields: [{ key: "OLLAMA_API_KEY", label: "apiKey" }],
   },
   {
     id: "azure-openai",
     label: "Azure OpenAI",
     fields: [
-      { key: "AZURE_OPENAI_API_KEY", label: "API_KEY" },
-      { key: "AZURE_OPENAI_RESOURCE_NAME", label: "Resource name" },
-      { key: "AZURE_OPENAI_API_VERSION", label: "API version" },
+      { key: "AZURE_OPENAI_API_KEY", label: "apiKey" },
+      { key: "AZURE_OPENAI_RESOURCE_NAME", label: "resourceName" },
+      { key: "AZURE_OPENAI_API_VERSION", label: "apiVersion" },
     ],
   },
   {
@@ -345,7 +350,7 @@ export const PROVIDER_GROUPS: readonly ProviderGroup[] = [
     fields: [
       {
         key: "GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON",
-        label: "Service account JSON",
+        label: "serviceAccountJson",
       },
     ],
   },
@@ -353,8 +358,8 @@ export const PROVIDER_GROUPS: readonly ProviderGroup[] = [
     id: "aws-bedrock",
     label: "AWS Bedrock",
     fields: [
-      { key: "AWS_BEARER_TOKEN_BEDROCK", label: "Bearer token" },
-      { key: "AWS_BEDROCK_REGION", label: "Region" },
+      { key: "AWS_BEARER_TOKEN_BEDROCK", label: "bearerToken" },
+      { key: "AWS_BEDROCK_REGION", label: "region" },
     ],
   },
 ] as const;
@@ -369,29 +374,6 @@ export const MAIN_MENU_ORDER = [
 ] as const;
 
 export const TUI_EXCLUDED_FIELDS = new Set<FieldKey>(["DEV"]);
-
-const FIELD_DESCRIPTIONS: Partial<Record<FieldKey, string>> = {
-  PROXY_API_KEY: "Credentials accepted from proxy clients",
-  ALLOWED_ORIGINS: "Exact browser origins allowed by CORS",
-  CLOUDFLARE_ACCOUNT_ID: "Cloudflare account used by AI Gateway",
-  AI_GATEWAY_NAME: "AI Gateway name (default when unset)",
-  ALWAYS_USE_AI_GATEWAY: "Route every provider request through AI Gateway",
-  CF_AIG_TOKEN: "AI Gateway authentication token",
-  CLOUDFLARE_API_TOKEN: "Cloudflare API token for Gateway APIs",
-  GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON:
-    "Vertex AI service-account JSON including region",
-  AZURE_OPENAI_RESOURCE_NAME: "Azure OpenAI resource name",
-  AZURE_OPENAI_API_VERSION: "Azure OpenAI API version",
-  AWS_BEDROCK_REGION: "Amazon Bedrock region",
-  DEFAULT_MODEL: "Default provider-qualified model",
-  CHAT_RESPONSE_METADATA_ENABLED:
-    "Add proxy routing metadata to chat responses",
-  API_KEY_COOLDOWN_SECONDS: "Credential cooldown in seconds",
-  MODELS_CACHE_TTL_SECONDS: "Aggregated model cache TTL in seconds",
-  STATUS_CACHE_TTL_SECONDS: "Status response cache TTL in seconds",
-  CUSTOM_OPENAI_ENDPOINTS: "Custom OpenAI-compatible provider definitions",
-  VIRTUAL_MODELS: "Virtual model routing definitions",
-};
 
 const FIELD_DEFAULT_LABELS: Partial<Record<FieldKey, string>> = {
   ALLOWED_ORIGINS: "*",
@@ -452,17 +434,45 @@ const NUMBER_FIELDS = new Set<FieldKey>([
 
 const REQUIRED_FIELDS = new Set<FieldKey>(["PROXY_API_KEY"]);
 
+const CREATE_CONFIG_MESSAGES: Record<ConfigTuiLanguage, CreateConfigMessages> =
+  {
+    en: ENGLISH_CREATE_CONFIG_MESSAGES,
+    ja: JAPANESE_CREATE_CONFIG_MESSAGES,
+  };
+
+function formatMessage(
+  template: string,
+  values: Record<string, string | number>,
+): string {
+  let result = template;
+  for (const [key, value] of Object.entries(values)) {
+    result = result.replaceAll(`{${key}}`, String(value));
+  }
+  return result;
+}
+
 const ajv = new Ajv({ allErrors: true, strict: false });
 const validateCompleteConfig = ajv.compile(configSchema);
 const fieldValidators = new Map<FieldKey, ReturnType<typeof ajv.compile>>();
 
-function validationMessage(error: ErrorObject): string {
+function validationMessage(
+  error: ErrorObject,
+  language: ConfigTuiLanguage,
+): string {
   const location =
     error.instancePath || error.params.missingProperty || "value";
-  return `${location} ${String(error.message)}`.trim();
+  if (language === "en") {
+    return `${location} ${String(error.message)}`.trim();
+  }
+  const messages = CREATE_CONFIG_MESSAGES[language];
+  return `${location} ${messages.validationMessages[error.keyword] ?? messages.invalidConfigurationValue}`;
 }
 
-function validateField(field: FieldKey, value: unknown): string | undefined {
+function validateField(
+  field: FieldKey,
+  value: unknown,
+  language: ConfigTuiLanguage,
+): string | undefined {
   let validator = fieldValidators.get(field);
   if (!validator) {
     validator = ajv.compile({
@@ -473,13 +483,18 @@ function validateField(field: FieldKey, value: unknown): string | undefined {
   }
   return validator(value)
     ? undefined
-    : validationMessage(validator.errors?.[0] as ErrorObject);
+    : validationMessage(validator.errors?.[0] as ErrorObject, language);
 }
 
-export function validateConfig(config: Config): string[] {
+export function validateConfig(
+  config: Config,
+  language: ConfigTuiLanguage = "en",
+): string[] {
   return validateCompleteConfig(config)
     ? []
-    : validateCompleteConfig.errors!.map(validationMessage);
+    : validateCompleteConfig.errors!.map((error) =>
+        validationMessage(error, language),
+      );
 }
 
 export function parseConfigTuiArguments(
@@ -590,8 +605,11 @@ function updateConfigSource(
   );
 }
 
-function fieldDescription(field: FieldKey): string {
-  return FIELD_DESCRIPTIONS[field] as string;
+function fieldDescription(
+  field: FieldKey,
+  language: ConfigTuiLanguage,
+): string {
+  return CREATE_CONFIG_MESSAGES[language].fieldDescriptions[field];
 }
 
 function hasValue(value: unknown): boolean {
@@ -601,21 +619,30 @@ function hasValue(value: unknown): boolean {
   return true;
 }
 
-function fieldStatus(field: FieldKey, value: unknown): string {
+function fieldStatus(
+  field: FieldKey,
+  value: unknown,
+  language: ConfigTuiLanguage,
+): string {
+  const messages = CREATE_CONFIG_MESSAGES[language];
   const defaultLabel = FIELD_DEFAULT_LABELS[field];
   if (!hasValue(value)) {
     return defaultLabel
-      ? `not set (effective default: ${defaultLabel})`
-      : "not set";
+      ? formatMessage(messages.effectiveDefaultStatus, {
+          default: defaultLabel,
+        })
+      : messages.notSet;
   }
   const status = SENSITIVE_FIELDS.has(field)
-    ? "configured (hidden)"
+    ? messages.configuredHidden
     : Array.isArray(value)
-      ? `${value.length} item(s)`
+      ? formatMessage(messages.itemCount, { count: value.length })
       : typeof value === "object"
-        ? "configured object"
+        ? messages.configuredObject
         : String(value);
-  return defaultLabel === status ? `${status} (default)` : status;
+  return defaultLabel === status
+    ? formatMessage(messages.defaultStatus, { status })
+    : status;
 }
 
 function parseEnteredValue(field: FieldKey, enteredValue: string): unknown {
@@ -640,12 +667,18 @@ function parseEnteredValue(field: FieldKey, enteredValue: string): unknown {
 export function validateConfigFieldInput(
   field: FieldKey,
   enteredValue: string,
+  language: ConfigTuiLanguage = "en",
 ): string | undefined {
-  if (enteredValue.trim() === "") return "Enter a value.";
+  const messages = CREATE_CONFIG_MESSAGES[language];
+  if (enteredValue.trim() === "") return messages.enterValue;
   try {
-    return validateField(field, parseEnteredValue(field, enteredValue));
+    return validateField(
+      field,
+      parseEnteredValue(field, enteredValue),
+      language,
+    );
   } catch {
-    return "Enter valid JSON.";
+    return messages.enterValidJson;
   }
 }
 
@@ -653,23 +686,29 @@ async function promptForNewValue(
   prompts: ConfigTuiPrompts,
   field: FieldKey,
   currentValue: unknown,
+  language: ConfigTuiLanguage,
   displayName?: string,
 ): Promise<unknown | symbol> {
-  const message = displayName ?? `${field} — ${fieldDescription(field)}`;
+  const messages = CREATE_CONFIG_MESSAGES[language];
+  const message =
+    displayName ?? `${field} — ${fieldDescription(field, language)}`;
   if (BOOLEAN_FIELDS.has(field)) {
     const selectedValue = await prompts.select({
       message,
       initialValue:
         typeof currentValue === "boolean" ? String(currentValue) : "null",
       options: [
-        { value: "true", label: "Enabled" },
+        {
+          value: "true",
+          label: messages.enabled,
+        },
         {
           value: "false",
-          label: "Disabled (default)",
+          label: messages.disabledDefault,
         },
         {
           value: "null",
-          label: "Not set (use effective default)",
+          label: messages.notSetEffectiveDefault,
         },
       ],
     });
@@ -680,12 +719,12 @@ async function promptForNewValue(
   }
 
   const validate = (value: string | undefined): string | undefined =>
-    validateConfigFieldInput(field, value ?? "");
+    validateConfigFieldInput(field, value ?? "", language);
 
   let enteredValue: string | symbol;
   if (SENSITIVE_FIELDS.has(field)) {
     enteredValue = await prompts.password({
-      message: `${message} (input is hidden)`,
+      message: formatMessage(messages.inputHidden, { message }),
       mask: "•",
       validate,
     });
@@ -695,14 +734,14 @@ async function promptForNewValue(
       initialValue: hasValue(currentValue)
         ? JSON.stringify(currentValue, null, 2)
         : undefined,
-      placeholder: "Enter JSON",
+      placeholder: messages.enterJson,
       validate,
     });
   } else {
     enteredValue = await prompts.text({
       message,
       initialValue: hasValue(currentValue) ? String(currentValue) : undefined,
-      placeholder: NUMBER_FIELDS.has(field) ? "Enter a number" : undefined,
+      placeholder: NUMBER_FIELDS.has(field) ? messages.enterNumber : undefined,
       validate,
     });
   }
@@ -715,12 +754,14 @@ async function promptForNewValue(
 async function chooseInitialAccount(
   prompts: ConfigTuiPrompts,
   accounts: CloudflareAccount[],
+  language: ConfigTuiLanguage,
 ): Promise<string | null | symbol> {
   if (accounts.length === 0) return null;
   if (accounts.length === 1) return accounts[0].id;
+  const messages = CREATE_CONFIG_MESSAGES[language];
 
   return prompts.select({
-    message: "Choose the Cloudflare account to use as the default",
+    message: messages.chooseAccount,
     options: [
       ...accounts.map((account) => ({
         value: account.id,
@@ -729,8 +770,8 @@ async function chooseInitialAccount(
       })),
       {
         value: "",
-        label: "Do not set an account yet",
-        hint: "You can enter one manually in the AI Gateway section",
+        label: messages.doNotSetAccount,
+        hint: messages.manualAccountHint,
       },
     ],
   });
@@ -740,6 +781,7 @@ async function editField(
   prompts: ConfigTuiPrompts,
   field: FieldKey,
   currentValue: unknown,
+  language: ConfigTuiLanguage,
   requireValue = false,
   displayName?: string,
 ): Promise<{
@@ -748,11 +790,13 @@ async function editField(
   cancelled?: boolean;
   back?: boolean;
 }> {
+  const messages = CREATE_CONFIG_MESSAGES[language];
   if (requireValue && !hasValue(currentValue)) {
     const value = await promptForNewValue(
       prompts,
       field,
       currentValue,
+      language,
       displayName,
     );
     if (prompts.isBack(value)) return { changed: false, back: true };
@@ -763,18 +807,24 @@ async function editField(
 
   while (true) {
     const action = await prompts.select({
-      message: `${displayName ?? field} is ${fieldStatus(field, currentValue)}`,
+      message: formatMessage(messages.fieldStatus, {
+        field: displayName ?? field,
+        status: fieldStatus(field, currentValue, language),
+      }),
       options: [
-        { value: "change", label: "Change value" },
+        {
+          value: "change",
+          label: messages.changeValue,
+        },
         {
           value: "clear",
-          label: "Set to null",
-          hint: "The next secrets deployment deletes this Worker secret",
+          label: messages.setToNull,
+          hint: messages.deleteOnNextDeployment,
           disabled: REQUIRED_FIELDS.has(field),
         },
         {
           value: "keep",
-          label: "Keep current value (no change)",
+          label: messages.keepCurrentValue,
         },
       ],
     });
@@ -787,6 +837,7 @@ async function editField(
       prompts,
       field,
       currentValue,
+      language,
       displayName,
     );
     if (prompts.isBack(value)) continue;
@@ -801,17 +852,22 @@ async function runProviderFields(
   provider: ProviderGroup,
   config: Config,
   update: (field: FieldKey, value: unknown) => void,
+  language: ConfigTuiLanguage,
 ): Promise<boolean> {
+  const messages = CREATE_CONFIG_MESSAGES[language];
   while (true) {
     const selectedField = await prompts.select({
       message: provider.label,
       options: [
         ...provider.fields.map((field) => ({
           value: field.key,
-          label: field.label,
-          hint: fieldStatus(field.key, config[field.key]),
+          label: messages.providerFieldLabels[field.label],
+          hint: fieldStatus(field.key, config[field.key], language),
         })),
-        { value: "__back", label: "Back to providers" },
+        {
+          value: "__back",
+          label: messages.backToProviders,
+        },
       ],
     });
     if (prompts.isBack(selectedField) || selectedField === "__back")
@@ -827,8 +883,9 @@ async function runProviderFields(
       prompts,
       providerField.key,
       config[providerField.key],
+      language,
       false,
-      `${provider.label} — ${providerField.label}`,
+      `${provider.label} — ${messages.providerFieldLabels[providerField.label]}`,
     );
     if (result.back) continue;
     if (result.cancelled) return false;
@@ -840,18 +897,28 @@ async function runProviderMenu(
   prompts: ConfigTuiPrompts,
   config: Config,
   update: (field: FieldKey, value: unknown) => void,
+  language: ConfigTuiLanguage,
 ): Promise<boolean> {
+  const messages = CREATE_CONFIG_MESSAGES[language];
   while (true) {
     const selectedProvider = await prompts.select({
-      message: "Providers",
+      message: messages.providers,
       maxItems: 12,
       options: [
         ...PROVIDER_GROUPS.map((provider) => ({
           value: provider.id,
           label: provider.label,
-          hint: `${provider.fields.filter((field) => hasValue(config[field.key])).length}/${provider.fields.length} configured`,
+          hint: formatMessage(messages.configuredCount, {
+            configured: provider.fields.filter((field) =>
+              hasValue(config[field.key]),
+            ).length,
+            total: provider.fields.length,
+          }),
         })),
-        { value: "__back", label: "Back to main menu" },
+        {
+          value: "__back",
+          label: messages.backToMainMenu,
+        },
       ],
     });
     if (prompts.isBack(selectedProvider) || selectedProvider === "__back") {
@@ -864,7 +931,9 @@ async function runProviderMenu(
     );
     /* istanbul ignore next -- every menu value is constructed from PROVIDER_GROUPS */
     if (!provider) throw new Error("Unknown provider.");
-    if (!(await runProviderFields(prompts, provider, config, update))) {
+    if (
+      !(await runProviderFields(prompts, provider, config, update, language))
+    ) {
       return false;
     }
   }
@@ -875,18 +944,23 @@ async function runFieldGroup(
   group: FieldGroup,
   config: Config,
   update: (field: FieldKey, value: unknown) => void,
+  language: ConfigTuiLanguage,
 ): Promise<boolean> {
+  const messages = CREATE_CONFIG_MESSAGES[language];
   while (true) {
     const selectedField = await prompts.select({
-      message: group.label,
+      message: messages.groupLabels[group.id],
       maxItems: 12,
       options: [
         ...group.fields.map((field) => ({
           value: field,
           label: field,
-          hint: fieldStatus(field, config[field]),
+          hint: fieldStatus(field, config[field], language),
         })),
-        { value: "__back", label: "Back to main menu" },
+        {
+          value: "__back",
+          label: messages.backToMainMenu,
+        },
       ],
     });
     if (prompts.isBack(selectedField)) return true;
@@ -894,7 +968,7 @@ async function runFieldGroup(
     if (selectedField === "__back") return true;
 
     const field = selectedField as FieldKey;
-    const result = await editField(prompts, field, config[field]);
+    const result = await editField(prompts, field, config[field], language);
     if (result.back) continue;
     if (result.cancelled) return false;
     if (result.changed) update(field, result.value);
@@ -915,16 +989,50 @@ export async function runConfigTui(
   const examplePath = path.join(repositoryRoot, CONFIG_EXAMPLE_PATH);
   const isExistingConfig = fileSystem.existsSync(configPath);
 
+  let language = dependencies.language;
+  if (!language) {
+    const selectedLanguage = await prompts.select({
+      message: `${ENGLISH_CREATE_CONFIG_MESSAGES.languagePrompt} / ${JAPANESE_CREATE_CONFIG_MESSAGES.languagePrompt}`,
+      initialValue: "en",
+      options: [
+        {
+          value: "en",
+          label: ENGLISH_CREATE_CONFIG_MESSAGES.languageName,
+        },
+        {
+          value: "ja",
+          label: JAPANESE_CREATE_CONFIG_MESSAGES.languageName,
+        },
+      ],
+    });
+    if (
+      prompts.isCancel(selectedLanguage) ||
+      prompts.isBack(selectedLanguage)
+    ) {
+      prompts.cancel(
+        `${ENGLISH_CREATE_CONFIG_MESSAGES.cancelled} / ${JAPANESE_CREATE_CONFIG_MESSAGES.cancelled}`,
+      );
+      return "cancelled";
+    }
+    language = selectedLanguage as ConfigTuiLanguage;
+  }
+  const messages = CREATE_CONFIG_MESSAGES[language];
   prompts.intro(
-    `${isExistingConfig ? "Edit" : "Create"} ${path.basename(configPath)}`,
+    formatMessage(
+      isExistingConfig ? messages.introEdit : messages.introCreate,
+      {
+        file: path.basename(configPath),
+      },
+    ),
   );
-  prompts.note(
-    "Esc: go back one level\nCtrl+C: exit without saving",
-    "Keyboard",
-  );
+  prompts.note(messages.keyboardMessage, messages.keyboardTitle);
 
   if (!isExistingConfig && !fileSystem.existsSync(examplePath)) {
-    throw new Error(`${CONFIG_EXAMPLE_PATH} was not found.`);
+    throw new Error(
+      formatMessage(messages.exampleNotFound, {
+        file: CONFIG_EXAMPLE_PATH,
+      }),
+    );
   }
 
   const sourcePath = isExistingConfig ? configPath : examplePath;
@@ -946,8 +1054,8 @@ export async function runConfigTui(
     accounts = await discoverAccounts();
   } catch {
     prompts.note(
-      "Wrangler account discovery was unavailable. You can enter CLOUDFLARE_ACCOUNT_ID manually.",
-      "Cloudflare account",
+      messages.accountDiscoveryUnavailable,
+      messages.cloudflareAccount,
     );
   }
 
@@ -959,27 +1067,28 @@ export async function runConfigTui(
         prompts,
         "PROXY_API_KEY",
         config.PROXY_API_KEY,
+        language,
         true,
       );
       if (proxyResult.back || proxyResult.cancelled) {
-        prompts.cancel("No configuration file was written.");
+        prompts.cancel(messages.noConfigurationWritten);
         return "cancelled";
       }
       if (proxyResult.changed) update("PROXY_API_KEY", proxyResult.value);
 
-      const accountId = await chooseInitialAccount(prompts, accounts);
+      const accountId = await chooseInitialAccount(prompts, accounts, language);
       if (prompts.isBack(accountId)) continue;
       if (prompts.isCancel(accountId)) {
-        prompts.cancel("No configuration file was written.");
+        prompts.cancel(messages.noConfigurationWritten);
         return "cancelled";
       }
       if (accountId) update("CLOUDFLARE_ACCOUNT_ID", accountId);
       break;
     }
   } else if (!hasValue(config.CLOUDFLARE_ACCOUNT_ID)) {
-    const accountId = await chooseInitialAccount(prompts, accounts);
+    const accountId = await chooseInitialAccount(prompts, accounts, language);
     if (prompts.isCancel(accountId)) {
-      prompts.cancel("No configuration file was written.");
+      prompts.cancel(messages.noConfigurationWritten);
       return "cancelled";
     }
     if (!prompts.isBack(accountId) && accountId) {
@@ -988,13 +1097,16 @@ export async function runConfigTui(
   } else if (accounts.length > 0) {
     prompts.note(
       accounts.map((account) => `${account.name}: ${account.id}`).join("\n"),
-      "Accounts reported by wrangler whoami --json",
+      messages.accountsReported,
     );
   }
 
   while (true) {
     const action = await prompts.select({
-      message: `${path.basename(configPath)}${changed ? " has unsaved changes" : ""}`,
+      message: formatMessage(
+        changed ? messages.configChanged : messages.configUnchanged,
+        { file: path.basename(configPath) },
+      ),
       options: [
         ...MAIN_MENU_ORDER.map((sectionId) => {
           if (sectionId === "__providers") {
@@ -1003,8 +1115,13 @@ export async function runConfigTui(
             );
             return {
               value: sectionId,
-              label: "Providers",
-              hint: `${providerFields.filter((field) => hasValue(config[field.key])).length}/${providerFields.length} configured`,
+              label: messages.providers,
+              hint: formatMessage(messages.configuredCount, {
+                configured: providerFields.filter((field) =>
+                  hasValue(config[field.key]),
+                ).length,
+                total: providerFields.length,
+              }),
             };
           }
           const group = FIELD_GROUPS.find(
@@ -1012,12 +1129,23 @@ export async function runConfigTui(
           ) as FieldGroup;
           return {
             value: group.id,
-            label: group.label,
-            hint: `${group.fields.filter((field) => hasValue(config[field])).length}/${group.fields.length} configured`,
+            label: messages.groupLabels[group.id],
+            hint: formatMessage(messages.configuredCount, {
+              configured: group.fields.filter((field) =>
+                hasValue(config[field]),
+              ).length,
+              total: group.fields.length,
+            }),
           };
         }),
-        { value: "__save", label: "Review and save" },
-        { value: "__cancel", label: "Exit without saving" },
+        {
+          value: "__save",
+          label: messages.reviewAndSave,
+        },
+        {
+          value: "__cancel",
+          label: messages.exitWithoutSaving,
+        },
       ],
     });
 
@@ -1026,14 +1154,14 @@ export async function runConfigTui(
       prompts.isCancel(action) ||
       action === "__cancel"
     ) {
-      prompts.cancel("No changes were written.");
+      prompts.cancel(messages.noChangesWritten);
       return "cancelled";
     }
 
     if (action !== "__save") {
       if (action === "__providers") {
-        if (!(await runProviderMenu(prompts, config, update))) {
-          prompts.cancel("No changes were written.");
+        if (!(await runProviderMenu(prompts, config, update, language))) {
+          prompts.cancel(messages.noChangesWritten);
           return "cancelled";
         }
         continue;
@@ -1041,18 +1169,18 @@ export async function runConfigTui(
       const group = FIELD_GROUPS.find((candidate) => candidate.id === action);
       /* istanbul ignore next -- every menu value is constructed from FIELD_GROUPS */
       if (!group) throw new Error("Unknown configuration section.");
-      if (!(await runFieldGroup(prompts, group, config, update))) {
-        prompts.cancel("No changes were written.");
+      if (!(await runFieldGroup(prompts, group, config, update, language))) {
+        prompts.cancel(messages.noChangesWritten);
         return "cancelled";
       }
       continue;
     }
 
-    const validationErrors = validateConfig(config);
+    const validationErrors = validateConfig(config, language);
     if (validationErrors.length > 0) {
       prompts.note(
         validationErrors.join("\n"),
-        "Configuration needs attention",
+        messages.configurationNeedsAttention,
       );
       continue;
     }
@@ -1062,26 +1190,31 @@ export async function runConfigTui(
         ...FIELD_GROUPS.flatMap((group) =>
           group.fields
             .filter((field) => hasValue(config[field]))
-            .map((field) => `${field}: ${fieldStatus(field, config[field])}`),
+            .map(
+              (field) =>
+                `${field}: ${fieldStatus(field, config[field], language)}`,
+            ),
         ),
         ...PROVIDER_GROUPS.flatMap((provider) =>
           provider.fields
             .filter((field) => hasValue(config[field.key]))
             .map(
               (field) =>
-                `${provider.label} — ${field.label}: ${fieldStatus(field.key, config[field.key])}`,
+                `${provider.label} — ${messages.providerFieldLabels[field.label]}: ${fieldStatus(field.key, config[field.key], language)}`,
             ),
         ),
       ].join("\n"),
-      "Values to save",
+      messages.valuesToSave,
     );
     const shouldSave = await prompts.confirm({
-      message: `Save ${path.basename(configPath)} with mode 0600?`,
+      message: formatMessage(messages.saveConfirmation, {
+        file: path.basename(configPath),
+      }),
       initialValue: true,
     });
     if (prompts.isBack(shouldSave)) continue;
     if (prompts.isCancel(shouldSave)) {
-      prompts.cancel("No changes were written.");
+      prompts.cancel(messages.noChangesWritten);
       return "cancelled";
     }
     if (!shouldSave) continue;
@@ -1089,7 +1222,10 @@ export async function runConfigTui(
     fileSystem.writeFileSync(configPath, configSource, { mode: 0o600 });
     fileSystem.chmodSync(configPath, 0o600);
     prompts.outro(
-      `${path.basename(configPath)} ${isExistingConfig ? "updated" : "created"}. Run npm run secrets:deploy when ready.`,
+      formatMessage(messages.completion, {
+        file: path.basename(configPath),
+        action: isExistingConfig ? messages.updated : messages.created,
+      }),
     );
     return "saved";
   }

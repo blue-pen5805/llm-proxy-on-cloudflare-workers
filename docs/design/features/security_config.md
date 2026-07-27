@@ -79,19 +79,22 @@ operator-owned files. It applies field changes to JSONC without reconstructing
 the whole document, preserving existing comments and unrelated values. Secret
 inputs are masked, existing secret values are represented only as configured or
 unset, and every field action can explicitly retain the current value without
-changing the document. Field hints identify effective runtime defaults. Esc
-returns one interface level while Ctrl+C cancels the session. `DEV` is excluded
-from the interface because the TUI configures deployment inputs, while `DEV` is
-a local-only authentication bypass. Its template or existing operator-owned
-value is preserved without exposing it for editing. Provider configuration is
-organized by provider display name. Each provider submenu maps its credential
-and provider-specific settings to their schema properties, keeping the storage
-binding names out of the operator-facing selection and review interface.
-API-key fields use the `API_KEY` label, while other credential types use their
-specific form, such as a bearer token or service-account JSON. Custom endpoints
-and virtual models are separate top-level sections. The complete result must
-satisfy the tracked JSON Schema before it can be saved. Files are written with
-owner-only permissions.
+changing the document. The first prompt selects English or Japanese for the
+current session; the selection is not stored in configuration. English and
+Japanese message catalogs are maintained as separate files under
+`scripts/locales/create-config/`, independently of the interface control flow.
+Field hints identify effective runtime defaults. Esc returns one interface level
+while Ctrl+C cancels the session. `DEV` is excluded from the interface because
+the TUI configures deployment inputs, while `DEV` is a local-only authentication
+bypass. Its template or existing operator-owned value is preserved without
+exposing it for editing. Provider configuration is organized by provider display
+name. Each provider submenu maps its credential and provider-specific settings
+to their schema properties, keeping the storage binding names out of the
+operator-facing selection and review interface. API-key fields use the `API_KEY`
+label, while other credential types use their specific form, such as a bearer
+token or service-account JSON. Custom endpoints and virtual models are separate
+top-level sections. The complete result must satisfy the tracked JSON Schema
+before it can be saved. Files are written with owner-only permissions.
 
 When the account ID is unset, the interface obtains available accounts from
 `wrangler whoami --json`. A single account supplies the default directly;

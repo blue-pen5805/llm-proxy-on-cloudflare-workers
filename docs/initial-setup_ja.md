@@ -34,9 +34,11 @@ npm run secrets
 ```
 
 ターミナル UI は `config.jsonc` がなければ作成し、すでにあれば既存値を保ったまま
-編集します。`CLOUDFLARE_ACCOUNT_ID` の初期値は `wrangler whoami --json` から取得されます。
-複数のアカウントがある場合は使用するものを選択でき、AI Gateway セクションで取得値を
-手動上書きすることもできます。認証情報の入力と保存済み Secret の値は UI 上で伏せられます。
+編集します。最初に English または日本語を選択します。この選択は実行中のセッションに
+のみ適用されます。`CLOUDFLARE_ACCOUNT_ID` の初期値は `wrangler whoami --json` から
+取得されます。複数のアカウントがある場合は使用するものを選択でき、AI Gateway
+セクションで取得値を手動上書きすることもできます。認証情報の入力と保存済み Secret の
+値は UI 上で伏せられます。
 
 名前付き環境は `npm run secrets -- --env <環境名>` で編集できます。または
 `config.example.jsonc` を `config.jsonc` にコピーして編集します。十分に長く一意な
