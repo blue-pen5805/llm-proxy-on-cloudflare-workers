@@ -112,7 +112,12 @@ describe("handleResponsesRequest", () => {
           strict: true,
         },
       },
-      reasoning: { effort: "medium" },
+      reasoning: {
+        effort: "medium",
+        summary: "auto",
+        context: "all_turns",
+        future_option: { enabled: true },
+      },
       max_output_tokens: 200,
       frequency_penalty: 0.1,
       logprobs: true,
@@ -351,6 +356,236 @@ describe("handleResponsesRequest", () => {
       expect.objectContaining({ type: "message", content: [] }),
     ]);
     expect(converted.usage).toBeNull();
+  });
+
+  it("converts nested file, custom-tool, allowed-tool, and verbosity fields", async () => {
+    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+      Response.json({
+        choices: [
+          {
+            message: {
+              tool_calls: [
+                {
+                  id: "call_custom",
+                  type: "custom",
+                  custom: { name: "shell", input: "echo ok" },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    );
+
+    const response = await handleResponsesRequest({
+      request: request({
+        model: "openai/model",
+        input: [
+          {
+            role: "user",
+            content: [
+              { type: "input_file", file_id: "file_1" },
+              {
+                type: "input_file",
+                file_data: "ZmlsZQ==",
+                filename: "input.txt",
+              },
+              {
+                type: "input_image",
+                image_url: "https://images.example/original.png",
+                detail: "auto",
+              },
+            ],
+          },
+          {
+            type: "custom_tool_call",
+            call_id: "call_custom",
+            name: "shell",
+            input: "echo prior",
+          },
+          {
+            type: "custom_tool_call_output",
+            call_id: "call_custom",
+            output: "prior output",
+          },
+          {
+            type: "function_call_output",
+            call_id: "call_function",
+            output: [{ type: "input_text", text: "function output" }],
+          },
+        ],
+        tools: [
+          { type: "function", name: "lookup", strict: null },
+          {
+            type: "custom",
+            name: "shell",
+            description: "Run a command",
+            format: { type: "text" },
+          },
+        ],
+        tool_choice: {
+          type: "allowed_tools",
+          mode: "required",
+          tools: [
+            { type: "function", name: "lookup" },
+            { type: "custom", name: "shell" },
+          ],
+        },
+        text: { verbosity: "high" },
+      }),
+    } as never);
+
+    const preparedRequest = vi.mocked(handleChatCompletionsRequest).mock
+      .calls[0][2]!;
+    expect(preparedRequest.body).toEqual({
+      model: "openai/model",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "file", file: { file_id: "file_1" } },
+            {
+              type: "file",
+              file: { file_data: "ZmlsZQ==", filename: "input.txt" },
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: "https://images.example/original.png",
+                detail: "auto",
+              },
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "call_custom",
+              type: "custom",
+              custom: { name: "shell", input: "echo prior" },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_custom",
+          content: "prior output",
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_function",
+          content: [{ type: "text", text: "function output" }],
+        },
+      ],
+      tools: [
+        {
+          type: "function",
+          function: { name: "lookup", strict: null },
+        },
+        {
+          type: "custom",
+          custom: {
+            name: "shell",
+            description: "Run a command",
+            format: { type: "text" },
+          },
+        },
+      ],
+      tool_choice: {
+        type: "allowed_tools",
+        allowed_tools: {
+          mode: "required",
+          tools: [
+            { type: "function", function: { name: "lookup" } },
+            { type: "custom", custom: { name: "shell" } },
+          ],
+        },
+      },
+      verbosity: "high",
+    });
+    await expect(response.json()).resolves.toMatchObject({
+      output: [
+        {
+          type: "custom_tool_call",
+          call_id: "call_custom",
+          name: "shell",
+          input: "echo ok",
+        },
+      ],
+    });
+  });
+
+  it("converts streamed custom-tool input to Responses events", async () => {
+    const sse = [
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_custom","type":"custom","custom":{"name":"shell","input":"echo "}}]},"finish_reason":null}]}',
+      "",
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"custom":{"input":"ok"}}]},"finish_reason":"tool_calls"}]}',
+      "",
+      "data: [DONE]",
+      "",
+    ].join("\n");
+    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+      new Response(sse, {
+        headers: { "content-type": "text/event-stream" },
+      }),
+    );
+
+    const response = await handleResponsesRequest({
+      request: request({ model: "openai/model", input: "Hello", stream: true }),
+    } as never);
+    const body = await response.text();
+
+    expect(body).toContain("event: response.custom_tool_call_input.delta");
+    expect(body).toContain("event: response.custom_tool_call_input.done");
+    expect(body).toContain('"type":"custom_tool_call"');
+    expect(body).toContain('"input":"echo ok"');
+  });
+
+  it("ignores Responses fields without a supported Chat Completions conversion", async () => {
+    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+      Response.json({ choices: [{ message: { content: "ok" } }] }),
+    );
+
+    const response = await handleResponsesRequest({
+      request: request({
+        model: "openai/model",
+        input: "Hello",
+        background: true,
+        context_management: [{ type: "compaction", compact_threshold: 1000 }],
+        conversation: "conv_1",
+        include: ["reasoning.encrypted_content"],
+        max_tool_calls: 2,
+        moderation: { type: "omni-moderation-latest" },
+        previous_response_id: "resp_1",
+        prompt: { id: "pmpt_1", variables: { topic: "weather" } },
+        prompt_cache_key: "tenant-1",
+        prompt_cache_options: { mode: "explicit", ttl: "30m" },
+        prompt_cache_retention: "24h",
+        safety_identifier: "hashed-user-1",
+        stream_options: { include_obfuscation: false },
+        truncation: "auto",
+        reasoning: {
+          summary: "auto",
+          context: "all_turns",
+          future_option: { enabled: true },
+        },
+      }),
+    } as never);
+
+    const preparedRequest = vi.mocked(handleChatCompletionsRequest).mock
+      .calls[0][2]!;
+    expect(preparedRequest.body).toEqual({
+      model: "openai/model",
+      messages: [{ role: "user", content: "Hello" }],
+    });
+    await expect(response.json()).resolves.toMatchObject({
+      background: false,
+      max_tool_calls: null,
+      previous_response_id: null,
+      truncation: "disabled",
+    });
   });
 
   it("converts Chat Completions text and function streaming chunks to Responses events", async () => {
@@ -782,7 +1017,19 @@ describe("handleResponsesRequest", () => {
   it("uses safe defaults for partial Chat Completions output", async () => {
     const upstream = new Response(
       JSON.stringify({
-        choices: [null, { message: { tool_calls: [null, { function: {} }] } }],
+        choices: [
+          null,
+          {
+            message: {
+              tool_calls: [
+                null,
+                {},
+                { function: {} },
+                { type: "custom", custom: {} },
+              ],
+            },
+          },
+        ],
         usage: {},
       }),
     );
@@ -825,6 +1072,12 @@ describe("handleResponsesRequest", () => {
         name: "",
         arguments: "",
       }),
+      expect.objectContaining({
+        type: "custom_tool_call",
+        call_id: expect.stringMatching(/^ctc_/),
+        name: "",
+        input: "",
+      }),
     ]);
   });
 
@@ -840,6 +1093,28 @@ describe("handleResponsesRequest", () => {
       {
         tools: [{ type: "function", function: { name: "lookup" } }],
       },
+    ],
+    [
+      "minimal custom tool",
+      { input: "Hello", tools: [{ type: "custom", name: "shell" }] },
+      {
+        tools: [{ type: "custom", custom: { name: "shell" } }],
+      },
+    ],
+    [
+      "named custom tool choice",
+      {
+        input: "Hello",
+        tool_choice: { type: "custom", name: "shell" },
+      },
+      {
+        tool_choice: { type: "custom", custom: { name: "shell" } },
+      },
+    ],
+    [
+      "null verbosity",
+      { input: "Hello", text: { verbosity: null } },
+      { verbosity: null },
     ],
     [
       "image without detail",
@@ -864,6 +1139,38 @@ describe("handleResponsesRequest", () => {
               {
                 type: "image_url",
                 image_url: { url: "https://images.example/a.png" },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    [
+      "image with null detail",
+      {
+        input: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_image",
+                image_url: "https://images.example/null-detail.png",
+                detail: null,
+              },
+            ],
+          },
+        ],
+      },
+      {
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image_url",
+                image_url: {
+                  url: "https://images.example/null-detail.png",
+                },
               },
             ],
           },
@@ -1014,6 +1321,13 @@ describe("handleResponsesRequest", () => {
       { model: "openai/model", input: [{ role: "user", content: [null] }] },
     ],
     [
+      "unknown content item",
+      {
+        model: "openai/model",
+        input: [{ role: "user", content: [{ type: "unknown" }] }],
+      },
+    ],
+    [
       "missing content text",
       {
         model: "openai/model",
@@ -1028,6 +1342,38 @@ describe("handleResponsesRequest", () => {
           {
             role: "user",
             content: [{ type: "input_image", file_id: "file_1" }],
+          },
+        ],
+      },
+    ],
+    [
+      "unsupported image detail",
+      {
+        model: "openai/model",
+        input: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_image",
+                image_url: "https://images.example/image.png",
+                detail: "original",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    [
+      "file URL without a Chat representation",
+      {
+        model: "openai/model",
+        input: [
+          {
+            role: "user",
+            content: [
+              { type: "input_file", file_url: "https://files.example" },
+            ],
           },
         ],
       },
@@ -1061,6 +1407,41 @@ describe("handleResponsesRequest", () => {
       },
     ],
     [
+      "invalid custom tool call",
+      {
+        model: "openai/model",
+        input: [{ type: "custom_tool_call", call_id: "c", name: "shell" }],
+      },
+    ],
+    [
+      "invalid custom tool output item",
+      {
+        model: "openai/model",
+        input: [
+          {
+            type: "custom_tool_call_output",
+            call_id: "c",
+            output: [
+              { type: "input_image", image_url: "https://image.example" },
+            ],
+          },
+        ],
+      },
+    ],
+    [
+      "invalid custom tool output text",
+      {
+        model: "openai/model",
+        input: [
+          {
+            type: "custom_tool_call_output",
+            call_id: "c",
+            output: [{ type: "input_text" }],
+          },
+        ],
+      },
+    ],
+    [
       "unknown input item",
       { model: "openai/model", input: [{ type: "unknown" }] },
     ],
@@ -1075,8 +1456,40 @@ describe("handleResponsesRequest", () => {
       { model: "openai/model", input: "Hello", tools: [{ type: "function" }] },
     ],
     [
+      "unnamed custom tool",
+      { model: "openai/model", input: "Hello", tools: [{ type: "custom" }] },
+    ],
+    [
+      "invalid custom tool format",
+      {
+        model: "openai/model",
+        input: "Hello",
+        tools: [{ type: "custom", name: "shell", format: "text" }],
+      },
+    ],
+    [
       "invalid tool choice",
       { model: "openai/model", input: "Hello", tool_choice: {} },
+    ],
+    [
+      "invalid allowed tool choice mode",
+      {
+        model: "openai/model",
+        input: "Hello",
+        tool_choice: { type: "allowed_tools", mode: "sometimes", tools: [] },
+      },
+    ],
+    [
+      "invalid allowed tool choice item",
+      {
+        model: "openai/model",
+        input: "Hello",
+        tool_choice: {
+          type: "allowed_tools",
+          mode: "auto",
+          tools: [{ type: "web_search" }],
+        },
+      },
     ],
     ["invalid text", { model: "openai/model", input: "Hello", text: "text" }],
     [
@@ -1096,18 +1509,6 @@ describe("handleResponsesRequest", () => {
       { model: "openai/model", input: "Hello", reasoning: "high" },
     ],
     [
-      "unknown reasoning field",
-      {
-        model: "openai/model",
-        input: "Hello",
-        reasoning: { effort: "high", summary: "auto" },
-      },
-    ],
-    [
-      "state reference",
-      { model: "openai/model", input: "Hello", previous_response_id: "resp_1" },
-    ],
-    [
       "built-in tool",
       {
         model: "openai/model",
@@ -1116,28 +1517,12 @@ describe("handleResponsesRequest", () => {
       },
     ],
     [
-      "file input",
-      {
-        model: "openai/model",
-        input: [
-          {
-            role: "user",
-            content: [{ type: "input_file", file_id: "file_1" }],
-          },
-        ],
-      },
-    ],
-    [
-      "automatic truncation",
-      { model: "openai/model", input: "Hello", truncation: "auto" },
-    ],
-    [
       "stateful storage",
       { model: "openai/model", input: "Hello", store: true },
     ],
     [
       "verbosity",
-      { model: "openai/model", input: "Hello", text: { verbosity: "high" } },
+      { model: "openai/model", input: "Hello", text: { verbosity: "extreme" } },
     ],
   ])("rejects unsupported or invalid %s", async (_name, body) => {
     const response = await handleResponsesRequest({

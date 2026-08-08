@@ -15,6 +15,22 @@ import {
 import { StreamingResponseBudget } from "./stream_limits";
 
 const MAX_CONVERTED_RESPONSE_BYTES = 5 * 1024 * 1024;
+const IGNORED_REQUEST_FIELDS = new Set([
+  "background",
+  "context_management",
+  "conversation",
+  "include",
+  "max_tool_calls",
+  "moderation",
+  "previous_response_id",
+  "prompt",
+  "prompt_cache_key",
+  "prompt_cache_options",
+  "prompt_cache_retention",
+  "safety_identifier",
+  "stream_options",
+  "truncation",
+]);
 const SUPPORTED_REQUEST_FIELDS = new Set([
   "frequency_penalty",
   "input",
@@ -36,7 +52,6 @@ const SUPPORTED_REQUEST_FIELDS = new Set([
   "tools",
   "top_logprobs",
   "top_p",
-  "truncation",
   "user",
 ]);
 
@@ -101,11 +116,40 @@ function convertContentPart(part: unknown): JsonObject {
     if (typeof part.image_url !== "string") {
       return unsupported("input_image.file_id");
     }
+    if (
+      part.detail !== undefined &&
+      part.detail !== null &&
+      !["auto", "low", "high"].includes(String(part.detail))
+    ) {
+      return unsupported("input_image.detail");
+    }
     return {
       type: "image_url",
       image_url: {
         url: part.image_url,
-        ...(typeof part.detail === "string" ? { detail: part.detail } : {}),
+        ...(["auto", "low", "high"].includes(String(part.detail))
+          ? { detail: part.detail }
+          : {}),
+      },
+    };
+  }
+  if (part.type === "input_file") {
+    if (
+      typeof part.file_id !== "string" &&
+      typeof part.file_data !== "string"
+    ) {
+      return unsupported("input_file.file_url");
+    }
+    return {
+      type: "file",
+      file: {
+        ...(typeof part.file_id === "string" ? { file_id: part.file_id } : {}),
+        ...(typeof part.file_data === "string"
+          ? { file_data: part.file_data }
+          : {}),
+        ...(typeof part.filename === "string"
+          ? { filename: part.filename }
+          : {}),
       },
     };
   }
@@ -149,30 +193,85 @@ function convertInputItem(item: unknown): JsonObject {
       ],
     };
   }
-  if (item.type === "function_call_output") {
+  if (item.type === "custom_tool_call") {
+    if (
+      typeof item.call_id !== "string" ||
+      typeof item.name !== "string" ||
+      typeof item.input !== "string"
+    ) {
+      return unsupported("input.custom_tool_call");
+    }
+    return {
+      role: "assistant",
+      content: null,
+      tool_calls: [
+        {
+          id: item.call_id,
+          type: "custom",
+          custom: { name: item.name, input: item.input },
+        },
+      ],
+    };
+  }
+  if (
+    item.type === "function_call_output" ||
+    item.type === "custom_tool_call_output"
+  ) {
     if (typeof item.call_id !== "string") {
-      return unsupported("input.function_call_output");
+      return unsupported(`input.${item.type}`);
     }
     return {
       role: "tool",
       tool_call_id: item.call_id,
-      content:
-        typeof item.output === "string"
-          ? item.output
-          : JSON.stringify(item.output ?? ""),
+      content: convertToolOutput(item.output, item.type),
     };
   }
   return unsupported(`input.${String(item.type ?? "item")}`);
+}
+
+function convertToolOutput(output: unknown, field: string): unknown {
+  if (typeof output === "string") return output;
+  if (Array.isArray(output)) {
+    return output.map((part) => {
+      if (!isObject(part) || part.type !== "input_text") {
+        return unsupported(`input.${field}.output`);
+      }
+      if (typeof part.text !== "string") {
+        return unsupported(`input.${field}.output.text`);
+      }
+      return { type: "text", text: part.text };
+    });
+  }
+  return JSON.stringify(output ?? "");
 }
 
 function convertTools(tools: unknown): JsonObject[] | undefined {
   if (tools === undefined) return undefined;
   if (!Array.isArray(tools)) return unsupported("tools");
   return tools.map((tool) => {
-    if (!isObject(tool) || tool.type !== "function") {
-      return unsupported(
-        `tools.${isObject(tool) ? String(tool.type) : "item"}`,
-      );
+    if (!isObject(tool)) {
+      return unsupported("tools.item");
+    }
+    if (tool.type === "custom") {
+      if (typeof tool.name !== "string") {
+        return unsupported("tools.custom.name");
+      }
+      if (tool.format !== undefined && !isObject(tool.format)) {
+        return unsupported("tools.custom.format");
+      }
+      return {
+        type: "custom",
+        custom: {
+          name: tool.name,
+          ...(typeof tool.description === "string"
+            ? { description: tool.description }
+            : {}),
+          ...(isObject(tool.format) ? { format: tool.format } : {}),
+        },
+      };
+    }
+    if (tool.type !== "function") {
+      return unsupported(`tools.${String(tool.type)}`);
     }
     if (typeof tool.name !== "string")
       return unsupported("tools.function.name");
@@ -184,10 +283,25 @@ function convertTools(tools: unknown): JsonObject[] | undefined {
           ? { description: tool.description }
           : {}),
         ...(isObject(tool.parameters) ? { parameters: tool.parameters } : {}),
-        ...(typeof tool.strict === "boolean" ? { strict: tool.strict } : {}),
+        ...(typeof tool.strict === "boolean" || tool.strict === null
+          ? { strict: tool.strict }
+          : {}),
       },
     };
   });
+}
+
+function convertAllowedTool(tool: unknown): JsonObject {
+  if (
+    !isObject(tool) ||
+    !["function", "custom"].includes(String(tool.type)) ||
+    typeof tool.name !== "string"
+  ) {
+    return unsupported("tool_choice.allowed_tools.tools");
+  }
+  return tool.type === "function"
+    ? { type: "function", function: { name: tool.name } }
+    : { type: "custom", custom: { name: tool.name } };
 }
 
 function convertToolChoice(toolChoice: unknown): unknown {
@@ -201,19 +315,57 @@ function convertToolChoice(toolChoice: unknown): unknown {
   ) {
     return { type: "function", function: { name: toolChoice.name } };
   }
+  if (
+    isObject(toolChoice) &&
+    toolChoice.type === "custom" &&
+    typeof toolChoice.name === "string"
+  ) {
+    return { type: "custom", custom: { name: toolChoice.name } };
+  }
+  if (
+    isObject(toolChoice) &&
+    toolChoice.type === "allowed_tools" &&
+    ["auto", "required"].includes(String(toolChoice.mode)) &&
+    Array.isArray(toolChoice.tools)
+  ) {
+    return {
+      type: "allowed_tools",
+      allowed_tools: {
+        mode: toolChoice.mode,
+        tools: toolChoice.tools.map(convertAllowedTool),
+      },
+    };
+  }
   return unsupported("tool_choice");
 }
 
-function convertTextFormat(text: unknown): unknown {
-  if (text === undefined) return undefined;
+function convertText(text: unknown): {
+  responseFormat: unknown;
+  verbosity: unknown;
+} {
+  if (text === undefined) {
+    return { responseFormat: undefined, verbosity: undefined };
+  }
   if (!isObject(text)) return unsupported("text");
-  if (text.verbosity !== undefined) return unsupported("text.verbosity");
-  if (text.format === undefined) return undefined;
+  const verbosity = text.verbosity;
+  if (
+    verbosity !== undefined &&
+    verbosity !== null &&
+    !["low", "medium", "high"].includes(String(verbosity))
+  ) {
+    return unsupported("text.verbosity");
+  }
+  if (text.format === undefined) {
+    return { responseFormat: undefined, verbosity };
+  }
   if (!isObject(text.format) || typeof text.format.type !== "string") {
     return unsupported("text.format");
   }
   if (text.format.type === "text" || text.format.type === "json_object") {
-    return { type: text.format.type };
+    return {
+      responseFormat: { type: text.format.type },
+      verbosity,
+    };
   }
   if (
     text.format.type === "json_schema" &&
@@ -221,17 +373,20 @@ function convertTextFormat(text: unknown): unknown {
     isObject(text.format.schema)
   ) {
     return {
-      type: "json_schema",
-      json_schema: {
-        name: text.format.name,
-        schema: text.format.schema,
-        ...(typeof text.format.description === "string"
-          ? { description: text.format.description }
-          : {}),
-        ...(typeof text.format.strict === "boolean"
-          ? { strict: text.format.strict }
-          : {}),
+      responseFormat: {
+        type: "json_schema",
+        json_schema: {
+          name: text.format.name,
+          schema: text.format.schema,
+          ...(typeof text.format.description === "string"
+            ? { description: text.format.description }
+            : {}),
+          ...(typeof text.format.strict === "boolean"
+            ? { strict: text.format.strict }
+            : {}),
+        },
       },
+      verbosity,
     };
   }
   return unsupported("text.format");
@@ -245,10 +400,12 @@ function convertResponsesRequest(body: unknown): {
     throw new Error("Invalid request.");
   }
   for (const field of Object.keys(body)) {
-    if (!SUPPORTED_REQUEST_FIELDS.has(field)) unsupported(field);
-  }
-  if (body.truncation !== undefined && body.truncation !== "disabled") {
-    unsupported("truncation");
+    if (
+      !SUPPORTED_REQUEST_FIELDS.has(field) &&
+      !IGNORED_REQUEST_FIELDS.has(field)
+    ) {
+      unsupported(field);
+    }
   }
   if (body.store === true) unsupported("store");
   const messages: JsonObject[] = [];
@@ -266,15 +423,11 @@ function convertResponsesRequest(body: unknown): {
 
   const tools = convertTools(body.tools);
   const toolChoice = convertToolChoice(body.tool_choice);
-  const responseFormat = convertTextFormat(body.text);
+  const { responseFormat, verbosity } = convertText(body.text);
   const reasoningEffort = isObject(body.reasoning)
     ? textValue(body.reasoning.effort)
     : undefined;
-  if (
-    body.reasoning !== undefined &&
-    (!isObject(body.reasoning) ||
-      Object.keys(body.reasoning).some((field) => field !== "effort"))
-  ) {
+  if (body.reasoning !== undefined && !isObject(body.reasoning)) {
     unsupported("reasoning");
   }
 
@@ -292,6 +445,7 @@ function convertResponsesRequest(body: unknown): {
       ...(responseFormat === undefined
         ? {}
         : { response_format: responseFormat }),
+      ...(verbosity === undefined ? {} : { verbosity }),
       ...(reasoningEffort === undefined
         ? {}
         : { reasoning_effort: reasoningEffort }),
@@ -352,7 +506,7 @@ function profileFor(request: ResponsesRequest): ResponseProfile {
     toolChoice: request.tool_choice ?? "auto",
     tools: Array.isArray(request.tools) ? request.tools : [],
     topP: typeof request.top_p === "number" ? request.top_p : null,
-    truncation: textValue(request.truncation) ?? "disabled",
+    truncation: "disabled",
     user: textValue(request.user) ?? null,
   };
 }
@@ -361,7 +515,7 @@ function responseId(): string {
   return `resp_${crypto.randomUUID().replaceAll("-", "")}`;
 }
 
-function itemId(prefix: "msg" | "fc"): string {
+function itemId(prefix: "msg" | "fc" | "ctc"): string {
   return `${prefix}_${crypto.randomUUID().replaceAll("-", "")}`;
 }
 
@@ -450,15 +604,26 @@ function convertChatOutput(message: JsonObject): unknown[] {
   }
   if (Array.isArray(message.tool_calls)) {
     for (const call of message.tool_calls) {
-      if (!isObject(call) || !isObject(call.function)) continue;
-      output.push({
-        id: itemId("fc"),
-        type: "function_call",
-        status: "completed",
-        call_id: textValue(call.id) ?? itemId("fc"),
-        name: textValue(call.function.name) ?? "",
-        arguments: textValue(call.function.arguments) ?? "",
-      });
+      if (!isObject(call)) continue;
+      if (call.type === "custom" && isObject(call.custom)) {
+        output.push({
+          id: itemId("ctc"),
+          type: "custom_tool_call",
+          status: "completed",
+          call_id: textValue(call.id) ?? itemId("ctc"),
+          name: textValue(call.custom.name) ?? "",
+          input: textValue(call.custom.input) ?? "",
+        });
+      } else if (isObject(call.function)) {
+        output.push({
+          id: itemId("fc"),
+          type: "function_call",
+          status: "completed",
+          call_id: textValue(call.id) ?? itemId("fc"),
+          name: textValue(call.function.name) ?? "",
+          arguments: textValue(call.function.arguments) ?? "",
+        });
+      }
     }
   }
   return output;
@@ -505,10 +670,11 @@ async function convertJsonResponse(
 }
 
 interface StreamingToolCall {
+  kind: "function" | "custom";
   id: string;
   callId: string;
   name: string;
-  arguments: string;
+  input: string;
   outputIndex: number;
 }
 
@@ -621,19 +787,26 @@ export function convertStreamingResponse(
       output[messageOutputIndex] = item;
     }
     for (const tool of tools.values()) {
+      const custom = tool.kind === "custom";
       const item = {
         id: tool.id,
-        type: "function_call",
+        type: custom ? "custom_tool_call" : "function_call",
         status: "completed",
         call_id: tool.callId,
         name: tool.name,
-        arguments: tool.arguments,
+        [custom ? "input" : "arguments"]: tool.input,
       };
-      event(controller, "response.function_call_arguments.done", {
-        item_id: tool.id,
-        output_index: tool.outputIndex,
-        arguments: tool.arguments,
-      });
+      event(
+        controller,
+        custom
+          ? "response.custom_tool_call_input.done"
+          : "response.function_call_arguments.done",
+        {
+          item_id: tool.id,
+          output_index: tool.outputIndex,
+          [custom ? "input" : "arguments"]: tool.input,
+        },
+      );
       event(controller, "response.output_item.done", {
         output_index: tool.outputIndex,
         item,
@@ -705,9 +878,13 @@ export function convertStreamingResponse(
           continue;
         let tool = tools.get(callDelta.index);
         const fn = isObject(callDelta.function) ? callDelta.function : {};
+        const custom = isObject(callDelta.custom) ? callDelta.custom : {};
         if (!tool) {
-          const callId = textValue(callDelta.id) ?? itemId("fc");
-          const name = textValue(fn.name) ?? "";
+          const kind = callDelta.type === "custom" ? "custom" : "function";
+          const idPrefix = kind === "custom" ? "ctc" : "fc";
+          const callId = textValue(callDelta.id) ?? itemId(idPrefix);
+          const name =
+            textValue(kind === "custom" ? custom.name : fn.name) ?? "";
           const limitError =
             budget.addTool() ??
             budget.addOutputItem() ??
@@ -718,10 +895,11 @@ export function convertStreamingResponse(
             return;
           }
           tool = {
-            id: itemId("fc"),
+            kind,
+            id: itemId(idPrefix),
             callId,
             name,
-            arguments: "",
+            input: "",
             outputIndex: nextOutputIndex++,
           };
           tools.set(callDelta.index, tool);
@@ -729,34 +907,43 @@ export function convertStreamingResponse(
             output_index: tool.outputIndex,
             item: {
               id: tool.id,
-              type: "function_call",
+              type:
+                tool.kind === "custom" ? "custom_tool_call" : "function_call",
               status: "in_progress",
               call_id: tool.callId,
               name: tool.name,
-              arguments: "",
+              [tool.kind === "custom" ? "input" : "arguments"]: "",
             },
           });
         }
-        if (typeof fn.name === "string" && fn.name !== tool.name) {
-          const limitError = budget.addToolMetadata(fn.name);
+        const name = tool.kind === "custom" ? custom.name : fn.name;
+        if (typeof name === "string" && name !== tool.name) {
+          const limitError = budget.addToolMetadata(name);
           if (limitError) {
             fail(controller, limitError);
             return;
           }
-          tool.name = fn.name;
+          tool.name = name;
         }
-        if (typeof fn.arguments === "string") {
-          const limitError = budget.addToolArguments(fn.arguments);
+        const input = tool.kind === "custom" ? custom.input : fn.arguments;
+        if (typeof input === "string") {
+          const limitError = budget.addToolArguments(input);
           if (limitError) {
             fail(controller, limitError);
             return;
           }
-          tool.arguments += fn.arguments;
-          event(controller, "response.function_call_arguments.delta", {
-            item_id: tool.id,
-            output_index: tool.outputIndex,
-            delta: fn.arguments,
-          });
+          tool.input += input;
+          event(
+            controller,
+            tool.kind === "custom"
+              ? "response.custom_tool_call_input.delta"
+              : "response.function_call_arguments.delta",
+            {
+              item_id: tool.id,
+              output_index: tool.outputIndex,
+              delta: input,
+            },
+          );
         }
       }
     }

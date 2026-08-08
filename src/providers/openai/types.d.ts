@@ -23,6 +23,14 @@ export type OpenAIChatCompletionsRequestBody = {
                   };
                 }
               | {
+                  type: "file";
+                  file: {
+                    file_data?: string;
+                    file_id?: string;
+                    filename?: string;
+                  };
+                }
+              | {
                   type: "input_audio";
                   input_audio: {
                     data: string;
@@ -54,10 +62,14 @@ export type OpenAIChatCompletionsRequestBody = {
         } | null;
         tool_calls?: {
           id: string;
-          type: string;
-          function: {
+          type: "function" | "custom";
+          function?: {
             name: string;
             arguments: string;
+          };
+          custom?: {
+            name: string;
+            input: string;
           };
         }[];
         function_call?: any | null; // deprecated
@@ -118,18 +130,39 @@ export type OpenAIChatCompletionsRequestBody = {
   suffix?: string | null;
   temperature?: number | null;
   top_p?: number | null;
-  tools?: {
-    type: "function";
-    function: {
-      description?: string;
-      name: string;
-      parameters?: Record<string, any>;
-      strict?: boolean | null;
-    };
-  }[];
-  tool_choice?: string | { type: "function"; function: { name: string } };
+  tools?: (
+    | {
+        type: "function";
+        function: {
+          description?: string;
+          name: string;
+          parameters?: Record<string, any>;
+          strict?: boolean | null;
+        };
+      }
+    | {
+        type: "custom";
+        custom: {
+          description?: string;
+          name: string;
+          format?: Record<string, any>;
+        };
+      }
+  )[];
+  tool_choice?:
+    | string
+    | { type: "function"; function: { name: string } }
+    | { type: "custom"; custom: { name: string } }
+    | {
+        type: "allowed_tools";
+        allowed_tools: {
+          mode: "auto" | "required";
+          tools: Record<string, any>[];
+        };
+      };
   parallel_tool_calls?: boolean;
   user?: string;
+  verbosity?: "low" | "medium" | "high" | null;
   function_call?:
     | string
     | {

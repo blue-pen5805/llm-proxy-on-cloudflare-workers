@@ -60,6 +60,7 @@ const DEFAULT_CHAT_COMPLETIONS_SUPPORTED_PARAMETERS: (keyof OpenAIChatCompletion
     "tool_choice",
     "parallel_tool_calls",
     "user",
+    "verbosity",
     "function_call",
     "functions",
   ];

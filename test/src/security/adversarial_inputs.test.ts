@@ -119,6 +119,53 @@ describe("adversarial provider selectors", () => {
     expect(response.status).toBe(400);
   });
 
+  it("rejects an unknown top-level Responses field", async () => {
+    const response = await Environments.run(environment, () =>
+      handleRouting(
+        routingContext(
+          { model: "openai/model", input: "hi", __proto_field__: true },
+          "/v1/responses",
+        ),
+      ),
+    );
+
+    expect(response.status).toBe(400);
+  });
+
+  it("rejects a non-object Responses reasoning field", async () => {
+    const response = await Environments.run(environment, () =>
+      handleRouting(
+        routingContext(
+          { model: "openai/model", input: "hi", reasoning: "high" },
+          "/v1/responses",
+        ),
+      ),
+    );
+
+    expect(response.status).toBe(400);
+  });
+
+  it("rejects a built-in tool nested in a Responses allowed-tools choice", async () => {
+    const response = await Environments.run(environment, () =>
+      handleRouting(
+        routingContext(
+          {
+            model: "openai/model",
+            input: "hi",
+            tool_choice: {
+              type: "allowed_tools",
+              mode: "auto",
+              tools: [{ type: "web_search" }],
+            },
+          },
+          "/v1/responses",
+        ),
+      ),
+    );
+
+    expect(response.status).toBe(400);
+  });
+
   it("rejects an inherited provider name on the Messages route", async () => {
     const response = await Environments.run(environment, () =>
       handleRouting(

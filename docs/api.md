@@ -173,22 +173,24 @@ curl https://your-worker.example/v1/responses \
 ```
 
 The Worker converts `instructions`, string or message-item `input`, image URLs,
-function calls and outputs, function tools, tool choice, structured-output
-format, reasoning effort, token limits, sampling fields, metadata, and streaming
-controls to Chat Completions. It then runs the ordinary Chat Completions path,
-including real and virtual models, provider parameter filtering, credential
-profiles, key rotation/cooldown, `/key/<selection>`, and direct or AI Gateway
-routing. This makes the route available to every provider whose Chat
-Completions adapter supports the resulting fields.
+uploaded-file IDs or base64 files, function and custom tool calls and outputs,
+function and custom tool definitions, named or allowed tool choice,
+structured-output format, verbosity, reasoning effort, token limits, sampling
+fields, metadata, and streaming controls to Chat Completions. It then runs the
+ordinary Chat Completions path, including real and virtual models, provider
+parameter filtering, credential profiles, key rotation/cooldown,
+`/key/<selection>`, and direct or AI Gateway routing. This makes the route
+available to every provider whose Chat Completions adapter supports the
+resulting fields.
 
 Successful Chat Completions JSON is converted into a Responses object with
-typed message and function-call output items and Responses token-usage names.
-With `stream: true`, Chat Completions chunks are converted incrementally into
-typed Responses SSE events, including text deltas, function-call argument
-deltas, completed output items, and a final `response.completed` or
-`response.incomplete` event. The conversion remains streaming and propagates
-client cancellation. Upstream error responses retain their status and error
-body.
+typed message, function-call, and custom-tool-call output items and Responses
+token-usage names. With `stream: true`, Chat Completions chunks are converted
+incrementally into typed Responses SSE events, including text, function-call
+argument, and custom-tool input deltas, completed output items, and a final
+`response.completed` or `response.incomplete` event. The conversion remains
+streaming and propagates client cancellation. Upstream error responses retain
+their status and error body.
 
 Converted streams independently limit an SSE record to 1 MiB, retained text to
 4 MiB, retained tool arguments to 4 MiB, tool metadata to 64 KiB, tool calls to
@@ -207,11 +209,16 @@ top-level `llm_proxy` routing and timing object as Chat Completions. Streaming
 output includes it in the final `response.completed` or
 `response.incomplete` event's `response`; it is not exposed as a Chat chunk.
 
-The proxy has no conversation store or built-in tool executor. It therefore
-returns HTTP 400 for state references such as `previous_response_id`, built-in
-storage, built-in tools, file inputs, background execution, and other fields that cannot be
-represented faithfully by Chat Completions. Unknown request fields are also
-rejected instead of being silently discarded. See the
+The proxy has no conversation store or built-in tool executor. Top-level
+Responses request fields without a supported Chat Completions conversion are
+ignored and not forwarded: `background`, `context_management`, `conversation`,
+`include`, `max_tool_calls`, `moderation`, `previous_response_id`, `prompt`,
+`prompt_cache_key`, `prompt_cache_options`, `prompt_cache_retention`,
+`safety_identifier`, `stream_options`, and `truncation`. Built-in storage,
+built-in tools, file URLs, non-text tool-output parts, unsupported nested input,
+text, or tool options, and unknown request fields still return HTTP 400.
+Members of the `reasoning` object other than `effort`, including `summary`,
+`context`, and future options, are ignored rather than forwarded. See the
 [Responses compatibility design](design/features/responses-api.md) for the
 complete boundary.
 

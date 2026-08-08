@@ -10,6 +10,18 @@ dated section; when multiple changes share a date, put the newest change first.
 Planned version: `1.0.0`. The package remains at `0.2.1` until the version
 update is explicitly approved.
 
+### 2026-08-08
+
+- Accepted `summary`, `context`, and future options inside Responses
+  `reasoning` objects without forwarding them to Chat Completions, while still
+  converting `reasoning.effort` and rejecting non-object `reasoning` values.
+- Ignored top-level Responses request fields without a supported Chat
+  Completions conversion instead of rejecting or forwarding them, while
+  converting compatible nested verbosity, file, function/custom-tool, and
+  allowed-tool-choice fields and retaining explicit rejection of unknown fields
+  and unsupported nested features. Converted JSON and streams now also expose
+  Chat custom-tool calls as Responses custom-tool output and events.
+
 ### 2026-07-27
 
 - Fixed configuration reading so a credential containing `", }"` or `", ]"` is

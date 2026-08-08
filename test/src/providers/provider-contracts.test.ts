@@ -154,6 +154,7 @@ describe("provider contracts", () => {
           model: "model-id",
           messages: [],
           temperature: 0.5,
+          verbosity: "high",
           unsupported: "removed",
         }),
         headers: { Authorization: "caller-header" },
@@ -166,6 +167,7 @@ describe("provider contracts", () => {
           model: "model-id",
           messages: [],
           temperature: 0.5,
+          verbosity: "high",
         }),
       });
       // Provider-computed headers take precedence over caller-supplied ones.
