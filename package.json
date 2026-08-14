@@ -3,10 +3,19 @@
   "description": "A serverless proxy on Cloudflare Workers for multiple LLM APIs with unified authentication and key rotation.",
   "author": "blue.pen5805",
   "version": "0.2.1",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blue-pen5805/llm-proxy-on-cloudflare-workers.git"
+  },
+  "bugs": {
+    "url": "https://github.com/blue-pen5805/llm-proxy-on-cloudflare-workers/issues"
+  },
+  "homepage": "https://github.com/blue-pen5805/llm-proxy-on-cloudflare-workers#readme",
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12.0"
   },
   "scripts": {
     "deploy": "wrangler deploy",
@@ -25,14 +34,15 @@
     "format:check": "oxfmt --check .",
     "lint": "oxlint --deny-warnings src scripts test",
     "lint:fix": "oxlint --fix src scripts test",
+    "verify": "npm run tsc && npm run format:check && npm run lint && npm run test:coverage",
     "secrets": "tsx scripts/create-config.ts",
     "secrets:deploy": "tsx scripts/deploy-secrets.ts"
   },
   "devDependencies": {
     "@clack/prompts": "^1.7.0",
     "@cloudflare/vitest-pool-workers": "^0.21.3",
-    "@types/node": "^26.2.0",
-    "@vitest/coverage-istanbul": "^4.1.10",
+    "@types/node": "^22.20.1",
+    "@vitest/coverage-istanbul": "4.1.10",
     "ajv": "^8.20.0",
     "jsonc-parser": "^3.3.1",
     "oxfmt": "^0.63.0",
@@ -41,7 +51,7 @@
     "tsx": "^4.23.12",
     "typescript": "~7.0.2",
     "vite": "^8.2.1",
-    "vitest": "^4.1.10",
+    "vitest": "4.1.10",
     "wrangler": "^4.123.0"
   },
   "cloudflare": {

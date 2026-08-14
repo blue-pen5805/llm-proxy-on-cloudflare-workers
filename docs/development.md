@@ -99,13 +99,12 @@ For code, configuration, or dependency changes, run all repository checks from
 the root:
 
 ```bash
-npm run tsc
-npm run format:check
-npm run lint
-npm run test
-npm run test:coverage
-npm run bench
+npm run verify
 ```
+
+The verification command runs type checking, formatting, linting, and the full
+test suite with coverage in that order. Use `npm run test` when coverage is not
+needed for a faster test-only run.
 
 Coverage is a required contract: statements, branches, functions, and lines
 must each remain at 100%. Add meaningful assertions for reachable behavior.

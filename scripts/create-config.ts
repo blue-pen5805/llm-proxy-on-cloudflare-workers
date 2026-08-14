@@ -2,7 +2,6 @@
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import type { Readable } from "node:stream";
 import { promisify } from "node:util";
 import {
   cancel,
@@ -132,7 +131,7 @@ export interface ConfigTuiDependencies {
 
 export const CONFIG_TUI_BACK = Symbol("config-tui:back");
 
-interface KeypressInput extends Readable {
+interface KeypressInput {
   prependListener(
     event: "keypress",
     listener: (character: string, key: { name?: string }) => void,
