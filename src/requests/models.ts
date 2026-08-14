@@ -25,7 +25,7 @@ import { resolveAiGatewayModelsProvider } from "./model_gateway";
 import { PRIVATE_NO_STORE_HEADERS } from "./response";
 
 // Timeout for individual provider model fetch operations (milliseconds)
-const PROVIDER_FETCH_TIMEOUT_MS = 30_000;
+const PROVIDER_FETCH_TIMEOUT_MS = 60_000;
 const MAX_PROVIDER_MODELS_RESPONSE_BYTES = 1024 * 1024;
 export const MAX_MODELS_PER_PROVIDER = 1000;
 export const MAX_AGGREGATED_MODELS_BYTES = 4 * 1024 * 1024;

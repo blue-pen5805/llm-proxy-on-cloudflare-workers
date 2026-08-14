@@ -127,7 +127,7 @@ exclusions live in [OpenAI-compatible Responses](responses-api.md) and
 
 Every registered and custom provider is considered concurrently. Unavailable
 providers return no models. Static lists avoid network access; other providers
-receive a model-list request with a 30-second timeout. Fulfilled results are
+receive a model-list request with a 60-second timeout. Fulfilled results are
 converted to OpenAI model objects and prefixed with their route name. Rejected or
 malformed responses are logged and omitted.
 The optional `provider` query restricts fan-out before requests start and forms

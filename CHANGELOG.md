@@ -10,6 +10,11 @@ dated section; when multiple changes share a date, put the newest change first.
 Planned version: `1.0.0`. The package remains at `0.2.1` until the version
 update is explicitly approved.
 
+### 2026-08-14
+
+- Extended each provider's aggregated model-discovery timeout from 30 to 60
+  seconds.
+
 ### 2026-08-08
 
 - Accepted `summary`, `context`, and future options inside Responses

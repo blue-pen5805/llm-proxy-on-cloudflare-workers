@@ -64,7 +64,7 @@ every key slot).
 
 **Rationale.** These routes are best-effort diagnostics, not transactional
 guarantees, and both require a valid `PROXY_API_KEY`. `/models` starts every
-configured provider concurrently with a 30-second per-provider timeout, while
+configured provider concurrently with a 60-second per-provider timeout, while
 `/status` starts every configured credential check concurrently with an
 individual five-second timeout.
 

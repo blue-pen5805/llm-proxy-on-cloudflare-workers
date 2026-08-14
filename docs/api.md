@@ -286,7 +286,7 @@ with its route selector. Default-profile IDs use `<provider>/<model>` and
 named-profile IDs use `<provider>:<profile>/<model>`. When `VIRTUAL_MODELS` is configured, every virtual model is
 listed first — ahead of the provider models — with `owned_by: "virtual"`, so
 clients discover them at the front of the list. All configured providers are
-queried concurrently, each with a 30-second timeout and 1 MiB response limit. At most 1,000 models
+queried concurrently, each with a 60-second timeout and 1 MiB response limit. At most 1,000 models
 per provider and 4 MiB of serialized model entries are retained. A bounded
 aggregate includes `X-Proxy-Models-Truncated: true` when it is truncated.
 Non-successful upstream responses are discarded before provider-specific model

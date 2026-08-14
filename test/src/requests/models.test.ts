@@ -338,7 +338,7 @@ describe("models", () => {
 
     await expect(timeoutPromise).resolves.toBe(formattedModels);
     expect(abortController).toBeInstanceOf(AbortController);
-    expect(timeoutMs).toBe(30_000);
+    expect(timeoutMs).toBe(60_000);
     expect(providerName).toBe("test");
     expect(json).toHaveBeenCalledOnce();
     expect(
@@ -610,6 +610,82 @@ describe("models", () => {
     const response = await handleModelsRequest({} as any, mockAIGateway as any);
 
     expect(((await response.json()) as ModelsResponse).data).toEqual([]);
+  });
+
+  it("returns a valid partial list when Cohere is rate limited and OpenAI times out", async () => {
+    const cohereResponse = new Response(
+      JSON.stringify({ message: "rate limit exceeded" }),
+      { status: 429 },
+    );
+    const cancelCohereBody = vi.spyOn(cohereResponse.body!, "cancel");
+    const cohereProvider = {
+      ...mockProviderClass,
+      fetch: vi.fn().mockResolvedValue(cohereResponse),
+      convertModelsToOpenAIFormat: vi.fn(),
+    };
+    const openAIProvider = {
+      ...mockProviderClass,
+      fetch: vi.fn().mockReturnValue(new Promise<Response>(() => {})),
+      convertModelsToOpenAIFormat: vi.fn(),
+    };
+    const healthyProvider = {
+      ...mockProviderClass,
+      fetch: vi
+        .fn()
+        .mockResolvedValue(new Response(JSON.stringify({ data: [] }))),
+      convertModelsToOpenAIFormat: vi.fn().mockReturnValue({
+        object: "list",
+        data: [
+          {
+            id: "available-model",
+            object: "model",
+            created: 0,
+            owned_by: "healthy",
+          },
+        ],
+      }),
+    };
+    vi.mocked(helpers.withTimeout).mockImplementation(
+      async (promise, abortController, _timeoutMs, providerName) => {
+        if (providerName === "openai") {
+          abortController.abort();
+          const error = new Error("Provider openai request timed out");
+          error.name = "TimeoutError";
+          throw error;
+        }
+        return promise;
+      },
+    );
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const response = await handleModelsRequest({
+      providers: {
+        all: () => ({
+          cohere: cohereProvider,
+          openai: openAIProvider,
+          healthy: healthyProvider,
+        }),
+      },
+    } as any);
+    const responseText = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toBe("application/json");
+    expect(() => JSON.parse(responseText)).not.toThrow();
+    expect(JSON.parse(responseText)).toEqual({
+      object: "list",
+      data: [
+        {
+          id: "healthy/available-model",
+          object: "model",
+          created: 0,
+          owned_by: "healthy",
+        },
+      ],
+    });
+    expect(cancelCohereBody).toHaveBeenCalledOnce();
+    expect(cohereProvider.convertModelsToOpenAIFormat).not.toHaveBeenCalled();
+    expect(openAIProvider.convertModelsToOpenAIFormat).not.toHaveBeenCalled();
   });
 
   it("should handle provider errors gracefully", async () => {
