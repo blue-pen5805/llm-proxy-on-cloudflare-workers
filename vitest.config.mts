@@ -10,7 +10,7 @@ export default defineConfig({
   ],
   test: {
     alias: {
-      "~/src": resolve(__dirname, "./src"),
+      "~/src": resolve(import.meta.dirname, "./src"),
     },
     // Suppress logger (console.*) output during tests. Tests that need to
     // assert on log records spy on console directly, so dropping the printed
