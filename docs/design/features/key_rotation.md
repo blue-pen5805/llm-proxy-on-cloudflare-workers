@@ -1,5 +1,10 @@
 # API Key Rotation
 
+Rotation spreads traffic across credential slots so one key does not consume
+the provider limit alone. Explicit selection exists for authenticated
+operational checks of a particular slot. Neither mechanism reveals credential
+material or provides globally ordered allocation.
+
 ## Selection policies
 
 Provider keys are normalized to arrays. Selection follows this precedence:
@@ -24,19 +29,10 @@ profile uses the unsuffixed identifier. The first selection in an isolate draws
 a cryptographically random starting phase; subsequent selections advance the
 counter modulo the key count.
 
-Rotation exists to spread load across keys so no single key exhausts its
-provider rate limit, not to guarantee a strict global ordering. Overlaying
-many perfect per-isolate rotations with random phases keeps aggregate key
-usage near-uniform: the per-key deviation is bounded by the number of live
-isolates rather than growing with the square root of the request count, which
-is tighter than pure random selection. In exchange, selection never leaves the
-isolate: no request pays a cross-isolate coordination round trip on its
-critical path.
-
-`getNextIndex` reads the counter (or draws the random phase), bounds it
-against the current key-array length, stores the following counter, and
-returns the selected index. Counters reset when an isolate is recycled; the
-fresh random phase preserves the aggregate distribution.
+Random starting phases keep aggregate use approximately balanced across
+isolates without coordination on the request path. Counters reset when an
+isolate is recycled. Rotation therefore provides statistical distribution, not
+global ordering or durable state.
 
 ## Error cooldowns
 
@@ -90,8 +86,5 @@ remain usable when no selection prefix is supplied.
 - Reordering the configured array changes which credential a stored numeric
   counter refers to for the remainder of each isolate's lifetime; a redeploy
   recycles isolates and restarts rotation from fresh random phases.
-- Reducing the array length is safe because an out-of-range stored counter is
-  reset to zero on the next call.
-- Strict cross-isolate ordering is intentionally not guaranteed; the
-  distribution guarantee is statistical near-uniformity of aggregate key
-  usage.
+- Reducing the array length is safe; the next selection returns to the new
+  bounds.

@@ -9,11 +9,6 @@ normalization. `createProvider` composes the shared behavior with a small
 `defineProvider` exposes a `new ProviderName()` constructor interface without
 coupling adapters through a base-class hierarchy.
 
-`ProviderBase` and `OpenAICompatibleProvider` are constructable exports.
-Provider adapters use definitions directly; OpenAI-compatible definitions opt
-into the shared JSON and Bearer-authentication behavior with
-`openAICompatible: true`.
-
 This is an adapter boundary rather than a promise of complete semantic parity.
 Provider adapters can filter chat fields, translate payloads, transform chat
 responses, or declare model listing unsupported. Response transformation is an
@@ -23,20 +18,15 @@ responses unchanged.
 
 ## Provider registry
 
-`src/providers.ts` is the authoritative built-in provider table.
-`ProviderRegistry` combines that table with the custom endpoint snapshot for a
-single request. It owns provider discovery, route-prefix matching, lazy
-construction, profile-view creation, and instance reuse. Request handlers therefore consume one
-consistent provider view without rebuilding every adapter during route
-selection.
-
-The top-level `getProviderByName` and `getAllProviderInstances` functions are
-convenience facades over the registry. Built-in providers take precedence over
-custom endpoints with the same name in lookup and aggregate listing.
+`ProviderRegistry` combines the built-in table in `src/providers.ts` with the
+custom endpoint snapshot for one request. It owns discovery, route matching,
+lazy construction, profile views, and instance reuse. Built-in providers take
+precedence over a custom endpoint with the same name.
 
 Client-supplied provider selectors match only registered names, never inherited
-`Object.prototype` members. See
-[Security Design Decisions](../security-decisions.md).
+`Object.prototype` members. Provider routes use a `Set`, and object lookups
+require own properties. This prevents inherited names such as `constructor`
+from becoming routes or causing adapter construction failures.
 
 Universal Endpoint steps must pass both Cloudflare's supported-provider check
 and lookup in the request-scoped registry. A provider advertised by Gateway but
@@ -67,16 +57,15 @@ then fail before any upstream request is attempted. Vertex AI uses this mode;
 its service-account JSON is converted to the Gateway credential header instead
 of being treated as a short-lived OAuth access token.
 
-Commented imports or provider directories that are not registered are not
-supported routes. Documentation should distinguish three independent
-capabilities:
+Registration does not imply complete compatibility. Providers declare three
+capabilities independently:
 
 - OpenAI-compatible chat translation;
 - model-list translation;
 - provider-specific pass-through.
 
-Pass-through usually needs only a base URL and authentication. The other two
-require adapter methods and tests for the provider's actual formats.
+Pass-through usually needs only a base URL and authentication. Chat and model
+listing require format-specific implementation and tests.
 
 Provider and client headers are merged with the Fetch API `Headers` abstraction
 so field names remain case-insensitive. Provider-controlled authentication and
@@ -86,6 +75,61 @@ request path when one provider exposes endpoints with different credential
 contracts. Google AI Studio uses `Authorization: Bearer` for its OpenAI-compatible
 paths and `x-goog-api-key` for its native Gemini paths, including when the request
 uses an AI Gateway provider endpoint.
+
+## Custom OpenAI-compatible endpoints
+
+Deployment configuration can register OpenAI-compatible upstreams without a
+provider class. This covers self-hosted inference and vendor endpoints whose
+authentication and response formats already follow the OpenAI contract.
+
+Validated `CUSTOM_OPENAI_ENDPOINTS` entries join the same request-scoped
+registry as built-in adapters. Invalid configuration prevents registry creation
+and produces a non-disclosing HTTP 503 after authentication. The complete input
+schema is in [Configuration](../../configuration.md#custom-openai-compatible-endpoints).
+
+A registered endpoint supports pass-through at `/<name>/<path>`, chat through a
+`<name>/<model>` selector, model aggregation through a static list or configured
+models path, and status checks for each key. Static models avoid upstream I/O
+and become `<name>/<model>` IDs owned by the custom endpoint.
+
+Keys are optional. When present, the adapter uses Bearer authentication and the
+same explicit and automatic selection policies as built-in providers. An
+endpoint without keys is considered available, leaving origin access control to
+the operator.
+
+With `ALWAYS_USE_AI_GATEWAY=true`, all operations use the synchronized AI
+Gateway Custom Provider. Otherwise, requests use the configured Base URL
+directly. Custom Provider synchronization and path behavior are defined in the
+[AI Gateway design](ai_gateway.md#custom-provider-path-behavior).
+
+## Credential profiles
+
+Credential profiles provide independent key pools for one provider without
+duplicating its adapter or routing configuration. Scalar and array credential
+forms create the `default` profile. A profile map can define `default` and
+additional named pools. Profile names contain 1–64 letters, digits, `.`, `_`,
+`~`, or `-`; the selector form is `<provider>:<profile>`, and provider names
+cannot contain the reserved colon.
+
+The registry resolves a selector to an adapter plus an immutable
+credential-profile view. Concurrent requests may share the base adapter because
+the selected profile is never stored as mutable instance state. Chat
+Completions, Responses, Messages, provider pass-through, and Universal Endpoint
+provider fields accept selectors. AI Gateway receives the base provider name
+because profiles exist only at the proxy credential boundary. Unknown or
+malformed named profiles never fall back to `default`.
+
+Each profile has its own key array, rotation identifier, and cooldown state.
+Explicit indices resolve only within the selected pool. Gateway credential
+representations remain index-aligned with ordinary keys inside that pool.
+Model aggregation and status enumerate the default view and every named view;
+default model IDs use `<provider>/<model>`, while named IDs use
+`<provider>:<profile>/<model>`. Structured logs identify named profiles without
+exposing credential values or derived identifiers.
+
+Auxiliary provider settings remain shared across profiles. Vertex AI is the
+credential-shape exception: a profile contains one or more service-account
+objects instead of strings, but selection and index alignment are unchanged.
 
 ## OpenAI-compatible chat flow
 
@@ -100,14 +144,65 @@ uses an AI Gateway provider endpoint.
    to an object-valued JSON response, or inject one final metadata chunk into an
    SSE response.
 
-The metadata stage runs only on the OpenAI-compatible Chat Completions route and
-is disabled by default for strict client compatibility. It preserves local
-pre-routing errors and malformed, oversized, or unrecognized upstream responses.
-See [OpenAI-compatible response metadata](chat-response-metadata.md).
+The metadata stage is disabled by default for strict client compatibility. Its
+complete contract follows below.
 
 The incoming abort signal is attached to the provider or Gateway subrequest so
 client cancellation can stop avoidable work. The Worker enables the
 `enable_request_signal` compatibility flag.
+
+### Compatibility response metadata
+
+The Chat Completions and converted Responses and Messages routes can add
+request-scoped routing and timing metadata to routed responses. This
+operator-enabled extension makes the concrete provider visible when `default`,
+a virtual model, key rotation, or AI Gateway changes the route. Provider
+pass-through, AI Gateway REST, Universal Endpoint, model discovery, and local
+pre-routing errors do not include it.
+
+The proxy owns the top-level `llm_proxy` field and replaces an upstream field of
+the same name. It contains:
+
+| Field                 | Meaning                                                                 |
+| --------------------- | ----------------------------------------------------------------------- |
+| `request_id`          | The request's `cf-ray` value, or the proxy-generated request ID         |
+| `provider`            | Concrete provider selected for the returned response                    |
+| `model`               | Concrete provider-native model sent upstream                            |
+| `requested_model`     | Client selector after resolving `default`                               |
+| `credential_profile`  | Selected profile (`default` when unnamed)                               |
+| `credential_index`    | Zero-based credential slot; omitted for Gateway-managed credentials     |
+| `via_ai_gateway`      | Whether the upstream request used AI Gateway                            |
+| `gateway`             | Selected Gateway ID, only when AI Gateway was used                      |
+| `started_at`          | ISO 8601 chat-handler start time                                        |
+| `headers_received_ms` | Milliseconds from handler start until response headers arrived          |
+| `completed_at`        | ISO 8601 time when enriched JSON or the metadata SSE chunk was produced |
+| `duration_ms`         | Milliseconds from handler start to `completed_at`                       |
+
+Credential material, account IDs, request or response content, and arbitrary
+upstream headers are excluded. Credential indexes identify configuration slots
+and can change when keys are reordered.
+
+For an object-valued `application/json` response, the proxy parses at most 5
+MiB and adds the field, including to an upstream JSON error after route
+selection. Oversized, malformed, non-object, and non-JSON responses pass through
+unchanged. Rewriting removes `Content-Length`, `Content-Encoding`,
+`Content-MD5`, `Digest`, and `ETag` because they describe the source body.
+
+For `text/event-stream`, a transform inserts one OpenAI-compatible metadata
+chunk before `data: [DONE]`, or at the end of a valid stream without that
+marker. Other chunks pass through. Responses and Messages converters place the
+metadata on their protocol-specific final response update. The completion
+fields therefore describe stream completion, while `headers_received_ms`
+describes time to headers. Backpressure and cancellation propagate upstream.
+Each SSE record is limited to 1 MiB; an oversized or malformed record produces
+a terminal compatible error, suppresses metadata and the success marker, and
+cancels the upstream stream.
+
+Virtual-model retries retain metadata from the winning concrete attempt.
+`requested_model` identifies the client-visible virtual model, while `provider`
+and `model` identify the upstream that returned the response. Retry history,
+rejected candidates, URLs, provider request IDs, and diagnostic errors remain
+in content-minimal structured logs rather than client metadata.
 
 ## Converted compatibility flows
 
@@ -148,3 +243,4 @@ routing, and AI Gateway behavior independently. See
 - [Anthropic Messages API](https://platform.claude.com/docs/en/api/messages/create)
 - [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/)
 - [Cloudflare AI Gateway providers](https://developers.cloudflare.com/ai-gateway/providers/)
+- [AI Gateway Custom Providers](https://developers.cloudflare.com/ai-gateway/configuration/custom-providers/)

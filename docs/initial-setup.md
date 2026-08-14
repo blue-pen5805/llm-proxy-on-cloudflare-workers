@@ -35,12 +35,10 @@ Use the interactive helper:
 npm run secrets
 ```
 
-The terminal UI creates `config.jsonc` or edits it when it already exists. It
-first asks whether to continue in English or Japanese. The choice applies only
-to the current session. By default, the UI uses `wrangler whoami --json` to load
-`CLOUDFLARE_ACCOUNT_ID`; choose an account when more than one is available, or
-replace the detected ID in the AI Gateway section. Credential input and saved
-secret values remain hidden in the UI.
+The terminal UI creates or safely edits `config.jsonc`, masks credentials, and
+can discover the Cloudflare account from Wrangler. See
+[Configuration files](configuration.md#configuration-files) for its complete
+behavior and named-environment rules.
 
 For a named environment, run
 `npm run secrets -- --env <environment>`. Alternatively, copy

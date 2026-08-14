@@ -78,79 +78,22 @@ model IDs use `<provider>/<model>`. The same selector works in pass-through
 paths and as the Universal Endpoint `provider` value. A missing or malformed
 named profile is rejected as an unknown provider selector.
 
-A `model` that does not name a real provider but matches a key in
-`VIRTUAL_MODELS` selects an operator-defined
-[virtual model](design/features/virtual_models.md) (`"virtual/<name>"` is the
-recommended convention, but any key works; real providers take precedence):
-candidates from `VIRTUAL_MODELS` are tried in order, and the first non-retryable
-response (or the last candidate's response) is returned as-is. A candidate can
-be a bare model string or an object with `model`, `retries`, and `timeout`;
-`retries` adds up to five attempts before advancing, while `timeout` limits the
-wait for response headers in milliseconds. Each attempt applies the normal
-striped per-isolate round-robin or explicit key-selection policy. A candidate
-may reference another configured virtual model; references are recursive and
-must form an acyclic graph whose expanded chain stays within 96 concrete
-provider attempts. An undefined
-virtual model name returns the same HTTP 400 `"Invalid provider."` as an
-unknown provider.
+A `model` that does not name a real provider can select an operator-defined
+virtual model. Its candidates run in order under their normal provider routing
+and key policies. See [Configuration](configuration.md#virtual-models) for the
+declaration format and [Virtual models design](design/features/virtual_models.md)
+for retry semantics.
 
 The adapters retain only parameters supported by each upstream API. Translation
 is therefore OpenAI-compatible at the endpoint level, not a guarantee that every
 OpenAI field or provider feature has identical semantics.
 
-When `CHAT_RESPONSE_METADATA_ENABLED=true`, object-valued JSON responses include
-an additive top-level `llm_proxy` object after a concrete upstream route is
-selected, including upstream JSON errors. It identifies the concrete `provider`
-and `model`, the resolved
-`requested_model`, credential profile and zero-based configured credential slot,
-AI Gateway route, request ID, and request timing. `credential_index` is omitted
-when AI Gateway supplies a credential; `gateway` is omitted for direct requests.
-No credential value or derived identifier is exposed. For example:
-
-```json
-{
-  "id": "chatcmpl-example",
-  "object": "chat.completion",
-  "choices": [],
-  "llm_proxy": {
-    "request_id": "example-request-id",
-    "provider": "openai",
-    "model": "gpt-4o-mini",
-    "requested_model": "virtual/fast",
-    "credential_profile": "default",
-    "credential_index": 0,
-    "via_ai_gateway": true,
-    "gateway": "production",
-    "started_at": "2026-07-22T00:00:00.000Z",
-    "headers_received_ms": 184.27,
-    "completed_at": "2026-07-22T00:00:00.190Z",
-    "duration_ms": 190.14
-  }
-}
-```
-
-With `"stream": true`, provider SSE chunks pass through unchanged and one additional
-`chat.completion.chunk` with `choices: []` and `llm_proxy` is emitted immediately
-before `data: [DONE]`. Its `duration_ms` measures through stream completion;
-`headers_received_ms` measures time to the selected upstream response headers.
-Clients that strictly enumerate chunks should accept or ignore an empty-choice
-metadata chunk. A JSON body is parsed only up to 5 MiB; malformed, oversized,
-non-object, and non-JSON upstream responses are returned unchanged. Local errors
-that occur before provider selection do not include the extension. See
-[the response metadata design](design/features/chat-response-metadata.md).
-
-The setting defaults to `false`. When disabled, the response body and stream are
-not inspected or rewritten by this metadata feature, preserving strict OpenAI
-client compatibility.
-
-Cloud-platform model examples are `azure-openai/<deployment-name>`,
-`google-vertex-ai/google/<gemini-model>`, and
-`aws-bedrock/<inference-profile-or-model-id>`. Azure sends the deployment name
-as `model` to the Azure OpenAI v1 API. Bedrock uses its native OpenAI-compatible
-endpoint. Vertex chat is sent only through AI Gateway using the configured
-service-account JSON; direct requests are rejected with HTTP 400. Vertex model
-discovery is not available through the compatibility API and is therefore
-omitted from `/v1/models`.
+`CHAT_RESPONSE_METADATA_ENABLED=true` adds a top-level `llm_proxy` object after
+a concrete route is selected. It reports routing, credential slot, Gateway,
+request ID, and timing metadata without credential material. Streaming output
+adds one empty-choice metadata chunk before `[DONE]`. The feature defaults to
+`false`; bodies that cannot be safely transformed remain unchanged. See the
+[metadata contract](design/features/provider_abstraction.md#compatibility-response-metadata).
 
 ## Responses
 
@@ -192,17 +135,11 @@ argument, and custom-tool input deltas, completed output items, and a final
 streaming and propagates client cancellation. Upstream error responses retain
 their status and error body.
 
-Converted streams independently limit an SSE record to 1 MiB, retained text to
-4 MiB, retained tool arguments to 4 MiB, tool metadata to 64 KiB, tool calls to
-64, and output items to 64. A malformed record or exceeded limit emits a
-terminal error event, emits no success terminal event, and cancels the upstream
-stream. The final Responses event therefore retains at most 8 MiB of generated
-content: 4 MiB of text plus 4 MiB of tool arguments, with item and metadata
-overhead bounded separately.
-
-Each SSE record's `data:` lines are joined with newlines. A stream that ends
-without `[DONE]` emits a terminal `error` event instead of
-`response.completed` or `response.incomplete`.
+Converted streams enforce bounded records, retained content, tool calls, and
+output items. Malformed, oversized, or truncated streams emit a terminal error,
+omit the success event, and cancel the upstream stream. Exact mappings and
+limits are defined in the
+[Responses compatibility design](design/features/responses-api.md).
 
 When `CHAT_RESPONSE_METADATA_ENABLED=true`, converted JSON includes the same
 top-level `llm_proxy` routing and timing object as Chat Completions. Streaming
@@ -218,9 +155,7 @@ ignored and not forwarded: `background`, `context_management`, `conversation`,
 built-in tools, file URLs, non-text tool-output parts, unsupported nested input,
 text, or tool options, and unknown request fields still return HTTP 400.
 Members of the `reasoning` object other than `effort`, including `summary`,
-`context`, and future options, are ignored rather than forwarded. See the
-[Responses compatibility design](design/features/responses-api.md) for the
-complete boundary.
+`context`, and future options, are ignored rather than forwarded.
 
 ## Messages
 
@@ -256,24 +191,16 @@ response. Upstream errors retain their original status and body. With
 `CHAT_RESPONSE_METADATA_ENABLED=true`, JSON includes `llm_proxy`, while a
 stream includes it on the final `message_delta` event.
 
-Content blocks never interleave. The text block is closed before the first
-`tool_use` block opens, and each `tool_use` block is emitted complete — start,
-one `input_json_delta`, stop — after the text block ends. Tool arguments are
-therefore not streamed incrementally; text deltas still are.
-
-Messages streams use the same independent SSE, text, tool-argument, tool-count,
-and output-item limits as Responses; Messages does not retain tool metadata.
-A malformed record, an exceeded limit, or an upstream stream that ends without
-its `[DONE]` sentinel emits a terminal error event, emits no `message_stop`,
-and cancels the upstream stream. Each SSE record's `data:` lines are joined
-with newlines.
+Text deltas stream incrementally; tool blocks are emitted sequentially after
+the text block because Anthropic content blocks cannot interleave. Malformed,
+oversized, or truncated streams emit a terminal error, omit `message_stop`, and
+cancel the upstream stream.
 
 Unknown fields and features without a direct Chat equivalent—including
 documents, citations, cache controls, thinking, server tools, MCP, containers,
 and context management—return HTTP 400. Use `/anthropic/v1/messages` when the
-complete provider-native contract is required. See the
-[Messages compatibility design](design/features/messages-api.md) for the exact
-boundary.
+complete provider-native contract is required. Exact mappings and limits are in
+the [Messages compatibility design](design/features/messages-api.md).
 
 `POST /v1/messages/count_tokens` returns an Anthropic-shaped HTTP 400 error.
 Token counting is not approximated because Chat Completions has no equivalent
@@ -308,11 +235,16 @@ request header bypasses the cache entirely, and bypassed responses carry no
 cache header. The cache is per Cloudflare datacenter, so a configuration
 change can serve a stale list from an already-primed datacenter for up to the
 TTL. Cache API `open`, `match`, and `put` are optional optimizations: if an
-operation is unavailable or fails, the request continues with an uncached
-provider fan-out. The cache is ineffective on a `*.workers.dev` deployment;
-use a custom domain to enable it.
+operation fails, the request continues with an uncached provider fan-out. The
+cache is ineffective on a `*.workers.dev` deployment; use a custom domain to
+enable it.
 Client-facing model responses always carry `Cache-Control: private, no-store`;
 the public max-age used by the internal Cache API is never exposed.
+
+Custom endpoints should use a static `models` list when reliable discovery
+matters. Model discovery uses the first provider key by default. Bedrock and
+Azure OpenAI are omitted unless their required local credentials and routing
+settings are configured, including in strict Gateway mode.
 
 ## Virtual models
 
@@ -338,24 +270,10 @@ timeout is configured.
       "access_order": [
         {
           "position": 1,
-          "model": "virtual/fast",
+          "model": "openai/gpt-4o-mini",
           "retries": 1,
           "attempts": 2,
-          "timeout_ms": 5000,
-          "access_order": [
-            {
-              "position": 1,
-              "model": "openai/gpt-4o-mini",
-              "retries": 0,
-              "attempts": 1
-            },
-            {
-              "position": 2,
-              "model": "anthropic/claude-sonnet",
-              "retries": 0,
-              "attempts": 1
-            }
-          ]
+          "timeout_ms": 5000
         }
       ]
     }
@@ -372,13 +290,6 @@ empty `data` array. Invalid `VIRTUAL_MODELS` configuration fails with the same
 HTTP 503 as chat and model discovery. The route uses normal proxy
 authentication, does not support `/key/<selection>`, and accepts
 `/g/<gateway>/virtual-models` without changing the response.
-
-Custom endpoints should define a static `models` list when reliable discovery
-matters. The endpoint uses the first provider key by default to avoid advancing
-key rotation merely for discovery. Amazon Bedrock and Azure OpenAI are omitted
-without sending an upstream request unless all of their required local
-credentials and routing identifiers are configured, even when
-`ALWAYS_USE_AI_GATEWAY=true`.
 
 ## Provider pass-through
 
@@ -397,9 +308,8 @@ credential. It also removes cookies, hop-by-hop headers, client/network metadata
 and credential-like query parameters, including API-key variants,
 `access_token`, `token`, `authorization`, `auth`, `password`, and `secret`.
 `True-Client-IP` is never forwarded. Retained query parameters are passed
-through byte-for-byte, including empty fields; the proxy does not re-encode or
-reorder them, and it does not resolve dot segments in a path that carries a
-query string.
+through byte-for-byte, including empty fields. Path `.` and `..` segments are
+rejected; matching text inside a query value is preserved.
 
 All outbound requests use manual redirect handling, so the Worker never follows
 a redirect with credentials attached. Pass-through routes return upstream 3xx
@@ -407,18 +317,17 @@ responses unchanged; clients must not replay the proxy credential when following
 them.
 Request-level `cf-aig-*` control headers are forwarded when the selected route
 uses AI Gateway and removed on direct provider requests. Client
-`cf-aig-authorization` and `cf-aig-byok-alias` are always removed; Gateway
-authentication and stored-credential selection remain operator-controlled.
+`cf-aig-authorization`, `cf-aig-byok-alias`, and `cf-aig-cache-key` are always
+removed; Gateway authentication, stored-credential selection, and cache
+partitioning remain operator-controlled.
 Provider-specific request and response formats remain the caller's
 responsibility. Routes are the keys registered in `src/providers.ts`; configured
 custom endpoint names are added dynamically.
 
 In strict Gateway mode, pass-through paths for a managed Custom Provider retain
-the adapter's fixed path prefix. A final version-looking Base URL segment is
-repeated at the start of the Gateway request path. An unversioned Base URL is
-registered with a `/v1` sentinel that Cloudflare consumes during Custom Provider
-URL resolution. These transformations apply only to strict Gateway routing;
-direct pass-through keeps the configured Base URL unchanged.
+the configured upstream path semantics. Direct pass-through keeps the
+configured Base URL unchanged. See
+[Custom Provider path behavior](design/features/ai_gateway.md#custom-provider-path-behavior).
 
 For cloud-platform pass-through, direct routes use the upstream provider path.
 Bedrock paths beginning with `/v1` are automatically prefixed with
@@ -480,10 +389,10 @@ Third-party models use `<provider>/<model>`; Workers AI models use
 `@cf/<author>/<model>`. The Messages route does not support Workers AI.
 Client `cf-aig-*` control headers are forwarded, allowing retry, cache, cost,
 log, and metadata settings to override Gateway defaults for that request.
-Client `cf-aig-authorization` and `cf-aig-byok-alias` are always removed. A
-configured `CF_AIG_TOKEN`, REST API authorization, and the route-selected
-Gateway ID are applied by the Worker after client header processing and
-therefore take precedence where applicable.
+Client `cf-aig-authorization`, `cf-aig-byok-alias`, and `cf-aig-cache-key` are
+always removed. A configured `CF_AIG_TOKEN`, REST API authorization, and the
+route-selected Gateway ID are applied by the Worker after client header
+processing and therefore take precedence where applicable.
 
 ## Explicit key selection
 

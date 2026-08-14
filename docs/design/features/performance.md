@@ -2,44 +2,17 @@
 
 ## Scope
 
-The proxy normally spends most of its wall time waiting for upstream model
-providers. Local CPU work still matters because it runs before each subrequest
-and counts against the Worker's CPU budget. Optimizations therefore target
-parsing and allocation on the authenticated request path without
-buffering upstream responses or sharing request state globally.
+This document records concrete request-path optimizations and their measurement
+contract. The priority order, streaming rules, and resource-bounding principles
+are defined once in [Project Principles](../../project-principles.md#minimize-worker-cpu-time-then-complexity).
 
 ## Decision priorities
 
-For implementations that preserve the same behavior, security, and documented
-limits, evaluate choices in this order:
-
-1. Minimize expected Worker CPU time across the full request distribution.
-2. Prefer the simplest design when expected CPU cost is equivalent or
-   unmeasured.
-3. Improve wall-clock latency and memory use without moving unnecessary work
-   into the Worker.
-
-Cloudflare measures CPU time while Worker code is actively executing; time
-spent awaiting network or storage I/O does not count. Concurrency can reduce
-wall-clock latency, but it does not make parsing, transformation, logging, or
-other local work free. Similarly, `ctx.waitUntil()` removes eligible work from
-the response's critical path but does not eliminate that work's CPU cost.
-
-The common request path therefore follows these rules:
-
-- Forward request bodies and return upstream response streams directly when the
-  route contract does not require inspecting or changing their contents.
-- Parse, validate, filter, and serialize a payload no more than required by the
-  selected route. Reuse request-scoped intermediate values instead of
-  reconstructing or cloning them.
-- Defer provider-specific conversion, aggregation, diagnostics, and other
-  route-specific work until routing establishes that it is necessary.
-- Keep lookup work indexed and iteration bounded. Do not add speculative
-  precomputation, caching, or abstraction whose common-path overhead lacks a
-  measured or contract-driven justification.
-- Keep buffering, item counts, attempts, and time bounded independently of
-  performance measurements. Independent subrequests run concurrently unless a
-  documented platform or upstream requirement justifies a cap.
+Cloudflare measures CPU while Worker code executes, excluding network and
+storage wait time. Consequently, concurrency improves wall-clock latency but
+does not make local transformations free, and `ctx.waitUntil()` removes work
+from the response path without removing its CPU cost. The sections below
+describe where the implementation applies the project-wide priorities.
 
 ## Chat request parsing
 
@@ -58,22 +31,10 @@ compatibility contract permits it.
 
 ## Shared request setup
 
-The runtime-normalized client URL is scanned once for its path and the result is
-shared by the request logger and request middleware; the common path does not
-invoke the URL parser. Authentication reuses the already-read configured key
-list, while still hashing the candidate and comparing every configured digest.
-Structured log construction, provider parameter filtering, provider header
-forwarding, and compatibility conversion use single-pass loops or `Headers`
-objects directly so common requests do not allocate intermediate entry and
-filter arrays.
-
-Virtual-model retries iterate the bounded candidate configuration directly
-instead of expanding it into a duplicate attempt array. Status connectivity
-checks start all configured credential subrequests concurrently without a local
-scheduling loop or application-level concurrency cap; they are settled
-independently. Google Vertex AI memoizes its parsed credential profiles by raw
-secret value, so provider enumeration does not repeatedly parse service-account
-JSON.
+Request parsing, authentication configuration, routing metadata, and provider
+instances are reused within one request. Common transformations use single-pass
+iteration and avoid intermediate request objects. Bounded fan-out operations
+start independent subrequests concurrently and settle failures independently.
 
 Optional `llm_proxy` response metadata avoids `clone()` and reads a JSON chat
 body once. A body beyond the 5 MiB metadata budget is forwarded unchanged by
@@ -139,16 +100,13 @@ or scan custom endpoint configuration for each lookup.
 ## Benchmarking
 
 Run `npm run bench` to exercise the CPU-only request-building, routing, and
-Responses/Messages/metadata SSE transformation hot paths. The streaming
-benchmarks use approximately 1 KiB across 2,000 input records. SSE boundary
-search retains an offset and revisits at most three trailing characters when a
-record spans chunks, avoiding repeated scans of the whole pending record.
+Responses, Messages, and metadata SSE transformation hot paths.
 
 Benchmarks are diagnostic rather than correctness gates because absolute
 results vary by machine. Record the command, Node version, machine, benchmark
 name, mean, and variance when using a result for a performance decision.
-Compare only the same input and environment. CI executes the suite on Node 24;
-the Worker-runtime tests and coverage thresholds enforce correctness.
+Compare only the same input and environment. Benchmarks diagnose performance;
+Worker-runtime tests and coverage enforce correctness.
 
 Production evaluation uses Workers CPU time rather than handler latency alone:
 handler latency includes upstream wait time and can move independently of local

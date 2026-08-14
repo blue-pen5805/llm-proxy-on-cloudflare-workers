@@ -34,7 +34,10 @@ header without changing the authentication requirement. Such responses carry
 `Vary: Origin`; the error guard also adds the applicable CORS headers to errors
 raised during CORS handling.
 `ALLOWED_ORIGINS` optionally restricts browser access to exact origins. Its
-absence preserves the wildcard default.
+absence preserves the wildcard default. Origins are matched as complete HTTP(S)
+origins rather than suffixes or patterns. Proxy authentication remains the
+security boundary; the allowlist reduces browser use of a disclosed credential
+without turning CORS into authorization.
 
 ## Credential isolation
 
@@ -42,10 +45,14 @@ Before chat or pass-through forwarding, the proxy removes every header format it
 accepts for its own authentication, provider credential aliases such as
 `api-key`, hop-by-hop headers, cookies, and client network metadata. On AI
 Gateway routes it retains request-level `cf-aig-*` controls except
-`cf-aig-authorization` and `cf-aig-byok-alias`; direct provider requests remove
-all of them. A client can therefore override non-credential Gateway request
-controls, while Gateway authentication and stored BYOK credential selection
-remain operator-controlled. The provider adapter then adds the selected
+`cf-aig-authorization`, `cf-aig-byok-alias`, and `cf-aig-cache-key`; direct
+provider requests remove all of them. Callers may legitimately set Gateway
+metadata and cost, logging, caching, retry, or backoff controls. Gateway
+authentication and stored BYOK selection remain operator-controlled, while the
+cache key is also reserved to prevent cross-caller cache reads or poisoning.
+For valid object-valued `cf-aig-metadata`, the proxy adds bounded routing
+metadata only to unused keys; client values win on collisions, and invalid
+metadata passes through unchanged. The provider adapter then adds the selected
 upstream key. Credential-like query parameters are removed during middleware
 processing using the same case-insensitive name set used for log redaction;
 this includes API-key variants, `token`, `access_token`, `authorization`,
@@ -69,86 +76,24 @@ providers.
 
 ## Configuration lifecycle
 
-Local JSONC files are operator inputs, not runtime files. `deploy-secrets.ts`
-serializes each non-empty top-level value and supplies it to `wrangler secret
-bulk`; a top-level `null` is preserved as Wrangler's explicit deletion
-operation. Arrays and custom endpoint objects therefore arrive as JSON strings
-and are parsed by the environment utilities. Before invoking Wrangler, every
-non-null serialized value is checked against Cloudflare's 5 KiB secret limit.
-Local `.dev.vars` generation omits `null` and missing top-level values rather
-than materializing empty bindings. Runtime secret lookup also ignores empty and
-whitespace-only string entries, so they cannot make a provider appear
-configured.
+Local JSONC files are operator inputs; the Worker receives their non-empty
+top-level values as environment bindings. Arrays and objects are serialized as
+JSON. Other values remain exact text so credential-like strings are never
+coerced. A bare `null` requests deletion, while missing and empty values leave
+deployed state unchanged. Each serialized secret is limited to 5,120 bytes.
 
-Operator files are read with a JSONC tokenizer rather than by stripping
-comments and trailing commas textually. A text transformation cannot separate a
-comma inside a string value from a trailing comma, which silently rewrote
-credentials before they reached Wrangler. The interactive editor writes files
-with the same parser, so the reader and the writer agree on every value.
+The editor and deployment helper use a JSONC parser, validate against the
+tracked schema, and preserve comments when editing. Credential input and stored
+values are masked, output is value-free, and generated local files use
+owner-only permissions. Operator configuration files remain untracked.
 
-A configured value is treated as structured only when it is an explicit JSON
-array or object. Every other value stays the exact configured text, so a
-credential that looks like another JSON type is neither coerced nor discarded.
-Only the bare literal `null` retains its separate meaning as a deletion.
-
-Deployment additionally evaluates the Worker's own configuration readers
-against the configuration the deployment produces. The JSON Schema cannot
-express endpoint name uniqueness, exact-origin form, or an acyclic virtual-model
-graph within the attempt limit, so without this a schema-valid file deploys and
-then fails every request with HTTP 503. Two properties make that check
-meaningful. Empty values that the deployment drops as no-ops are excluded, so
-the check never rejects a file that changes nothing. And because a setting that
-is not deployed keeps its deployed value, which this command cannot read back,
-`CUSTOM_OPENAI_ENDPOINTS` and `VIRTUAL_MODELS` must change together: the
-validity of a virtual-model reference depends on which endpoint names exist, so
-neither half alone describes the resulting configuration.
-
-Both properties are decided by each setting's effective operation rather than
-by the presence of its key, because those two definitions disagree exactly where
-it matters. An empty value is present but deploys nothing, so a presence test
-would accept `CUSTOM_OPENAI_ENDPOINTS` deleted alongside an empty
-`VIRTUAL_MODELS` as a complete declaration while leaving the deployed virtual
-models untouched — reintroducing the partial update the requirement exists to
-prevent.
-
-The requirement is one-directional because the dependency is. Deleting
-`VIRTUAL_MODELS` leaves no reference that could name an endpoint, and cycles and
-the attempt limit are properties of that graph alone, so that deletion is
-verifiable on its own whatever endpoints remain deployed. Every other one-sided
-change leaves the retained half unknown and is refused.
-
-`create-config.ts` provides the create-and-edit terminal interface for these
-operator-owned files. It applies field changes to JSONC without reconstructing
-the whole document, preserving existing comments and unrelated values. Secret
-inputs are masked, existing secret values are represented only as configured or
-unset, and every field action can explicitly retain the current value without
-changing the document. The first prompt selects English or Japanese for the
-current session; the selection is not stored in configuration. English and
-Japanese message catalogs are maintained as separate files under
-`scripts/locales/create-config/`, independently of the interface control flow.
-Field hints identify effective runtime defaults. Esc returns one interface level
-while Ctrl+C cancels the session. `DEV` is excluded from the interface because
-the TUI configures deployment inputs, while `DEV` is a local-only authentication
-bypass. Its template or existing operator-owned value is preserved without
-exposing it for editing. Provider configuration is organized by provider display
-name. Each provider submenu maps its credential and provider-specific settings
-to their schema properties, keeping the storage binding names out of the
-operator-facing selection and review interface. API-key fields use the `API_KEY`
-label, while other credential types use their specific form, such as a bearer
-token or service-account JSON. Custom endpoints and virtual models are separate
-top-level sections. The complete result must satisfy the tracked JSON Schema
-before it can be saved. Files are written with owner-only permissions.
-
-When the account ID is unset, the interface obtains available accounts from
-`wrangler whoami --json`. A single account supplies the default directly;
-multiple accounts require an explicit selection. The operator may replace the
-selected ID with a manually entered value, and failure to discover an account
-does not expose Wrangler output or block manual configuration.
-
-The schema validates shape during editing and critical custom-endpoint
-constraints are checked again at runtime. Configuration files contain live
-credentials and must not be committed. Deployment and dry-run output list names
-only and redact values.
+Deployment also applies constraints the schema cannot express, including unique
+endpoint names, exact origins, and bounded acyclic virtual-model graphs. Because
+omitted settings retain their deployed value, `CUSTOM_OPENAI_ENDPOINTS` and
+`VIRTUAL_MODELS` normally change together; deleting `VIRTUAL_MODELS` alone is
+safe because no endpoint reference remains. Runtime validation repeats critical
+checks for bindings installed outside the repository tooling and fails closed
+with a non-disclosing HTTP 503.
 
 ## Error and diagnostic disclosure
 
@@ -179,6 +124,6 @@ application-layer policies around the Worker.
 ## References
 
 - [Workers configuration](https://developers.cloudflare.com/workers/configuration/)
+- [Workers limits](https://developers.cloudflare.com/workers/platform/limits/#environment-variables)
 - [Workers secrets](https://developers.cloudflare.com/workers/configuration/secrets/)
-- [Wrangler `whoami`](https://developers.cloudflare.com/workers/wrangler/commands/general/#whoami)
 - [Workers Request API](https://developers.cloudflare.com/workers/runtime-apis/request/)

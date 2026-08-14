@@ -33,12 +33,10 @@ Worker を所有する Cloudflare アカウントでブラウザー認証を完�
 npm run secrets
 ```
 
-ターミナル UI は `config.jsonc` がなければ作成し、すでにあれば既存値を保ったまま
-編集します。最初に English または日本語を選択します。この選択は実行中のセッションに
-のみ適用されます。`CLOUDFLARE_ACCOUNT_ID` の初期値は `wrangler whoami --json` から
-取得されます。複数のアカウントがある場合は使用するものを選択でき、AI Gateway
-セクションで取得値を手動上書きすることもできます。認証情報の入力と保存済み Secret の
-値は UI 上で伏せられます。
+ターミナル UI は `config.jsonc` を安全に作成または編集し、認証情報を伏せます。
+Wrangler から Cloudflare アカウントを取得することもできます。UI の全動作と名前付き
+環境の規則は英語版の [Configuration files](configuration.md#configuration-files) を
+参照してください。
 
 名前付き環境は `npm run secrets -- --env <環境名>` で編集できます。または
 `config.example.jsonc` を `config.jsonc` にコピーして編集します。十分に長く一意な

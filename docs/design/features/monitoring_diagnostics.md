@@ -7,21 +7,16 @@ The Worker exposes two authenticated health routes:
 - `/ping` returns `Pong` without provider subrequests. It is a liveness check
   for routing and Worker execution only.
 - `/status` returns sanitized configuration and runs credential connectivity
-  checks. It is an operator diagnostic, not a low-cost liveness probe. Its
-  response is serialized as compact JSON to avoid diagnostic-only whitespace.
+  checks. It is an operator diagnostic, not a low-cost liveness probe.
 
 All three proxy-generated health surfaces (`/ping`, `/status`, and
 `/virtual-models`) use `Cache-Control: no-store`.
 
 ## Status algorithm
 
-The handler constructs every built-in and custom provider instance. For each
-configured credential, it calls the provider's model-list path, either directly
-or through the active AI Gateway. Checks run concurrently with an individual
-five-second timeout. Every configured credential check starts immediately
-without an application-level concurrency cap. Each result remains isolated, so
-one slow or failed check does not prevent the other credential slots from being
-examined.
+For each configured credential, `/status` calls the provider's model-list path
+directly or through the active AI Gateway. Checks start concurrently with an
+individual five-second timeout and isolated results.
 
 The number of checks follows the deployed credential count, so a large
 configuration can exhaust the per-request subrequest budget. Provider
@@ -29,6 +24,9 @@ descriptions and checks fail independently: unexamined slots stay `unknown`,
 and an unreadable provider reports `available: false` with no key slots and a
 `provider.status.failed` log. Subrequest-limit exceptions also leave the
 affected slot `unknown`. Many `unknown` slots indicate an incomplete scan.
+The unrestricted fan-out is intentional: `/status` is an authenticated,
+best-effort diagnostic rather than a low-cost health probe, and starting checks
+concurrently prevents one slow provider from delaying all others.
 
 `STATUS_CACHE_TTL_SECONDS` optionally caches a complete compact status response
 in the per-datacenter Cache API. The default `0` preserves live checks.
@@ -74,16 +72,13 @@ unaudited monitoring payload.
 ## Platform observability
 
 `wrangler.jsonc` enables Workers Logs for every invocation and sampled traces.
-Application logs are structured JSON objects with a human-readable `message`, a
-stable `event` field, and a `request_id`. The logger requires every record to
-provide `message` so Cloudflare Workers Observability can populate its summary
-Message column. Every request-scoped message starts with the first eight
-characters of its request ID in brackets, allowing related records to be
-identified at a glance while the complete value remains available in
-`request_id`. The remainder includes the event's most useful safe fields, such
-as provider, operation, HTTP method, query-free destination, status, credential
-slot, selection policy, and duration as applicable. The request ID uses
-Cloudflare's `cf-ray` value when available and falls back to a generated UUID.
+Application records contain a human-readable `message`, stable `event`, and
+`request_id`, plus safe routing and outcome fields when applicable. The request
+ID uses Cloudflare's `cf-ray` value when available and otherwise a generated
+UUID.
+The edge supplies `cf-ray` for deployed traffic, and the value is used only for
+correlation, never authorization, integrity, or routing. A spoofed local value
+can therefore affect only that caller's log correlation.
 Provider names observed in request-scoped events are carried into
 `request.completed` as `provider` for one destination or a comma-separated
 `providers` summary for multiple destinations.

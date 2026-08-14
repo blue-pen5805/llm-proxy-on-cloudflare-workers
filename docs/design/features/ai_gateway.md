@@ -52,13 +52,12 @@ forwarded. Gateway/account path segments are validated and URL-encoded.
 
 Client-supplied `cf-aig-*` control headers are retained on AI Gateway routes
 because request-level Gateway settings intentionally take precedence over
-Gateway defaults. This allows callers to control logging, cache keys, retries,
-cost, and metadata per request. Credential-policy headers are exceptions:
-`cf-aig-authorization` and `cf-aig-byok-alias` are always removed from client
-input. Only the operator-configured `CF_AIG_TOKEN` may authenticate Gateway, and
-clients cannot select among provider credentials stored in Gateway BYOK. The
-Worker also applies REST authorization and the route-selected Gateway ID after
-sanitization.
+Gateway defaults. This allows callers to control logging, caching behavior,
+retries, cost, and metadata per request. Operator-policy headers are exceptions:
+`cf-aig-authorization`, `cf-aig-byok-alias`, and `cf-aig-cache-key` are always
+removed from client input. Gateway authentication, stored credential selection,
+and cache partitioning therefore remain operator-controlled. The Worker applies
+REST authorization and the route-selected Gateway ID after sanitization.
 
 ### Provider endpoint
 
@@ -116,13 +115,10 @@ contract to incompatible operations.
 
 Custom Providers are synchronized by `npm run secrets:deploy` before Worker
 secrets are applied. The helper lists account providers and creates missing
-managed definitions or updates their Base URL, display name, enabled state, and
-provider logo. Cline, Ollama, and NVIDIA NIM use the Base64-encoded SVG assets
-stored with their adapters; other managed definitions retain Cloudflare's
-generated logo. The helper does not store provider credentials in Custom
-Provider metadata, delete stale definitions, or overwrite an existing slug
-owned by a different display name. Synchronization uses
-`CLOUDFLARE_API_TOKEN` with AI Gateway Write permission and sends no management
+managed definitions or updates their routing metadata. It does not store
+provider credentials in Custom Provider metadata, delete stale definitions, or
+overwrite an existing slug owned by a different display name. Synchronization uses
+`CLOUDFLARE_API_TOKEN` with `AI Gateway - Edit` permission and sends no management
 API requests during `--dry-run`.
 
 When no local provider key exists, a single request without an upstream

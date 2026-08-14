@@ -21,12 +21,6 @@ The code deployment and secret deployment are separate. A successful Worker
 deployment does not prove that the expected secrets exist in the same Wrangler
 environment.
 
-The repository's secret deployment script prints setting names only. The
-temporary JSON is owner-readable only and is removed after Wrangler finishes or
-the deployment receives a termination signal. Generated `config.jsonc` and
-`.dev.vars*` files are also forced to mode `0600`; dotenv values are quoted and
-escaped to prevent line injection.
-
 ## Safe configuration changes
 
 - Keep `config.jsonc`, environment-specific variants, `.dev.vars*`, and
@@ -34,7 +28,7 @@ escaped to prevent line injection.
 - Use distinct `PROXY_API_KEY` values per environment.
 - Set a setting to `null` and deploy secrets to delete it from the Worker.
   Omitting a setting preserves its current deployed value.
-- Keep every serialized setting within Cloudflare's 5 KiB per-secret limit.
+- Keep every serialized setting within the enforced 5,120-byte limit.
   The deployment command validates this before contacting Wrangler.
 - Replace a provider key in the configuration, deploy secrets, verify it, and
   only then revoke the old key at the provider.
@@ -48,44 +42,25 @@ escaped to prevent line injection.
 ## Observability
 
 Workers Logs are enabled for every invocation in `wrangler.jsonc`; traces use
-head sampling. Every application record has a human-readable `message` for the
-Workers Observability summary and can be filtered by its structured `event` and
-`request_id` fields. Request-scoped messages begin with the first eight request ID
-characters in brackets and repeat the most useful safe structured fields, so
-the summary identifies related events at a glance together with the provider,
-operation, destination, status, credential slot, and duration when those values
-apply. Use `request.started` to identify the query-free method/path and resolved
-endpoint. Chat Completions, Responses, and Messages starts also identify the
-provider, non-default credential profile, and model; early rejections retain
-method/path only. Each upstream attempt then emits `subrequest.started` followed
-by `subrequest.completed` or `subrequest.failed`; Chat Completions, Responses,
-and Messages subrequest events repeat the concrete model. Use
-`request.completed` for status and handler latency; completion also summarizes
-the provider or providers observed during the request.
-Correlate `subrequest.completed`, `subrequest.failed`, or provider-specific
-failure events using the complete structured request ID.
+head sampling. Filter structured records by `event` and correlate them with the
+complete `request_id`. Use `request.started` for the route and safe routing
+metadata, `subrequest.completed` or `subrequest.failed` for upstream outcomes,
+and `request.completed` for the final status and handler latency.
 
 Virtual-model requests emit `virtual_model.select` before each candidate
 attempt. A retryable result emits `virtual_model.retry` before the next select
 event; the final HTTP result or final error emits `virtual_model.completed`.
 
-Inbound logs contain the path but exclude the query string. Logged upstream URLs
-contain only scheme, host, and path, with every query value omitted. Error
-messages are redacted using the same credential-name set as query removal and
-are truncated; headers, payloads, stack traces, and arbitrary thrown objects are
-not recorded.
 `request.completed.duration_ms` ends when response headers are returned, so it
-does not measure completion of a streamed response body. Continue to restrict
-log access and retention as operational data can still be sensitive.
+does not measure completion of a streamed response body. Logs exclude query
+strings, headers, payloads, stack traces, and credential material, but access
+and retention must still be restricted. The full event and disclosure contract
+is in [Monitoring and diagnostics](design/features/monitoring_diagnostics.md#platform-observability).
 
 Filter on `provider.key.selected` to audit credential-slot usage. `key_index`
-is zero based. For one-to-one provider requests, `provider_request_id`
-correlates the selection with its upstream result. Universal Endpoint selection
-events use a zero-based `step` because all steps share one aggregate subrequest.
-`selection_policy` distinguishes explicit indexes or ranges, automatic
-rotation, the default first key, and `/status` diagnostic scans. No credential
-value or fingerprint is emitted. These numbers follow configuration order and
-therefore change if keys are reordered.
+is zero based, `provider_request_id` correlates one-to-one requests with their
+upstream result, and `selection_policy` explains how the slot was chosen. Slot
+numbers follow configuration order and change when keys are reordered.
 
 Use health endpoints deliberately:
 
@@ -141,7 +116,7 @@ that collision explicitly rather than renaming or deleting providers blindly.
 ### Custom Provider synchronization fails
 
 - `ALWAYS_USE_AI_GATEWAY=true` requires both `CLOUDFLARE_ACCOUNT_ID` and a
-  `CLOUDFLARE_API_TOKEN` with AI Gateway Write permission.
+  `CLOUDFLARE_API_TOKEN` with `AI Gateway - Edit` permission.
 - Use `npm run secrets:deploy -- --dry-run` to validate configuration without
   contacting Cloudflare. The dry run cannot verify account permissions or
   existing provider ownership.

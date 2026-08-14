@@ -58,8 +58,7 @@ forwarded.
 
 ### Request processing
 
-- [Middleware pipeline](features/middleware_pipeline.md)
-- [Path handling and normalization](features/path_handling.md)
+- [Request processing](features/request-processing.md)
 - [Security and configuration](features/security_config.md)
 
 ### Provider behavior and reliability
@@ -67,22 +66,14 @@ forwarded.
 - [Provider abstraction](features/provider_abstraction.md)
 - [OpenAI-compatible Responses](features/responses-api.md)
 - [Anthropic-compatible Messages](features/messages-api.md)
-- [Custom OpenAI-compatible endpoints](features/custom-openai-endpoints.md)
 - [Key rotation](features/key_rotation.md)
-- [Provider credential profiles](features/provider_profiles.md)
 - [Virtual models](features/virtual_models.md)
-- [OpenAI-compatible response metadata](features/chat-response-metadata.md)
 
 ### Cloudflare integration and diagnostics
 
 - [AI Gateway integration](features/ai_gateway.md)
 - [Monitoring and diagnostics](features/monitoring_diagnostics.md)
 - [Request-path performance](features/performance.md)
-
-### Security decisions
-
-- [Security design decisions](security-decisions.md) — intentional behaviors and
-  accepted risks, with rationale and reconsideration conditions.
 
 ## Authoritative implementation points
 

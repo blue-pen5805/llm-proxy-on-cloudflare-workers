@@ -1,0 +1,116 @@
+# Request Processing
+
+## Middleware model
+
+The Worker uses a composed middleware chain to keep authentication, path
+rewriting, Gateway selection, and route handlers independent. A shared
+`MiddlewareContext` carries only request-scoped state: the request, Worker
+environment, execution context, normalized path, optional key selection,
+optional AI Gateway client, and the request's provider registry.
+
+`composeMiddleware` enforces single forward traversal. Calling `next()` twice
+rejects, and reaching the end of the chain produces a not-found error.
+
+The internal field is named `pathname`, but it stores the URL suffix after the
+origin, including the query string. This preserves non-authentication query
+parameters on pass-through requests.
+
+## Ordered stages and path rewriting
+
+The order in `src/index.ts` is behaviorally significant:
+
+1. `loggingMiddleware` guarantees a request-start record and records final
+   response status and request latency. Route handlers emit the start record
+   earlier when safe endpoint-specific metadata becomes available.
+2. `errorMiddleware` converts known application errors to JSON and redacts
+   unexpected error details from clients. Because it wraps CORS handling, its
+   responses include the applicable cross-origin headers.
+3. `corsMiddleware` answers preflight requests immediately and adds CORS headers
+   to actual cross-origin responses.
+4. `requestMiddleware` initializes the origin-relative path, including its
+   query string.
+5. `authMiddleware` removes credential-like query parameters and authenticates
+   header credentials unless development mode is enabled on a locally running
+   Worker.
+6. `apiKeyPathMiddleware` extracts and removes an optional `/key/...` prefix.
+   Authentication runs first so malformed selections cannot reveal the reserved
+   prefix to an unauthenticated client.
+7. `providerRegistryMiddleware` validates custom endpoint configuration and
+   creates the request-scoped provider registry.
+8. `aiGatewayMiddleware` selects the default or path-specific Gateway and
+   removes an optional `/g/<name>` prefix. A prefix without
+   `CLOUDFLARE_ACCOUNT_ID` fails with HTTP 400.
+9. `routerMiddleware` dispatches health, compatibility, OpenAI-compatible,
+   provider pass-through, and Universal Endpoint requests. It rejects an
+   extracted key selection when the selected route has no key-selection
+   contract.
+
+For example, after successful authentication:
+
+```text
+/key/1-3/g/production/openai/v1/models?api_key=untrusted&region=us
+    -> query: /key/1-3/g/production/openai/v1/models?region=us
+    -> key selection: {start: 1, end: 3}
+    -> Gateway: production
+    -> provider: openai
+    -> upstream path: /v1/models?region=us
+```
+
+The preflight short circuit intentionally occurs before authentication. Other
+routes authenticate before dispatch. Provider handlers remove all headers
+accepted as proxy credentials and then add the selected provider credential.
+For routed requests, `request.started` is emitted after bounded parsing needed
+to identify the endpoint, provider, and model, but before credential selection
+and upstream I/O. The outer logging middleware supplies a method/path-only
+fallback for requests that return before route metadata becomes available.
+
+## Key prefix and route matching
+
+The leading forms `/key/N`, `/key/N-M`, `/key/N-`, and `/key/-M` are supported.
+Indices are zero-based non-negative safe integers, and a range start cannot
+exceed its end. Malformed values in the reserved `/key/` namespace return HTTP 400. Parsing occurs only at the beginning of the path. The provider handler
+resolves the recorded selection after it knows the configured key count.
+
+Explicit selection is supported only by OpenAI-compatible Chat Completions,
+Responses, Anthropic-compatible Messages, model aggregation, and registered
+provider pass-through routes. `/ping`, `/status`, AI Gateway REST and
+compatibility pass-through routes, the Universal Endpoint, and unknown routes
+reject a leading key-selection prefix with HTTP 400.
+
+The router recognizes the documented versioned and unversioned compatibility
+aliases. Provider pass-through requires `/<provider>/` with a trailing slash
+after the provider name. Gateway Compatibility matches only
+`POST /compat/chat/completions`, and the Universal Endpoint matches only
+`POST /`, when a Gateway context exists.
+
+The account-level AI Gateway REST API matches only `POST /ai/run`,
+`POST /ai/v1/chat/completions`, `POST /ai/v1/responses`, and
+`POST /ai/v1/messages` when a Gateway context exists. Other methods, suffixes,
+and query-bearing variants in the reserved `/ai` namespace return HTTP 404.
+
+Path normalization is routing logic, not a general defense against malicious
+upstream paths. Provider base URLs remain fixed by code or trusted deployment
+configuration. The complete public route contract is in
+[HTTP API and routing](../../api.md).
+
+## Request-scoped environment and failures
+
+The entry point runs the chain inside `Environments.run`, backed by
+`AsyncLocalStorage`. Provider instances and utilities can read the current
+`Env` without mutable module-level request state. After authentication,
+`providerRegistryMiddleware` creates one `ProviderRegistry` in that scope.
+Invalid custom endpoint configuration therefore becomes a safe HTTP 503 without
+being disclosed to unauthenticated requests. Routing reads provider names
+without eagerly constructing adapters; handlers reuse lazily created instances.
+
+Handlers may return upstream responses directly or throw application errors.
+The outer error boundary preserves public messages for known errors. Unknown
+values are logged and converted to a generic HTTP 500 JSON response.
+OpenAI-compatible local failures use the OpenAI error object; Messages routes
+use the Anthropic error object. `HEAD` health and model routes execute their
+`GET` contract and discard the response body.
+
+## References
+
+- [Cloudflare Workers](https://developers.cloudflare.com/workers/)
+- [Fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API)
