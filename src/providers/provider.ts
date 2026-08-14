@@ -44,16 +44,20 @@ const DEFAULT_CHAT_COMPLETIONS_SUPPORTED_PARAMETERS: (keyof OpenAIChatCompletion
     "reasoning_effort",
     "n",
     "modalities",
+    "moderation",
     "prediction",
     "audio",
     "presence_penalty",
+    "prompt_cache_key",
+    "prompt_cache_options",
+    "prompt_cache_retention",
     "response_format",
+    "safety_identifier",
     "seed",
     "service_tier",
     "stop",
     "stream",
     "stream_options",
-    "suffix",
     "temperature",
     "top_p",
     "tools",
@@ -61,9 +65,14 @@ const DEFAULT_CHAT_COMPLETIONS_SUPPORTED_PARAMETERS: (keyof OpenAIChatCompletion
     "parallel_tool_calls",
     "user",
     "verbosity",
+    "web_search_options",
     "function_call",
     "functions",
   ];
+
+const KNOWN_CHAT_COMPLETIONS_PARAMETERS = new Set<
+  keyof OpenAIChatCompletionsRequestBody
+>([...DEFAULT_CHAT_COMPLETIONS_SUPPORTED_PARAMETERS, "suffix"]);
 
 interface AiGatewayChatRequestArguments {
   data: Readonly<Record<string, unknown>> & { model: string };
@@ -419,11 +428,11 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
       );
       const filteredData: Record<string, unknown> = {};
       for (const key in data) {
+        const parameter = key as keyof OpenAIChatCompletionsRequestBody;
         if (
           Object.prototype.hasOwnProperty.call(data, key) &&
-          supportedChatParameters.has(
-            key as keyof OpenAIChatCompletionsRequestBody,
-          )
+          (!KNOWN_CHAT_COMPLETIONS_PARAMETERS.has(parameter) ||
+            supportedChatParameters.has(parameter))
         ) {
           filteredData[key] = data[key];
         }

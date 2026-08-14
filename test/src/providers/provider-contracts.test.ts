@@ -142,7 +142,7 @@ describe("provider contracts", () => {
       expect(await provider.getNextApiKeyIndex()).toBe(0);
     });
 
-    it("builds filtered OpenAI-compatible requests", async () => {
+    it("drops explicitly unsupported fields and retains extensions", async () => {
       const provider = new ProviderBase();
       vi.spyOn(provider, "headers").mockResolvedValue({
         Authorization: "provider-header",
@@ -155,7 +155,7 @@ describe("provider contracts", () => {
           messages: [],
           temperature: 0.5,
           verbosity: "high",
-          unsupported: "removed",
+          unsupported: "retained",
         }),
         headers: { Authorization: "caller-header" },
         apiKeyIndex: 1,
@@ -168,6 +168,7 @@ describe("provider contracts", () => {
           messages: [],
           temperature: 0.5,
           verbosity: "high",
+          unsupported: "retained",
         }),
       });
       // Provider-computed headers take precedence over caller-supplied ones.
@@ -456,6 +457,31 @@ describe("provider contracts", () => {
   });
 
   describe("provider-specific behavior", () => {
+    it("tracks the current OpenAI Chat Completions top-level parameters", () => {
+      expect(
+        new OpenAI().filterSupportedChatParameters({
+          model: "gpt-test",
+          messages: [],
+          moderation: { type: "omni-moderation-latest" },
+          prompt_cache_key: "tenant",
+          prompt_cache_options: { mode: "explicit", ttl: "30m" },
+          prompt_cache_retention: "24h",
+          safety_identifier: "hashed-user",
+          web_search_options: {},
+          suffix: "legacy",
+        }),
+      ).toEqual({
+        model: "gpt-test",
+        messages: [],
+        moderation: { type: "omni-moderation-latest" },
+        prompt_cache_key: "tenant",
+        prompt_cache_options: { mode: "explicit", ttl: "30m" },
+        prompt_cache_retention: "24h",
+        safety_identifier: "hashed-user",
+        web_search_options: {},
+      });
+    });
+
     it("builds Anthropic headers and converts model timestamps", async () => {
       const provider = new Anthropic();
       await expect(provider.headers(1)).resolves.toEqual({

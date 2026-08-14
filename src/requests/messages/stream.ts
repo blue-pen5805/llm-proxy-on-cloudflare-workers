@@ -8,6 +8,7 @@ import { StreamingResponseBudget } from "../stream_limits";
 import type { MessagesRequest } from "./request";
 import {
   convertUsage,
+  convertDeltaUsage,
   invalidUpstreamResponse,
   messageId,
   stopReason,
@@ -31,7 +32,7 @@ export function convertStreamingResponse(
   let started = false;
   let finished = false;
   let finishReason: unknown;
-  let usage: JsonObject = { input_tokens: 0, output_tokens: 0 };
+  let usage: JsonObject = convertDeltaUsage(undefined);
   let proxyMetadata: JsonObject | undefined;
   let textOutputIndex: number | undefined;
   const tools = new Map<number, StreamingTool>();
@@ -56,10 +57,12 @@ export function convertStreamingResponse(
         type: "message",
         role: "assistant",
         content: [],
+        container: null,
         model: request.model,
+        stop_details: null,
         stop_reason: null,
         stop_sequence: null,
-        usage: { input_tokens: 0, output_tokens: 0 },
+        usage: convertUsage(undefined),
       },
     });
   };
@@ -75,7 +78,7 @@ export function convertStreamingResponse(
     textOutputIndex = 0;
     event(controller, "content_block_start", {
       index: textOutputIndex,
-      content_block: { type: "text", text: "" },
+      content_block: { type: "text", text: "", citations: null },
     });
   };
   const finish = (controller: TransformStreamDefaultController<Uint8Array>) => {
@@ -110,7 +113,12 @@ export function convertStreamingResponse(
       event(controller, "content_block_stop", { index });
     }
     event(controller, "message_delta", {
-      delta: { stop_reason: stopReason(finishReason), stop_sequence: null },
+      delta: {
+        container: null,
+        stop_details: null,
+        stop_reason: stopReason(finishReason),
+        stop_sequence: null,
+      },
       usage,
       ...(responseMetadataEnabled && proxyMetadata
         ? { llm_proxy: proxyMetadata }
@@ -139,7 +147,7 @@ export function convertStreamingResponse(
     start(controller);
     if (responseMetadataEnabled && isObject(chunk.llm_proxy))
       proxyMetadata = chunk.llm_proxy;
-    if (chunk.usage !== undefined) usage = convertUsage(chunk.usage);
+    if (chunk.usage !== undefined) usage = convertDeltaUsage(chunk.usage);
     if (!Array.isArray(chunk.choices)) return;
     for (const choice of chunk.choices) {
       if (!isObject(choice)) continue;

@@ -12,6 +12,17 @@ update is explicitly approved.
 
 ### 2026-08-14
 
+- Chat Completions now removes only parameters explicitly unsupported by the
+  selected provider; unclassified extension and future fields pass through.
+- Responses now converts direct Chat equivalents and ignores removed, unknown,
+  or independently removable unsupported fields, items, content parts, and
+  tools instead of rejecting the complete request. Standard `include` log-prob
+  requests are converted, stream delta obfuscation is retained once per bounded
+  upstream chunk unless disabled, and empty allowed-tool choices produced by
+  filtering are omitted.
+- Messages now converts compatible output, system, content, and tool options
+  while ignoring unknown or independently removable unsupported fields,
+  content blocks, and tools instead of rejecting the complete request.
 - Extended each provider's aggregated model-discovery timeout from 30 to 60
   seconds.
 

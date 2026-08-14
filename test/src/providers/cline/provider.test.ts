@@ -35,7 +35,7 @@ describe("Cline provider", () => {
         model: "anthropic/claude-sonnet",
         messages: [{ role: "user", content: "hello" }],
         temperature: 0.2,
-        unsupported: "removed",
+        unsupported: "retained",
       }),
       headers: { "X-Request": "kept" },
     });
@@ -49,6 +49,7 @@ describe("Cline provider", () => {
       model: "anthropic/claude-sonnet",
       messages: [{ role: "user", content: "hello" }],
       temperature: 0.2,
+      unsupported: "retained",
     });
     expect(new Headers(builtChatInit.headers)).toEqual(
       new Headers({

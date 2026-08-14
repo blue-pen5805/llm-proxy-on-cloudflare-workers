@@ -116,7 +116,7 @@ describe("adversarial provider selectors", () => {
     expect(response.status).toBe(400);
   });
 
-  it("rejects an unknown top-level Responses field", async () => {
+  it("does not reject an unknown top-level Responses field as malformed", async () => {
     const response = await Environments.run(environment, () =>
       handleRouting(
         routingContext(
@@ -126,7 +126,7 @@ describe("adversarial provider selectors", () => {
       ),
     );
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(401);
   });
 
   it("rejects a non-object Responses reasoning field", async () => {
@@ -142,7 +142,7 @@ describe("adversarial provider selectors", () => {
     expect(response.status).toBe(400);
   });
 
-  it("rejects a built-in tool nested in a Responses allowed-tools choice", async () => {
+  it("ignores a built-in tool nested in a Responses allowed-tools choice", async () => {
     const response = await Environments.run(environment, () =>
       handleRouting(
         routingContext(
@@ -160,7 +160,34 @@ describe("adversarial provider selectors", () => {
       ),
     );
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(401);
+  });
+
+  it("ignores an unsupported Responses prompt-cache breakpoint", async () => {
+    const response = await Environments.run(environment, () =>
+      handleRouting(
+        routingContext(
+          {
+            model: "openai/model",
+            input: [
+              {
+                role: "user",
+                content: [
+                  {
+                    type: "input_text",
+                    text: "hi",
+                    prompt_cache_breakpoint: { mode: "implicit" },
+                  },
+                ],
+              },
+            ],
+          },
+          "/v1/responses",
+        ),
+      ),
+    );
+
+    expect(response.status).toBe(401);
   });
 
   it("rejects an inherited provider name on the Messages route", async () => {
@@ -178,6 +205,28 @@ describe("adversarial provider selectors", () => {
     );
 
     expect(response.status).toBe(400);
+  });
+
+  it("ignores an unsupported field in a Messages system block", async () => {
+    const response = await Environments.run(environment, () =>
+      handleRouting(
+        routingContext(
+          {
+            model: "openai/model",
+            max_tokens: 8,
+            messages: [
+              {
+                role: "system",
+                content: [{ type: "text", text: "hi", untrusted: true }],
+              },
+            ],
+          },
+          "/v1/messages",
+        ),
+      ),
+    );
+
+    expect(response.status).toBe(401);
   });
 });
 

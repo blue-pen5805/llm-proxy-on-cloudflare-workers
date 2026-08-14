@@ -3,8 +3,25 @@
 export type OpenAIChatCompletionsRequestBody = {
   messages: (
     | {
-        content: string | string[];
+        content:
+          | string
+          | {
+              type: "text";
+              text: string;
+              prompt_cache_breakpoint?: { mode: "explicit" };
+            }[];
         role: "system";
+        name?: string;
+      }
+    | {
+        content:
+          | string
+          | {
+              type: "text";
+              text: string;
+              prompt_cache_breakpoint?: { mode: "explicit" };
+            }[];
+        role: "developer";
         name?: string;
       }
     | {
@@ -14,6 +31,7 @@ export type OpenAIChatCompletionsRequestBody = {
               | {
                   type: "text";
                   text: string;
+                  prompt_cache_breakpoint?: { mode: "explicit" };
                 }
               | {
                   type: "image_url";
@@ -21,6 +39,7 @@ export type OpenAIChatCompletionsRequestBody = {
                     url: string;
                     detail?: "auto" | "high" | "low";
                   };
+                  prompt_cache_breakpoint?: { mode: "explicit" };
                 }
               | {
                   type: "file";
@@ -29,6 +48,7 @@ export type OpenAIChatCompletionsRequestBody = {
                     file_id?: string;
                     filename?: string;
                   };
+                  prompt_cache_breakpoint?: { mode: "explicit" };
                 }
               | {
                   type: "input_audio";
@@ -36,6 +56,7 @@ export type OpenAIChatCompletionsRequestBody = {
                     data: string;
                     format: "wav" | "mp3";
                   };
+                  prompt_cache_breakpoint?: { mode: "explicit" };
                 }
             )[];
         role: "user";
@@ -48,6 +69,7 @@ export type OpenAIChatCompletionsRequestBody = {
               | {
                   type: string;
                   text: string;
+                  prompt_cache_breakpoint?: { mode: "explicit" };
                 }
               | {
                   type: string;
@@ -98,6 +120,7 @@ export type OpenAIChatCompletionsRequestBody = {
   reasoning_effort?: string | null;
   n?: number | null;
   modalities?: string[] | null;
+  moderation?: Record<string, any> | null;
   prediction?: {
     type: "content";
     content:
@@ -105,6 +128,7 @@ export type OpenAIChatCompletionsRequestBody = {
       | {
           type: string;
           text: string;
+          prompt_cache_breakpoint?: { mode: "explicit" };
         }[];
   } | null;
   audio?: {
@@ -112,6 +136,12 @@ export type OpenAIChatCompletionsRequestBody = {
     format: string;
   } | null;
   presence_penalty?: number | null;
+  prompt_cache_key?: string | null;
+  prompt_cache_options?: {
+    mode?: "implicit" | "explicit";
+    ttl?: "30m";
+  };
+  prompt_cache_retention?: "in_memory" | "24h" | null;
   response_format?:
     | {
         type: "text" | "json_object";
@@ -120,13 +150,16 @@ export type OpenAIChatCompletionsRequestBody = {
         type: "json_schema";
         json_schema: Record<string, any>;
       };
+  safety_identifier?: string | null;
   seed?: number | null;
   service_tier?: string | null;
   stop?: string | string[] | null;
   stream?: boolean | null;
   stream_options?: {
+    include_obfuscation?: boolean;
     include_usage?: boolean;
   } | null;
+  /** Provider-specific legacy extension; not part of current OpenAI Chat Completions. */
   suffix?: string | null;
   temperature?: number | null;
   top_p?: number | null;
@@ -163,6 +196,7 @@ export type OpenAIChatCompletionsRequestBody = {
   parallel_tool_calls?: boolean;
   user?: string;
   verbosity?: "low" | "medium" | "high" | null;
+  web_search_options?: Record<string, any>;
   function_call?:
     | string
     | {

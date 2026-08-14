@@ -36,7 +36,7 @@ describe("NVIDIA NIM provider", () => {
         model: "meta/model",
         messages: [{ role: "user", content: "hello" }],
         temperature: 0.2,
-        unsupported: "removed",
+        unsupported: "retained",
       }),
       headers: { "X-Request": "kept" },
     });
@@ -52,6 +52,7 @@ describe("NVIDIA NIM provider", () => {
       model: "meta/model",
       messages: [{ role: "user", content: "hello" }],
       temperature: 0.2,
+      unsupported: "retained",
     });
     expect(new Headers(builtChatInit.headers)).toEqual(
       new Headers({

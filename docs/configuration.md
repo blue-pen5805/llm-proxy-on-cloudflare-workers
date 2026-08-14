@@ -330,9 +330,10 @@ validation enforce these limits. Configured virtual models appear first in
 Malformed configuration fails authenticated requests with HTTP 503, the same as
 `CUSTOM_OPENAI_ENDPOINTS`. Missing or explicit `null` configuration means no
 virtual models exist; requesting an undefined name returns the same HTTP 400
-`"Invalid provider."` as an unknown provider. See [Virtual models](api.md#virtual-models)
-for the diagnostic response and [Virtual models design](design/features/virtual_models.md)
-for rationale.
+`"Invalid provider."` as an unknown provider. See
+[Virtual models](api/proxy-management.md#virtual-models) for the diagnostic
+response and [Virtual models design](design/features/virtual_models.md) for
+rationale.
 
 ## Applying changes
 

@@ -8,6 +8,7 @@ import { StreamingResponseBudget } from "../stream_limits";
 import { type ResponsesRequest, textValue } from "./request";
 import {
   baseResponse,
+  convertTokenLogprobs,
   convertUsage,
   invalidUpstreamResponse,
   itemId,
@@ -35,10 +36,14 @@ export function convertStreamingResponse(
   const id = responseId();
   const createdAt = Math.floor(Date.now() / 1000);
   const profile = profileFor(request);
+  const includeObfuscation =
+    request.stream_options?.include_obfuscation !== false;
   let sequenceNumber = 0;
   let started = false;
   let finished = false;
   let text = "";
+  const textLogprobs: JsonObject[] = [];
+  const textEventLogprobs: JsonObject[] = [];
   let messageId: string | undefined;
   let messageOutputIndex: number | undefined;
   let usage: JsonObject | null = null;
@@ -106,7 +111,12 @@ export function convertStreamingResponse(
     start(controller);
     finished = true;
     if (messageId && messageOutputIndex !== undefined) {
-      const part = { type: "output_text", text, annotations: [] };
+      const part = {
+        type: "output_text",
+        text,
+        annotations: [],
+        logprobs: textLogprobs,
+      };
       const item = {
         id: messageId,
         type: "message",
@@ -118,6 +128,7 @@ export function convertStreamingResponse(
         item_id: messageId,
         output_index: messageOutputIndex,
         content_index: 0,
+        logprobs: textEventLogprobs,
         text,
       });
       event(controller, "response.content_part.done", {
@@ -179,10 +190,9 @@ export function convertStreamingResponse(
     start(controller);
     finished = true;
     event(controller, "error", {
-      error: {
-        type: "stream_error",
-        message: error.message,
-      },
+      code: "stream_error",
+      message: error.message,
+      param: null,
     });
     controller.terminate();
   };
@@ -191,6 +201,16 @@ export function convertStreamingResponse(
     controller: TransformStreamDefaultController<Uint8Array>,
   ) => {
     start(controller);
+    let pendingObfuscation =
+      includeObfuscation && typeof chunk.obfuscation === "string"
+        ? chunk.obfuscation
+        : undefined;
+    const takeObfuscation = (): JsonObject => {
+      if (pendingObfuscation === undefined) return {};
+      const obfuscation = pendingObfuscation;
+      pendingObfuscation = undefined;
+      return { obfuscation };
+    };
     if (responseMetadataEnabled && isObject(chunk.llm_proxy)) {
       proxyMetadata = chunk.llm_proxy;
     }
@@ -211,11 +231,16 @@ export function convertStreamingResponse(
         startMessage(controller);
         if (finished) return;
         text += choice.delta.content;
+        const deltaLogprobs = convertTokenLogprobs(choice.logprobs, false);
+        textEventLogprobs.push(...deltaLogprobs);
+        textLogprobs.push(...convertTokenLogprobs(choice.logprobs, true));
         event(controller, "response.output_text.delta", {
           item_id: messageId,
           output_index: messageOutputIndex,
           content_index: 0,
           delta: choice.delta.content,
+          logprobs: deltaLogprobs,
+          ...takeObfuscation(),
         });
       }
       if (!Array.isArray(choice.delta.tool_calls)) continue;
@@ -288,6 +313,7 @@ export function convertStreamingResponse(
               item_id: tool.id,
               output_index: tool.outputIndex,
               delta: input,
+              ...takeObfuscation(),
             },
           );
         }

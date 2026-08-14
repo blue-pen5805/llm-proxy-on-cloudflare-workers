@@ -3,6 +3,10 @@ import { CloudflareAIGateway } from "~/src/ai_gateway";
 import { handleChatCompletionsRequest } from "~/src/requests/chat_completions";
 import { handleResponsesRequest } from "~/src/requests/responses";
 import {
+  convertResponsesRequest,
+  SUPPORTED_REQUEST_FIELDS,
+} from "~/src/requests/responses/request";
+import {
   MAX_SSE_RECORD_BYTES,
   MAX_STREAM_TEXT_BYTES,
   MAX_STREAM_TOOL_ARGUMENT_BYTES,
@@ -32,6 +36,72 @@ describe("handleResponsesRequest", () => {
     vi.clearAllMocks();
   });
 
+  it("declares the top-level fields converted to Chat Completions", () => {
+    expect([...SUPPORTED_REQUEST_FIELDS]).toEqual([
+      "frequency_penalty",
+      "include",
+      "input",
+      "instructions",
+      "logprobs",
+      "max_output_tokens",
+      "metadata",
+      "model",
+      "moderation",
+      "parallel_tool_calls",
+      "presence_penalty",
+      "prompt_cache_key",
+      "prompt_cache_options",
+      "prompt_cache_retention",
+      "reasoning",
+      "safety_identifier",
+      "seed",
+      "service_tier",
+      "store",
+      "stream",
+      "stream_options",
+      "temperature",
+      "text",
+      "tool_choice",
+      "tools",
+      "top_logprobs",
+      "top_p",
+      "user",
+    ]);
+    expect(
+      convertResponsesRequest({
+        model: "openai/model",
+        input: "hello",
+        future_option: true,
+      }).request,
+    ).toEqual({ model: "openai/model", input: "hello" });
+  });
+
+  it("converts requested logprobs and omits an empty allowed-tools choice", () => {
+    const converted = convertResponsesRequest({
+      model: "openai/model",
+      input: "hello",
+      include: ["reasoning.encrypted_content", "message.output_text.logprobs"],
+      tools: [{ type: "web_search" }],
+      tool_choice: {
+        type: "allowed_tools",
+        mode: "required",
+        tools: [{ type: "web_search" }],
+      },
+    });
+
+    expect(converted.chat).toMatchObject({ logprobs: true });
+    expect(converted.chat).not.toHaveProperty("tools");
+    expect(converted.chat).not.toHaveProperty("tool_choice");
+
+    const nullableTopLogprobs = convertResponsesRequest({
+      model: "openai/model",
+      input: "hello",
+      top_logprobs: null,
+    });
+    expect(nullableTopLogprobs.chat).toMatchObject({ top_logprobs: null });
+    expect(nullableTopLogprobs.chat).not.toHaveProperty("logprobs");
+  });
+
   it("converts a Responses request to Chat Completions and converts JSON output back", async () => {
     vi.spyOn(Config, "chatResponseMetadataEnabled").mockReturnValue(true);
     vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
@@ -58,6 +128,29 @@ describe("handleResponsesRequest", () => {
                       arguments: '{"city":"Tokyo"}',
                     },
                   },
+                ],
+              },
+              logprobs: {
+                content: [
+                  {
+                    token: "Hello",
+                    bytes: [72],
+                    logprob: -0.1,
+                    top_logprobs: [
+                      {
+                        token: "Hello",
+                        bytes: null,
+                        logprob: -0.1,
+                      },
+                      null,
+                    ],
+                  },
+                  {
+                    token: " world",
+                    bytes: null,
+                    logprob: -0.3,
+                  },
+                  null,
                 ],
               },
             },
@@ -119,12 +212,8 @@ describe("handleResponsesRequest", () => {
         future_option: { enabled: true },
       },
       max_output_tokens: 200,
-      frequency_penalty: 0.1,
-      logprobs: true,
       metadata: { tenant: "example" },
       parallel_tool_calls: false,
-      presence_penalty: 0.2,
-      seed: 7,
       service_tier: "default",
       store: false,
       temperature: 0.4,
@@ -181,12 +270,9 @@ describe("handleResponsesRequest", () => {
       },
       reasoning_effort: "medium",
       max_completion_tokens: 200,
-      frequency_penalty: 0.1,
       logprobs: true,
       metadata: { tenant: "example" },
       parallel_tool_calls: false,
-      presence_penalty: 0.2,
-      seed: 7,
       service_tier: "default",
       store: false,
       temperature: 0.4,
@@ -242,7 +328,31 @@ describe("handleResponsesRequest", () => {
         status: "completed",
         role: "assistant",
         content: [
-          { type: "output_text", text: "Hello from chat", annotations: [] },
+          {
+            type: "output_text",
+            text: "Hello from chat",
+            annotations: [],
+            logprobs: [
+              {
+                token: "Hello",
+                bytes: [72],
+                logprob: -0.1,
+                top_logprobs: [
+                  {
+                    token: "Hello",
+                    bytes: [72, 101, 108, 108, 111],
+                    logprob: -0.1,
+                  },
+                ],
+              },
+              {
+                token: " world",
+                bytes: [32, 119, 111, 114, 108, 100],
+                logprob: -0.3,
+                top_logprobs: [],
+              },
+            ],
+          },
           { type: "refusal", refusal: "brief refusal" },
         ],
       },
@@ -268,16 +378,28 @@ describe("handleResponsesRequest", () => {
         input: [
           {
             role: "developer",
-            content: [{ type: "input_text", text: "Developer guidance" }],
+            content: [
+              {
+                type: "input_text",
+                text: "Developer guidance",
+                prompt_cache_breakpoint: { mode: "explicit" },
+              },
+            ],
           },
           {
             role: "user",
             content: [
-              { type: "text", text: "Look" },
+              {
+                type: "text",
+                text: "Look",
+                prompt_cache_breakpoint: { mode: "explicit" },
+              },
+              { type: "text", text: "Again" },
               {
                 type: "input_image",
                 image_url: "https://images.example/image.png",
                 detail: "low",
+                prompt_cache_breakpoint: { mode: "explicit" },
               },
             ],
           },
@@ -308,18 +430,30 @@ describe("handleResponsesRequest", () => {
       messages: [
         {
           role: "system",
-          content: [{ type: "text", text: "Developer guidance" }],
+          content: [
+            {
+              type: "text",
+              text: "Developer guidance",
+              prompt_cache_breakpoint: { mode: "explicit" },
+            },
+          ],
         },
         {
           role: "user",
           content: [
-            { type: "text", text: "Look" },
+            {
+              type: "text",
+              text: "Look",
+              prompt_cache_breakpoint: { mode: "explicit" },
+            },
+            { type: "text", text: "Again" },
             {
               type: "image_url",
               image_url: {
                 url: "https://images.example/image.png",
                 detail: "low",
               },
+              prompt_cache_breakpoint: { mode: "explicit" },
             },
           ],
         },
@@ -384,7 +518,11 @@ describe("handleResponsesRequest", () => {
           {
             role: "user",
             content: [
-              { type: "input_file", file_id: "file_1" },
+              {
+                type: "input_file",
+                file_id: "file_1",
+                prompt_cache_breakpoint: { mode: "explicit" },
+              },
               {
                 type: "input_file",
                 file_data: "ZmlsZQ==",
@@ -395,6 +533,8 @@ describe("handleResponsesRequest", () => {
                 image_url: "https://images.example/original.png",
                 detail: "auto",
               },
+              { type: "future_content", payload: "ignored" },
+              { type: "input_file", file_url: "https://files.example/a" },
             ],
           },
           {
@@ -415,6 +555,7 @@ describe("handleResponsesRequest", () => {
           },
         ],
         tools: [
+          { type: "web_search" },
           { type: "function", name: "lookup", strict: null },
           {
             type: "custom",
@@ -427,11 +568,14 @@ describe("handleResponsesRequest", () => {
           type: "allowed_tools",
           mode: "required",
           tools: [
+            { type: "web_search" },
             { type: "function", name: "lookup" },
             { type: "custom", name: "shell" },
           ],
         },
         text: { verbosity: "high" },
+        max_tool_calls: 2,
+        future_option: true,
       }),
     } as never);
 
@@ -443,7 +587,11 @@ describe("handleResponsesRequest", () => {
         {
           role: "user",
           content: [
-            { type: "file", file: { file_id: "file_1" } },
+            {
+              type: "file",
+              file: { file_id: "file_1" },
+              prompt_cache_breakpoint: { mode: "explicit" },
+            },
             {
               type: "file",
               file: { file_data: "ZmlsZQ==", filename: "input.txt" },
@@ -556,7 +704,6 @@ describe("handleResponsesRequest", () => {
         context_management: [{ type: "compaction", compact_threshold: 1000 }],
         conversation: "conv_1",
         include: ["reasoning.encrypted_content"],
-        max_tool_calls: 2,
         moderation: { type: "omni-moderation-latest" },
         previous_response_id: "resp_1",
         prompt: { id: "pmpt_1", variables: { topic: "weather" } },
@@ -579,10 +726,14 @@ describe("handleResponsesRequest", () => {
     expect(preparedRequest.body).toEqual({
       model: "openai/model",
       messages: [{ role: "user", content: "Hello" }],
+      moderation: { type: "omni-moderation-latest" },
+      prompt_cache_key: "tenant-1",
+      prompt_cache_options: { mode: "explicit", ttl: "30m" },
+      prompt_cache_retention: "24h",
+      safety_identifier: "hashed-user-1",
     });
     await expect(response.json()).resolves.toMatchObject({
       background: false,
-      max_tool_calls: null,
       previous_response_id: null,
       truncation: "disabled",
     });
@@ -591,13 +742,13 @@ describe("handleResponsesRequest", () => {
   it("converts Chat Completions text and function streaming chunks to Responses events", async () => {
     vi.spyOn(Config, "chatResponseMetadataEnabled").mockReturnValue(true);
     const sse = [
-      'data: {"choices":[{"delta":{"content":"Hel"},"finish_reason":null}]}',
+      'data: {"choices":[{"delta":{"content":"Hel"},"finish_reason":null,"logprobs":{"content":[{"token":"Hel","bytes":[72,101,108],"logprob":-0.1,"top_logprobs":[{"token":"Hello","bytes":[72,"bad"],"logprob":-0.2}]}]}}],"obfuscation":"text-pad-1"}',
       "",
-      'data: {"choices":[{"delta":{"content":"lo"},"finish_reason":null}]}',
+      'data: {"choices":[{"delta":{"content":"lo"},"finish_reason":null}],"obfuscation":"text-pad-2"}',
       "",
-      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"lookup","arguments":"{\\"q\\":"}}]},"finish_reason":null}]}',
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"lookup","arguments":"{\\"q\\":"}}]},"finish_reason":null}],"obfuscation":"tool-pad-1"}',
       "",
-      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\\"x\\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":3,"completion_tokens":2,"total_tokens":5}}',
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\\"x\\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":3,"completion_tokens":2,"total_tokens":5},"obfuscation":"tool-pad-2"}',
       "",
       'data: {"id":"proxy-metadata","object":"chat.completion.chunk","choices":[],"llm_proxy":{"request_id":"request-stream","provider":"anthropic","model":"claude-sonnet-4-5","requested_model":"anthropic/model","credential_profile":"default","via_ai_gateway":true,"gateway":"production"}}',
       "",
@@ -619,6 +770,7 @@ describe("handleResponsesRequest", () => {
         model: "anthropic/model",
         input: "Hello",
         stream: true,
+        stream_options: { include_obfuscation: false },
       }),
     } as never);
 
@@ -663,6 +815,38 @@ describe("handleResponsesRequest", () => {
         .map((event) => event.delta)
         .join(""),
     ).toBe("Hello");
+    const textDeltas = events.filter(
+      (event) => event.type === "response.output_text.delta",
+    );
+    expect(textDeltas[0].logprobs).toEqual([
+      {
+        token: "Hel",
+        logprob: -0.1,
+        top_logprobs: [{ token: "Hello", logprob: -0.2 }],
+      },
+    ]);
+    expect(textDeltas[1].logprobs).toEqual([]);
+    expect(textDeltas.map((event) => event.obfuscation)).toEqual([
+      undefined,
+      undefined,
+    ]);
+    expect(
+      events
+        .filter(
+          (event) => event.type === "response.function_call_arguments.delta",
+        )
+        .map((event) => event.obfuscation),
+    ).toEqual([undefined, undefined]);
+    expect(
+      events.find((event) => event.type === "response.output_text.done")
+        .logprobs,
+    ).toEqual([
+      {
+        token: "Hel",
+        logprob: -0.1,
+        top_logprobs: [{ token: "Hello", logprob: -0.2 }],
+      },
+    ]);
     expect(events.at(-1).response).toMatchObject({
       status: "completed",
       usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 },
@@ -689,8 +873,42 @@ describe("handleResponsesRequest", () => {
       .calls[0][2]!;
     expect(preparedRequest.body).toMatchObject({
       stream: true,
-      stream_options: { include_usage: true },
+      stream_options: { include_obfuscation: false, include_usage: true },
     });
+  });
+
+  it("emits upstream obfuscation at most once per Chat chunk", async () => {
+    const obfuscation = "x".repeat(64 * 1024);
+    const choices = Array.from({ length: 128 }, (_value, index) => ({
+      delta: { content: String(index % 10) },
+      finish_reason: null,
+    }));
+    const sse = [
+      `data: ${JSON.stringify({ choices, obfuscation })}`,
+      "",
+      "data: [DONE]",
+      "",
+    ].join("\n");
+    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+      new Response(sse, {
+        headers: { "content-type": "text/event-stream" },
+      }),
+    );
+
+    const response = await handleResponsesRequest({
+      request: request({
+        model: "openai/model",
+        input: "Hello",
+        stream: true,
+      }),
+    } as never);
+    const body = await response.text();
+
+    expect(body.split('"obfuscation":').length - 1).toBe(1);
+    expect(body.split("event: response.output_text.delta").length - 1).toBe(
+      choices.length,
+    );
+    expect(body.length).toBeLessThan(obfuscation.length + 256 * 1024);
   });
 
   it("terminates malformed streams without emitting a successful completion", async () => {
@@ -715,6 +933,9 @@ describe("handleResponsesRequest", () => {
     } as never);
     const body = await response.text();
     expect(body).toContain("event: error");
+    expect(body).toContain('"code":"stream_error"');
+    expect(body).toContain('"param":null');
+    expect(body).not.toContain('"error":{"type":"stream_error"');
     expect(body).not.toContain("event: response.completed");
     expect(body).not.toContain("event: response.incomplete");
     expect(cancel).toHaveBeenCalledOnce();
@@ -1113,7 +1334,7 @@ describe("handleResponsesRequest", () => {
     ],
     [
       "null verbosity",
-      { input: "Hello", text: { verbosity: null } },
+      { input: "Hello", text: { verbosity: null }, stream_options: null },
       { verbosity: null },
     ],
     [
@@ -1221,6 +1442,32 @@ describe("handleResponsesRequest", () => {
         ],
       },
     ],
+    [
+      "prior output text",
+      {
+        input: [
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "output_text",
+                text: "prior",
+                annotations: [],
+                logprobs: [],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        messages: [
+          {
+            role: "assistant",
+            content: [{ type: "text", text: "prior" }],
+          },
+        ],
+      },
+    ],
   ])("converts %s", async (_name, body, expected) => {
     vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
       Response.json({ choices: [{ message: { content: "ok" } }] }),
@@ -1297,16 +1544,64 @@ describe("handleResponsesRequest", () => {
     expect(body).toMatch(/"call_id":"fc_[a-f0-9]{32}"/);
   });
 
+  const ignoredCompatibilityCases = new Set([
+    "removed Responses field",
+    "unknown stream option",
+    "invalid role",
+    "unknown content item",
+    "invalid prompt-cache breakpoint",
+    "image file id",
+    "unsupported image detail",
+    "file URL without a Chat representation",
+    "file detail without a Chat representation",
+    "invalid custom tool output item",
+    "unknown input item",
+    "unnamed input item",
+    "invalid tool item",
+    "invalid tool choice",
+    "invalid allowed tool choice mode",
+    "invalid allowed tool choice item",
+    "invalid text format",
+    "invalid JSON schema format",
+    "built-in tool",
+    "stateful storage",
+    "verbosity",
+  ]);
+
   it.each([
     ["malformed JSON", "{"],
     ["non-object", []],
     ["missing model", { input: "Hello" }],
     ["missing input", { model: "openai/model" }],
     [
+      "removed Responses field",
+      { model: "openai/model", input: "Hello", max_tool_calls: 1 },
+    ],
+    [
       "invalid instructions",
       { model: "openai/model", input: "Hello", instructions: 1 },
     ],
     ["invalid input", { model: "openai/model", input: {} }],
+    [
+      "invalid stream options",
+      { model: "openai/model", input: "Hello", stream_options: false },
+    ],
+    [
+      "unknown stream option",
+      {
+        model: "openai/model",
+        input: "Hello",
+        stream_options: { unknown: true },
+      },
+    ],
+    [
+      "invalid stream obfuscation option",
+      {
+        model: "openai/model",
+        input: "Hello",
+        stream_options: { include_obfuscation: "no" },
+      },
+    ],
     ["invalid input item", { model: "openai/model", input: [null] }],
     [
       "invalid role",
@@ -1332,6 +1627,24 @@ describe("handleResponsesRequest", () => {
       {
         model: "openai/model",
         input: [{ role: "user", content: [{ type: "input_text" }] }],
+      },
+    ],
+    [
+      "invalid prompt-cache breakpoint",
+      {
+        model: "openai/model",
+        input: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: "x",
+                prompt_cache_breakpoint: { mode: "explicit", extra: true },
+              },
+            ],
+          },
+        ],
       },
     ],
     [
@@ -1373,6 +1686,20 @@ describe("handleResponsesRequest", () => {
             role: "user",
             content: [
               { type: "input_file", file_url: "https://files.example" },
+            ],
+          },
+        ],
+      },
+    ],
+    [
+      "file detail without a Chat representation",
+      {
+        model: "openai/model",
+        input: [
+          {
+            role: "user",
+            content: [
+              { type: "input_file", file_id: "file_1", detail: "full" },
             ],
           },
         ],
@@ -1524,17 +1851,28 @@ describe("handleResponsesRequest", () => {
       "verbosity",
       { model: "openai/model", input: "Hello", text: { verbosity: "extreme" } },
     ],
-  ])("rejects unsupported or invalid %s", async (_name, body) => {
+  ])("handles unsupported or invalid %s", async (name, body) => {
+    const ignored = ignoredCompatibilityCases.has(name);
+    if (ignored) {
+      vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+        Response.json({ choices: [{ message: { content: "ok" } }] }),
+      );
+    }
     const response = await handleResponsesRequest({
       request: request(body),
     } as never);
-    expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({
-      error: expect.objectContaining({
-        message: expect.any(String),
-        type: "invalid_request_error",
-      }),
-    });
-    expect(handleChatCompletionsRequest).not.toHaveBeenCalled();
+    if (ignored) {
+      expect(response.status).toBe(200);
+      expect(handleChatCompletionsRequest).toHaveBeenCalledOnce();
+    } else {
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: expect.objectContaining({
+          message: expect.any(String),
+          type: "invalid_request_error",
+        }),
+      });
+      expect(handleChatCompletionsRequest).not.toHaveBeenCalled();
+    }
   });
 });

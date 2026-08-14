@@ -1,24 +1,34 @@
 import { anthropicErrorResponse } from "../error_response";
 import { isJsonObject as isObject, type JsonObject } from "../sse";
+import type { MessagesRequest } from "./types";
 
-const SUPPORTED_REQUEST_FIELDS = new Set([
-  "max_tokens",
-  "messages",
-  "metadata",
-  "model",
-  "stop_sequences",
-  "stream",
-  "system",
-  "temperature",
-  "tool_choice",
-  "tools",
-  "top_p",
-]);
+export type { MessagesRequest } from "./types";
 
-export interface MessagesRequest extends JsonObject {
-  max_tokens: number;
-  messages: unknown[];
-  model: string;
+/** Top-level Messages fields with an implemented Chat Completions conversion. */
+export const SUPPORTED_REQUEST_FIELDS: ReadonlySet<keyof MessagesRequest> =
+  new Set<keyof MessagesRequest>([
+    "max_tokens",
+    "messages",
+    "metadata",
+    "model",
+    "output_config",
+    "stop_sequences",
+    "stream",
+    "system",
+    "temperature",
+    "tool_choice",
+    "tools",
+    "top_p",
+  ]);
+
+function selectSupportedRequestFields<T extends JsonObject>(body: T): T {
+  const selected: JsonObject = {};
+  for (const field of SUPPORTED_REQUEST_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(body, field)) {
+      selected[field] = body[field];
+    }
+  }
+  return selected as T;
 }
 
 export function invalidRequest(message: string): Response {
@@ -29,16 +39,7 @@ function unsupported(field: string): never {
   throw new Error(`Messages field is not supported: ${field}.`);
 }
 
-function requireOnly(
-  value: JsonObject,
-  allowed: readonly string[],
-  field: string,
-) {
-  const unknown = Object.keys(value).find((key) => !allowed.includes(key));
-  if (unknown) unsupported(`${field}.${unknown}`);
-}
-
-function convertImageSource(source: unknown): string {
+function convertImageSource(source: unknown): string | undefined {
   if (!isObject(source) || typeof source.type !== "string") {
     return unsupported("messages.content.image.source");
   }
@@ -47,69 +48,98 @@ function convertImageSource(source: unknown): string {
     typeof source.media_type === "string" &&
     typeof source.data === "string"
   ) {
-    requireOnly(
-      source,
-      ["type", "media_type", "data"],
-      "messages.content.image.source",
-    );
     return `data:${source.media_type};base64,${source.data}`;
   }
   if (source.type === "url" && typeof source.url === "string") {
-    requireOnly(source, ["type", "url"], "messages.content.image.source");
     return source.url;
   }
-  return unsupported("messages.content.image.source");
+  return undefined;
 }
 
-function convertOrdinaryBlock(block: JsonObject): JsonObject {
+function convertOrdinaryBlock(block: JsonObject): JsonObject | undefined {
   if (block.type === "text" && typeof block.text === "string") {
-    requireOnly(block, ["type", "text"], "messages.content.text");
     return { type: "text", text: block.text };
   }
   if (block.type === "image") {
-    requireOnly(block, ["type", "source"], "messages.content.image");
+    const url = convertImageSource(block.source);
+    if (url === undefined) return undefined;
     return {
       type: "image_url",
-      image_url: { url: convertImageSource(block.source) },
+      image_url: { url },
     };
   }
-  return unsupported(`messages.content.${block.type}`);
+  return undefined;
 }
 
 function toolResultContent(content: unknown): string | JsonObject[] {
+  if (content === undefined) return "";
   if (typeof content === "string") return content;
   if (!Array.isArray(content))
     return unsupported("messages.content.tool_result.content");
-  return content.map((block) => {
+  return content.flatMap((block) => {
     if (
       !isObject(block) ||
       block.type !== "text" ||
       typeof block.text !== "string"
     ) {
-      return unsupported("messages.content.tool_result.content");
+      return [];
     }
-    requireOnly(
-      block,
-      ["type", "text"],
-      "messages.content.tool_result.content",
-    );
-    return { type: "text", text: block.text };
+    return [{ type: "text", text: block.text }];
   });
 }
 
-function convertMessage(message: unknown): JsonObject[] {
-  if (
-    !isObject(message) ||
-    !["user", "assistant"].includes(String(message.role))
-  ) {
-    return unsupported("messages");
+function convertMidConversationSystem(
+  block: JsonObject,
+): JsonObject & { content: JsonObject[] } {
+  if (!Array.isArray(block.content)) {
+    unsupported("messages.content.system.content");
   }
-  requireOnly(message, ["role", "content"], "messages[]");
-  const role = message.role as "user" | "assistant";
+  const content = block.content.flatMap((nested) => {
+    if (
+      !isObject(nested) ||
+      nested.type !== "text" ||
+      typeof nested.text !== "string"
+    ) {
+      return [];
+    }
+    return [{ type: "text", text: nested.text }];
+  });
+  return { role: "system", content };
+}
+
+function convertMessage(message: unknown): JsonObject[] {
+  if (!isObject(message)) return unsupported("messages");
+  if (!["user", "assistant", "system"].includes(String(message.role))) {
+    return [];
+  }
+  const role = message.role as "user" | "assistant" | "system";
   if (typeof message.content === "string") {
     return [{ role, content: message.content }];
   }
   if (!Array.isArray(message.content)) return unsupported("messages.content");
+
+  if (role === "system") {
+    const content: JsonObject[] = [];
+    for (const block of message.content) {
+      if (!isObject(block) || typeof block.type !== "string") {
+        continue;
+      }
+      if (block.type === "mid_conv_system") {
+        content.push(...convertMidConversationSystem(block).content);
+        continue;
+      }
+      if (block.type !== "text" || typeof block.text !== "string") {
+        continue;
+      }
+      content.push({ type: "text", text: block.text });
+    }
+    return [
+      {
+        role,
+        content,
+      },
+    ];
+  }
 
   const converted: JsonObject[] = [];
   let ordinary: JsonObject[] = [];
@@ -124,15 +154,15 @@ function convertMessage(message: unknown): JsonObject[] {
     if (!isObject(block) || typeof block.type !== "string") {
       unsupported("messages.content");
     }
+    if (block.type === "mid_conv_system") {
+      flushOrdinary();
+      converted.push(convertMidConversationSystem(block));
+      continue;
+    }
     if (block.type === "tool_result") {
       if (role !== "user" || typeof block.tool_use_id !== "string") {
         unsupported("messages.content.tool_result");
       }
-      requireOnly(
-        block,
-        ["type", "tool_use_id", "content"],
-        "messages.content.tool_result",
-      );
       flushOrdinary();
       converted.push({
         role: "tool",
@@ -150,11 +180,6 @@ function convertMessage(message: unknown): JsonObject[] {
       ) {
         unsupported("messages.content.tool_use");
       }
-      requireOnly(
-        block,
-        ["type", "id", "name", "input"],
-        "messages.content.tool_use",
-      );
       flushOrdinary();
       converted.push({
         role: "assistant",
@@ -172,7 +197,8 @@ function convertMessage(message: unknown): JsonObject[] {
       });
       continue;
     }
-    ordinary.push(convertOrdinaryBlock(block));
+    const ordinaryBlock = convertOrdinaryBlock(block);
+    if (ordinaryBlock) ordinary.push(ordinaryBlock);
   }
   flushOrdinary();
   return converted.length > 0 ? converted : [{ role, content: [] }];
@@ -184,16 +210,15 @@ function convertSystem(system: unknown): JsonObject | undefined {
   if (!Array.isArray(system)) return unsupported("system");
   return {
     role: "system",
-    content: system.map((block) => {
+    content: system.flatMap((block) => {
       if (
         !isObject(block) ||
         block.type !== "text" ||
         typeof block.text !== "string"
       ) {
-        return unsupported("system");
+        return [];
       }
-      requireOnly(block, ["type", "text"], "system");
-      return { type: "text", text: block.text };
+      return [{ type: "text", text: block.text }];
     }),
   };
 }
@@ -201,26 +226,62 @@ function convertSystem(system: unknown): JsonObject | undefined {
 function convertTools(tools: unknown): JsonObject[] | undefined {
   if (tools === undefined) return undefined;
   if (!Array.isArray(tools)) return unsupported("tools");
-  return tools.map((tool) => {
+  return tools.flatMap((tool): JsonObject[] => {
     if (
       !isObject(tool) ||
       typeof tool.name !== "string" ||
       !isObject(tool.input_schema)
     ) {
-      return unsupported("tools");
+      return [];
     }
-    requireOnly(tool, ["name", "description", "input_schema"], "tools[]");
-    return {
-      type: "function",
-      function: {
-        name: tool.name,
-        ...(typeof tool.description === "string"
-          ? { description: tool.description }
-          : {}),
-        parameters: tool.input_schema,
+    if (
+      tool.type !== undefined &&
+      tool.type !== null &&
+      tool.type !== "custom"
+    ) {
+      return [];
+    }
+    return [
+      {
+        type: "function",
+        function: {
+          name: tool.name,
+          ...(typeof tool.description === "string"
+            ? { description: tool.description }
+            : {}),
+          parameters: tool.input_schema,
+          ...(typeof tool.strict === "boolean" ? { strict: tool.strict } : {}),
+        },
+      },
+    ];
+  });
+}
+
+function convertOutputConfig(outputConfig: unknown): JsonObject {
+  if (outputConfig === undefined) return {};
+  if (!isObject(outputConfig)) return unsupported("output_config");
+
+  const converted: JsonObject = {};
+  if (typeof outputConfig.effort === "string") {
+    converted.reasoning_effort = outputConfig.effort;
+  }
+  if (outputConfig.format !== undefined && outputConfig.format !== null) {
+    if (
+      !isObject(outputConfig.format) ||
+      outputConfig.format.type !== "json_schema" ||
+      !isObject(outputConfig.format.schema)
+    ) {
+      return converted;
+    }
+    converted.response_format = {
+      type: "json_schema",
+      json_schema: {
+        name: "response",
+        schema: outputConfig.format.schema,
       },
     };
-  });
+  }
+  return converted;
 }
 
 function convertToolChoice(choice: unknown):
@@ -231,20 +292,15 @@ function convertToolChoice(choice: unknown):
   | undefined {
   if (choice === undefined) return undefined;
   if (!isObject(choice) || typeof choice.type !== "string") {
-    return unsupported("tool_choice");
+    return undefined;
   }
-  requireOnly(
-    choice,
-    ["type", "name", "disable_parallel_tool_use"],
-    "tool_choice",
-  );
   let toolChoice: unknown;
   if (choice.type === "auto" || choice.type === "none")
     toolChoice = choice.type;
   else if (choice.type === "any") toolChoice = "required";
   else if (choice.type === "tool" && typeof choice.name === "string") {
     toolChoice = { type: "function", function: { name: choice.name } };
-  } else return unsupported("tool_choice");
+  } else return undefined;
   if (
     choice.disable_parallel_tool_use !== undefined &&
     typeof choice.disable_parallel_tool_use !== "boolean"
@@ -259,26 +315,26 @@ function convertToolChoice(choice: unknown):
   };
 }
 
-export function convertMessagesRequest(body: unknown): {
+export function convertMessagesRequest(rawBody: unknown): {
   chat: JsonObject & { model: string };
   request: MessagesRequest;
 } {
   if (
-    !isObject(body) ||
-    typeof body.model !== "string" ||
-    !Array.isArray(body.messages) ||
-    typeof body.max_tokens !== "number"
+    !isObject(rawBody) ||
+    typeof rawBody.model !== "string" ||
+    !Array.isArray(rawBody.messages) ||
+    typeof rawBody.max_tokens !== "number"
   ) {
     throw new Error("Invalid request.");
   }
-  for (const field of Object.keys(body)) {
-    if (!SUPPORTED_REQUEST_FIELDS.has(field)) unsupported(field);
-  }
+  const body = selectSupportedRequestFields(
+    rawBody,
+  ) as unknown as MessagesRequest;
   if (body.metadata !== undefined) {
     if (!isObject(body.metadata)) unsupported("metadata");
-    requireOnly(body.metadata, ["user_id"], "metadata");
     if (
       body.metadata.user_id !== undefined &&
+      body.metadata.user_id !== null &&
       typeof body.metadata.user_id !== "string"
     ) {
       unsupported("metadata.user_id");
@@ -293,6 +349,7 @@ export function convertMessagesRequest(body: unknown): {
   const system = convertSystem(body.system);
   const tools = convertTools(body.tools);
   const choice = convertToolChoice(body.tool_choice);
+  const outputConfig = convertOutputConfig(body.output_config);
   const messages: JsonObject[] = [];
   if (system) messages.push(system);
   for (const message of body.messages) {
@@ -315,6 +372,7 @@ export function convertMessagesRequest(body: unknown): {
         ? {}
         : { temperature: body.temperature }),
       ...(body.top_p === undefined ? {} : { top_p: body.top_p }),
+      ...outputConfig,
       ...(isObject(body.metadata) && typeof body.metadata.user_id === "string"
         ? { user: body.metadata.user_id }
         : {}),

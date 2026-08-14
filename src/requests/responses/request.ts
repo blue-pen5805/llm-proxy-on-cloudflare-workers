@@ -1,49 +1,50 @@
 import { openAIErrorResponse } from "../error_response";
 import { isJsonObject as isObject, type JsonObject } from "../sse";
+import type { ResponsesRequest } from "./types";
 
-const IGNORED_REQUEST_FIELDS = new Set([
-  "background",
-  "context_management",
-  "conversation",
-  "include",
-  "max_tool_calls",
-  "moderation",
-  "previous_response_id",
-  "prompt",
-  "prompt_cache_key",
-  "prompt_cache_options",
-  "prompt_cache_retention",
-  "safety_identifier",
-  "stream_options",
-  "truncation",
-]);
-const SUPPORTED_REQUEST_FIELDS = new Set([
-  "frequency_penalty",
-  "input",
-  "instructions",
-  "logprobs",
-  "max_output_tokens",
-  "metadata",
-  "model",
-  "parallel_tool_calls",
-  "presence_penalty",
-  "reasoning",
-  "seed",
-  "service_tier",
-  "store",
-  "stream",
-  "temperature",
-  "text",
-  "tool_choice",
-  "tools",
-  "top_logprobs",
-  "top_p",
-  "user",
-]);
+export type { ResponsesRequest } from "./types";
 
-export interface ResponsesRequest extends JsonObject {
-  model: string;
-  input: unknown;
+/** Top-level Responses fields with an implemented Chat Completions conversion. */
+export const SUPPORTED_REQUEST_FIELDS: ReadonlySet<keyof ResponsesRequest> =
+  new Set<keyof ResponsesRequest>([
+    "frequency_penalty",
+    "include",
+    "input",
+    "instructions",
+    "logprobs",
+    "max_output_tokens",
+    "metadata",
+    "model",
+    "moderation",
+    "parallel_tool_calls",
+    "presence_penalty",
+    "prompt_cache_key",
+    "prompt_cache_options",
+    "prompt_cache_retention",
+    "reasoning",
+    "safety_identifier",
+    "seed",
+    "service_tier",
+    "store",
+    "stream",
+    "stream_options",
+    "temperature",
+    "text",
+    "tool_choice",
+    "tools",
+    "top_logprobs",
+    "top_p",
+    "user",
+  ]);
+
+function selectSupportedRequestFields<T extends JsonObject>(body: T): T {
+  const selected: JsonObject = {};
+  for (const field of SUPPORTED_REQUEST_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(body, field)) {
+      selected[field] = body[field];
+    }
+  }
+  return selected as T;
 }
 
 export interface ResponseProfile {
@@ -80,35 +81,46 @@ function unsupported(field: string): never {
   throw new Error(`Responses field is not supported: ${field}.`);
 }
 
+function promptCacheBreakpoint(value: unknown): JsonObject | undefined {
+  if (value === undefined) return undefined;
+  return isObject(value) && value.mode === "explicit"
+    ? { mode: "explicit" }
+    : undefined;
+}
+
 export function textValue(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
-function convertContentPart(part: unknown): JsonObject {
+function convertContentPart(part: unknown): JsonObject | undefined {
   if (!isObject(part) || typeof part.type !== "string") {
     return unsupported("input.content");
   }
   if (part.type === "input_text" || part.type === "output_text") {
     if (typeof part.text !== "string") return unsupported("input.content.text");
-    return { type: "text", text: part.text };
+    const breakpoint = promptCacheBreakpoint(part.prompt_cache_breakpoint);
+    return {
+      type: "text",
+      text: part.text,
+      ...(breakpoint ? { prompt_cache_breakpoint: breakpoint } : {}),
+    };
   }
   if (part.type === "text" && typeof part.text === "string") {
-    return { type: "text", text: part.text };
+    const breakpoint = promptCacheBreakpoint(part.prompt_cache_breakpoint);
+    return {
+      type: "text",
+      text: part.text,
+      ...(breakpoint ? { prompt_cache_breakpoint: breakpoint } : {}),
+    };
   }
   if (part.type === "refusal" && typeof part.refusal === "string") {
     return { type: "text", text: part.refusal };
   }
   if (part.type === "input_image") {
     if (typeof part.image_url !== "string") {
-      return unsupported("input_image.file_id");
+      return undefined;
     }
-    if (
-      part.detail !== undefined &&
-      part.detail !== null &&
-      !["auto", "low", "high"].includes(String(part.detail))
-    ) {
-      return unsupported("input_image.detail");
-    }
+    const breakpoint = promptCacheBreakpoint(part.prompt_cache_breakpoint);
     return {
       type: "image_url",
       image_url: {
@@ -117,6 +129,7 @@ function convertContentPart(part: unknown): JsonObject {
           ? { detail: part.detail }
           : {}),
       },
+      ...(breakpoint ? { prompt_cache_breakpoint: breakpoint } : {}),
     };
   }
   if (part.type === "input_file") {
@@ -124,8 +137,9 @@ function convertContentPart(part: unknown): JsonObject {
       typeof part.file_id !== "string" &&
       typeof part.file_data !== "string"
     ) {
-      return unsupported("input_file.file_url");
+      return undefined;
     }
+    const breakpoint = promptCacheBreakpoint(part.prompt_cache_breakpoint);
     return {
       type: "file",
       file: {
@@ -137,22 +151,25 @@ function convertContentPart(part: unknown): JsonObject {
           ? { filename: part.filename }
           : {}),
       },
+      ...(breakpoint ? { prompt_cache_breakpoint: breakpoint } : {}),
     };
   }
-  return unsupported(`input.content.${part.type}`);
+  return undefined;
 }
 
 function convertMessageContent(content: unknown): string | JsonObject[] {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return unsupported("input.content");
-  return content.map(convertContentPart);
+  return content
+    .map(convertContentPart)
+    .filter((part): part is JsonObject => part !== undefined);
 }
 
-function convertInputItem(item: unknown): JsonObject {
+function convertInputItem(item: unknown): JsonObject | undefined {
   if (!isObject(item)) return unsupported("input[]");
   if (typeof item.role === "string") {
     if (!["user", "assistant", "system", "developer"].includes(item.role)) {
-      return unsupported(`input.role.${item.role}`);
+      return undefined;
     }
     return {
       role: item.role === "developer" ? "system" : item.role,
@@ -212,20 +229,20 @@ function convertInputItem(item: unknown): JsonObject {
       content: convertToolOutput(item.output, item.type),
     };
   }
-  return unsupported(`input.${String(item.type ?? "item")}`);
+  return undefined;
 }
 
 function convertToolOutput(output: unknown, field: string): unknown {
   if (typeof output === "string") return output;
   if (Array.isArray(output)) {
-    return output.map((part) => {
+    return output.flatMap((part) => {
       if (!isObject(part) || part.type !== "input_text") {
-        return unsupported(`input.${field}.output`);
+        return [];
       }
       if (typeof part.text !== "string") {
         return unsupported(`input.${field}.output.text`);
       }
-      return { type: "text", text: part.text };
+      return [{ type: "text", text: part.text }];
     });
   }
   return JSON.stringify(output ?? "");
@@ -234,9 +251,9 @@ function convertToolOutput(output: unknown, field: string): unknown {
 function convertTools(tools: unknown): JsonObject[] | undefined {
   if (tools === undefined) return undefined;
   if (!Array.isArray(tools)) return unsupported("tools");
-  return tools.map((tool) => {
+  const converted = tools.flatMap((tool): JsonObject[] => {
     if (!isObject(tool)) {
-      return unsupported("tools.item");
+      return [];
     }
     if (tool.type === "custom") {
       if (typeof tool.name !== "string") {
@@ -245,45 +262,50 @@ function convertTools(tools: unknown): JsonObject[] | undefined {
       if (tool.format !== undefined && !isObject(tool.format)) {
         return unsupported("tools.custom.format");
       }
-      return {
-        type: "custom",
-        custom: {
+      return [
+        {
+          type: "custom",
+          custom: {
+            name: tool.name,
+            ...(typeof tool.description === "string"
+              ? { description: tool.description }
+              : {}),
+            ...(isObject(tool.format) ? { format: tool.format } : {}),
+          },
+        },
+      ];
+    }
+    if (tool.type !== "function") {
+      return [];
+    }
+    if (typeof tool.name !== "string")
+      return unsupported("tools.function.name");
+    return [
+      {
+        type: "function",
+        function: {
           name: tool.name,
           ...(typeof tool.description === "string"
             ? { description: tool.description }
             : {}),
-          ...(isObject(tool.format) ? { format: tool.format } : {}),
+          ...(isObject(tool.parameters) ? { parameters: tool.parameters } : {}),
+          ...(typeof tool.strict === "boolean" || tool.strict === null
+            ? { strict: tool.strict }
+            : {}),
         },
-      };
-    }
-    if (tool.type !== "function") {
-      return unsupported(`tools.${String(tool.type)}`);
-    }
-    if (typeof tool.name !== "string")
-      return unsupported("tools.function.name");
-    return {
-      type: "function",
-      function: {
-        name: tool.name,
-        ...(typeof tool.description === "string"
-          ? { description: tool.description }
-          : {}),
-        ...(isObject(tool.parameters) ? { parameters: tool.parameters } : {}),
-        ...(typeof tool.strict === "boolean" || tool.strict === null
-          ? { strict: tool.strict }
-          : {}),
       },
-    };
+    ];
   });
+  return converted.length === 0 ? undefined : converted;
 }
 
-function convertAllowedTool(tool: unknown): JsonObject {
+function convertAllowedTool(tool: unknown): JsonObject | undefined {
   if (
     !isObject(tool) ||
     !["function", "custom"].includes(String(tool.type)) ||
     typeof tool.name !== "string"
   ) {
-    return unsupported("tool_choice.allowed_tools.tools");
+    return undefined;
   }
   return tool.type === "function"
     ? { type: "function", function: { name: tool.name } }
@@ -314,15 +336,19 @@ function convertToolChoice(toolChoice: unknown): unknown {
     ["auto", "required"].includes(String(toolChoice.mode)) &&
     Array.isArray(toolChoice.tools)
   ) {
+    const convertedTools = toolChoice.tools
+      .map(convertAllowedTool)
+      .filter((tool): tool is JsonObject => tool !== undefined);
+    if (convertedTools.length === 0) return undefined;
     return {
       type: "allowed_tools",
       allowed_tools: {
         mode: toolChoice.mode,
-        tools: toolChoice.tools.map(convertAllowedTool),
+        tools: convertedTools,
       },
     };
   }
-  return unsupported("tool_choice");
+  return undefined;
 }
 
 function convertText(text: unknown): {
@@ -333,20 +359,16 @@ function convertText(text: unknown): {
     return { responseFormat: undefined, verbosity: undefined };
   }
   if (!isObject(text)) return unsupported("text");
-  const verbosity = text.verbosity;
-  if (
-    verbosity !== undefined &&
-    verbosity !== null &&
-    !["low", "medium", "high"].includes(String(verbosity))
-  ) {
-    return unsupported("text.verbosity");
-  }
+  const verbosity =
+    text.verbosity === null ||
+    ["low", "medium", "high"].includes(String(text.verbosity))
+      ? text.verbosity
+      : undefined;
   if (text.format === undefined) {
     return { responseFormat: undefined, verbosity };
   }
-  if (!isObject(text.format) || typeof text.format.type !== "string") {
-    return unsupported("text.format");
-  }
+  if (!isObject(text.format) || typeof text.format.type !== "string")
+    return { responseFormat: undefined, verbosity };
   if (text.format.type === "text" || text.format.type === "json_object") {
     return {
       responseFormat: { type: text.format.type },
@@ -375,34 +397,47 @@ function convertText(text: unknown): {
       verbosity,
     };
   }
-  return unsupported("text.format");
+  return { responseFormat: undefined, verbosity };
 }
 
-export function convertResponsesRequest(body: unknown): {
+export function convertResponsesRequest(rawBody: unknown): {
   chat: JsonObject & { model: string };
   request: ResponsesRequest;
 } {
-  if (!isObject(body) || typeof body.model !== "string" || !("input" in body)) {
+  if (
+    !isObject(rawBody) ||
+    typeof rawBody.model !== "string" ||
+    !("input" in rawBody)
+  ) {
     throw new Error("Invalid request.");
   }
-  for (const field of Object.keys(body)) {
+  const body = selectSupportedRequestFields(
+    rawBody,
+  ) as unknown as ResponsesRequest;
+  const includeLogprobs =
+    Array.isArray(body.include) &&
+    body.include.includes("message.output_text.logprobs");
+  if (body.stream_options !== undefined && body.stream_options !== null) {
+    if (!isObject(body.stream_options)) unsupported("stream_options");
     if (
-      !SUPPORTED_REQUEST_FIELDS.has(field) &&
-      !IGNORED_REQUEST_FIELDS.has(field)
+      body.stream_options.include_obfuscation !== undefined &&
+      typeof body.stream_options.include_obfuscation !== "boolean"
     ) {
-      unsupported(field);
+      unsupported("stream_options.include_obfuscation");
     }
   }
-  if (body.store === true) unsupported("store");
   const messages: JsonObject[] = [];
-  if (body.instructions !== undefined) {
+  if (body.instructions !== undefined && body.instructions !== null) {
     if (typeof body.instructions !== "string") unsupported("instructions");
     messages.push({ role: "system", content: body.instructions });
   }
   if (typeof body.input === "string") {
     messages.push({ role: "user", content: body.input });
   } else if (Array.isArray(body.input)) {
-    for (const item of body.input) messages.push(convertInputItem(item));
+    for (const item of body.input) {
+      const converted = convertInputItem(item);
+      if (converted) messages.push(converted);
+    }
   } else {
     unsupported("input");
   }
@@ -424,7 +459,18 @@ export function convertResponsesRequest(body: unknown): {
       messages,
       ...(body.stream === undefined ? {} : { stream: body.stream }),
       ...(body.stream === true
-        ? { stream_options: { include_usage: true } }
+        ? {
+            stream_options: {
+              ...(isObject(body.stream_options) &&
+              typeof body.stream_options.include_obfuscation === "boolean"
+                ? {
+                    include_obfuscation:
+                      body.stream_options.include_obfuscation,
+                  }
+                : {}),
+              include_usage: true,
+            },
+          }
         : {}),
       ...(tools === undefined ? {} : { tools }),
       ...(toolChoice === undefined ? {} : { tool_choice: toolChoice }),
@@ -442,8 +488,13 @@ export function convertResponsesRequest(body: unknown): {
         "frequency_penalty",
         "logprobs",
         "metadata",
+        "moderation",
         "parallel_tool_calls",
+        "prompt_cache_key",
+        "prompt_cache_options",
+        "prompt_cache_retention",
         "presence_penalty",
+        "safety_identifier",
         "seed",
         "service_tier",
         "store",
@@ -452,13 +503,16 @@ export function convertResponsesRequest(body: unknown): {
         "top_p",
         "user",
       ]),
+      ...(typeof body.top_logprobs !== "number" && !includeLogprobs
+        ? {}
+        : { logprobs: true }),
     },
   };
 }
 
 function copyDefined(
-  source: JsonObject,
-  fields: readonly string[],
+  source: ResponsesRequest,
+  fields: readonly (keyof ResponsesRequest)[],
 ): JsonObject {
   const copied: JsonObject = {};
   for (const field of fields) {

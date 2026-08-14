@@ -22,23 +22,42 @@ export function convertUsage(usage: unknown): JsonObject {
     ? typed.prompt_tokens_details
     : {};
   return {
+    cache_creation: null,
+    cache_creation_input_tokens: null,
+    cache_read_input_tokens:
+      typeof promptDetails.cached_tokens === "number"
+        ? promptDetails.cached_tokens
+        : null,
+    inference_geo: null,
     input_tokens:
       typeof typed.prompt_tokens === "number" ? typed.prompt_tokens : 0,
     output_tokens:
       typeof typed.completion_tokens === "number" ? typed.completion_tokens : 0,
-    ...(typeof promptDetails.cached_tokens === "number"
-      ? { cache_read_input_tokens: promptDetails.cached_tokens }
-      : {}),
+    output_tokens_details: null,
+    server_tool_use: null,
+    service_tier: null,
+  };
+}
+
+export function convertDeltaUsage(usage: unknown): JsonObject {
+  const converted = convertUsage(usage);
+  return {
+    cache_creation_input_tokens: converted.cache_creation_input_tokens,
+    cache_read_input_tokens: converted.cache_read_input_tokens,
+    input_tokens: converted.input_tokens,
+    output_tokens: converted.output_tokens,
+    output_tokens_details: converted.output_tokens_details,
+    server_tool_use: converted.server_tool_use,
   };
 }
 
 function convertContent(message: JsonObject): JsonObject[] {
   const content: JsonObject[] = [];
   if (typeof message.content === "string" && message.content) {
-    content.push({ type: "text", text: message.content });
+    content.push({ type: "text", text: message.content, citations: null });
   }
   if (typeof message.refusal === "string" && message.refusal) {
-    content.push({ type: "text", text: message.refusal });
+    content.push({ type: "text", text: message.refusal, citations: null });
   }
   if (Array.isArray(message.tool_calls)) {
     for (const call of message.tool_calls) {
@@ -98,7 +117,9 @@ export async function convertJsonResponse(
     type: "message",
     role: "assistant",
     content: convertContent(message),
+    container: null,
     model: request.model,
+    stop_details: null,
     stop_reason: stopReason(choice?.finish_reason),
     stop_sequence: null,
     usage: convertUsage(body.usage),

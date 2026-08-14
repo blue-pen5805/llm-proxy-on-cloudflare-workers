@@ -64,8 +64,6 @@ forwarded.
 ### Provider behavior and reliability
 
 - [Provider abstraction](features/provider_abstraction.md)
-- [OpenAI-compatible Responses](features/responses-api.md)
-- [Anthropic-compatible Messages](features/messages-api.md)
 - [Key rotation](features/key_rotation.md)
 - [Virtual models](features/virtual_models.md)
 

@@ -133,16 +133,28 @@ objects instead of strings, but selection and index alignment are unchanged.
 
 ## OpenAI-compatible chat flow
 
+Official API definition:
+[OpenAI Chat Completions](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create).
+Last accessed for this compatibility contract: 2026-08-14.
+
 1. Parse and validate the JSON body.
 2. Resolve `default` or split `<provider>/<model>` at the first slash.
 3. Resolve an API key index.
-4. Let the adapter filter or translate supported fields and remove the provider
-   prefix from the model.
+4. Let the adapter remove explicitly unsupported fields or translate provider
+   differences, then remove the provider prefix from the model.
 5. Send directly or construct an AI Gateway request.
 6. Apply the provider's optional response transformation and forward the result.
 7. When `CHAT_RESPONSE_METADATA_ENABLED=true`, add bounded `llm_proxy` metadata
    to an object-valued JSON response, or inject one final metadata chunk into an
    SSE response.
+
+The shared OpenAI-compatible capability list tracks the current official Chat
+Completions top-level parameters. Provider declarations may intentionally narrow
+that list; a known parameter absent from such a declaration is removed. Fields
+outside the known set are retained so provider extensions and newly introduced
+Chat parameters are not removed merely because the proxy has not classified
+them yet. Provider-specific known extensions such as Cerebras `suffix` remain
+explicitly declared.
 
 The metadata stage is disabled by default for strict client compatibility. Its
 complete contract follows below.
@@ -215,8 +227,9 @@ Successful JSON and SSE responses are converted back to the selected public
 protocol. Both streaming converters share the bounded Chat Completions SSE
 decoder and implement only their protocol-specific state and event output.
 Upstream errors pass through. The complete mappings, limits, and explicit
-exclusions live in [OpenAI-compatible Responses](responses-api.md) and
-[Anthropic-compatible Messages](messages-api.md).
+exclusions live in the [OpenAI-compatible API](../../api/openai-compatible.md#responses)
+and [Anthropic-compatible API](../../api/anthropic-compatible.md#messages)
+guides.
 
 ## Model aggregation flow
 

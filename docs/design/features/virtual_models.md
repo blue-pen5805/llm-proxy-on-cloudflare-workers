@@ -95,6 +95,6 @@ boundary. Failed history remains log-only.
 ## References
 
 - [Configuration](../../configuration.md#virtual-models)
-- [HTTP API](../../api.md#virtual-models)
+- [Proxy management API](../../api/proxy-management.md#virtual-models)
 - [Compatibility response metadata](provider_abstraction.md#compatibility-response-metadata)
 - [Project principles](../../project-principles.md)

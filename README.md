@@ -99,13 +99,14 @@ curl https://your-worker.example/v1/chat/completions \
 Responses requests to Chat Completions internally and converts provider JSON or
 SSE back to Responses format. It is not a pass-through to a provider-native
 Responses endpoint, and its supported inputs, tools, and streaming behavior are
-intentionally bounded. See [HTTP API and routing](docs/api.md#responses).
+intentionally bounded. See the
+[OpenAI-compatible API guide](docs/api/openai-compatible.md#responses).
 
 `POST /v1/messages` is likewise experimental. It accepts an Anthropic Messages
 subset and converts provider JSON or SSE back to Anthropic message events while
 reusing the same providers, virtual models, credentials, and AI Gateway routing.
 Use `/anthropic/v1/messages` instead for native Anthropic pass-through. See
-[HTTP API and routing](docs/api.md#messages).
+[Anthropic-compatible API guide](docs/api/anthropic-compatible.md#messages).
 
 Or forward a provider-native request through a pass-through route:
 
@@ -141,6 +142,11 @@ profile and request `openai:second/gpt-5.6-sol`. See the
 - [Initial setup](docs/initial-setup.md) ([日本語](docs/initial-setup_ja.md))
 - [Configuration reference](docs/configuration.md)
 - [HTTP API and routing](docs/api.md)
+  - [OpenAI-compatible API](docs/api/openai-compatible.md)
+  - [Anthropic-compatible API](docs/api/anthropic-compatible.md)
+  - [Provider pass-through API](docs/api/provider-pass-through.md)
+  - [AI Gateway API](docs/api/ai-gateway.md)
+  - [Proxy management API](docs/api/proxy-management.md)
 - [Operations and troubleshooting](docs/operations.md)
 - [Development and verification](docs/development.md)
 - [Architecture and design](docs/design/overview.md)

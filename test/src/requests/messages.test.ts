@@ -3,6 +3,10 @@ import { CloudflareAIGateway } from "~/src/ai_gateway";
 import { handleChatCompletionsRequest } from "~/src/requests/chat_completions";
 import { handleMessagesRequest } from "~/src/requests/messages";
 import {
+  convertMessagesRequest,
+  SUPPORTED_REQUEST_FIELDS,
+} from "~/src/requests/messages/request";
+import {
   MAX_SSE_RECORD_BYTES,
   MAX_STREAM_TEXT_BYTES,
   MAX_STREAM_TOOL_ARGUMENT_BYTES,
@@ -31,6 +35,35 @@ describe("handleMessagesRequest", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
+  });
+
+  it("declares the top-level fields converted to Chat Completions", () => {
+    expect([...SUPPORTED_REQUEST_FIELDS]).toEqual([
+      "max_tokens",
+      "messages",
+      "metadata",
+      "model",
+      "output_config",
+      "stop_sequences",
+      "stream",
+      "system",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_p",
+    ]);
+    expect(
+      convertMessagesRequest({
+        model: "openai/model",
+        max_tokens: 10,
+        messages: [],
+        future_option: true,
+      }).request,
+    ).toEqual({
+      model: "openai/model",
+      max_tokens: 10,
+      messages: [],
+    });
   });
 
   it("converts a Messages request to Chat Completions and JSON output back", async () => {
@@ -224,20 +257,28 @@ describe("handleMessagesRequest", () => {
     expect(converted).toMatchObject({
       type: "message",
       role: "assistant",
+      container: null,
       model: "virtual/claude",
+      stop_details: null,
       stop_reason: "tool_use",
       stop_sequence: null,
       usage: {
+        cache_creation: null,
+        cache_creation_input_tokens: null,
         input_tokens: 12,
         output_tokens: 4,
         cache_read_input_tokens: 3,
+        inference_geo: null,
+        output_tokens_details: null,
+        server_tool_use: null,
+        service_tier: null,
       },
       llm_proxy: { provider: "openai", model: "gpt-test" },
     });
     expect(converted.id).toMatch(/^msg_[a-f0-9]{32}$/);
     expect(converted.content).toEqual([
-      { type: "text", text: "Hello" },
-      { type: "text", text: "Cannot continue" },
+      { type: "text", text: "Hello", citations: null },
+      { type: "text", text: "Cannot continue", citations: null },
       {
         type: "tool_use",
         id: "toolu_weather",
@@ -279,7 +320,8 @@ describe("handleMessagesRequest", () => {
           { role: "assistant", content: [] },
         ],
         stream: false,
-        metadata: {},
+        metadata: { user_id: null },
+        output_config: { format: null },
         tools: [{ name: "minimal", input_schema: {} }],
         tool_choice: { type: "any" },
       }),
@@ -322,6 +364,199 @@ describe("handleMessagesRequest", () => {
     expect(preparedRequest.body).toMatchObject({
       tool_choice: "none",
       parallel_tool_calls: true,
+    });
+  });
+
+  it("drops known unsupported parameters and converts compatible nested options", async () => {
+    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+      Response.json({ choices: [{ message: { content: "ok" } }] }),
+    );
+
+    const response = await handleMessagesRequest({
+      request: request({
+        model: "openai/model",
+        max_tokens: 10,
+        messages: [
+          {
+            role: "system",
+            content: [
+              { type: "text", text: "Direct system" },
+              {
+                type: "mid_conv_system",
+                content: [
+                  {
+                    type: "text",
+                    text: "Updated system",
+                    cache_control: { type: "ephemeral" },
+                  },
+                ],
+                cache_control: { type: "ephemeral" },
+              },
+            ],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Hello",
+                cache_control: { type: "ephemeral" },
+              },
+              {
+                type: "image",
+                source: { type: "url", url: "https://images.example/a.png" },
+                cache_control: { type: "ephemeral" },
+              },
+              {
+                type: "mid_conv_system",
+                content: [{ type: "text", text: "User-turn system" }],
+              },
+              { type: "document", source: { type: "url" } },
+            ],
+          },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "toolu_1",
+                name: "lookup",
+                input: {},
+                cache_control: { type: "ephemeral" },
+              },
+            ],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "toolu_1",
+                content: [
+                  {
+                    type: "text",
+                    text: "done",
+                    cache_control: { type: "ephemeral" },
+                  },
+                ],
+                cache_control: { type: "ephemeral" },
+              },
+              {
+                type: "tool_result",
+                tool_use_id: "toolu_2",
+                is_error: true,
+              },
+            ],
+          },
+        ],
+        system: [
+          {
+            type: "text",
+            text: "System",
+            cache_control: { type: "ephemeral" },
+          },
+          { type: "thinking", thinking: "ignored" },
+        ],
+        tools: [
+          {
+            name: "search",
+            type: "web_search_20250305",
+            input_schema: { type: "object" },
+          },
+          {
+            name: "lookup",
+            type: "custom",
+            input_schema: { type: "object" },
+            strict: true,
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+        output_config: {
+          effort: "high",
+          format: {
+            type: "json_schema",
+            schema: { type: "object" },
+          },
+          future_option: true,
+        },
+        cache_control: { type: "ephemeral" },
+        container: "container_1",
+        context_management: { edits: [] },
+        inference_geo: "us",
+        mcp_servers: [{ type: "url", name: "tools" }],
+        service_tier: "auto",
+        thinking: { type: "adaptive" },
+        top_k: 20,
+        user_profile_id: "profile_1",
+        future_option: true,
+      }),
+    } as never);
+
+    expect(response.status).toBe(200);
+    const preparedRequest = vi.mocked(handleChatCompletionsRequest).mock
+      .calls[0][2]!;
+    expect(preparedRequest.body).toEqual({
+      model: "openai/model",
+      messages: [
+        {
+          role: "system",
+          content: [{ type: "text", text: "System" }],
+        },
+        {
+          role: "system",
+          content: [
+            { type: "text", text: "Direct system" },
+            { type: "text", text: "Updated system" },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Hello" },
+            {
+              type: "image_url",
+              image_url: { url: "https://images.example/a.png" },
+            },
+          ],
+        },
+        {
+          role: "system",
+          content: [{ type: "text", text: "User-turn system" }],
+        },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "toolu_1",
+              type: "function",
+              function: { name: "lookup", arguments: "{}" },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          tool_call_id: "toolu_1",
+          content: [{ type: "text", text: "done" }],
+        },
+        { role: "tool", tool_call_id: "toolu_2", content: "" },
+      ],
+      max_completion_tokens: 10,
+      reasoning_effort: "high",
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "response", schema: { type: "object" } },
+      },
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "lookup",
+            parameters: { type: "object" },
+            strict: true,
+          },
+        },
+      ],
     });
   });
 
@@ -416,9 +651,39 @@ describe("handleMessagesRequest", () => {
         .join(""),
     ).toBe('{"q":"x"}');
     expect(events.at(-2)).toMatchObject({
-      delta: { stop_reason: "tool_use", stop_sequence: null },
-      usage: { input_tokens: 3, output_tokens: 2 },
+      delta: {
+        container: null,
+        stop_details: null,
+        stop_reason: "tool_use",
+        stop_sequence: null,
+      },
+      usage: {
+        cache_creation_input_tokens: null,
+        cache_read_input_tokens: null,
+        input_tokens: 3,
+        output_tokens: 2,
+        output_tokens_details: null,
+        server_tool_use: null,
+      },
       llm_proxy: { provider: "anthropic" },
+    });
+    expect(events[0].message).toMatchObject({
+      container: null,
+      stop_details: null,
+      usage: {
+        cache_creation: null,
+        cache_creation_input_tokens: null,
+        cache_read_input_tokens: null,
+        inference_geo: null,
+        output_tokens_details: null,
+        server_tool_use: null,
+        service_tier: null,
+      },
+    });
+    expect(events[1].content_block).toEqual({
+      type: "text",
+      text: "",
+      citations: null,
     });
     const preparedRequest = vi.mocked(handleChatCompletionsRequest).mock
       .calls[0][2]!;
@@ -743,12 +1008,64 @@ describe("handleMessagesRequest", () => {
     ).toBe(502);
   });
 
+  const ignoredCompatibilityCases = new Set([
+    "unknown field",
+    "invalid message role",
+    "invalid nested mid-conversation system block",
+    "unsupported system block",
+    "unknown content",
+    "unknown image source",
+    "invalid tool result block",
+    "invalid system block",
+    "invalid tools",
+    "non-object tool choice",
+    "invalid tool choice",
+    "invalid metadata",
+    "invalid output format",
+    "invalid custom tool type",
+  ]);
+
   it.each([
     ["invalid JSON", "{"],
     ["missing fields", { model: undefined }],
+    ["invalid message", { messages: [null] }],
     ["unknown field", { unknown: true }],
-    ["invalid message", { messages: [{ role: "system", content: "x" }] }],
     ["invalid content", { messages: [{ role: "user", content: 1 }] }],
+    ["invalid message role", { messages: [{ role: "tool", content: "x" }] }],
+    [
+      "invalid system block",
+      { messages: [{ role: "system", content: [null] }] },
+    ],
+    [
+      "invalid mid-conversation system content",
+      {
+        messages: [
+          {
+            role: "system",
+            content: [{ type: "mid_conv_system", content: "x" }],
+          },
+        ],
+      },
+    ],
+    [
+      "invalid nested mid-conversation system block",
+      {
+        messages: [
+          {
+            role: "system",
+            content: [{ type: "mid_conv_system", content: [null] }],
+          },
+        ],
+      },
+    ],
+    [
+      "unsupported system block",
+      {
+        messages: [
+          { role: "system", content: [{ type: "image", source: {} }] },
+        ],
+      },
+    ],
     [
       "invalid content block",
       { messages: [{ role: "user", content: [null] }] },
@@ -836,7 +1153,19 @@ describe("handleMessagesRequest", () => {
     ["non-object metadata", { metadata: "user" }],
     ["invalid metadata user", { metadata: { user_id: 1 } }],
     ["invalid stops", { stop_sequences: "END" }],
-  ])("rejects %s", async (_name, partial) => {
+    ["invalid output config", { output_config: "high" }],
+    ["invalid output format", { output_config: { format: { type: "text" } } }],
+    [
+      "invalid custom tool type",
+      { tools: [{ name: "tool", input_schema: {}, type: "server" }] },
+    ],
+  ])("handles %s", async (name, partial) => {
+    const ignored = ignoredCompatibilityCases.has(name);
+    if (ignored) {
+      vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+        Response.json({ choices: [{ message: { content: "ok" } }] }),
+      );
+    }
     const body =
       typeof partial === "string"
         ? partial
@@ -844,11 +1173,16 @@ describe("handleMessagesRequest", () => {
     const response = await handleMessagesRequest({
       request: request(body),
     } as never);
-    expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({
-      type: "error",
-      error: { type: "invalid_request_error" },
-    });
-    expect(handleChatCompletionsRequest).not.toHaveBeenCalled();
+    if (ignored) {
+      expect(response.status).toBe(200);
+      expect(handleChatCompletionsRequest).toHaveBeenCalledOnce();
+    } else {
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        type: "error",
+        error: { type: "invalid_request_error" },
+      });
+      expect(handleChatCompletionsRequest).not.toHaveBeenCalled();
+    }
   });
 });

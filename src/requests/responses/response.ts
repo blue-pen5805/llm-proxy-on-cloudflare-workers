@@ -71,6 +71,59 @@ export function convertUsage(usage: unknown): JsonObject | null {
   };
 }
 
+function tokenBytes(value: unknown, token: string): number[] {
+  return Array.isArray(value) && value.every((byte) => typeof byte === "number")
+    ? value
+    : [...new TextEncoder().encode(token)];
+}
+
+function convertTopLogprobs(
+  value: unknown,
+  includeBytes: boolean,
+): JsonObject[] {
+  if (!Array.isArray(value)) return [];
+  const converted: JsonObject[] = [];
+  for (const item of value) {
+    if (
+      !isObject(item) ||
+      typeof item.token !== "string" ||
+      typeof item.logprob !== "number"
+    ) {
+      continue;
+    }
+    converted.push({
+      token: item.token,
+      ...(includeBytes ? { bytes: tokenBytes(item.bytes, item.token) } : {}),
+      logprob: item.logprob,
+    });
+  }
+  return converted;
+}
+
+export function convertTokenLogprobs(
+  value: unknown,
+  includeBytes: boolean,
+): JsonObject[] {
+  if (!isObject(value) || !Array.isArray(value.content)) return [];
+  const converted: JsonObject[] = [];
+  for (const item of value.content) {
+    if (
+      !isObject(item) ||
+      typeof item.token !== "string" ||
+      typeof item.logprob !== "number"
+    ) {
+      continue;
+    }
+    converted.push({
+      token: item.token,
+      ...(includeBytes ? { bytes: tokenBytes(item.bytes, item.token) } : {}),
+      logprob: item.logprob,
+      top_logprobs: convertTopLogprobs(item.top_logprobs, includeBytes),
+    });
+  }
+  return converted;
+}
+
 export function baseResponse(
   id: string,
   createdAt: number,
@@ -92,7 +145,6 @@ export function baseResponse(
       status === "incomplete" ? { reason: "max_output_tokens" } : null,
     instructions: profile.instructions,
     max_output_tokens: profile.maxOutputTokens,
-    max_tool_calls: null,
     model: profile.model,
     output,
     parallel_tool_calls: profile.parallelToolCalls,
@@ -113,7 +165,7 @@ export function baseResponse(
   };
 }
 
-function convertChatOutput(message: JsonObject): unknown[] {
+function convertChatOutput(message: JsonObject, logprobs: unknown): unknown[] {
   const output: unknown[] = [];
   const content = typeof message.content === "string" ? message.content : "";
   const refusal = typeof message.refusal === "string" ? message.refusal : "";
@@ -125,7 +177,14 @@ function convertChatOutput(message: JsonObject): unknown[] {
       role: "assistant",
       content: [
         ...(content
-          ? [{ type: "output_text", text: content, annotations: [] }]
+          ? [
+              {
+                type: "output_text",
+                text: content,
+                annotations: [],
+                logprobs: convertTokenLogprobs(logprobs, true),
+              },
+            ]
           : []),
         ...(refusal ? [{ type: "refusal", refusal }] : []),
       ],
@@ -185,7 +244,7 @@ export async function convertJsonResponse(
     createdAt,
     status,
     profileFor(request),
-    convertChatOutput(message),
+    convertChatOutput(message, choice?.logprobs),
     convertUsage(body.usage),
     responseMetadataEnabled && isObject(body.llm_proxy)
       ? body.llm_proxy

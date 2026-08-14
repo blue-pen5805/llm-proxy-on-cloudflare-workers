@@ -8,6 +8,11 @@ LLM proxy. Start with the setup guide, then use the task-oriented guides below.
 - [Initial setup](initial-setup.md) ([日本語](initial-setup_ja.md))
 - [Configuration reference](configuration.md)
 - [HTTP API and routing](api.md)
+  - [OpenAI-compatible API](api/openai-compatible.md)
+  - [Anthropic-compatible API](api/anthropic-compatible.md)
+  - [Provider pass-through API](api/provider-pass-through.md)
+  - [AI Gateway API](api/ai-gateway.md)
+  - [Proxy management API](api/proxy-management.md)
 - [Operations and troubleshooting](operations.md)
 - [Live provider Chat Completions testing](live-provider-testing.md)
 
