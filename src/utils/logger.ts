@@ -1,5 +1,5 @@
-import { SENSITIVE_CREDENTIAL_NAME_PATTERN } from "./sensitive_data";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { SENSITIVE_CREDENTIAL_NAME_PATTERN } from "./sensitive_data";
 
 type LogValue = string | number | boolean | null | undefined;
 export type LogFields = Record<string, LogValue>;

@@ -1,10 +1,10 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildCustomProviderTargets,
   syncAiGatewayCustomProviders,
 } from "../../scripts/sync-ai-gateway-custom-providers";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const logoSources = vi.hoisted(() => ({
   cline: '<svg id="cline"/>',

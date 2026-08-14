@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+import { execFileSync, spawn } from "child_process";
+import { randomUUID } from "crypto";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import { BUILT_IN_PROVIDER_NAME_SET } from "../src/providers/names.ts";
 import { Config } from "../src/utils/config.ts";
 import { Environments } from "../src/utils/environments.ts";
@@ -18,11 +23,6 @@ import {
   validateEnvironmentName,
 } from "./utils.ts";
 import type { FileSystemOperations, OperationResult } from "./utils.ts";
-import { execFileSync, spawn } from "child_process";
-import { randomUUID } from "crypto";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
 
 export type { FileSystemOperations } from "./utils.ts";
 

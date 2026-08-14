@@ -1,11 +1,11 @@
+import path from "path";
+import { fileURLToPath } from "url";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   removeGeneratedDevVarsFile,
   runCommandWithSecretsCli,
   parseWithSecretsArguments,
 } from "../../scripts/with-secrets";
-import path from "path";
-import { fileURLToPath } from "url";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   existsSync: vi.fn(),

@@ -1,5 +1,5 @@
-import { Config } from "./config";
 import { createHash } from "node:crypto";
+import { Config } from "./config";
 
 const AUTHORIZATION_KEYS = ["Authorization", "x-api-key", "x-goog-api-key"];
 

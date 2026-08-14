@@ -1,14 +1,9 @@
 #!/usr/bin/env tsx
-import configSchema from "../schemas/config-schema.json";
-import { ENGLISH_CREATE_CONFIG_MESSAGES } from "./locales/create-config/en.ts";
-import { JAPANESE_CREATE_CONFIG_MESSAGES } from "./locales/create-config/ja.ts";
-import type { CreateConfigMessages } from "./locales/create-config/types.ts";
-import {
-  getErrorMessage,
-  parseEnvironmentCliArguments,
-  parseJsonc,
-  validateEnvironmentName,
-} from "./utils.ts";
+import { execFile } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import type { Readable } from "node:stream";
+import { promisify } from "node:util";
 import {
   cancel,
   confirm,
@@ -23,11 +18,16 @@ import {
 } from "@clack/prompts";
 import Ajv, { type ErrorObject } from "ajv";
 import { applyEdits, modify } from "jsonc-parser";
-import { execFile } from "node:child_process";
-import fs from "node:fs";
-import path from "node:path";
-import type { Readable } from "node:stream";
-import { promisify } from "node:util";
+import configSchema from "../schemas/config-schema.json";
+import { ENGLISH_CREATE_CONFIG_MESSAGES } from "./locales/create-config/en.ts";
+import { JAPANESE_CREATE_CONFIG_MESSAGES } from "./locales/create-config/ja.ts";
+import type { CreateConfigMessages } from "./locales/create-config/types.ts";
+import {
+  getErrorMessage,
+  parseEnvironmentCliArguments,
+  parseJsonc,
+  validateEnvironmentName,
+} from "./utils.ts";
 
 const execFileAsync = promisify(execFile);
 const CONFIG_EXAMPLE_PATH = "config.example.jsonc";

@@ -1,3 +1,7 @@
+import { execFileSync, spawn } from "child_process";
+import fs from "fs";
+import { EventEmitter } from "node:events";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   deploySecrets,
   executeWranglerSecretBulk,
@@ -13,10 +17,6 @@ import {
   type FileSystemOperations,
 } from "../../scripts/deploy-secrets";
 import { syncAiGatewayCustomProviders } from "../../scripts/sync-ai-gateway-custom-providers";
-import { execFileSync, spawn } from "child_process";
-import fs from "fs";
-import { EventEmitter } from "node:events";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock child_process module
 vi.mock("child_process", () => ({

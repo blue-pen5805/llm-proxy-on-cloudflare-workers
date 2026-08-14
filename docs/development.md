@@ -100,7 +100,7 @@ the root:
 
 ```bash
 npm run tsc
-npm run prettier-ci
+npm run format:check
 npm run lint
 npm run test
 npm run test:coverage
@@ -131,20 +131,20 @@ deployment-tooling tests from `test/scripts/tsconfig.json`. The last is separate
 because the Workers and Node global declarations for shared names such as `URL`
 are not assignable to each other in one program.
 
-ESLint covers `src`, `scripts`, and `test`. It uses the TypeScript project
-service for `src` and `scripts` so Promise-returning expressions are checked by
-`@typescript-eslint/no-floating-promises`. Await a Promise when its result is
-part of control flow; otherwise mark intentional fire-and-forget work with
-`void` and handle rejection where applicable.
+Oxlint covers `src`, `scripts`, and `test`. Type-aware linting is enabled for
+`src` and `scripts` so Promise-returning expressions are checked by
+`typescript/no-floating-promises`. Await a Promise when its result is part of
+control flow; otherwise mark intentional fire-and-forget work with `void` and
+handle rejection where applicable.
 
-If the formatting check fails, run `npm run prettier`, review every resulting
+If the formatting check fails, run `npm run format`, review every resulting
 change, and repeat the checks. Run `npm run bench` for performance-sensitive
 changes; benchmarks are diagnostic and must be compared under the same runtime
 and machine.
 
 For documentation-only changes, at minimum:
 
-1. Run Prettier against the changed Markdown files.
+1. Run Oxfmt against the changed Markdown files.
 2. Check relative links and referenced repository paths.
 3. Compare commands, routes, configuration names, and behavior with their
    authoritative implementation files.

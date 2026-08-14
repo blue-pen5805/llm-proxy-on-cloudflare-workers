@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import {
   customProviderBaseUrl,
   customProviderSlug,
@@ -8,8 +10,6 @@ import { parseProviderSelector } from "../src/providers/profile.ts";
 import type { Provider } from "../src/providers/provider.ts";
 import { Environments } from "../src/utils/environments.ts";
 import { DEFAULT_PROVIDER_PROFILE } from "../src/utils/secrets.ts";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 
 const CLOUDFLARE_API_ORIGIN = "https://api.cloudflare.com/client/v4";
 const CUSTOM_PROVIDER_LOGOS: Readonly<Record<string, string>> = {

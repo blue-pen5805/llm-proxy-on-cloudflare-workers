@@ -1,8 +1,8 @@
 #!/usr/bin/env tsx
-import { getErrorMessage, parseJsonc } from "./utils.ts";
 import { readFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { getErrorMessage, parseJsonc } from "./utils.ts";
 
 const DEFAULT_CONFIG_PATH = "live-chat-models.jsonc";
 const DEFAULT_WORKER_CONFIG_PATH = "config.develop.jsonc";

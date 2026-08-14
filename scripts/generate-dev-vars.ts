@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import {
   getErrorMessage,
   parseJsonc,
@@ -8,9 +11,6 @@ import {
   validateEnvironmentName,
 } from "./utils.ts";
 import type { FileSystemOperations, OperationResult } from "./utils.ts";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
 
 export type { FileSystemOperations } from "./utils.ts";
 

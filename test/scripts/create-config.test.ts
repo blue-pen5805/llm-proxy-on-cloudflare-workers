@@ -1,3 +1,5 @@
+import { PassThrough } from "node:stream";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import configSchema from "../../schemas/config-schema.json";
 import {
   CONFIG_TUI_BACK,
@@ -19,8 +21,6 @@ import {
   type ConfigTuiPrompts,
   type FieldKey,
 } from "../../scripts/create-config";
-import { PassThrough } from "node:stream";
-import { afterEach, describe, expect, it, vi } from "vitest";
 
 const CANCEL = Symbol("cancel");
 const REPOSITORY_ROOT = "/repository";

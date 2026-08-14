@@ -1,3 +1,4 @@
+import { describe, expect, it, vi } from "vitest";
 import {
   AI_GATEWAY_COMPATIBILITY_PROVIDERS,
   BUILT_IN_LIVE_CHAT_CONTRACTS,
@@ -11,7 +12,6 @@ import {
 } from "../../scripts/test-live-chat";
 import { CloudflareAIGateway } from "../../src/ai_gateway";
 import { BUILT_IN_PROVIDER_CONSTRUCTORS } from "../../src/providers";
-import { describe, expect, it, vi } from "vitest";
 
 describe("live Chat Completions test script", () => {
   it("accepts provider names as positional or named arguments", () => {

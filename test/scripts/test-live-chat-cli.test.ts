@@ -1,6 +1,6 @@
-import { runLiveChatCli } from "../../scripts/test-live-chat";
 import { readFileSync } from "fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { runLiveChatCli } from "../../scripts/test-live-chat";
 
 vi.mock("fs", () => ({ readFileSync: vi.fn() }));
 

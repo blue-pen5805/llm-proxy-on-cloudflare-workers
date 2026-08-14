@@ -1,10 +1,10 @@
+import { describe, expect, it } from "vitest";
 import {
   getErrorMessage,
   parseEnvironmentCliArguments,
   parseJsonc,
   validateEnvironmentName,
 } from "../../scripts/utils";
-import { describe, expect, it } from "vitest";
 
 describe("script utilities", () => {
   it("normalizes Error and non-Error exception values", () => {

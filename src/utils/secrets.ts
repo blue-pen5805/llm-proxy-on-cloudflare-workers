@@ -1,6 +1,6 @@
+import { randomInt } from "node:crypto";
 import { Environments } from "./environments";
 import { shuffleArray } from "./helpers";
-import { randomInt } from "node:crypto";
 
 // Filtering is a pure function of the parsed value, and Environments memoizes
 // parsing so multi-key arrays keep a stable identity. Caching by that identity
@@ -20,7 +20,9 @@ export const DEFAULT_PROVIDER_PROFILE = "default";
 export const PROVIDER_PROFILE_PATTERN = /^[A-Za-z0-9._~-]{1,64}$/;
 
 export type ProfiledSecret =
-  string | string[] | Readonly<Record<string, string | string[]>>;
+  | string
+  | string[]
+  | Readonly<Record<string, string | string[]>>;
 
 function filterSecretValues(value: unknown): string[] {
   if (Array.isArray(value)) {

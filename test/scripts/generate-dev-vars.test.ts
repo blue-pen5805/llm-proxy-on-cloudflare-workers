@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   convertConfigToDevVars,
   generateDevVars,
@@ -10,7 +11,6 @@ import {
   serializeEnvironmentValue,
   type FileSystemOperations,
 } from "../../scripts/generate-dev-vars";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock file system operations
 const createMockFileSystem = (files: Record<string, string> = {}) => {

@@ -241,7 +241,8 @@ function configuredApiKeys(provider: Provider): string[] {
 /** Build one provider by composing common behavior with explicit hooks. */
 export function createProvider(definition: ProviderDefinition = {}): Provider {
   let supportedChatParameters:
-    ReadonlySet<keyof OpenAIChatCompletionsRequestBody> | undefined;
+    | ReadonlySet<keyof OpenAIChatCompletionsRequestBody>
+    | undefined;
 
   const provider: Provider = {
     ...definition.properties,

@@ -1,5 +1,5 @@
-import packageJson from "../../package.json";
 import { describe, expect, it } from "vitest";
+import packageJson from "../../package.json";
 
 describe("TypeScript CLI package scripts", () => {
   it("uses the same transforming runtime for every TypeScript entry point", () => {
