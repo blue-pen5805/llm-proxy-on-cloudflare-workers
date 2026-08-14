@@ -1,10 +1,10 @@
 import { CloudflareAIGateway } from "../ai_gateway";
 import { gatewayProviderPath } from "../ai_gateway/custom_provider";
-import type { MiddlewareContext } from "../middleware";
 import { getAllProviderInstances } from "../providers";
 import type { ProviderRegistry } from "../providers";
 import { parseProviderSelector } from "../providers/profile";
 import { ProviderBase, ProviderNotSupportedError } from "../providers/provider";
+import type { RoutedRequestContext } from "../request_context";
 import { recordApiKeySelection } from "../utils/api_key_selection";
 import { Config } from "../utils/config";
 import { Environments } from "../utils/environments";
@@ -149,7 +149,7 @@ async function checkProviderConnectivity(
 export async function handleStatusRequest(
   aiGateway?: CloudflareAIGateway,
   providerRegistry?: ProviderRegistry,
-  context?: MiddlewareContext,
+  context?: RoutedRequestContext,
 ) {
   const cacheTtlSeconds = Config.statusCacheTtlSeconds();
   const requestCacheControl =

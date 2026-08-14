@@ -13,6 +13,7 @@
   },
   "include": [
     "./src/**/*.ts",
+    "./helpers/**/*.ts",
     "./performance/**/*.ts",
     "../worker-configuration.d.ts"
   ],

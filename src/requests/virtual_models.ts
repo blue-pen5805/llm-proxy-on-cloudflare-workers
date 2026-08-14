@@ -1,4 +1,4 @@
-import type { MiddlewareContext } from "../middleware";
+import type { RoutedRequestContext } from "../request_context";
 import { Config, VIRTUAL_MODEL_PROVIDER_NAME } from "../utils/config";
 import type { VirtualModelCandidate, VirtualModels } from "../utils/config";
 import { ConfigurationError } from "../utils/error";
@@ -19,7 +19,7 @@ interface VirtualModelAccessOrderEntry {
  * boundary. Config validation guarantees that the reference graph is acyclic.
  */
 function expandAccessOrder(
-  context: MiddlewareContext,
+  context: RoutedRequestContext,
   virtualModels: VirtualModels,
   candidates: readonly VirtualModelCandidate[],
   resolving: ReadonlySet<string>,
@@ -61,7 +61,7 @@ function expandAccessOrder(
 
 /** Lists operator-defined virtual models and their expanded access order. */
 export function handleVirtualModelsRequest(
-  context: MiddlewareContext,
+  context: RoutedRequestContext,
 ): Response {
   const virtualModels = Config.virtualModels() ?? {};
 

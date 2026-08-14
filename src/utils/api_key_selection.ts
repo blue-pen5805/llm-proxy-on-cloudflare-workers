@@ -1,5 +1,5 @@
-import type { MiddlewareContext } from "../middleware";
 import type { ProviderBase } from "../providers/provider";
+import type { ApiKeySelection } from "../request_context";
 import { Config } from "./config";
 import type { LogFields } from "./logger";
 import { RequestLogger } from "./logger";
@@ -104,7 +104,7 @@ interface ApiKeySelectionLogOptions {
 }
 
 export function determineApiKeySelectionPolicy(
-  selection: MiddlewareContext["apiKeyIndex"],
+  selection: ApiKeySelection | undefined,
   fallback: ApiKeyFallback,
 ): ApiKeySelectionPolicy {
   if (typeof selection === "number") return "explicit_index";
@@ -154,7 +154,7 @@ export function recordApiKeySelection({
 /** Resolve an explicit key selection or apply the endpoint's fallback policy. */
 export async function selectApiKeyIndex(
   provider: ProviderBase,
-  selection: MiddlewareContext["apiKeyIndex"],
+  selection: ApiKeySelection | undefined,
   fallback: ApiKeyFallback,
   providerName?: string,
 ): Promise<number> {

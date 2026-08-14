@@ -1,18 +1,22 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
-import type { MiddlewareContext } from "~/src/middleware";
 import { createProvider } from "~/src/providers/provider";
+import type {
+  ApiKeySelection,
+  RoutedRequestContext,
+} from "~/src/request_context";
 import { handleChatCompletionsRequest } from "~/src/requests/chat_completions";
+import { createTestRoutedContext } from "../../helpers/request_context";
 
 const API_KEYS = ["provider-key-0", "provider-key-1", "provider-key-2"];
 
 function createContext(
-  selection?: MiddlewareContext["apiKeyIndex"],
+  selection?: ApiKeySelection,
   providerName = "openai",
   automaticIndex = 0,
   apiKeys: string[] = API_KEYS,
   gatewayApiKeys: string[] = apiKeys,
-): MiddlewareContext {
+): RoutedRequestContext {
   const provider = createProvider({
     openAICompatible: true,
     baseUrl: "https://api.example.com/v1",
@@ -31,16 +35,13 @@ function createContext(
     body: JSON.stringify({ model: `${providerName}/model`, messages: [] }),
   });
 
-  return {
+  const context = createTestRoutedContext({
     request,
-    env: {} as Env,
-    ctx: {} as ExecutionContext,
     pathname: "/v1/chat/completions",
     apiKeyIndex: selection,
-    providers: {
-      get: () => provider,
-    } as unknown as MiddlewareContext["providers"],
-  };
+  });
+  vi.spyOn(context.providers, "get").mockReturnValue(provider);
+  return context;
 }
 
 function authorizationHeaders(fetchMock: ReturnType<typeof vi.fn>): string[] {

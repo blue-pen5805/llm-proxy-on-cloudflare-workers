@@ -1,24 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
 import { BUILT_IN_PROVIDER_CONSTRUCTORS } from "~/src/providers";
-import { getProviderByName } from "~/src/providers";
 import { handleProviderProxyRequest } from "~/src/requests/proxy";
-import { Environments } from "~/src/utils/environments";
 import { NotFoundError } from "~/src/utils/error";
 import { fetchWithLogging } from "~/src/utils/helpers";
 import { Secrets } from "~/src/utils/secrets";
+import { createTestRoutedContext } from "../../helpers/request_context";
 
-vi.mock("~/src/providers", async () => {
-  const actual =
-    await vi.importActual<typeof import("~/src/providers")>("~/src/providers");
-  return {
-    ...actual,
-    getProviderByName: vi.fn(),
-  };
-});
 vi.mock("~/src/providers/ai_gateway");
 vi.mock("~/src/utils/helpers");
-vi.mock("~/src/utils/environments");
 vi.mock("~/src/utils/secrets");
 
 describe("proxy", () => {
@@ -44,12 +34,6 @@ describe("proxy", () => {
     mockProviderClass.fetch.mockResolvedValue(new Response());
     vi.mocked(Secrets.getAll).mockReturnValue(["test-key"]);
     vi.mocked(Secrets.getNext).mockResolvedValue(0);
-    vi.mocked(Environments.all).mockReturnValue({} as any);
-
-    vi.mocked(getProviderByName).mockImplementation((name) => {
-      const ProviderClass = BUILT_IN_PROVIDER_CONSTRUCTORS[name];
-      return ProviderClass ? new (ProviderClass as any)() : undefined;
-    });
   });
 
   it("should call providerClass.fetch with correct arguments", async () => {
@@ -143,7 +127,7 @@ describe("proxy", () => {
     });
 
     await handleProviderProxyRequest(
-      { request: mockRequest } as any,
+      createTestRoutedContext({ request: mockRequest }),
       providerName,
       "/test/path",
     );
@@ -161,11 +145,14 @@ describe("proxy", () => {
   });
 
   it("throws NotFoundError for an unknown provider", async () => {
-    vi.mocked(getProviderByName).mockReturnValue(undefined);
     const request = new Request("https://example.com/missing");
 
     await expect(
-      handleProviderProxyRequest({ request } as any, "missing", "/missing"),
+      handleProviderProxyRequest(
+        createTestRoutedContext({ request }),
+        "missing",
+        "/missing",
+      ),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
@@ -202,7 +189,10 @@ describe("proxy", () => {
     const request = new Request("https://example.com/models");
 
     await handleProviderProxyRequest(
-      { request, apiKeyIndex: { start: 1, end: 2 } } as any,
+      createTestRoutedContext({
+        request,
+        apiKeyIndex: { start: 1, end: 2 },
+      }),
       providerName,
       "/models",
     );
@@ -241,7 +231,7 @@ describe("proxy", () => {
     });
 
     const response = await handleProviderProxyRequest(
-      { request } as any,
+      createTestRoutedContext({ request }),
       providerName,
       "/models",
       gateway,
@@ -287,7 +277,7 @@ describe("proxy", () => {
     });
 
     await handleProviderProxyRequest(
-      { request } as any,
+      createTestRoutedContext({ request }),
       "google-ai-studio",
       "/v1beta/openai/chat/completions",
       { buildProviderEndpointRequest } as any,
@@ -363,7 +353,11 @@ describe("proxy", () => {
       },
     });
 
-    await handleProviderProxyRequest({ request } as any, providerName, "/test");
+    await handleProviderProxyRequest(
+      createTestRoutedContext({ request }),
+      providerName,
+      "/test",
+    );
 
     const init = mockProviderClass.fetch.mock.calls[0][1];
     expect(new Headers(init.headers)).toEqual(
@@ -389,7 +383,7 @@ describe("proxy", () => {
     const request = new Request("https://example.com/v1/files/artifact");
 
     const response = await handleProviderProxyRequest(
-      { request } as any,
+      createTestRoutedContext({ request }),
       providerName,
       "/v1/files/artifact",
     );

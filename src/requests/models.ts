@@ -1,10 +1,10 @@
 import { CloudflareAIGateway } from "../ai_gateway";
 import { gatewayProviderPath } from "../ai_gateway/custom_provider";
-import { MiddlewareContext } from "../middleware";
 import { getAllProviderInstances } from "../providers";
 import { OpenAIModelsListResponseBody } from "../providers/openai/types";
 import { parseProviderSelector } from "../providers/profile";
 import { ProviderBase, ProviderNotSupportedError } from "../providers/provider";
+import type { ApiKeySelection, RoutedRequestContext } from "../request_context";
 import {
   determineApiKeySelectionPolicy,
   recordApiKeySelection,
@@ -66,7 +66,7 @@ async function putModelsCache(
  * middleware. Clients cannot inject arbitrary partitions into the key.
  */
 function buildModelsCacheKey(
-  apiKeySelection: MiddlewareContext["apiKeyIndex"],
+  apiKeySelection: ApiKeySelection | undefined,
   aiGateway?: CloudflareAIGateway,
   providerFilter?: readonly string[],
 ): Request {
@@ -124,7 +124,7 @@ function requestedProviders(
 async function fetchProviderModels(
   providerSelector: string,
   provider: ProviderBase,
-  selection: MiddlewareContext["apiKeyIndex"],
+  selection: ApiKeySelection | undefined,
   aiGateway?: CloudflareAIGateway,
   clientGatewayHeaders?: HeadersInit,
 ): Promise<OpenAIModelsListResponseBody> {
@@ -234,14 +234,14 @@ interface AggregatedModels {
 }
 
 export async function handleModelsRequest(
-  context: MiddlewareContext,
+  context: RoutedRequestContext,
   aiGateway: CloudflareAIGateway | undefined = undefined,
 ): Promise<Response> {
   return (await aggregateModels(context, aiGateway)).response;
 }
 
 async function aggregateModels(
-  context: MiddlewareContext,
+  context: RoutedRequestContext,
   aiGateway: CloudflareAIGateway | undefined,
 ): Promise<AggregatedModels> {
   const allProviderEntries = Object.entries(
@@ -477,7 +477,7 @@ async function aggregateModels(
 }
 
 export async function handleModelRetrieveRequest(
-  context: MiddlewareContext,
+  context: RoutedRequestContext,
   modelId: string,
   aiGateway: CloudflareAIGateway | undefined = undefined,
 ): Promise<Response> {

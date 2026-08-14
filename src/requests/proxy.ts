@@ -4,8 +4,8 @@ import {
   resolveGatewayProvider,
 } from "../ai_gateway/custom_provider";
 import { addProxyAiGatewayMetadata } from "../ai_gateway/metadata";
-import { MiddlewareContext } from "../middleware";
 import { parseProviderSelector } from "../providers/profile";
+import type { RoutedRequestContext } from "../request_context";
 import {
   determineApiKeySelectionPolicy,
   recordApiKeyOutcome,
@@ -22,7 +22,7 @@ import {
 } from "./provider_request";
 
 export async function handleProviderProxyRequest(
-  context: MiddlewareContext,
+  context: RoutedRequestContext,
   providerSelector: string,
   pathname: string,
   aiGateway: CloudflareAIGateway | undefined = undefined,

@@ -40,10 +40,11 @@ The order in `src/index.ts` is behaviorally significant:
 8. `aiGatewayMiddleware` selects the default or path-specific Gateway and
    removes an optional `/g/<name>` prefix. A prefix without
    `CLOUDFLARE_ACCOUNT_ID` fails with HTTP 400.
-9. `routerMiddleware` dispatches health, compatibility, OpenAI-compatible,
-   provider pass-through, and Universal Endpoint requests. It rejects an
+9. `routerMiddleware` requires the provider registry established by the prior
+   stage, resolves the request to a typed route without invoking a handler, and
+   then executes that route. Resolution preserves route priority and rejects an
    extracted key selection when the selected route has no key-selection
-   contract.
+   contract. Execution owns handler invocation and endpoint-specific logging.
 
 For example, after successful authentication:
 
@@ -109,6 +110,12 @@ values are logged and converted to a generic HTTP 500 JSON response.
 OpenAI-compatible local failures use the OpenAI error object; Messages routes
 use the Anthropic error object. `HEAD` health and model routes execute their
 `GET` contract and discard the response body.
+
+The Responses and Messages compatibility implementations are organized by
+protocol stage. Each has a request translator, a bounded JSON response
+translator, an SSE stream translator, and a handler that coordinates the
+existing Chat Completions flow. Their top-level modules are stable facades for
+the route handler and stream-conversion entry points.
 
 ## References
 

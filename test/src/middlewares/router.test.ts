@@ -9,6 +9,7 @@ import { handleProviderProxyRequest } from "~/src/requests/proxy";
 import { handleResponsesRequest } from "~/src/requests/responses";
 import { handleVirtualModelsRequest } from "~/src/requests/virtual_models";
 import { BadRequestError, NotFoundError } from "~/src/utils/error";
+import { createTestRoutedContext } from "../../helpers/request_context";
 
 // Mock the request handlers
 vi.mock("~/src/requests/chat_completions", () => ({
@@ -61,24 +62,30 @@ describe("handleRouting", () => {
   const request = new Request("http://localhost/");
 
   it("should route to status", async () => {
-    const response = await handleRouting({
-      request,
-      pathname: "/status",
-    } as any);
+    const response = await handleRouting(
+      createTestRoutedContext({
+        request,
+        pathname: "/status",
+      }),
+    );
     expect(await response.text()).toBe("status");
   });
 
   it("should route to ping", async () => {
-    const response = await handleRouting({ request, pathname: "/ping" } as any);
+    const response = await handleRouting(
+      createTestRoutedContext({ request, pathname: "/ping" }),
+    );
     expect(await response.text()).toBe("Pong");
     expect(response.status).toBe(200);
   });
 
   it("should route to virtual models", async () => {
-    const response = await handleRouting({
-      request,
-      pathname: "/virtual-models",
-    } as any);
+    const response = await handleRouting(
+      createTestRoutedContext({
+        request,
+        pathname: "/virtual-models",
+      }),
+    );
     expect(await response.text()).toBe("virtual-models");
     expect(handleVirtualModelsRequest).toHaveBeenCalledOnce();
   });
@@ -87,18 +94,22 @@ describe("handleRouting", () => {
     const postRequest = new Request("http://localhost/v1/chat/completions", {
       method: "POST",
     });
-    const response = await handleRouting({
-      request: postRequest,
-      pathname: "/v1/chat/completions",
-    } as any);
+    const response = await handleRouting(
+      createTestRoutedContext({
+        request: postRequest,
+        pathname: "/v1/chat/completions",
+      }),
+    );
     expect(await response.text()).toBe("chat");
   });
 
   it("should route to models", async () => {
-    const response = await handleRouting({
-      request,
-      pathname: "/v1/models",
-    } as any);
+    const response = await handleRouting(
+      createTestRoutedContext({
+        request,
+        pathname: "/v1/models",
+      }),
+    );
     expect(await response.text()).toBe("models");
   });
 
@@ -106,10 +117,12 @@ describe("handleRouting", () => {
     const filteredRequest = new Request(
       "http://localhost/v1/models?provider=openai",
     );
-    const response = await handleRouting({
-      request: filteredRequest,
-      pathname: "/v1/models?provider=openai",
-    } as any);
+    const response = await handleRouting(
+      createTestRoutedContext({
+        request: filteredRequest,
+        pathname: "/v1/models?provider=openai",
+      }),
+    );
     expect(await response.text()).toBe("models");
   });
 
@@ -117,10 +130,12 @@ describe("handleRouting", () => {
     const modelRequest = new Request(
       "http://localhost/v1/models/openai%2Fgpt-4.1",
     );
-    const response = await handleRouting({
-      request: modelRequest,
-      pathname: "/v1/models/openai%2Fgpt-4.1",
-    } as any);
+    const response = await handleRouting(
+      createTestRoutedContext({
+        request: modelRequest,
+        pathname: "/v1/models/openai%2Fgpt-4.1",
+      }),
+    );
     expect(await response.text()).toBe("model");
     expect(handleModelRetrieveRequest).toHaveBeenCalledWith(
       expect.objectContaining({ request: modelRequest }),
@@ -132,10 +147,12 @@ describe("handleRouting", () => {
   it("rejects a malformed encoded model identifier", async () => {
     const modelRequest = new Request("http://localhost/v1/models/%25");
     await expect(
-      handleRouting({
-        request: modelRequest,
-        pathname: "/v1/models/%",
-      } as any),
+      handleRouting(
+        createTestRoutedContext({
+          request: modelRequest,
+          pathname: "/v1/models/%",
+        }),
+      ),
     ).rejects.toThrow(BadRequestError);
   });
 
@@ -145,10 +162,12 @@ describe("handleRouting", () => {
       const headRequest = new Request(`http://localhost${pathname}`, {
         method: "HEAD",
       });
-      const response = await handleRouting({
-        request: headRequest,
-        pathname,
-      } as any);
+      const response = await handleRouting(
+        createTestRoutedContext({
+          request: headRequest,
+          pathname,
+        }),
+      );
       expect(response.status).toBe(200);
       expect(await response.text()).toBe("");
     },
@@ -160,10 +179,12 @@ describe("handleRouting", () => {
       const postRequest = new Request(`http://localhost${pathname}`, {
         method: "POST",
       });
-      const response = await handleRouting({
-        request: postRequest,
-        pathname,
-      } as any);
+      const response = await handleRouting(
+        createTestRoutedContext({
+          request: postRequest,
+          pathname,
+        }),
+      );
 
       expect(await response.text()).toBe("responses");
       expect(handleResponsesRequest).toHaveBeenLastCalledWith(
@@ -179,10 +200,12 @@ describe("handleRouting", () => {
       const postRequest = new Request(`http://localhost${pathname}`, {
         method: "POST",
       });
-      const response = await handleRouting({
-        request: postRequest,
-        pathname,
-      } as any);
+      const response = await handleRouting(
+        createTestRoutedContext({
+          request: postRequest,
+          pathname,
+        }),
+      );
 
       expect(await response.text()).toBe("messages");
       expect(handleMessagesRequest).toHaveBeenLastCalledWith(
@@ -198,10 +221,12 @@ describe("handleRouting", () => {
       const postRequest = new Request(`http://localhost${pathname}`, {
         method: "POST",
       });
-      const response = await handleRouting({
-        request: postRequest,
-        pathname,
-      } as any);
+      const response = await handleRouting(
+        createTestRoutedContext({
+          request: postRequest,
+          pathname,
+        }),
+      );
       expect(response.status).toBe(400);
       await expect(response.json()).resolves.toEqual({
         type: "error",
@@ -214,10 +239,12 @@ describe("handleRouting", () => {
   );
 
   it("should route to proxy for supported providers", async () => {
-    const response = await handleRouting({
-      request,
-      pathname: "/openai/v1/models",
-    } as any);
+    const response = await handleRouting(
+      createTestRoutedContext({
+        request,
+        pathname: "/openai/v1/models",
+      }),
+    );
     expect(await response.text()).toBe("proxy");
     expect(handleProviderProxyRequest).toHaveBeenCalledWith(
       expect.anything(),
@@ -231,7 +258,7 @@ describe("handleRouting", () => {
     const aiGateway = new CloudflareAIGateway("acc", "gate", "key");
     const postRequest = new Request("http://localhost/", { method: "POST" });
     const response = await handleRouting(
-      { request: postRequest, pathname: "/" } as any,
+      createTestRoutedContext({ request: postRequest, pathname: "/" }),
       aiGateway,
     );
     expect(await response.text()).toBe("universal");
@@ -257,11 +284,11 @@ describe("handleRouting", () => {
 
       await expect(
         handleRouting(
-          {
+          createTestRoutedContext({
             request: selectedRequest,
             pathname,
             apiKeyIndex: 0,
-          } as any,
+          }),
           aiGateway,
         ),
       ).rejects.toThrow(BadRequestError);
@@ -275,10 +302,10 @@ describe("handleRouting", () => {
       { method: "POST" },
     );
     const response = await handleRouting(
-      {
+      createTestRoutedContext({
         request: postRequest,
         pathname: "/compat/chat/completions",
-      } as any,
+      }),
       aiGateway,
     );
 
@@ -302,34 +329,32 @@ describe("handleRouting", () => {
       });
 
       await expect(
-        handleRouting({ request: compatRequest, pathname } as any, aiGateway),
+        handleRouting(
+          createTestRoutedContext({ request: compatRequest, pathname }),
+          aiGateway,
+        ),
       ).rejects.toThrow(NotFoundError);
     },
   );
 
   it("should not fall through unsupported compat paths to provider routing", async () => {
     const aiGateway = new CloudflareAIGateway("acc", "gate", "key");
-    const providers = {
-      match: vi.fn(() => ({
-        providerName: "compat",
-        pathname: "/models",
-      })),
-    };
     const postRequest = new Request("http://localhost/compat/models", {
       method: "POST",
     });
+    const context = createTestRoutedContext({
+      request: postRequest,
+      pathname: "/compat/models",
+    });
+    const match = vi.spyOn(context.providers, "match").mockReturnValue({
+      providerName: "compat",
+      pathname: "/models",
+    });
 
-    await expect(
-      handleRouting(
-        {
-          request: postRequest,
-          pathname: "/compat/models",
-          providers,
-        } as any,
-        aiGateway,
-      ),
-    ).rejects.toThrow(NotFoundError);
-    expect(providers.match).not.toHaveBeenCalled();
+    await expect(handleRouting(context, aiGateway)).rejects.toThrow(
+      NotFoundError,
+    );
+    expect(match).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -351,7 +376,7 @@ describe("handleRouting", () => {
       });
 
       const response = await handleRouting(
-        { request: postRequest, pathname: path } as any,
+        createTestRoutedContext({ request: postRequest, pathname: path }),
         aiGateway,
       );
 
@@ -370,7 +395,9 @@ describe("handleRouting", () => {
     });
 
     await expect(
-      handleRouting({ request: postRequest, pathname: "/ai/run" } as any),
+      handleRouting(
+        createTestRoutedContext({ request: postRequest, pathname: "/ai/run" }),
+      ),
     ).rejects.toThrow("AI Gateway REST API requires CLOUDFLARE_ACCOUNT_ID.");
   });
 
@@ -388,13 +415,16 @@ describe("handleRouting", () => {
     const request = new Request(`http://localhost${path}`, { method });
 
     await expect(
-      handleRouting({ request, pathname: path } as any, aiGateway),
+      handleRouting(
+        createTestRoutedContext({ request, pathname: path }),
+        aiGateway,
+      ),
     ).rejects.toThrow(NotFoundError);
   });
 
   it("should throw NotFoundError for unknown routes", async () => {
     await expect(
-      handleRouting({ request, pathname: "/unknown" } as any),
+      handleRouting(createTestRoutedContext({ request, pathname: "/unknown" })),
     ).rejects.toThrow(NotFoundError);
   });
 });

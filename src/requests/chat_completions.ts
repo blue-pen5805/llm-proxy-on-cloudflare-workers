@@ -4,9 +4,9 @@ import {
   resolveGatewayProvider,
 } from "../ai_gateway/custom_provider";
 import { addProxyAiGatewayMetadata } from "../ai_gateway/metadata";
-import { MiddlewareContext } from "../middleware";
 import { parseProviderSelector } from "../providers/profile";
 import { mergeHeaders } from "../providers/provider";
+import type { RoutedRequestContext } from "../request_context";
 import {
   determineApiKeySelectionPolicy,
   getEligibleApiKeyIndexes,
@@ -70,7 +70,7 @@ function finalizeChatResponse(
 }
 
 export async function handleChatCompletionsRequest(
-  context: MiddlewareContext,
+  context: RoutedRequestContext,
   aiGateway: CloudflareAIGateway | undefined = undefined,
   preparedRequest?: PreparedChatCompletionsRequest,
 ) {
@@ -182,7 +182,7 @@ export async function handleChatCompletionsRequest(
 }
 
 async function attemptResolvedChatCompletion(
-  context: MiddlewareContext,
+  context: RoutedRequestContext,
   aiGateway: CloudflareAIGateway | undefined,
   chatRequestBody: Record<string, unknown> & { model: string },
   requestedModel: string,
@@ -251,7 +251,7 @@ async function attemptResolvedChatCompletion(
 }
 
 async function attemptChatCompletion(
-  context: MiddlewareContext,
+  context: RoutedRequestContext,
   aiGateway: CloudflareAIGateway | undefined,
   chatRequestBody: Record<string, unknown> & { model: string },
   requestedModel: string,

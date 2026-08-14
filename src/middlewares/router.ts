@@ -1,10 +1,9 @@
 import { CloudflareAIGateway } from "../ai_gateway";
+import { Middleware } from "../middleware";
 import {
-  isCloudflareAIGatewayRestApiPath,
-  isCloudflareAiPath,
-} from "../ai_gateway/utils";
-import { Middleware, MiddlewareContext } from "../middleware";
-import { createProviderRegistry } from "../providers";
+  assertRoutedRequestContext,
+  type RoutedRequestContext,
+} from "../request_context";
 import { handleAiGatewayRestRequest } from "../requests/ai_gateway_rest";
 import { handleChatCompletionsRequest } from "../requests/chat_completions";
 import { handleCompatibilityRequest } from "../requests/compat";
@@ -20,188 +19,96 @@ import { handleResponsesRequest } from "../requests/responses";
 import { handleStatusRequest } from "../requests/status";
 import { handleUniversalEndpointRequest } from "../requests/universal_endpoint";
 import { handleVirtualModelsRequest } from "../requests/virtual_models";
-import { Environments } from "../utils/environments";
-import { BadRequestError, NotFoundError } from "../utils/error";
+import { resolveRoute, type ResolvedRoute } from "../routing";
 import { RequestLogger } from "../utils/logger";
 
-const COMPAT_PATH_PATTERN = /^\/compat(?:$|\/|\?)/;
-export async function handleRouting(
-  context: MiddlewareContext,
+/** Execute a previously resolved route. */
+export async function executeRoute(
+  context: RoutedRequestContext,
+  route: ResolvedRoute,
   aiGateway?: CloudflareAIGateway,
 ): Promise<Response> {
-  const { request, pathname } = context;
-  const routePath = pathname.split("?")[0];
-  const isGetOrHead = request.method === "GET" || request.method === "HEAD";
-  const rejectUnsupportedKeySelection = (): void => {
-    if (context.apiKeyIndex !== undefined) {
-      throw new BadRequestError(
-        "API key selection is not supported for this route.",
+  const { request } = context;
+
+  switch (route.kind) {
+    case "ping":
+      RequestLogger.start({ endpoint: "ping" });
+      return withoutBodyForHead(
+        request,
+        new Response("Pong", { status: 200, headers: NO_STORE_HEADERS }),
       );
-    }
-  };
-  // Example: /ping
-  //          /status
-  //          /g/{AI_GATEWAY_NAME}/status
-  if (isGetOrHead && routePath === "/ping") {
-    rejectUnsupportedKeySelection();
-    RequestLogger.start({ endpoint: "ping" });
-    return withoutBodyForHead(
-      request,
-      new Response("Pong", { status: 200, headers: NO_STORE_HEADERS }),
-    );
-  }
-
-  if (isGetOrHead && routePath === "/status") {
-    rejectUnsupportedKeySelection();
-    RequestLogger.start({ endpoint: "status" });
-    return withoutBodyForHead(
-      request,
-      await handleStatusRequest(aiGateway, context.providers, context),
-    );
-  }
-
-  if (isGetOrHead && routePath === "/virtual-models") {
-    rejectUnsupportedKeySelection();
-    RequestLogger.start({ endpoint: "virtual_models" });
-    return withoutBodyForHead(request, handleVirtualModelsRequest(context));
-  }
-
-  if (aiGateway && COMPAT_PATH_PATTERN.test(pathname)) {
-    rejectUnsupportedKeySelection();
-    // Example: /g/{AI_GATEWAY_NAME}/compat/chat/completions
-    if (request.method === "POST" && pathname === "/compat/chat/completions") {
+    case "status":
+      RequestLogger.start({ endpoint: "status" });
+      return withoutBodyForHead(
+        request,
+        await handleStatusRequest(aiGateway, context.providers, context),
+      );
+    case "virtual_models":
+      RequestLogger.start({ endpoint: "virtual_models" });
+      return withoutBodyForHead(request, handleVirtualModelsRequest(context));
+    case "ai_gateway_compatibility":
       RequestLogger.start({ endpoint: "ai_gateway_compatibility" });
-      return await handleCompatibilityRequest(request, aiGateway);
-    }
-
-    throw new NotFoundError();
-  }
-
-  if (isCloudflareAiPath(pathname)) {
-    rejectUnsupportedKeySelection();
-    if (
-      request.method === "POST" &&
-      isCloudflareAIGatewayRestApiPath(pathname)
-    ) {
-      if (!aiGateway) {
-        throw new BadRequestError(
-          "AI Gateway REST API requires CLOUDFLARE_ACCOUNT_ID.",
-        );
-      }
+      return await handleCompatibilityRequest(request, aiGateway!);
+    case "ai_gateway_rest":
       RequestLogger.start({ endpoint: "ai_gateway_rest" });
-      return await handleAiGatewayRestRequest(request, pathname, aiGateway);
-    }
-
-    throw new NotFoundError();
+      return await handleAiGatewayRestRequest(
+        request,
+        route.pathname,
+        aiGateway!,
+      );
+    case "chat_completions":
+      return await handleChatCompletionsRequest(context, aiGateway);
+    case "responses":
+      return await handleResponsesRequest(context, aiGateway);
+    case "messages":
+      return await handleMessagesRequest(context, aiGateway);
+    case "messages_count_tokens":
+      RequestLogger.start({ endpoint: "messages_count_tokens" });
+      return anthropicErrorResponse(
+        "Messages count_tokens is not supported by this compatibility endpoint.",
+        400,
+        "invalid_request_error",
+      );
+    case "models":
+      RequestLogger.start({ endpoint: "models" });
+      return withoutBodyForHead(
+        request,
+        await handleModelsRequest(context, aiGateway),
+      );
+    case "model_retrieve":
+      RequestLogger.start({ endpoint: "model_retrieve" });
+      return withoutBodyForHead(
+        request,
+        await handleModelRetrieveRequest(context, route.modelId, aiGateway),
+      );
+    case "provider_proxy":
+      return await handleProviderProxyRequest(
+        context,
+        route.providerName,
+        route.pathname,
+        aiGateway,
+      );
+    case "universal":
+      return await handleUniversalEndpointRequest(
+        request,
+        aiGateway!,
+        context.providers,
+      );
   }
+}
 
-  // OpenAI compatible endpoints
-  // Chat Completions - https://platform.openai.com/docs/api-reference/chat
-  // Example: /chat/completions
-  //          /v1/chat/completions
-  //          /g/{AI_GATEWAY_NAME}/chat/completions
-  if (
-    request.method === "POST" &&
-    (pathname === "/chat/completions" || pathname === "/v1/chat/completions")
-  ) {
-    return await handleChatCompletionsRequest(context, aiGateway);
-  }
-
-  // Responses - https://developers.openai.com/api/reference/resources/responses/methods/create
-  // Example: /responses
-  //          /v1/responses
-  //          /g/{AI_GATEWAY_NAME}/v1/responses
-  if (
-    request.method === "POST" &&
-    (pathname === "/responses" || pathname === "/v1/responses")
-  ) {
-    return await handleResponsesRequest(context, aiGateway);
-  }
-
-  // Messages - https://platform.claude.com/docs/en/api/messages/create
-  // Example: /messages
-  //          /v1/messages
-  //          /g/{AI_GATEWAY_NAME}/v1/messages
-  if (
-    request.method === "POST" &&
-    (pathname === "/messages" || pathname === "/v1/messages")
-  ) {
-    return await handleMessagesRequest(context, aiGateway);
-  }
-
-  if (
-    request.method === "POST" &&
-    (routePath === "/messages/count_tokens" ||
-      routePath === "/v1/messages/count_tokens")
-  ) {
-    rejectUnsupportedKeySelection();
-    RequestLogger.start({ endpoint: "messages_count_tokens" });
-    return anthropicErrorResponse(
-      "Messages count_tokens is not supported by this compatibility endpoint.",
-      400,
-      "invalid_request_error",
-    );
-  }
-
-  // Models - https://platform.openai.com/docs/api-reference/models
-  // Example: /models
-  //          /v1/models
-  //          /g/{AI_GATEWAY_NAME}/models
-  if (isGetOrHead && (routePath === "/models" || routePath === "/v1/models")) {
-    RequestLogger.start({ endpoint: "models" });
-    return withoutBodyForHead(
-      request,
-      await handleModelsRequest(context, aiGateway),
-    );
-  }
-
-  const modelRetrieveMatch = routePath.match(/^\/(?:v1\/)?models\/(.+)$/);
-  if (isGetOrHead && modelRetrieveMatch) {
-    RequestLogger.start({ endpoint: "model_retrieve" });
-    let modelId: string;
-    try {
-      modelId = decodeURIComponent(modelRetrieveMatch[1]);
-    } catch {
-      throw new BadRequestError("Invalid model identifier.");
-    }
-    return withoutBodyForHead(
-      request,
-      await handleModelRetrieveRequest(context, modelId, aiGateway),
-    );
-  }
-
-  // Proxy
-  // Example: /openai/v1/chat/completions
-  //          /google-ai-studio/v1beta/models/{MODEL_NAME}:generateContent
-  //          /g/{AI_GATEWAY_NAME}/openai/v1/chat/completions
-  const providerRegistry =
-    context.providers ?? createProviderRegistry(Environments.all());
-  const providerRoute = providerRegistry.match(pathname);
-  if (providerRoute) {
-    return await handleProviderProxyRequest(
-      context,
-      providerRoute.providerName,
-      providerRoute.pathname,
-      aiGateway,
-    );
-  }
-
-  rejectUnsupportedKeySelection();
-
-  // Universal Endpoint
-  // https://developers.cloudflare.com/ai-gateway/usage/universal/
-  // Example: /g/{AI_GATEWAY_NAME}/
-  if (aiGateway && request.method === "POST" && pathname === "/") {
-    return await handleUniversalEndpointRequest(
-      request,
-      aiGateway,
-      providerRegistry,
-    );
-  }
-
-  throw new NotFoundError();
+export async function handleRouting(
+  context: RoutedRequestContext,
+  aiGateway?: CloudflareAIGateway,
+): Promise<Response> {
+  return await executeRoute(
+    context,
+    resolveRoute(context, aiGateway !== undefined),
+    aiGateway,
+  );
 }
 
 export const routerMiddleware: Middleware = async (context) => {
+  assertRoutedRequestContext(context);
   return await handleRouting(context, context.aiGateway);
 };

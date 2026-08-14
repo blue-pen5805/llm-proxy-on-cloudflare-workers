@@ -1,22 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
 import { BUILT_IN_PROVIDER_CONSTRUCTORS } from "~/src/providers";
-import { getProviderByName } from "~/src/providers";
 import { handleChatCompletionsRequest } from "~/src/requests/chat_completions";
 import { Config } from "~/src/utils/config";
 import * as helpers from "~/src/utils/helpers";
 import { RequestLogger } from "~/src/utils/logger";
 import { Secrets } from "~/src/utils/secrets";
+import { createTestRoutedContext } from "../../helpers/request_context";
 
 vi.mock("~/src/ai_gateway");
-vi.mock("~/src/providers", async () => {
-  const actual =
-    await vi.importActual<typeof import("~/src/providers")>("~/src/providers");
-  return {
-    ...actual,
-    getProviderByName: vi.fn(),
-  };
-});
 vi.mock("~/src/utils/config");
 vi.mock("~/src/utils/helpers");
 vi.mock("~/src/utils/secrets");
@@ -69,11 +61,6 @@ describe("handleChatCompletionsRequest", () => {
     vi.mocked(Secrets.getNext).mockResolvedValue(0);
     mockProviderClass.getApiKeys.mockReturnValue(["test-key"]);
     mockProviderClass.getNextApiKeyIndex.mockResolvedValue(0);
-
-    vi.mocked(getProviderByName).mockImplementation((name) => {
-      const ProviderClass = BUILT_IN_PROVIDER_CONSTRUCTORS[name];
-      return ProviderClass ? new (ProviderClass as any)() : undefined;
-    });
   });
 
   it("should handle valid chat completions request", async () => {
@@ -174,7 +161,7 @@ describe("handleChatCompletionsRequest", () => {
         .mockImplementation(() => {});
 
       await RequestLogger.run(request, () =>
-        handleChatCompletionsRequest({ request } as any),
+        handleChatCompletionsRequest(createTestRoutedContext({ request })),
       );
 
       const startRecord = consoleInfo.mock.calls
@@ -224,7 +211,9 @@ describe("handleChatCompletionsRequest", () => {
     ]);
     mockProviderClass.fetch.mockResolvedValue(Response.json(upstreamBody));
 
-    const response = await handleChatCompletionsRequest({ request } as any);
+    const response = await handleChatCompletionsRequest(
+      createTestRoutedContext({ request }),
+    );
 
     expect(await response.json()).toEqual(upstreamBody);
   });
@@ -243,7 +232,9 @@ describe("handleChatCompletionsRequest", () => {
       Response.json({ id: "chatcmpl-test", choices: [] }),
     );
 
-    const response = await handleChatCompletionsRequest({ request } as any);
+    const response = await handleChatCompletionsRequest(
+      createTestRoutedContext({ request }),
+    );
     const body = (await response.json()) as Record<string, any>;
 
     expect(body.id).toBe("chatcmpl-test");
@@ -273,10 +264,12 @@ describe("handleChatCompletionsRequest", () => {
     ]);
     mockProviderClass.fetch.mockResolvedValue(new Response());
 
-    await handleChatCompletionsRequest({
-      request,
-      apiKeyIndex: { start: 1, end: 2 },
-    } as any);
+    await handleChatCompletionsRequest(
+      createTestRoutedContext({
+        request,
+        apiKeyIndex: { start: 1, end: 2 },
+      }),
+    );
 
     expect(Secrets.resolveApiKeyIndex).toHaveBeenCalledWith(
       { start: 1, end: 2 },
@@ -314,7 +307,7 @@ describe("handleChatCompletionsRequest", () => {
     ]);
     mockProviderClass.fetch.mockResolvedValue(new Response());
 
-    await handleChatCompletionsRequest({ request } as any);
+    await handleChatCompletionsRequest(createTestRoutedContext({ request }));
 
     expect(Config.defaultModel).toHaveBeenCalled();
     expect(mockProviderClass.buildChatCompletionsRequest).toHaveBeenCalledWith({
@@ -332,7 +325,9 @@ describe("handleChatCompletionsRequest", () => {
       headers: { "Content-Type": "application/json" },
     });
 
-    const response = await handleChatCompletionsRequest({ request } as any);
+    const response = await handleChatCompletionsRequest(
+      createTestRoutedContext({ request }),
+    );
 
     expect(response.status).toBe(400);
     const body = (await response.json()) as {
@@ -345,12 +340,14 @@ describe("handleChatCompletionsRequest", () => {
     [JSON.stringify({ messages: [] }), "a missing model"],
     [JSON.stringify({ model: 42, messages: [] }), "a non-string model"],
   ])("should return 400 for %s", async (body) => {
-    const response = await handleChatCompletionsRequest({
-      request: new Request("https://example.com/chat/completions", {
-        method: "POST",
-        body,
+    const response = await handleChatCompletionsRequest(
+      createTestRoutedContext({
+        request: new Request("https://example.com/chat/completions", {
+          method: "POST",
+          body,
+        }),
       }),
-    } as any);
+    );
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
@@ -382,7 +379,9 @@ describe("handleChatCompletionsRequest", () => {
       headers: { "Content-Type": "application/json" },
     });
 
-    const response = await handleChatCompletionsRequest({ request } as any);
+    const response = await handleChatCompletionsRequest(
+      createTestRoutedContext({ request }),
+    );
 
     expect(response.status).toBe(400);
     const body = (await response.json()) as {
@@ -476,7 +475,7 @@ describe("handleChatCompletionsRequest", () => {
     ]);
 
     await handleChatCompletionsRequest(
-      { request } as any,
+      createTestRoutedContext({ request }),
       mockAIGateway as any,
     );
 
@@ -526,7 +525,7 @@ describe("handleChatCompletionsRequest", () => {
       .mockResolvedValueOnce(new Response(null, { status: 200 }));
 
     const response = await handleChatCompletionsRequest(
-      { request } as any,
+      createTestRoutedContext({ request }),
       mockAIGateway as any,
     );
 
@@ -741,7 +740,7 @@ describe("handleChatCompletionsRequest", () => {
     ]);
     mockProviderClass.fetch.mockResolvedValue(new Response());
 
-    await handleChatCompletionsRequest({ request } as any);
+    await handleChatCompletionsRequest(createTestRoutedContext({ request }));
 
     const headersArg =
       mockProviderClass.buildChatCompletionsRequest.mock.calls[0][0].headers;
@@ -777,7 +776,7 @@ describe("handleChatCompletionsRequest", () => {
     ]);
     mockProviderClass.fetch.mockResolvedValue(new Response());
 
-    await handleChatCompletionsRequest({ request } as any);
+    await handleChatCompletionsRequest(createTestRoutedContext({ request }));
 
     expect(mockProviderClass.buildChatCompletionsRequest).toHaveBeenCalledWith({
       body: "",
@@ -814,9 +813,9 @@ describe("handleChatCompletionsRequest", () => {
         new Response("ok", { status: 200 }),
       );
 
-      const response = await handleChatCompletionsRequest({
-        request: buildRequest("virtual/fast-tier"),
-      } as any);
+      const response = await handleChatCompletionsRequest(
+        createTestRoutedContext({ request: buildRequest("virtual/fast-tier") }),
+      );
 
       expect(await response.text()).toBe("ok");
       expect(mockProviderClass.fetch).toHaveBeenCalledTimes(1);
@@ -838,9 +837,9 @@ describe("handleChatCompletionsRequest", () => {
       ]);
       mockProviderClass.fetch.mockResolvedValue(new Response("nested ok"));
 
-      const response = await handleChatCompletionsRequest({
-        request: buildRequest("virtual/front"),
-      } as any);
+      const response = await handleChatCompletionsRequest(
+        createTestRoutedContext({ request: buildRequest("virtual/front") }),
+      );
 
       expect(await response.text()).toBe("nested ok");
       expect(mockProviderClass.fetch).toHaveBeenCalledOnce();
@@ -862,9 +861,9 @@ describe("handleChatCompletionsRequest", () => {
         Response.json({ id: "chatcmpl-virtual", choices: [] }),
       );
 
-      const response = await handleChatCompletionsRequest({
-        request: buildRequest("virtual/fast-tier"),
-      } as any);
+      const response = await handleChatCompletionsRequest(
+        createTestRoutedContext({ request: buildRequest("virtual/fast-tier") }),
+      );
 
       await expect(response.json()).resolves.toMatchObject({
         id: "chatcmpl-virtual",
@@ -883,9 +882,9 @@ describe("handleChatCompletionsRequest", () => {
       });
 
       await expect(
-        handleChatCompletionsRequest({
-          request: buildRequest("virtual/one"),
-        } as any),
+        handleChatCompletionsRequest(
+          createTestRoutedContext({ request: buildRequest("virtual/one") }),
+        ),
       ).rejects.toThrow("Invalid configuration for VIRTUAL_MODELS.");
       expect(mockProviderClass.fetch).not.toHaveBeenCalled();
     });
@@ -903,7 +902,9 @@ describe("handleChatCompletionsRequest", () => {
       mockProviderClass.fetch.mockResolvedValue(new Response("ok"));
       const request = buildRequest("virtual/fast-tier");
 
-      const response = await handleChatCompletionsRequest({ request } as any);
+      const response = await handleChatCompletionsRequest(
+        createTestRoutedContext({ request }),
+      );
 
       const fetchSignal = mockProviderClass.fetch.mock.calls[0]?.[1]?.signal;
       expect(await response.text()).toBe("ok");
@@ -927,9 +928,7 @@ describe("handleChatCompletionsRequest", () => {
       );
 
       await handleChatCompletionsRequest(
-        {
-          request: buildRequest("virtual/front"),
-        } as any,
+        createTestRoutedContext({ request: buildRequest("virtual/front") }),
         mockAIGateway as any,
       );
 
@@ -964,9 +963,9 @@ describe("handleChatCompletionsRequest", () => {
         .mockResolvedValueOnce(new Response("rate limited", { status: 429 }))
         .mockResolvedValueOnce(new Response("ok", { status: 200 }));
 
-      const response = await handleChatCompletionsRequest({
-        request: buildRequest("virtual/fast-tier"),
-      } as any);
+      const response = await handleChatCompletionsRequest(
+        createTestRoutedContext({ request: buildRequest("virtual/fast-tier") }),
+      );
 
       expect(response.status).toBe(200);
       expect(await response.text()).toBe("ok");
@@ -989,9 +988,9 @@ describe("handleChatCompletionsRequest", () => {
         .mockResolvedValueOnce(new Response("rate limited", { status: 429 }))
         .mockResolvedValueOnce(new Response("ok", { status: 200 }));
 
-      const response = await handleChatCompletionsRequest({
-        request: buildRequest("virtual/fast-tier"),
-      } as any);
+      const response = await handleChatCompletionsRequest(
+        createTestRoutedContext({ request: buildRequest("virtual/fast-tier") }),
+      );
 
       expect(await response.text()).toBe("ok");
       expect(mockProviderClass.getNextApiKeyIndex).toHaveBeenCalledTimes(2);
@@ -1017,9 +1016,9 @@ describe("handleChatCompletionsRequest", () => {
         new Response("bad request", { status: 400 }),
       );
 
-      const response = await handleChatCompletionsRequest({
-        request: buildRequest("virtual/fast-tier"),
-      } as any);
+      const response = await handleChatCompletionsRequest(
+        createTestRoutedContext({ request: buildRequest("virtual/fast-tier") }),
+      );
 
       expect(response.status).toBe(400);
       expect(mockProviderClass.fetch).toHaveBeenCalledTimes(1);
@@ -1040,9 +1039,9 @@ describe("handleChatCompletionsRequest", () => {
         new Response("unavailable", { status: 503 }),
       );
 
-      const response = await handleChatCompletionsRequest({
-        request: buildRequest("virtual/fast-tier"),
-      } as any);
+      const response = await handleChatCompletionsRequest(
+        createTestRoutedContext({ request: buildRequest("virtual/fast-tier") }),
+      );
 
       expect(response.status).toBe(503);
       expect(mockProviderClass.fetch).toHaveBeenCalledTimes(2);
@@ -1053,9 +1052,9 @@ describe("handleChatCompletionsRequest", () => {
         "virtual/broken": [{ model: "unknown/model", retries: 0 }],
       });
 
-      const response = await handleChatCompletionsRequest({
-        request: buildRequest("virtual/broken"),
-      } as any);
+      const response = await handleChatCompletionsRequest(
+        createTestRoutedContext({ request: buildRequest("virtual/broken") }),
+      );
 
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({
@@ -1069,9 +1068,11 @@ describe("handleChatCompletionsRequest", () => {
         "virtual/fast-tier": [{ model: "openai/gpt-4", retries: 0 }],
       });
 
-      const response = await handleChatCompletionsRequest({
-        request: buildRequest("virtual/unknown-route"),
-      } as any);
+      const response = await handleChatCompletionsRequest(
+        createTestRoutedContext({
+          request: buildRequest("virtual/unknown-route"),
+        }),
+      );
 
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({
@@ -1083,9 +1084,9 @@ describe("handleChatCompletionsRequest", () => {
     it("returns 400 when no virtual models are configured", async () => {
       vi.mocked(Config.virtualModels).mockReturnValue(undefined);
 
-      const response = await handleChatCompletionsRequest({
-        request: buildRequest("virtual/fast-tier"),
-      } as any);
+      const response = await handleChatCompletionsRequest(
+        createTestRoutedContext({ request: buildRequest("virtual/fast-tier") }),
+      );
 
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({
@@ -1105,9 +1106,9 @@ describe("handleChatCompletionsRequest", () => {
         new Response("ok", { status: 200 }),
       );
 
-      const response = await handleChatCompletionsRequest({
-        request: buildRequest("group/fast"),
-      } as any);
+      const response = await handleChatCompletionsRequest(
+        createTestRoutedContext({ request: buildRequest("group/fast") }),
+      );
 
       expect(response.status).toBe(200);
       expect(await response.text()).toBe("ok");
@@ -1126,9 +1127,9 @@ describe("handleChatCompletionsRequest", () => {
         new Response("ok", { status: 200 }),
       );
 
-      const response = await handleChatCompletionsRequest({
-        request: buildRequest("fast"),
-      } as any);
+      const response = await handleChatCompletionsRequest(
+        createTestRoutedContext({ request: buildRequest("fast") }),
+      );
 
       expect(response.status).toBe(200);
     });
@@ -1136,9 +1137,9 @@ describe("handleChatCompletionsRequest", () => {
     it("rejects a non-provider model without a separator", async () => {
       vi.mocked(Config.virtualModels).mockReturnValue(undefined);
 
-      const response = await handleChatCompletionsRequest({
-        request: buildRequest("missing"),
-      } as any);
+      const response = await handleChatCompletionsRequest(
+        createTestRoutedContext({ request: buildRequest("missing") }),
+      );
 
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({
@@ -1160,9 +1161,9 @@ describe("handleChatCompletionsRequest", () => {
         new Response("ok", { status: 200 }),
       );
 
-      const response = await handleChatCompletionsRequest({
-        request: buildRequest("openai/gpt-4"),
-      } as any);
+      const response = await handleChatCompletionsRequest(
+        createTestRoutedContext({ request: buildRequest("openai/gpt-4") }),
+      );
 
       expect(response.status).toBe(200);
       expect(await response.text()).toBe("ok");

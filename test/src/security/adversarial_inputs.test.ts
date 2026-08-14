@@ -1,15 +1,16 @@
 import { describe, it, expect } from "vitest";
-import type { MiddlewareContext } from "~/src/middleware";
 import { handleRouting } from "~/src/middlewares/router";
 import {
   BUILT_IN_PROVIDER_CONSTRUCTORS,
   createProviderRegistry,
 } from "~/src/providers";
 import { ProviderRegistry } from "~/src/providers/registry";
+import type { RoutedRequestContext } from "~/src/request_context";
 import { handleVirtualModelsRequest } from "~/src/requests/virtual_models";
 import { Config } from "~/src/utils/config";
 import { Environments } from "~/src/utils/environments";
 import { parseVirtualModels } from "~/src/utils/virtual_models";
+import { createTestRoutedContext } from "../../helpers/request_context";
 
 // Names that exist on Object.prototype. A plain object used as a lookup table
 // resolves them even though no provider or virtual model is configured, so
@@ -29,21 +30,17 @@ const environment = {
   OPENAI_API_KEY: "sk-adversarial",
 } as unknown as Env;
 
-function routingContext(body: unknown, pathname: string): MiddlewareContext {
-  return {
+function routingContext(body: unknown, pathname: string): RoutedRequestContext {
+  return createTestRoutedContext({
     request: new Request(`https://proxy.example${pathname}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }),
     env: environment,
-    ctx: {
-      waitUntil: () => undefined,
-      passThroughOnException: () => undefined,
-    } as unknown as ExecutionContext,
     pathname,
     providers: createProviderRegistry(environment),
-  };
+  });
 }
 
 describe("adversarial provider selectors", () => {
@@ -244,7 +241,7 @@ describe("adversarial virtual model keys", () => {
         env: proxyEnvironment,
         pathname: "/virtual-models",
         providers: createProviderRegistry(proxyEnvironment),
-      } as unknown as MiddlewareContext),
+      } as unknown as RoutedRequestContext),
     );
 
     await expect(response.json()).resolves.toMatchObject({

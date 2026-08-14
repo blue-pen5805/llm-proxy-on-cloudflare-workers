@@ -1,17 +1,7 @@
-import { CloudflareAIGateway } from "./ai_gateway";
-import type { ProviderRegistry } from "./providers";
+import type { MiddlewareContext } from "./request_context";
 import { NotFoundError } from "./utils/error";
 
-export interface MiddlewareContext {
-  request: Request;
-  env: Env;
-  ctx: ExecutionContext;
-  pathname: string;
-  aiGateway?: CloudflareAIGateway;
-  apiKeyIndex?: number | { start?: number; end?: number };
-  proxyKeyIndex?: number;
-  providers?: ProviderRegistry;
-}
+export type { MiddlewareContext } from "./request_context";
 
 type NextFunction = () => Promise<Response>;
 

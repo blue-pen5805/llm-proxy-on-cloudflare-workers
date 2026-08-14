@@ -1,19 +1,15 @@
 import type { CloudflareAIGateway } from "../ai_gateway";
-import type { MiddlewareContext } from "../middleware";
-import { getProviderByName } from "../providers";
 import type { ProviderBase } from "../providers/provider";
-import { Environments } from "../utils/environments";
+import type { RoutedRequestContext } from "../request_context";
 import { RequestLogger } from "../utils/logger";
 import { openAIErrorResponse } from "./error_response";
 
-/** Resolve a provider from the request-scoped registry or the legacy fallback. */
+/** Resolve a provider from the request-scoped registry. */
 export function resolveProvider(
-  context: MiddlewareContext,
+  context: RoutedRequestContext,
   providerName: string,
 ): ProviderBase | undefined {
-  return context.providers
-    ? context.providers.get(providerName)
-    : getProviderByName(providerName, Environments.all());
+  return context.providers.get(providerName);
 }
 
 /**
