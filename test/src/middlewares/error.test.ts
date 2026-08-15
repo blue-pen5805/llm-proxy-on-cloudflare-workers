@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MiddlewareContext } from "~/src/middleware";
 import { errorMiddleware } from "~/src/middlewares/error";
-import { AppError } from "~/src/utils/error";
+import { AppError, MethodNotAllowedError } from "~/src/utils/error";
 
 describe("errorMiddleware", () => {
   let context: MiddlewareContext;
@@ -33,6 +33,15 @@ describe("errorMiddleware", () => {
       vi.fn().mockRejectedValue(new AppError("Default status")),
     );
     expect(response.status).toBe(500);
+  });
+
+  it("returns the allowed methods with a 405 response", async () => {
+    const response = await errorMiddleware(
+      context,
+      vi.fn().mockRejectedValue(new MethodNotAllowedError(["GET", "POST"])),
+    );
+    expect(response.status).toBe(405);
+    expect(response.headers.get("Allow")).toBe("GET, POST");
   });
 
   it("should catch generic Error and return 500", async () => {

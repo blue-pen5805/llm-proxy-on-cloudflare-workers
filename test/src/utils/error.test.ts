@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   AppError,
   BadRequestError,
+  MethodNotAllowedError,
   UnauthorizedError,
   NotFoundError,
   ServiceUnavailableError,
@@ -25,5 +26,12 @@ describe("Error Classes", () => {
     const error = new ErrorClass();
     expect(error.status).toBe(status);
     expect(error.message).toBe(message);
+  });
+
+  it("retains the allowed methods for a 405 response", () => {
+    const error = new MethodNotAllowedError(["GET", "POST"]);
+    expect(error.status).toBe(405);
+    expect(error.message).toBe("Method Not Allowed");
+    expect(error.allowedMethods).toEqual(["GET", "POST"]);
   });
 });

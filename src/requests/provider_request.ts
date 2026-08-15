@@ -50,5 +50,5 @@ export function createProviderConfigurationErrorResponse(
     return undefined;
   }
 
-  return openAIErrorResponse(error, 400);
+  return openAIErrorResponse(error, 503);
 }

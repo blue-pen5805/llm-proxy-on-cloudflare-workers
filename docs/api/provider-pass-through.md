@@ -16,6 +16,10 @@ endpoint names are added dynamically. Append `:<profile>` to a provider name to
 select a named credential pool. Provider-specific request and response formats
 remain the caller's responsibility.
 
+Pass-through accepts `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, and `DELETE`.
+Other methods, including `TRACE` and `CONNECT`, return HTTP 405 with the allowed
+method set in the `Allow` response header and are never forwarded upstream.
+
 The proxy replaces client authentication headers with the selected upstream
 credential. It also removes cookies, hop-by-hop headers, client and network
 metadata, and credential-like query parameters, including API-key variants,

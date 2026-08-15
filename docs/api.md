@@ -3,6 +3,9 @@
 All routes except CORS preflight pass through the same authentication layer.
 Use `Authorization: Bearer <PROXY_API_KEY>` in normal clients. Anthropic SDKs
 may use `x-api-key: <PROXY_API_KEY>` on the Anthropic-compatible API.
+Browser preflight allows `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, and `DELETE`.
+Cross-origin responses expose `X-Proxy-Models-Cache` and
+`X-Proxy-Models-Truncated` to browser JavaScript.
 
 Responses from upstream providers are streamed or forwarded without a
 proxy-specific envelope, except for the opt-in additive `llm_proxy` metadata
@@ -23,29 +26,32 @@ documented by each compatibility API.
 
 ## Route summary
 
-| Method        | Path                                   | Guide                                                              |
-| ------------- | -------------------------------------- | ------------------------------------------------------------------ |
-| `OPTIONS`     | any                                    | CORS preflight                                                     |
-| `GET`, `HEAD` | `/ping`                                | [Proxy management](api/proxy-management.md)                        |
-| `GET`, `HEAD` | `/status`                              | [Proxy management](api/proxy-management.md)                        |
-| `GET`, `HEAD` | `/virtual-models`                      | [Proxy management](api/proxy-management.md)                        |
-| `POST`        | `/v1/chat/completions`                 | [OpenAI-compatible](api/openai-compatible.md#chat-completions)     |
-| `POST`        | `/v1/responses`                        | [OpenAI-compatible](api/openai-compatible.md#responses)            |
-| `POST`        | `/v1/messages`                         | [Anthropic-compatible](api/anthropic-compatible.md#messages)       |
-| `POST`        | `/v1/messages/count_tokens`            | [Anthropic-compatible](api/anthropic-compatible.md#token-counting) |
-| `GET`, `HEAD` | `/v1/models`                           | [OpenAI-compatible](api/openai-compatible.md#models)               |
-| `GET`, `HEAD` | `/v1/models/<model>`                   | [OpenAI-compatible](api/openai-compatible.md#models)               |
-| any           | `/<provider>[:<profile>]/<path>`       | [Provider pass-through](api/provider-pass-through.md)              |
-| `POST`        | `/g/<gateway>/ai/run`                  | [AI Gateway](api/ai-gateway.md#rest-api)                           |
-| `POST`        | `/g/<gateway>/ai/v1/chat/completions`  | [AI Gateway](api/ai-gateway.md#rest-api)                           |
-| `POST`        | `/g/<gateway>/ai/v1/responses`         | [AI Gateway](api/ai-gateway.md#rest-api)                           |
-| `POST`        | `/g/<gateway>/ai/v1/messages`          | [AI Gateway](api/ai-gateway.md#rest-api)                           |
-| `POST`        | `/g/<gateway>/`                        | [AI Gateway](api/ai-gateway.md#universal-endpoint)                 |
-| `POST`        | `/g/<gateway>/compat/chat/completions` | [AI Gateway](api/ai-gateway.md#compatibility-pass-through)         |
+| Method                                          | Path                                   | Guide                                                              |
+| ----------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------ |
+| `OPTIONS`                                       | any                                    | CORS preflight                                                     |
+| `GET`, `HEAD`                                   | `/ping`                                | [Proxy management](api/proxy-management.md)                        |
+| `GET`, `HEAD`                                   | `/status`                              | [Proxy management](api/proxy-management.md)                        |
+| `GET`, `HEAD`                                   | `/virtual-models`                      | [Proxy management](api/proxy-management.md)                        |
+| `POST`                                          | `/v1/chat/completions`                 | [OpenAI-compatible](api/openai-compatible.md#chat-completions)     |
+| `POST`                                          | `/v1/responses`                        | [OpenAI-compatible](api/openai-compatible.md#responses)            |
+| `POST`                                          | `/v1/messages`                         | [Anthropic-compatible](api/anthropic-compatible.md#messages)       |
+| `POST`                                          | `/v1/messages/count_tokens`            | [Anthropic-compatible](api/anthropic-compatible.md#token-counting) |
+| `GET`, `HEAD`                                   | `/v1/models`                           | [OpenAI-compatible](api/openai-compatible.md#models)               |
+| `GET`, `HEAD`                                   | `/v1/models/<model>`                   | [OpenAI-compatible](api/openai-compatible.md#models)               |
+| `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE` | `/<provider>[:<profile>]/<path>`       | [Provider pass-through](api/provider-pass-through.md)              |
+| `POST`                                          | `/g/<gateway>/ai/run`                  | [AI Gateway](api/ai-gateway.md#rest-api)                           |
+| `POST`                                          | `/g/<gateway>/ai/v1/chat/completions`  | [AI Gateway](api/ai-gateway.md#rest-api)                           |
+| `POST`                                          | `/g/<gateway>/ai/v1/responses`         | [AI Gateway](api/ai-gateway.md#rest-api)                           |
+| `POST`                                          | `/g/<gateway>/ai/v1/messages`          | [AI Gateway](api/ai-gateway.md#rest-api)                           |
+| `POST`                                          | `/g/<gateway>/`                        | [AI Gateway](api/ai-gateway.md#universal-endpoint)                 |
+| `POST`                                          | `/g/<gateway>/compat/chat/completions` | [AI Gateway](api/ai-gateway.md#compatibility-pass-through)         |
 
 `/chat/completions`, `/responses`, `/messages`, and `/models` are aliases of
 their `/v1` forms. `HEAD` follows the corresponding `GET` route and returns
 identical status and headers with no response body.
+Route matching ignores the query string except in the reserved AI Gateway REST
+`/ai` namespace, where query-bearing variants return HTTP 404. Provider
+pass-through retains allowed query parameters when forwarding upstream.
 
 ## Route prefixes
 
@@ -114,3 +120,5 @@ exceeds 10 MiB return HTTP 413 before JSON parsing, including Responses and
 Messages requests. Proxy-issued HTTP 401 responses carry
 `WWW-Authenticate: Bearer` without a realm. An upstream 401 forwarded from a
 provider keeps that provider's own headers.
+Unknown client provider selectors are HTTP 400 on compatibility routes. A
+registered provider that lacks required operator configuration returns HTTP 503.

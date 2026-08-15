@@ -10,7 +10,7 @@ export const WorkersAi = defineProvider({
   properties: { accountIdName: "CLOUDFLARE_ACCOUNT_ID" as keyof Env },
   apiKeyName: "CLOUDFLARE_API_KEY",
   chatCompletionPath: "/v1/chat/completions",
-  modelsPath: "/models/search?task=Text Generation",
+  modelsPath: "/models/search?task=Text%20Generation",
   available() {
     const { accountIdName } = this as WorkersAi;
     return (

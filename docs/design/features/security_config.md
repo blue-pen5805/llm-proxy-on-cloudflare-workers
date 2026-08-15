@@ -32,7 +32,9 @@ CORS preflight is answered before authentication. Actual cross-origin responses,
 including authentication and routing errors, receive the matching CORS origin
 header without changing the authentication requirement. Such responses carry
 `Vary: Origin`; the error guard also adds the applicable CORS headers to errors
-raised during CORS handling.
+raised during CORS handling. Preflight permits the bounded provider pass-through
+method set (`GET`, `HEAD`, `POST`, `PUT`, `PATCH`, and `DELETE`), and actual
+responses expose the model cache and truncation diagnostic headers.
 `ALLOWED_ORIGINS` optionally restricts browser access to exact origins. Its
 absence preserves the wildcard default. Origins are matched as complete HTTP(S)
 origins rather than suffixes or patterns. Proxy authentication remains the

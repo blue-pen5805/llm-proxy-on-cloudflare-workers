@@ -28,4 +28,28 @@ describe("resolveRoute", () => {
       pathname: "/v1/models?limit=2",
     });
   });
+
+  it.each([
+    ["/v1/chat/completions?trace=true", false, { kind: "chat_completions" }],
+    ["/v1/responses?trace=true", false, { kind: "responses" }],
+    ["/v1/messages?trace=true", false, { kind: "messages" }],
+    [
+      "/compat/chat/completions?trace=true",
+      true,
+      { kind: "ai_gateway_compatibility" },
+    ],
+    ["/?trace=true", true, { kind: "universal" }],
+  ] as const)(
+    "matches query-bearing compatibility route %s by path",
+    (pathname, hasAiGateway, expected) => {
+      const context = createTestRoutedContext({
+        request: new Request(`https://example.com${pathname}`, {
+          method: "POST",
+        }),
+        pathname,
+      });
+
+      expect(resolveRoute(context, hasAiGateway)).toEqual(expected);
+    },
+  );
 });

@@ -46,6 +46,9 @@ describe("Vary", () => {
 
     expect(response.headers.get("Vary")).toBe("Accept-Encoding, Origin");
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(response.headers.get("Access-Control-Expose-Headers")).toBe(
+      "X-Proxy-Models-Cache,X-Proxy-Models-Truncated",
+    );
   });
 
   it("leaves a same-origin response untouched", () => {
@@ -96,6 +99,9 @@ describe("handleOptions", () => {
       new Response("denied"),
     );
     expect(deniedActual.headers.get("Access-Control-Allow-Origin")).toBeNull();
+    expect(
+      deniedActual.headers.get("Access-Control-Expose-Headers"),
+    ).toBeNull();
   });
 
   it("keeps an error response safe when origin configuration is invalid", () => {
@@ -130,7 +136,7 @@ describe("handleOptions", () => {
     expect(await response.text()).toBe("");
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
     expect(response.headers.get("Access-Control-Allow-Methods")).toBe(
-      "GET,HEAD,POST,OPTIONS",
+      "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS",
     );
     expect(response.headers.get("Access-Control-Max-Age")).toBe("86400");
     expect(response.headers.get("Access-Control-Allow-Headers")).toBe(
@@ -150,7 +156,9 @@ describe("handleOptions", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("Allow")).toBe("GET, HEAD, POST, OPTIONS");
+    expect(response.headers.get("Allow")).toBe(
+      "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS",
+    );
     expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
     expect(response.headers.get("Access-Control-Allow-Methods")).toBeNull();
   });

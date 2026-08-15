@@ -4,7 +4,7 @@ import {
   openAIErrorResponse,
 } from "../requests/error_response";
 import { addCorsHeaders } from "../requests/options";
-import { AppError } from "../utils/error";
+import { AppError, MethodNotAllowedError } from "../utils/error";
 import { RequestLogger } from "../utils/logger";
 
 export const errorMiddleware: Middleware = async (context, next) => {
@@ -41,6 +41,9 @@ export const errorMiddleware: Middleware = async (context, next) => {
     // deployment without helping any client choose a credential.
     if (status === 401) {
       response.headers.set("WWW-Authenticate", "Bearer");
+    }
+    if (err instanceof MethodNotAllowedError) {
+      response.headers.set("Allow", err.allowedMethods.join(", "));
     }
     return addCorsHeaders(context.request, response);
   }

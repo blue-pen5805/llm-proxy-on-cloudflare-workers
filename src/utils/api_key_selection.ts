@@ -9,7 +9,7 @@ import { Secrets } from "./secrets";
 // striped rotation. They improve immediate reuse within a warm isolate without
 // adding storage or a coordination round trip to every provider request.
 const apiKeyCooldowns = new Map<string, Map<number, number>>();
-const COOLDOWN_STATUSES = new Set([401, 403, 404, 429]);
+const COOLDOWN_STATUSES = new Set([401, 403, 429]);
 
 function shouldCoolDown(status: number): boolean {
   return COOLDOWN_STATUSES.has(status) || status >= 500;

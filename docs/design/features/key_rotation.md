@@ -36,11 +36,13 @@ global ordering or durable state.
 
 ## Error cooldowns
 
-An attributable upstream HTTP 401, 403, 404, 429, or 5xx response places the
+An attributable upstream HTTP 401, 403, 429, or 5xx response places the
 selected provider key slot into an isolate-local cooldown. The duration is
 configured by `API_KEY_COOLDOWN_SECONDS`, defaults to 60 seconds, is capped at
 86,400 seconds, and can be disabled with `0`. A successful response clears any
-cooldown for the selected slot early.
+cooldown for the selected slot early. HTTP 404 is not credential-attributable:
+it commonly identifies an unknown model or provider path, so it passes through
+without affecting key selection.
 
 Cooldown state is keyed only by provider selector (including a named profile)
 and zero-based slot; it

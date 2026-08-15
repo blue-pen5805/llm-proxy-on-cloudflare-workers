@@ -1,9 +1,10 @@
 import { Config } from "../utils/config";
 
 const CORS_HEADERS = {
-  "Access-Control-Allow-Methods": "GET,HEAD,POST,OPTIONS",
+  "Access-Control-Allow-Methods": "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS",
   "Access-Control-Max-Age": "86400",
 };
+const CORS_EXPOSE_HEADERS = "X-Proxy-Models-Cache,X-Proxy-Models-Truncated";
 
 function allowedCorsOrigin(request: Request): string | undefined {
   const requestOrigin = request.headers.get("Origin");
@@ -25,8 +26,10 @@ export function addCorsHeaders(request: Request, response: Response): Response {
   // validation. Preserve the safe error response without recursively throwing.
   try {
     const allowedOrigin = allowedCorsOrigin(request);
-    if (allowedOrigin)
+    if (allowedOrigin) {
       headers.set("Access-Control-Allow-Origin", allowedOrigin);
+      headers.set("Access-Control-Expose-Headers", CORS_EXPOSE_HEADERS);
+    }
   } catch {
     headers.delete("Access-Control-Allow-Origin");
   }
@@ -66,7 +69,7 @@ export async function handleOptions(request: Request): Promise<Response> {
     // Handle standard OPTIONS request.
     return new Response(null, {
       headers: {
-        Allow: "GET, HEAD, POST, OPTIONS",
+        Allow: "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS",
       },
     });
   }

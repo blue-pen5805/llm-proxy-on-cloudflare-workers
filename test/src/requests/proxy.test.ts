@@ -171,7 +171,7 @@ describe("proxy", () => {
       "/path",
     );
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(503);
     expect(await response.json()).toEqual({
       error: expect.objectContaining({
         message: "google-vertex-ai requires Cloudflare AI Gateway.",

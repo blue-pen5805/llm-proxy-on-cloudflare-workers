@@ -64,6 +64,12 @@ capabilities independently:
 - model-list translation;
 - provider-specific pass-through.
 
+A client selector that does not resolve to a registered provider or credential
+profile is a request error and returns HTTP 400 on compatibility routes. A
+registered provider that cannot serve because its operator credentials,
+provider-specific settings, required Gateway, or Gateway token are absent
+returns HTTP 503. Provider pass-through retains HTTP 404 for an unknown route.
+
 Pass-through usually needs only a base URL and authentication. Chat and model
 listing require format-specific implementation and tests.
 

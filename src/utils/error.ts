@@ -27,6 +27,12 @@ export class NotFoundError extends AppError {
   }
 }
 
+export class MethodNotAllowedError extends AppError {
+  constructor(public readonly allowedMethods: readonly string[]) {
+    super("Method Not Allowed", 405);
+  }
+}
+
 export class PayloadTooLargeError extends AppError {
   constructor(message: string = "Payload Too Large") {
     super(message, 413);

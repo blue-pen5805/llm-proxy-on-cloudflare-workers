@@ -408,10 +408,13 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
         {
           method: "POST",
           body: JSON.stringify(trimmedData),
-          // Provider-computed headers win over caller-supplied ones, matching
-          // buildHeadersForPath so credential/routing headers cannot be
-          // overridden from a request on any path.
-          headers: mergeHeaders(headers, await this.headers(apiKeyIndex)),
+          // Provider-computed headers win over caller-supplied ones, and
+          // path-specific authentication matches provider pass-through.
+          headers: await this.buildHeadersForPath(
+            this.chatCompletionPath,
+            headers,
+            apiKeyIndex,
+          ),
         },
       ];
     },

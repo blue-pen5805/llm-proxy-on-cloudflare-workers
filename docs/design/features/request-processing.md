@@ -80,9 +80,12 @@ reject a leading key-selection prefix with HTTP 400.
 
 The router recognizes the documented versioned and unversioned compatibility
 aliases. Provider pass-through requires `/<provider>/` with a trailing slash
-after the provider name. Gateway Compatibility matches only
+after the provider name and accepts only `GET`, `HEAD`, `POST`, `PUT`, `PATCH`,
+or `DELETE`; other methods fail with HTTP 405 before provider request
+construction. Gateway Compatibility matches only
 `POST /compat/chat/completions`, and the Universal Endpoint matches only
-`POST /`, when a Gateway context exists.
+`POST /`, when a Gateway context exists. Compatibility POST routes match the
+URL path independently of the query string, as the GET and HEAD routes do.
 
 The account-level AI Gateway REST API matches only `POST /ai/run`,
 `POST /ai/v1/chat/completions`, `POST /ai/v1/responses`, and

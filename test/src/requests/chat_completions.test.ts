@@ -409,7 +409,7 @@ describe("handleChatCompletionsRequest", () => {
       providers: { get: vi.fn(() => gatewayOnlyProvider) },
     } as any);
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(503);
     expect(await response.json()).toEqual({
       error: expect.objectContaining({
         message: "google-vertex-ai requires Cloudflare AI Gateway.",
@@ -442,7 +442,7 @@ describe("handleChatCompletionsRequest", () => {
       { apiKey: undefined, buildChatCompletionsRequests } as any,
     );
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(503);
     expect(await response.json()).toEqual({
       error: expect.objectContaining({
         message: "google-vertex-ai requires CF_AIG_TOKEN.",

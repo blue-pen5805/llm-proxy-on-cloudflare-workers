@@ -22,7 +22,7 @@ describe("provider request configuration", () => {
       provider,
     );
 
-    expect(response?.status).toBe(400);
+    expect(response?.status).toBe(503);
     expect(await response?.json()).toEqual({
       error: expect.objectContaining({
         message: "openai is not configured.",

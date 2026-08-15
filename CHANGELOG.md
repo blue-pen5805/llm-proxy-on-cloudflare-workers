@@ -10,6 +10,21 @@ dated section; when multiple changes share a date, put the newest change first.
 Planned version: `1.0.0`. The package remains at `0.2.1` until the version
 update is explicitly approved.
 
+### 2026-08-15
+
+- Stopped cooling provider credential slots after HTTP 404 responses; cooldown
+  now applies only to HTTP 401, 403, 429, and 5xx outcomes.
+- Applied Google AI Studio's path-specific Bearer authentication to Chat
+  Completions and encoded the Workers AI text-generation model-search URL.
+- Matched compatibility POST routes independently of query strings, allowed
+  browser pass-through preflight for PUT, PATCH, and DELETE, and exposed model
+  cache and truncation diagnostics to browser JavaScript.
+- Restricted provider pass-through to GET, HEAD, POST, PUT, PATCH, and DELETE;
+  other methods now return HTTP 405 without reaching an upstream provider.
+- Returned HTTP 503 when a registered provider lacks required operator
+  credentials, settings, Gateway, or Gateway token, while retaining HTTP 400
+  for invalid client provider selectors.
+
 ### 2026-08-14
 
 - Chat Completions now removes only parameters explicitly unsupported by the

@@ -4,9 +4,22 @@ import {
   isCloudflareAiPath,
 } from "./ai_gateway/utils";
 import type { RoutedRequestContext } from "./request_context";
-import { BadRequestError, NotFoundError } from "./utils/error";
+import {
+  BadRequestError,
+  MethodNotAllowedError,
+  NotFoundError,
+} from "./utils/error";
 
 const COMPAT_PATH_PATTERN = /^\/compat(?:$|\/|\?)/;
+export const PROVIDER_PROXY_METHODS = [
+  "GET",
+  "HEAD",
+  "POST",
+  "PUT",
+  "PATCH",
+  "DELETE",
+] as const;
+const PROVIDER_PROXY_METHOD_SET = new Set<string>(PROVIDER_PROXY_METHODS);
 
 export type ResolvedRoute =
   | { kind: "ping" }
@@ -56,7 +69,7 @@ export function resolveRoute(
 
   if (hasAiGateway && COMPAT_PATH_PATTERN.test(pathname)) {
     rejectUnsupportedKeySelection();
-    if (request.method === "POST" && pathname === "/compat/chat/completions") {
+    if (request.method === "POST" && routePath === "/compat/chat/completions") {
       return { kind: "ai_gateway_compatibility" };
     }
 
@@ -82,21 +95,21 @@ export function resolveRoute(
 
   if (
     request.method === "POST" &&
-    (pathname === "/chat/completions" || pathname === "/v1/chat/completions")
+    (routePath === "/chat/completions" || routePath === "/v1/chat/completions")
   ) {
     return { kind: "chat_completions" };
   }
 
   if (
     request.method === "POST" &&
-    (pathname === "/responses" || pathname === "/v1/responses")
+    (routePath === "/responses" || routePath === "/v1/responses")
   ) {
     return { kind: "responses" };
   }
 
   if (
     request.method === "POST" &&
-    (pathname === "/messages" || pathname === "/v1/messages")
+    (routePath === "/messages" || routePath === "/v1/messages")
   ) {
     return { kind: "messages" };
   }
@@ -128,12 +141,15 @@ export function resolveRoute(
 
   const providerRoute = context.providers.match(pathname);
   if (providerRoute) {
+    if (!PROVIDER_PROXY_METHOD_SET.has(request.method)) {
+      throw new MethodNotAllowedError(PROVIDER_PROXY_METHODS);
+    }
     return { kind: "provider_proxy", ...providerRoute };
   }
 
   rejectUnsupportedKeySelection();
 
-  if (hasAiGateway && request.method === "POST" && pathname === "/") {
+  if (hasAiGateway && request.method === "POST" && routePath === "/") {
     return { kind: "universal" };
   }
 

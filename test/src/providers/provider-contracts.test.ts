@@ -426,7 +426,7 @@ describe("provider contracts", () => {
           baseUrl:
             "https://api.cloudflare.com/client/v4/accounts/account-id/ai",
           chatCompletionPath: "/v1/chat/completions",
-          modelsPath: "/models/search?task=Text Generation",
+          modelsPath: "/models/search?task=Text%20Generation",
         },
       ],
     ];
@@ -676,6 +676,25 @@ describe("provider contracts", () => {
         }),
       );
       vi.mocked(Secrets.getAll).mockReturnValue(["key-0", "key-1"]);
+      const [builtChatPath, builtChatInit] =
+        await provider.buildChatCompletionsRequest({
+          body: JSON.stringify({ model: "gemini", messages: [] }),
+          headers: {
+            Authorization: "Bearer caller-key",
+            "x-goog-api-key": "caller-key",
+            "X-Custom": "value",
+          },
+          apiKeyIndex: 1,
+        });
+      expect(builtChatPath).toBe("/v1beta/openai/chat/completions");
+      expect(new Headers(builtChatInit.headers)).toEqual(
+        new Headers({
+          Authorization: "Bearer key-1",
+          "Content-Type": "application/json",
+          "X-Custom": "value",
+        }),
+      );
+
       await provider.fetch(
         "/v1beta/openai/chat/completions",
         { headers: { "x-goog-api-key": "old", "X-Custom": "value" } },
@@ -716,6 +735,12 @@ describe("provider contracts", () => {
         "Content-Type": "application/json",
         Authorization: "Bearer key-1",
       });
+      const [modelsUrl] = await provider.buildRequest(provider.modelsPath, {
+        method: "GET",
+      });
+      expect(modelsUrl).toBe(
+        "https://api.cloudflare.com/client/v4/accounts/account-id/ai/models/search?task=Text%20Generation",
+      );
       expect(
         provider.convertModelsToOpenAIFormat({
           success: true,

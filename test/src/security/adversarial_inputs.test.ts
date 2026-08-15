@@ -7,6 +7,7 @@ import {
 import { ProviderRegistry } from "~/src/providers/registry";
 import type { RoutedRequestContext } from "~/src/request_context";
 import { handleVirtualModelsRequest } from "~/src/requests/virtual_models";
+import { resolveRoute } from "~/src/routing";
 import { Config } from "~/src/utils/config";
 import { Environments } from "~/src/utils/environments";
 import { parseVirtualModels } from "~/src/utils/virtual_models";
@@ -44,6 +45,23 @@ function routingContext(body: unknown, pathname: string): RoutedRequestContext {
 }
 
 describe("adversarial provider selectors", () => {
+  it.each(["TRACE", "CONNECT"])(
+    "rejects provider pass-through method %s with 405",
+    (method) => {
+      const request = new Request("https://proxy.example/openai/v1/models");
+      Object.defineProperty(request, "method", { value: method });
+      const context = createTestRoutedContext({
+        request,
+        pathname: "/openai/v1/models",
+        providers: createProviderRegistry(environment),
+      });
+
+      expect(() => resolveRoute(context, false)).toThrow(
+        expect.objectContaining({ status: 405 }),
+      );
+    },
+  );
+
   it.each(INHERITED_KEYS)(
     "does not resolve %s as a built-in provider",
     (providerName) => {

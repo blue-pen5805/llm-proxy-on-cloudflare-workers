@@ -77,7 +77,7 @@ describe("API key selection logging", () => {
     } as unknown as ProviderBase;
     vi.spyOn(Config, "apiKeyCooldownSeconds").mockReturnValue(60);
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    recordApiKeyOutcome(providerName, 0, 2, 404);
+    recordApiKeyOutcome(providerName, 0, 2, 403);
     recordApiKeyOutcome(providerName, 1, 2, 503);
 
     await expect(
@@ -124,6 +124,7 @@ describe("API key selection logging", () => {
       .spyOn(Config, "apiKeyCooldownSeconds")
       .mockReturnValue(60);
     recordApiKeyOutcome(providerName, 0, 2, 400);
+    recordApiKeyOutcome(providerName, 0, 2, 404);
     expect(getEligibleApiKeyIndexes(providerName, 2)).toBeUndefined();
 
     cooldown.mockReturnValue(0);
