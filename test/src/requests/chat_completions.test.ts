@@ -61,6 +61,9 @@ describe("handleChatCompletionsRequest", () => {
     vi.mocked(Secrets.getNext).mockResolvedValue(0);
     mockProviderClass.getApiKeys.mockReturnValue(["test-key"]);
     mockProviderClass.getNextApiKeyIndex.mockResolvedValue(0);
+    mockProviderClass.headers.mockImplementation(async () => ({
+      "x-provider-auth": "provider-header",
+    }));
   });
 
   it("should handle valid chat completions request", async () => {
@@ -499,6 +502,7 @@ describe("handleChatCompletionsRequest", () => {
       body: "",
       parsedBody: { ...requestBody, model: "gpt-4" },
       headers: expect.any(Object),
+      headersByCredential: expect.any(Array),
       apiKeys: ["test-key"],
     });
     expect(helpers.fetchWithLogging).toHaveBeenCalledWith(
@@ -513,11 +517,17 @@ describe("handleChatCompletionsRequest", () => {
       body: JSON.stringify({ model: "openai/gpt-4", messages: [] }),
     });
     mockProviderClass.getApiKeys.mockReturnValue(["key-0", "key-1"]);
+    mockProviderClass.headers.mockImplementation(async (index?: number) => ({
+      "x-provider-auth": `provider-header-${index ?? 0}`,
+    }));
     mockAIGateway.buildChatCompletionsRequests.mockImplementation(
-      ({ headers, apiKeys }) =>
+      ({ headers, headersByCredential, apiKeys }) =>
         apiKeys.map((_apiKey: string, index: number) => [
           `https://gateway.example/attempt-${index}`,
-          { method: "POST", headers: new Headers(headers) },
+          {
+            method: "POST",
+            headers: new Headers(headersByCredential?.[index] ?? headers),
+          },
         ]),
     );
     vi.mocked(helpers.fetchWithLogging)
@@ -530,6 +540,17 @@ describe("handleChatCompletionsRequest", () => {
     );
 
     expect(response.status).toBe(200);
+    expect(mockProviderClass.headers).toHaveBeenCalledWith(0);
+    expect(mockProviderClass.headers).toHaveBeenCalledWith(1);
+    const providerAuthHeaders = vi
+      .mocked(helpers.fetchWithLogging)
+      .mock.calls.map(([, init]) =>
+        new Headers(init?.headers).get("x-provider-auth"),
+      );
+    expect(providerAuthHeaders).toEqual([
+      "provider-header-0",
+      "provider-header-1",
+    ]);
     const providerKeyIndexes = vi
       .mocked(helpers.fetchWithLogging)
       .mock.calls.map(([, init]) => {

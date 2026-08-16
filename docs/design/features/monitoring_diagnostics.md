@@ -85,25 +85,28 @@ Provider names observed in request-scoped events are carried into
 
 The following events support operational queries:
 
-| Event                              | Meaning                                    |
-| ---------------------------------- | ------------------------------------------ |
-| `request.started`                  | Routed handler started                     |
-| `request.completed`                | Handler completed, with status and latency |
-| `request.unhandled_error`          | An unexpected exception reached the guard  |
-| `subrequest.started`               | Provider request started                   |
-| `subrequest.completed`             | Provider request returned an HTTP response |
-| `subrequest.failed`                | Provider request failed before a response  |
-| `provider.models.failed`           | A provider model-list operation failed     |
-| `provider.models.invalid_response` | A model-list response could not be used    |
-| `models.cache.unavailable`         | An optional model cache operation failed   |
-| `provider.connectivity.failed`     | A status connectivity check failed         |
-| `provider.status.failed`           | A provider could not describe itself       |
-| `auth.development_mode_ignored`    | `DEV` was ignored on a deployed Worker     |
-| `provider.key.selected`            | A credential slot was selected             |
-| `provider.key.cooldown`            | A credential slot entered cooldown         |
-| `virtual_model.select`             | A candidate was selected for an attempt    |
-| `virtual_model.retry`              | Another candidate attempt will be made     |
-| `virtual_model.completed`          | The final candidate attempt completed      |
+| Event                                 | Meaning                                             |
+| ------------------------------------- | --------------------------------------------------- |
+| `request.started`                     | Routed handler started                              |
+| `request.completed`                   | Handler completed, with status and latency          |
+| `request.unhandled_error`             | An unexpected exception reached the guard           |
+| `subrequest.started`                  | Provider request started                            |
+| `subrequest.completed`                | Provider request returned an HTTP response          |
+| `subrequest.failed`                   | Provider request failed before a response           |
+| `provider.models.failed`              | A provider model-list operation failed              |
+| `provider.models.invalid_response`    | A model-list response could not be used             |
+| `provider.models.aggregate_truncated` | The aggregated model list hit its size bound        |
+| `models.cache.unavailable`            | An optional model cache operation failed            |
+| `status.cache.unavailable`            | An optional status cache operation failed           |
+| `provider.connectivity.failed`        | A status connectivity check failed                  |
+| `provider.status.failed`              | A provider could not describe itself                |
+| `provider.credential.missing`         | A provider that requires local credentials has none |
+| `auth.development_mode_ignored`       | `DEV` was ignored on a deployed Worker              |
+| `provider.key.selected`               | A credential slot was selected                      |
+| `provider.key.cooldown`               | A credential slot entered cooldown                  |
+| `virtual_model.select`                | A candidate was selected for an attempt             |
+| `virtual_model.retry`                 | Another candidate attempt will be made              |
+| `virtual_model.completed`             | The final candidate attempt completed               |
 
 `request.started` always includes the HTTP method and query-free path. Once a
 route has resolved safe routing metadata, it also reports an `endpoint` label.
@@ -139,6 +142,11 @@ so their selection events instead include a zero-based `step` number.
 Credential values, partial values, and derived fingerprints are never logged.
 Indexes identify configuration order only and can change when keys are
 reordered.
+
+`provider.credential.missing` reports the provider selector and the operator
+credential setting name. It fires only for adapters that require a local
+credential, currently Vertex AI (`GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON`). It
+never logs a credential value.
 
 `provider.key.cooldown` reports the provider, zero-based `key_index`,
 `key_count`, upstream `status`, and configured `cooldown_seconds`. It follows

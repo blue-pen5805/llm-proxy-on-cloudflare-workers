@@ -257,7 +257,7 @@ export class Config {
     return defaultModel;
   }
 
-  /** Whether routed Chat and converted Responses output receives `llm_proxy`. */
+  /** Whether routed Chat and converted Responses or Messages output receives `llm_proxy`. */
   static chatResponseMetadataEnabled(): boolean {
     const rawValue = Environments.get("CHAT_RESPONSE_METADATA_ENABLED", false);
     return rawValue?.trim().toLowerCase() === "true";

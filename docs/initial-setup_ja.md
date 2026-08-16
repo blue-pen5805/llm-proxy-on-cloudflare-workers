@@ -93,6 +93,9 @@ curl https://your-worker.example/v1/models \
 含まれるため、出力は非公開で確認してください。`/v1/models` はベストエフォートであり、
 タイムアウトや一覧取得非対応のプロバイダーは省略されます。
 
+Wrangler 既定の `*.workers.dev` URL では Cache API が使われません。
+`MODELS_CACHE_TTL_SECONDS` を有効にするにはカスタムドメインを追加してください。
+
 次は英語版の [HTTP API and routing](api.md) を参照してください。名前付き環境、
 キーローテーション、AI Gateway、カスタムエンドポイントは
 [Configuration reference](configuration.md) と

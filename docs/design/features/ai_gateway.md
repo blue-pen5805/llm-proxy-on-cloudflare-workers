@@ -11,18 +11,23 @@ requests, and explicit Universal Endpoint payloads.
 
 ## Gateway selection
 
-`CLOUDFLARE_ACCOUNT_ID` is required for any Gateway context. If
-`AI_GATEWAY_NAME` is also configured, that Gateway becomes the default for
-requests. A leading `/g/<gateway>/` path selects a different Gateway for one
-request and is removed before normal routing.
-Using that prefix without an account ID is a client-visible HTTP 400
-configuration error.
+`CLOUDFLARE_ACCOUNT_ID` is required for any Gateway context. A leading
+`/g/<gateway>/` path selects that Gateway for one request and is removed
+before normal routing. Using that prefix without an account ID is a
+client-visible HTTP 400 configuration error.
+
+Without the prefix, a Gateway context is created when the account ID is set
+and any of the following apply: `AI_GATEWAY_NAME` is configured,
+`ALWAYS_USE_AI_GATEWAY=true`, or the path is an account-level `/ai` REST
+route. The selected Gateway is `AI_GATEWAY_NAME` when present and otherwise
+`default`.
 
 `ALWAYS_USE_AI_GATEWAY=true` enables strict Gateway routing. It requires an
 account ID, selects `AI_GATEWAY_NAME` when present, and otherwise selects the
 Gateway named `default`. The explicit `/g/<gateway>/` prefix overrides that
 selection for one request. Strict mode fails closed rather than
-falling back to a direct provider request.
+falling back to a direct provider request. The API token is required by
+schema and Custom Provider synchronization, not by every inference request.
 
 If `CF_AIG_TOKEN` exists, requests add
 `cf-aig-authorization: Bearer <token>`. The token is never returned verbatim by
@@ -147,8 +152,10 @@ tries another credential only after a network error, HTTP 401/403, or HTTP 429;
 deterministic client and provider errors return immediately. An explicit
 `/key/<selection>` resolves one credential and sends exactly one request, so
 fallback cannot override the caller's selection. Each attempted credential is
-logged with its actual slot. The model is rewritten to `<provider>/<model>` for
-Gateway's compatibility endpoint.
+logged with its actual slot. Each attempt rebuilds adapter headers for that
+credential slot so a later request cannot keep the first key's native
+authentication headers. The model is rewritten to
+`<provider>/<model>` for Gateway's compatibility endpoint.
 
 OpenRouter is included in this subset under a tested operational contract for
 the Compatibility Endpoint.

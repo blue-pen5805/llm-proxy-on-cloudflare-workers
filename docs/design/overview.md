@@ -78,7 +78,8 @@ forwarded.
 | Concern                         | Source                       |
 | ------------------------------- | ---------------------------- |
 | Middleware order                | `src/index.ts`               |
-| Route table                     | `src/middlewares/router.ts`  |
+| Route table                     | `src/routing.ts`             |
+| Route execution                 | `src/middlewares/router.ts`  |
 | Built-in providers              | `src/providers.ts`           |
 | Configuration shape             | `schemas/config-schema.json` |
 | Worker bindings and migrations  | `wrangler.jsonc`             |

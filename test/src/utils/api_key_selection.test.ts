@@ -162,7 +162,7 @@ describe("API key selection logging", () => {
       request_id: null,
       ...fields,
       message:
-        "Provider credential selected: provider=openai, operation=proxy, key_index=1, key_count=3, credential_configured=true, selection_policy=automatic_rotation, via_ai_gateway=true, step=2",
+        "Provider credential selected: provider=openai, operation=proxy, key_index=1, key_count=3, credential_configured=true, selection_policy=automatic_rotation, via_ai_gateway=true, step=2, provider_request_id=provider-request",
     });
     expect(JSON.stringify(consoleInfo.mock.calls)).not.toContain("sk-");
   });
@@ -192,7 +192,7 @@ describe("API key selection logging", () => {
       selection_policy: "default_first",
       via_ai_gateway: false,
       message:
-        "Provider credential selected: provider=ollama, operation=models, key_index=null, key_count=0, credential_configured=false, selection_policy=default_first, via_ai_gateway=false",
+        "Provider credential selected: provider=ollama, operation=models, key_index=null, key_count=0, credential_configured=false, selection_policy=default_first, via_ai_gateway=false, provider_request_id=provider-request",
     });
   });
 });

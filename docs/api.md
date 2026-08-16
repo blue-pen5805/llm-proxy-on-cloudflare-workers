@@ -43,12 +43,21 @@ documented by each compatibility API.
 | `POST`                                          | `/g/<gateway>/ai/v1/chat/completions`  | [AI Gateway](api/ai-gateway.md#rest-api)                           |
 | `POST`                                          | `/g/<gateway>/ai/v1/responses`         | [AI Gateway](api/ai-gateway.md#rest-api)                           |
 | `POST`                                          | `/g/<gateway>/ai/v1/messages`          | [AI Gateway](api/ai-gateway.md#rest-api)                           |
+| `POST`                                          | `/ai/run`                              | [AI Gateway](api/ai-gateway.md#rest-api)                           |
+| `POST`                                          | `/ai/v1/chat/completions`              | [AI Gateway](api/ai-gateway.md#rest-api)                           |
+| `POST`                                          | `/ai/v1/responses`                     | [AI Gateway](api/ai-gateway.md#rest-api)                           |
+| `POST`                                          | `/ai/v1/messages`                      | [AI Gateway](api/ai-gateway.md#rest-api)                           |
 | `POST`                                          | `/g/<gateway>/`                        | [AI Gateway](api/ai-gateway.md#universal-endpoint)                 |
+| `POST`                                          | `/`                                    | [AI Gateway](api/ai-gateway.md#universal-endpoint)                 |
 | `POST`                                          | `/g/<gateway>/compat/chat/completions` | [AI Gateway](api/ai-gateway.md#compatibility-pass-through)         |
+| `POST`                                          | `/compat/chat/completions`             | [AI Gateway](api/ai-gateway.md#compatibility-pass-through)         |
 
 `/chat/completions`, `/responses`, `/messages`, and `/models` are aliases of
 their `/v1` forms. `HEAD` follows the corresponding `GET` route and returns
 identical status and headers with no response body.
+Unprefixed AI Gateway REST, Universal Endpoint, and compatibility pass-through
+routes require a Gateway context (`CLOUDFLARE_ACCOUNT_ID` plus a configured or
+implicit `default` Gateway) and then use `AI_GATEWAY_NAME` or `default`.
 Route matching ignores the query string except in the reserved AI Gateway REST
 `/ai` namespace, where query-bearing variants return HTTP 404. Provider
 pass-through retains allowed query parameters when forwarding upstream.

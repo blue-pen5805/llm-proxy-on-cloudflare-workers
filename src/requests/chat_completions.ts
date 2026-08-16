@@ -27,7 +27,10 @@ import {
   ChatResponseRouteMetadata,
   enrichChatResponseWithMetadata,
 } from "./chat_response_metadata";
-import { fetchCompatibilityFallback } from "./compatibility_fallback";
+import {
+  fetchCompatibilityFallback,
+  MAX_COMPATIBILITY_FALLBACK_ATTEMPTS,
+} from "./compatibility_fallback";
 import { openAIErrorResponse } from "./error_response";
 import {
   createProviderConfigurationErrorResponse,
@@ -391,11 +394,25 @@ async function attemptChatCompletion(
         : contextApiKeyIndex === undefined
           ? [apiKeyIndex, ...remainingApiKeyIndexes]
           : [apiKeyIndex];
+    const compatibilityAttempts =
+      configuredApiKeys.length === 0
+        ? [undefined]
+        : gatewayApiKeyIndexes.slice(0, MAX_COMPATIBILITY_FALLBACK_ATTEMPTS);
     // The Compatibility Endpoint serializes its own request body from the
     // parsed data, so the provider request builder (whose serialized body
     // would be discarded) is skipped; only its header merge is reproduced.
     // Providers reaching this path use the default builder, which layers
-    // provider-computed headers over the sanitized client headers.
+    // provider-computed headers over the sanitized client headers. Rebuild
+    // that merge for each credential so fallback cannot keep the first slot's
+    // native authentication headers.
+    const headersByCredential = await Promise.all(
+      compatibilityAttempts.map(async (candidateIndex) =>
+        mergeHeaders(
+          sanitizedHeaders,
+          await providerInstance.headers(candidateIndex),
+        ),
+      ),
+    );
     const gatewayRequests = aiGateway.buildChatCompletionsRequests({
       provider: aiGatewayProvider,
       body: "",
@@ -403,10 +420,8 @@ async function attemptChatCompletion(
         model: string;
         [key: string]: unknown;
       },
-      headers: mergeHeaders(
-        sanitizedHeaders,
-        await providerInstance.headers(apiKeyIndex),
-      ),
+      headers: headersByCredential[0]!,
+      headersByCredential,
       apiKeys: gatewayApiKeyIndexes.map(
         (candidateIndex) =>
           gatewayApiKeys[candidateIndex] ?? configuredApiKeys[candidateIndex],

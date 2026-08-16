@@ -110,6 +110,7 @@ deletion described above.
 | `grok`             | `GROK_API_KEY`                                    |
 | `groq`             | `GROQ_API_KEY`                                    |
 | `mistral`          | `MISTRAL_API_KEY`                                 |
+| `nvidia-nim`       | `NVIDIA_NIM_API_KEY`                              |
 | `openrouter`       | `OPENROUTER_API_KEY`                              |
 | `huggingface`      | `HUGGINGFACE_API_KEY`                             |
 | `perplexity-ai`    | `PERPLEXITYAI_API_KEY`                            |
@@ -213,9 +214,12 @@ select the `default` Gateway; `/g/<gateway>/ai/...` overrides either choice.
 distinct from `CF_AIG_TOKEN`, which authenticates provider, compatibility, and
 Universal Endpoint requests.
 
-With `ALWAYS_USE_AI_GATEWAY=true`, `CLOUDFLARE_ACCOUNT_ID` and
-`CLOUDFLARE_API_TOKEN` are required. `AI_GATEWAY_NAME` is optional: the Worker
-uses the Gateway named `default` when it is absent. A `/g/<gateway>/` prefix
+With `ALWAYS_USE_AI_GATEWAY=true`, the JSON Schema and
+`npm run secrets:deploy` require `CLOUDFLARE_ACCOUNT_ID` and
+`CLOUDFLARE_API_TOKEN`. Runtime Gateway routing requires the account ID;
+the API token is used for Custom Provider synchronization and `/ai` REST
+routes. `AI_GATEWAY_NAME` is optional: the Worker uses the Gateway named
+`default` when it is absent. A `/g/<gateway>/` prefix
 overrides the selected Gateway for one request. Native provider routes
 are used where Cloudflare supports the operation. Other operations use managed
 AI Gateway Custom Providers and never fall back to a direct origin.

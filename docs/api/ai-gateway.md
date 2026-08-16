@@ -7,7 +7,9 @@ prefix uses `AI_GATEWAY_NAME`.
 
 ## Universal Endpoint
 
-`POST /g/<gateway>/` forwards an AI Gateway Universal Endpoint request. The
+`POST /g/<gateway>/` forwards an AI Gateway Universal Endpoint request. When a
+Gateway context already exists, `POST /` is the same route without an explicit
+prefix and uses `AI_GATEWAY_NAME` or `default`. The
 body must be a non-empty JSON array with at most 16 steps. Each step needs a
 supported `provider` and an object-valued `query`.
 
@@ -30,8 +32,9 @@ Configure both `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`. The Worker
 forwards request and response streams without translating their bodies,
 replaces the client authentication header with the Cloudflare API token, and
 sets `cf-aig-gateway-id` to the selected Gateway. The unprefixed `/ai/...`
-forms are shortcuts for the configured `AI_GATEWAY_NAME`. When no default
-Gateway is configured, use the explicit `/g/<gateway>/ai/...` form.
+forms are shortcuts for the configured `AI_GATEWAY_NAME`, or `default` when
+that name is absent. An explicit `/g/<gateway>/ai/...` prefix overrides either
+choice.
 
 ```bash
 curl https://your-worker.example/g/production/ai/v1/responses \
@@ -55,6 +58,8 @@ processing and therefore take precedence where applicable.
 
 `POST /g/<gateway>/compat/chat/completions` passes an OpenAI-compatible Chat
 Completions request to AI Gateway without using the proxy's provider adapters.
+The unprefixed `POST /compat/chat/completions` form is the same route when a
+Gateway context exists.
 
 ## Request metadata
 

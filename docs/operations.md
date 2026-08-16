@@ -99,19 +99,21 @@ endpoint is missing or slow.
 
 ### `/g/<name>/...` returns 400 or a provider route fails
 
-The dynamic Gateway prefix requires `CLOUDFLARE_ACCOUNT_ID`. The default Gateway
-also requires `AI_GATEWAY_NAME`. Confirm that the provider is in the supported
-AI Gateway set and that the path follows the patterns in [HTTP API and
-routing](api.md).
+The dynamic Gateway prefix requires `CLOUDFLARE_ACCOUNT_ID`. Unprefixed
+Gateway routing uses `AI_GATEWAY_NAME` when set, and otherwise `default` when
+`ALWAYS_USE_AI_GATEWAY=true` or an `/ai` REST path is requested. Confirm that
+the provider is in the supported AI Gateway set and that the path follows the
+patterns in [HTTP API and routing](api.md).
 When the account ID is absent, the proxy returns HTTP 400 with an explicit
 configuration message before provider routing.
 
 With `ALWAYS_USE_AI_GATEWAY=true`, an absent `AI_GATEWAY_NAME` intentionally
 selects `default`. If a `custom-llm-proxy-*` route returns 404, rerun
-`npm run secrets:deploy` and confirm that `CLOUDFLARE_API_TOKEN` has AI Gateway
-Write permission. The command fails before applying secrets when a generated
-slug is already owned by an unrelated account-level Custom Provider; resolve
-that collision explicitly rather than renaming or deleting providers blindly.
+`npm run secrets:deploy` and confirm that `CLOUDFLARE_API_TOKEN` has
+`AI Gateway - Edit` permission. The command fails before applying secrets when
+a generated slug is already owned by an unrelated account-level Custom
+Provider; resolve that collision explicitly rather than renaming or deleting
+providers blindly.
 
 ### Custom Provider synchronization fails
 

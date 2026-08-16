@@ -14,7 +14,7 @@
 - 実験的な Anthropic 互換 `POST /v1/messages`（内部で Chat Completions に変換）
 - `/openai/v1/responses` などのプロバイダー別パススルールート
 - Cloudflare AI Gateway のプロバイダールートとアカウントレベル REST API
-- 複数のプロバイダーキーからランダム選択、またはストライプ方式のラウンドロビン選択
+- 複数のプロバイダーキーからストライプ方式のアイソレート単位ラウンドロビン選択
 - `provider:profile` で選択できる名前付きプロバイダー認証情報プロファイル
 - `/key/<index-or-range>` によるリクエスト単位のキー指定
 - 設定ファイルで追加できるカスタム OpenAI 互換エンドポイント
@@ -95,13 +95,13 @@ curl https://your-worker.example/v1/chat/completions \
 Completions 形式に変換し、プロバイダーからの JSON または SSE を Responses 形式へ
 戻します。プロバイダー固有の Responses API へのパススルーではなく、対応する入力、
 ツール、ストリーミング機能には制限があります。詳細は
-[HTTP API and routing](docs/api.md#responses) を参照してください。
+[OpenAI 互換 API](docs/api/openai-compatible.md#responses) を参照してください。
 
 `POST /v1/messages` も実験的な互換機能です。Anthropic Messages の対応範囲を Chat
 Completions に変換し、プロバイダーの JSON または SSE を Anthropic 形式へ戻します。
 プロバイダー、virtual model、認証情報、AI Gateway の経路は Chat Completions と共通です。
 Anthropic 固有機能をそのまま使う場合は `/anthropic/v1/messages` を使用してください。
-詳細は [HTTP API and routing](docs/api.md#messages) を参照してください。
+詳細は [Anthropic 互換 API](docs/api/anthropic-compatible.md#messages) を参照してください。
 
 プロバイダー固有のリクエストは、パススルールートへそのまま送信できます。
 
@@ -138,7 +138,13 @@ Workers Free plan では 1 invocation あたりの subrequest が 50 件に制�
 - [初期セットアップ](docs/initial-setup_ja.md) ([English](docs/initial-setup.md))
 - [Configuration reference](docs/configuration.md)
 - [HTTP API and routing](docs/api.md)
+  - [OpenAI-compatible API](docs/api/openai-compatible.md)
+  - [Anthropic-compatible API](docs/api/anthropic-compatible.md)
+  - [Provider pass-through API](docs/api/provider-pass-through.md)
+  - [AI Gateway API](docs/api/ai-gateway.md)
+  - [Proxy management API](docs/api/proxy-management.md)
 - [Operations and troubleshooting](docs/operations.md)
+- [Live provider Chat Completions testing](docs/live-provider-testing.md)
 - [Development and verification](docs/development.md)
 - [Architecture and design](docs/design/overview.md)
 - [Project principles](docs/project-principles.md)
