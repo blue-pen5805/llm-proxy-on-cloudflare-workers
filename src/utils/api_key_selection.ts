@@ -11,8 +11,12 @@ export async function selectApiKeyIndex(
   selection: ApiKeySelection,
   fallback: ApiKeyFallback,
 ): Promise<number> {
+  const keyCount = provider.getApiKeys().length;
+  if (keyCount <= 0) {
+    return 0;
+  }
   if (selection !== undefined) {
-    return Secrets.resolveApiKeyIndex(selection, provider.getApiKeys().length);
+    return Secrets.resolveApiKeyIndex(selection, keyCount);
   }
   return fallback === "rotate" ? provider.getNextApiKeyIndex() : 0;
 }
@@ -28,7 +32,7 @@ export function listApiKeyIndicesToTry(
   firstIndex: number,
 ): number[] {
   if (keyCount <= 1) {
-    return [firstIndex];
+    return [0];
   }
 
   const allowed = new Set(allowedApiKeyIndices(selection, keyCount));

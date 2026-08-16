@@ -14,6 +14,12 @@ import { fetch2, withTimeout } from "../utils/helpers";
 const PROVIDER_FETCH_TIMEOUT_MS = 5000;
 const HTTP_TOO_MANY_REQUESTS = 429;
 
+function providerTimeoutError(providerName: string): Error {
+  const timeoutError = new Error(`Provider ${providerName} request timed out`);
+  timeoutError.name = "TimeoutError";
+  return timeoutError;
+}
+
 const EMPTY_MODELS: OpenAIModelsListResponseBody = {
   object: "list",
   data: [],
@@ -27,6 +33,7 @@ async function fetchProviderModelsWithKey(
   providerName: string,
   provider: ProviderBase,
   apiKeyIndex: number,
+  timeoutMs: number,
   aiGateway?: CloudflareAIGateway,
 ): Promise<ModelsFetchResult> {
   const [path, init] = await provider.buildModelsRequest(apiKeyIndex);
@@ -55,6 +62,11 @@ async function fetchProviderModelsWithKey(
   const modelsPromise = responsePromise.then(
     async (response): Promise<ModelsFetchResult> => {
       if (response.status === HTTP_TOO_MANY_REQUESTS) {
+        try {
+          await response.body?.cancel();
+        } catch {
+          // Body may already be closed.
+        }
         return { rateLimited: true };
       }
       return {
@@ -63,12 +75,7 @@ async function fetchProviderModelsWithKey(
       };
     },
   );
-  return withTimeout(
-    modelsPromise,
-    abortController,
-    PROVIDER_FETCH_TIMEOUT_MS,
-    providerName,
-  );
+  return withTimeout(modelsPromise, abortController, timeoutMs, providerName);
 }
 
 async function fetchProviderModels(
@@ -92,12 +99,19 @@ async function fetchProviderModels(
     provider.getApiKeys().length,
     firstIndex,
   );
+  const startedAt = Date.now();
 
   for (const apiKeyIndex of indices) {
+    const remainingMs = PROVIDER_FETCH_TIMEOUT_MS - (Date.now() - startedAt);
+    if (remainingMs <= 0) {
+      throw providerTimeoutError(providerName);
+    }
+
     const result = await fetchProviderModelsWithKey(
       providerName,
       provider,
       apiKeyIndex,
+      remainingMs,
       aiGateway,
     );
     if (!result.rateLimited) {

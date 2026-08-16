@@ -42,19 +42,24 @@ describe("selectApiKeyIndex", () => {
     expect(provider.getNextApiKeyIndex).toHaveBeenCalledOnce();
   });
 
-  it("resolves an explicit numeric selection", async () => {
-    await expect(selectApiKeyIndex(provider as any, 4, "first")).resolves.toBe(
-      1,
+  it("uses index 0 when a provider has no API keys", async () => {
+    provider.getApiKeys.mockReturnValue([]);
+
+    await expect(
+      selectApiKeyIndex(provider as any, { start: 0 }, "first"),
+    ).resolves.toBe(0);
+    await expect(selectApiKeyIndex(provider as any, 2, "rotate")).resolves.toBe(
+      0,
     );
-    expect(Secrets.resolveApiKeyIndex).toHaveBeenCalledWith(4, 3);
+    expect(Secrets.resolveApiKeyIndex).not.toHaveBeenCalled();
     expect(provider.getNextApiKeyIndex).not.toHaveBeenCalled();
   });
 });
 
 describe("listApiKeyIndicesToTry", () => {
-  it("returns only the first index when a single key is available", () => {
+  it("returns index 0 when at most one key is available", () => {
     expect(listApiKeyIndicesToTry(undefined, 1, 0)).toEqual([0]);
-    expect(listApiKeyIndicesToTry(2, 0, 2)).toEqual([2]);
+    expect(listApiKeyIndicesToTry(2, 0, 2)).toEqual([0]);
   });
 
   it("walks all keys from the first index when no selection is set", () => {
@@ -76,5 +81,10 @@ describe("listApiKeyIndicesToTry", () => {
 
   it("defaults an open-ended range to the last key", () => {
     expect(listApiKeyIndicesToTry({ start: 2 }, 4, 2)).toEqual([2, 3]);
+  });
+
+  it("defaults an unspecified range start to index 0", () => {
+    expect(listApiKeyIndicesToTry({ end: 2 }, 5, 0)).toEqual([0, 1, 2]);
+    expect(listApiKeyIndicesToTry({ end: 2 }, 5, 2)).toEqual([2, 0, 1]);
   });
 });
