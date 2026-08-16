@@ -153,10 +153,11 @@ never logs a credential value.
 `key_count`, upstream `status`, and configured `cooldown_seconds`. It follows
 the same slot-only disclosure policy and never logs credential material.
 
-`provider.models.key_retry` reports the provider, the zero-based `key_index`
-that returned HTTP 429, the `next_key_index` that will be tried, `status`, and
-the 1-based failed `attempt`. It is emitted only for automatic model discovery
-before a later key is requested.
+`provider.models.key_retry` reports the provider, optional non-default
+`credential_profile`, the zero-based `key_index` that returned HTTP 429, the
+`next_key_index` that will be tried, `status`, and the 1-based failed
+`attempt`. It is emitted only for automatic model discovery before a later key
+is requested.
 
 ## References
 

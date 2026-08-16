@@ -59,6 +59,7 @@ const LOG_MESSAGE_FIELDS: Readonly<Record<string, readonly string[]>> = {
   "provider.models.aggregate_truncated": ["maximum_bytes"],
   "provider.models.key_retry": [
     "provider",
+    "credential_profile",
     "key_index",
     "next_key_index",
     "status",

@@ -1160,6 +1160,73 @@ describe("models", () => {
       );
     });
 
+    it("does not rotate when an explicit key range is present", async () => {
+      const fetch = vi
+        .fn()
+        .mockResolvedValue(new Response("rate limited", { status: 429 }));
+      const provider = createKeyedProvider(fetch, ["key-a", "key-b", "key-c"]);
+      vi.spyOn(console, "error").mockImplementation(() => {});
+
+      const response = await handleModelsRequest({
+        apiKeyIndex: { start: 0, end: 2 },
+        providers: { all: () => ({ test: provider }) },
+      } as any);
+
+      expect(((await response.json()) as ModelsResponse).data).toEqual([]);
+      expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not continue after a later non-429 failure", async () => {
+      const rateLimited = new Response("rate limited", { status: 429 });
+      const serverError = new Response("upstream error", { status: 500 });
+      const cancelRateLimited = vi.spyOn(rateLimited.body!, "cancel");
+      const cancelServerError = vi.spyOn(serverError.body!, "cancel");
+      const fetch = vi
+        .fn()
+        .mockResolvedValueOnce(rateLimited)
+        .mockResolvedValueOnce(serverError);
+      const provider = createKeyedProvider(fetch, ["key-a", "key-b", "key-c"]);
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      vi.spyOn(console, "error").mockImplementation(() => {});
+
+      const response = await handleModelsRequest({
+        providers: { all: () => ({ test: provider }) },
+      } as any);
+
+      expect(((await response.json()) as ModelsResponse).data).toEqual([]);
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(cancelRateLimited).toHaveBeenCalledOnce();
+      expect(cancelServerError).toHaveBeenCalledOnce();
+    });
+
+    it("includes a named credential profile on the retry log", async () => {
+      const fetch = vi
+        .fn()
+        .mockResolvedValueOnce(new Response("rate limited", { status: 429 }))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ data: [] })));
+      const provider = createKeyedProvider(fetch, ["key-a", "key-b"]);
+      const consoleWarn = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+
+      await handleModelsRequest({
+        providers: { all: () => ({ "openai:paid": provider }) },
+      } as any);
+
+      expect(consoleWarn).toHaveBeenCalledWith({
+        event: "provider.models.key_retry",
+        request_id: null,
+        provider: "openai",
+        credential_profile: "paid",
+        key_index: 0,
+        next_key_index: 1,
+        status: 429,
+        attempt: 1,
+        message:
+          "Retrying provider model discovery with the next credential after HTTP 429: provider=openai, credential_profile=paid, key_index=0, next_key_index=1, status=429, attempt=1",
+      });
+    });
+
     it("retries the next credential through AI Gateway after HTTP 429", async () => {
       mockAIGateway.buildProviderEndpointRequest.mockReturnValue([
         "https://gateway.ai.cloudflare.com/v1/account/gateway/openai/models",

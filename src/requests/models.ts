@@ -238,6 +238,7 @@ async function fetchProviderModels(
         "Retrying provider model discovery with the next credential after HTTP 429",
         {
           provider: providerName,
+          ...(profile !== "default" ? { credential_profile: profile } : {}),
           key_index: apiKeyIndex,
           next_key_index: apiKeyIndex + 1,
           status: lastStatus,
