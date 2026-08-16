@@ -10,6 +10,12 @@ dated section; when multiple changes share a date, put the newest change first.
 Planned version: `1.0.0`. The package remains at `0.2.1` until the version
 update is explicitly approved.
 
+### 2026-08-16
+
+- Replaced provider-specific credential headers on each AI Gateway
+  Compatibility fallback attempt so a later key cannot keep the first slot's
+  `x-api-key`, `x-goog-api-key`, or `api-key` value.
+
 ### 2026-08-15
 
 - Stopped cooling provider credential slots after HTTP 404 responses; cooldown

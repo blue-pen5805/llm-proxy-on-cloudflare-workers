@@ -230,12 +230,27 @@ export class CloudflareAIGateway {
     });
 
     return credentials.map((apiKey) => {
-      // Overwrite authorization header with the provider's API key
+      // Compatibility Endpoint auth is Authorization: Bearer. Provider
+      // adapters may also set native credential headers on the shared
+      // header snapshot; replace those values so fallback attempts cannot
+      // keep the first slot's key.
       const newHeaders = new Headers(headers);
       if (apiKey) {
         newHeaders.set("authorization", `Bearer ${apiKey}`);
+        if (newHeaders.has("x-api-key")) {
+          newHeaders.set("x-api-key", apiKey);
+        }
+        if (newHeaders.has("x-goog-api-key")) {
+          newHeaders.set("x-goog-api-key", apiKey);
+        }
+        if (newHeaders.has("api-key")) {
+          newHeaders.set("api-key", apiKey);
+        }
       } else {
         newHeaders.delete("authorization");
+        newHeaders.delete("x-api-key");
+        newHeaders.delete("x-goog-api-key");
+        newHeaders.delete("api-key");
       }
 
       // Convert Headers to plain object

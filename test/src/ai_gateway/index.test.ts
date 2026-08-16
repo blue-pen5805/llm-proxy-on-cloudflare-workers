@@ -447,6 +447,54 @@ describe("CloudflareAIGateway", () => {
       });
     });
 
+    it("replaces native credential headers for each fallback key", () => {
+      const requests = gateway.buildChatCompletionsRequests({
+        provider: "anthropic",
+        body: JSON.stringify({
+          model: "claude-3-opus-20240229",
+          messages: [{ role: "user", content: "Hello" }],
+        }),
+        headers: {
+          "x-api-key": "first-key",
+          "x-goog-api-key": "first-key",
+          "api-key": "first-key",
+          "anthropic-version": "2023-06-01",
+        },
+        apiKeys: ["first-key", "second-key"],
+      });
+
+      expect(requests).toHaveLength(2);
+      const firstHeaders = new Headers(requests[0][1].headers);
+      expect(firstHeaders.get("authorization")).toBe("Bearer first-key");
+      expect(firstHeaders.get("x-api-key")).toBe("first-key");
+      expect(firstHeaders.get("x-goog-api-key")).toBe("first-key");
+      expect(firstHeaders.get("api-key")).toBe("first-key");
+      expect(firstHeaders.get("anthropic-version")).toBe("2023-06-01");
+
+      const secondHeaders = new Headers(requests[1][1].headers);
+      expect(secondHeaders.get("authorization")).toBe("Bearer second-key");
+      expect(secondHeaders.get("x-api-key")).toBe("second-key");
+      expect(secondHeaders.get("x-goog-api-key")).toBe("second-key");
+      expect(secondHeaders.get("api-key")).toBe("second-key");
+      expect(secondHeaders.get("anthropic-version")).toBe("2023-06-01");
+    });
+
+    it("removes native credential headers from a BYOK compatibility request", () => {
+      const requests = gateway.buildChatCompletionsRequests({
+        provider: "anthropic",
+        body: JSON.stringify({ model: "claude", messages: [] }),
+        headers: {
+          Authorization: "Bearer leftover-key",
+          "x-api-key": "leftover-key",
+        },
+      });
+
+      expect(requests).toHaveLength(1);
+      const headers = new Headers(requests[0][1].headers);
+      expect(headers.has("authorization")).toBe(false);
+      expect(headers.has("x-api-key")).toBe(false);
+    });
+
     it("builds one BYOK request when no provider key is configured", () => {
       const requests = gateway.buildChatCompletionsRequests({
         provider: "aws-bedrock",
