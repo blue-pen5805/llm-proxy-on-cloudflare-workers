@@ -3,39 +3,34 @@ import { MiddlewareContext } from "../middleware";
 import { getAllProviders } from "../providers";
 import { OpenAIModelsListResponseBody } from "../providers/openai/types";
 import { ProviderBase, ProviderNotSupportedError } from "../providers/provider";
-import {
-  listApiKeyIndicesToTry,
-  selectApiKeyIndex,
-} from "../utils/api_key_selection";
+import { selectApiKeyIndex } from "../utils/api_key_selection";
 import { Environments } from "../utils/environments";
 import { fetch2, withTimeout } from "../utils/helpers";
 
 // Timeout for individual provider model fetch operations (milliseconds)
 const PROVIDER_FETCH_TIMEOUT_MS = 5000;
-const HTTP_TOO_MANY_REQUESTS = 429;
-
-function providerTimeoutError(providerName: string): Error {
-  const timeoutError = new Error(`Provider ${providerName} request timed out`);
-  timeoutError.name = "TimeoutError";
-  return timeoutError;
-}
 
 const EMPTY_MODELS: OpenAIModelsListResponseBody = {
   object: "list",
   data: [],
 };
 
-type ModelsFetchResult =
-  | { rateLimited: true }
-  | { rateLimited: false; models: OpenAIModelsListResponseBody };
-
-async function fetchProviderModelsWithKey(
+async function fetchProviderModels(
   providerName: string,
   provider: ProviderBase,
-  apiKeyIndex: number,
-  timeoutMs: number,
+  selection: MiddlewareContext["apiKeyIndex"],
   aiGateway?: CloudflareAIGateway,
-): Promise<ModelsFetchResult> {
+): Promise<OpenAIModelsListResponseBody> {
+  if (!provider.available()) {
+    return EMPTY_MODELS;
+  }
+
+  const staticModels = provider.staticModels();
+  if (staticModels) {
+    return staticModels;
+  }
+
+  const apiKeyIndex = await selectApiKeyIndex(provider, selection, "first");
   const [path, init] = await provider.buildModelsRequest(apiKeyIndex);
   const abortController = new AbortController();
 
@@ -59,68 +54,14 @@ async function fetchProviderModelsWithKey(
     );
   }
 
-  const modelsPromise = responsePromise.then(
-    async (response): Promise<ModelsFetchResult> => {
-      if (response.status === HTTP_TOO_MANY_REQUESTS) {
-        try {
-          await response.body?.cancel();
-        } catch {
-          // Body may already be closed.
-        }
-        return { rateLimited: true };
-      }
-      return {
-        rateLimited: false,
-        models: provider.modelsToOpenAIFormat(await response.json()),
-      };
-    },
+  const modelsPromise = responsePromise.then(async (response) =>
+    provider.modelsToOpenAIFormat(await response.json()),
   );
-  return withTimeout(modelsPromise, abortController, timeoutMs, providerName);
-}
-
-async function fetchProviderModels(
-  providerName: string,
-  provider: ProviderBase,
-  selection: MiddlewareContext["apiKeyIndex"],
-  aiGateway?: CloudflareAIGateway,
-): Promise<OpenAIModelsListResponseBody> {
-  if (!provider.available()) {
-    return EMPTY_MODELS;
-  }
-
-  const staticModels = provider.staticModels();
-  if (staticModels) {
-    return staticModels;
-  }
-
-  const firstIndex = await selectApiKeyIndex(provider, selection, "first");
-  const indices = listApiKeyIndicesToTry(
-    selection,
-    provider.getApiKeys().length,
-    firstIndex,
-  );
-  const startedAt = Date.now();
-
-  for (const apiKeyIndex of indices) {
-    const remainingMs = PROVIDER_FETCH_TIMEOUT_MS - (Date.now() - startedAt);
-    if (remainingMs <= 0) {
-      throw providerTimeoutError(providerName);
-    }
-
-    const result = await fetchProviderModelsWithKey(
-      providerName,
-      provider,
-      apiKeyIndex,
-      remainingMs,
-      aiGateway,
-    );
-    if (!result.rateLimited) {
-      return result.models;
-    }
-  }
-
-  throw new Error(
-    `Rate limited (429) when fetching models for provider ${providerName}`,
+  return withTimeout(
+    modelsPromise,
+    abortController,
+    PROVIDER_FETCH_TIMEOUT_MS,
+    providerName,
   );
 }
 
