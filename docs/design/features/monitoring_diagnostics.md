@@ -85,28 +85,28 @@ Provider names observed in request-scoped events are carried into
 
 The following events support operational queries:
 
-| Event                              | Meaning                                    |
-| ---------------------------------- | ------------------------------------------ |
-| `request.started`                  | Routed handler started                     |
-| `request.completed`                | Handler completed, with status and latency |
-| `request.unhandled_error`          | An unexpected exception reached the guard  |
-| `subrequest.started`               | Provider request started                   |
-| `subrequest.completed`             | Provider request returned an HTTP response |
-| `subrequest.failed`                | Provider request failed before a response  |
-| `provider.models.failed`           | A provider model-list operation failed     |
-| `provider.models.invalid_response` | A model-list response could not be used    |
+| Event                                 | Meaning                                      |
+| ------------------------------------- | -------------------------------------------- |
+| `request.started`                     | Routed handler started                       |
+| `request.completed`                   | Handler completed, with status and latency   |
+| `request.unhandled_error`             | An unexpected exception reached the guard    |
+| `subrequest.started`                  | Provider request started                     |
+| `subrequest.completed`                | Provider request returned an HTTP response   |
+| `subrequest.failed`                   | Provider request failed before a response    |
+| `provider.models.failed`              | A provider model-list operation failed       |
+| `provider.models.invalid_response`    | A model-list response could not be used      |
 | `provider.models.aggregate_truncated` | The aggregated model list hit its size bound |
-| `models.cache.unavailable`         | An optional model cache operation failed   |
-| `status.cache.unavailable`         | An optional status cache operation failed  |
-| `provider.connectivity.failed`     | A status connectivity check failed         |
-| `provider.status.failed`           | A provider could not describe itself       |
-| `provider.credential.missing`      | A registered provider has no local key     |
-| `auth.development_mode_ignored`    | `DEV` was ignored on a deployed Worker     |
-| `provider.key.selected`            | A credential slot was selected             |
-| `provider.key.cooldown`            | A credential slot entered cooldown         |
-| `virtual_model.select`             | A candidate was selected for an attempt    |
-| `virtual_model.retry`              | Another candidate attempt will be made     |
-| `virtual_model.completed`          | The final candidate attempt completed      |
+| `models.cache.unavailable`            | An optional model cache operation failed     |
+| `status.cache.unavailable`            | An optional status cache operation failed    |
+| `provider.connectivity.failed`        | A status connectivity check failed           |
+| `provider.status.failed`              | A provider could not describe itself         |
+| `provider.credential.missing`         | A registered provider has no local key       |
+| `auth.development_mode_ignored`       | `DEV` was ignored on a deployed Worker       |
+| `provider.key.selected`               | A credential slot was selected               |
+| `provider.key.cooldown`               | A credential slot entered cooldown           |
+| `virtual_model.select`                | A candidate was selected for an attempt      |
+| `virtual_model.retry`                 | Another candidate attempt will be made       |
+| `virtual_model.completed`             | The final candidate attempt completed        |
 
 `request.started` always includes the HTTP method and query-free path. Once a
 route has resolved safe routing metadata, it also reports an `endpoint` label.
