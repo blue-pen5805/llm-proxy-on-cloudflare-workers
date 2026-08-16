@@ -12,6 +12,9 @@ update is explicitly approved.
 
 ### 2026-08-16
 
+- Retried `GET /v1/models` provider discovery with sequential later keys after
+  HTTP 429, up to three attempts, without advancing striped rotation or
+  retrying other statuses.
 - Rebuilt provider headers for each AI Gateway Compatibility fallback attempt
   so a later credential cannot keep the first slot's native authentication
   headers.

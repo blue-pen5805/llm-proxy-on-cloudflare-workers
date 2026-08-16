@@ -91,7 +91,9 @@ Use health endpoints deliberately:
 ### A provider is absent from `/v1/models`
 
 The endpoint omits unavailable, unsupported, timed-out, and malformed provider
-responses. Amazon Bedrock and Azure OpenAI are unavailable for model discovery
+responses. Automatic discovery retries sequential later keys after HTTP 429,
+up to three attempts, and still omits the provider if every attempt fails.
+Amazon Bedrock and Azure OpenAI are unavailable for model discovery
 until all of their required local credentials and routing identifiers are
 configured, including with `ALWAYS_USE_AI_GATEWAY=true`. Check `/status` and
 Worker logs. For a custom endpoint, set `models` to a static list if its model
@@ -154,7 +156,9 @@ deployment deletion instructions only.
 - A single index wraps modulo the number of configured keys.
 - Ranges choose randomly and are inclusive.
 - With no explicit prefix, multiple keys use striped per-isolate round-robin.
-- `/v1/models` uses the first key unless a prefix is present.
+- `/v1/models` uses the first key unless a prefix is present. HTTP 429 retries
+  sequential later keys, up to three attempts; other statuses and explicit
+  selections do not rotate.
 - A `provider:profile` selector limits rotation, cooldowns, and explicit key
   indices to that profile; omitting the suffix selects `default`.
 - Only chat, Responses, Messages, models, and registered provider pass-through

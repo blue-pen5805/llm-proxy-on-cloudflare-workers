@@ -29,6 +29,9 @@ const PROVIDER_FETCH_TIMEOUT_MS = 60_000;
 const MAX_PROVIDER_MODELS_RESPONSE_BYTES = 1024 * 1024;
 export const MAX_MODELS_PER_PROVIDER = 1000;
 export const MAX_AGGREGATED_MODELS_BYTES = 4 * 1024 * 1024;
+// Automatic model discovery starts at the first key and, on HTTP 429 only,
+// tries sequential later keys. This bound includes the original attempt.
+export const MAX_MODELS_RATE_LIMIT_KEY_ATTEMPTS = 3;
 
 const MODELS_CACHE_NAME = "llm-proxy-models";
 
@@ -87,6 +90,15 @@ function buildModelsCacheKey(
     `https://models-cache.llm-proxy.internal/${gatewayScope}/${keyScope}/${providerScope}`,
     { method: "GET" },
   );
+}
+
+async function discardUpstreamBody(response: Response): Promise<void> {
+  if (!response.body) return;
+  try {
+    await response.body.cancel();
+  } catch {
+    // The status is still authoritative if the body is already locked.
+  }
 }
 
 function requestedProviders(
@@ -149,71 +161,93 @@ async function fetchProviderModels(
     return getStaticModels;
   }
 
-  const apiKeyIndex = await selectApiKeyIndex(provider, selection, "first");
-  const keyLogFields = recordApiKeySelection({
-    provider: providerName,
-    credentialProfile: profile,
-    operation: "models",
-    keyIndex: apiKeyIndex,
-    keyCount: provider.getApiKeys().length,
-    selectionPolicy: determineApiKeySelectionPolicy(selection, "first"),
-    viaAiGateway: aiGatewayProvider !== undefined,
-  });
-  const [path, init] = await provider.buildModelsRequest(apiKeyIndex);
+  const keyCount = provider.getApiKeys().length;
+  const initialApiKeyIndex = await selectApiKeyIndex(
+    provider,
+    selection,
+    "first",
+  );
+  const selectionPolicy = determineApiKeySelectionPolicy(selection, "first");
+  const maxAttempts =
+    selection === undefined && keyCount > 1
+      ? Math.min(MAX_MODELS_RATE_LIMIT_KEY_ATTEMPTS, keyCount)
+      : 1;
   const abortController = new AbortController();
-
-  let responsePromise: Promise<Response>;
-  if (aiGateway && aiGatewayProvider) {
-    const gatewayHeaders = new Headers(clientGatewayHeaders);
-    const providerHeaders = new Headers(await provider.headers(apiKeyIndex));
-    providerHeaders.forEach((value, key) => gatewayHeaders.set(key, value));
-    const [gatewayUrl, gatewayInit] = aiGateway.buildProviderEndpointRequest({
-      provider: aiGatewayProvider,
-      method: init.method,
-      path: gatewayProviderPath(
-        providerName,
-        provider,
-        path,
-        aiGatewayProvider,
-      ),
-      headers: gatewayHeaders,
+  const fetchModelsWithKey = async (apiKeyIndex: number) => {
+    const keyLogFields = recordApiKeySelection({
+      provider: providerName,
+      credentialProfile: profile,
+      operation: "models",
+      keyIndex: apiKeyIndex,
+      keyCount,
+      selectionPolicy,
+      viaAiGateway: aiGatewayProvider !== undefined,
     });
-    responsePromise = RequestLogger.withFields(keyLogFields, () =>
-      fetchWithLogging(gatewayUrl, {
-        ...gatewayInit,
-        signal: abortController.signal,
-      }),
-    );
-  } else {
-    responsePromise = RequestLogger.withFields(keyLogFields, () =>
+    const [path, init] = await provider.buildModelsRequest(apiKeyIndex);
+    if (aiGateway && aiGatewayProvider) {
+      const gatewayHeaders = new Headers(clientGatewayHeaders);
+      const providerHeaders = new Headers(await provider.headers(apiKeyIndex));
+      providerHeaders.forEach((value, key) => gatewayHeaders.set(key, value));
+      const [gatewayUrl, gatewayInit] = aiGateway.buildProviderEndpointRequest({
+        provider: aiGatewayProvider,
+        method: init.method,
+        path: gatewayProviderPath(
+          providerName,
+          provider,
+          path,
+          aiGatewayProvider,
+        ),
+        headers: gatewayHeaders,
+      });
+      return RequestLogger.withFields(keyLogFields, () =>
+        fetchWithLogging(gatewayUrl, {
+          ...gatewayInit,
+          signal: abortController.signal,
+        }),
+      );
+    }
+    return RequestLogger.withFields(keyLogFields, () =>
       provider.fetch(
         path,
         { ...init, signal: abortController.signal },
         apiKeyIndex,
       ),
     );
-  }
+  };
 
-  const modelsPromise = responsePromise.then(async (upstreamResponse) => {
-    if (!upstreamResponse.ok) {
-      if (upstreamResponse.body) {
-        try {
-          await upstreamResponse.body.cancel();
-        } catch {
-          // The status is still authoritative if the body is already locked.
-        }
+  const modelsPromise = (async () => {
+    let lastStatus = 0;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const apiKeyIndex = initialApiKeyIndex + attempt;
+      const upstreamResponse = await fetchModelsWithKey(apiKeyIndex);
+      if (upstreamResponse.ok) {
+        return provider.convertModelsToOpenAIFormat(
+          await readResponseJson(
+            upstreamResponse,
+            MAX_PROVIDER_MODELS_RESPONSE_BYTES,
+          ),
+        );
       }
-      throw new Error(
-        `Provider models request failed with HTTP ${upstreamResponse.status}.`,
+      lastStatus = upstreamResponse.status;
+      await discardUpstreamBody(upstreamResponse);
+      if (lastStatus !== 429 || attempt + 1 >= maxAttempts) {
+        break;
+      }
+      RequestLogger.warn(
+        "provider.models.key_retry",
+        "Retrying provider model discovery with the next credential after HTTP 429",
+        {
+          provider: providerName,
+          ...(profile !== "default" ? { credential_profile: profile } : {}),
+          key_index: apiKeyIndex,
+          next_key_index: apiKeyIndex + 1,
+          status: lastStatus,
+          attempt: attempt + 1,
+        },
       );
     }
-    return provider.convertModelsToOpenAIFormat(
-      await readResponseJson(
-        upstreamResponse,
-        MAX_PROVIDER_MODELS_RESPONSE_BYTES,
-      ),
-    );
-  });
+    throw new Error(`Provider models request failed with HTTP ${lastStatus}.`);
+  })();
   return withTimeout(
     modelsPromise,
     abortController,

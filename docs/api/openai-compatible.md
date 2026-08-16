@@ -232,6 +232,10 @@ Client-facing model responses always carry `Cache-Control: private, no-store`;
 the public max-age used by the internal Cache API is never exposed.
 
 Custom endpoints should use a static `models` list when reliable discovery
-matters. Model discovery uses the first provider key by default. Bedrock and
-Azure OpenAI are omitted unless their required local credentials and routing
-settings are configured, including in strict Gateway mode.
+matters. Model discovery uses the first provider key by default. If that
+request returns HTTP 429, the proxy retries sequential later keys, up to three
+attempts or the configured key count, without advancing striped rotation.
+Other statuses do not rotate, and an explicit `/key/<selection>` prefix
+disables the retry. Bedrock and Azure OpenAI are omitted unless their required
+local credentials and routing settings are configured, including in strict
+Gateway mode.

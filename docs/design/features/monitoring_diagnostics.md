@@ -96,6 +96,7 @@ The following events support operational queries:
 | `provider.models.failed`              | A provider model-list operation failed              |
 | `provider.models.invalid_response`    | A model-list response could not be used             |
 | `provider.models.aggregate_truncated` | The aggregated model list hit its size bound        |
+| `provider.models.key_retry`           | Model discovery will retry the next key after 429   |
 | `models.cache.unavailable`            | An optional model cache operation failed            |
 | `status.cache.unavailable`            | An optional status cache operation failed           |
 | `provider.connectivity.failed`        | A status connectivity check failed                  |
@@ -151,6 +152,12 @@ never logs a credential value.
 `provider.key.cooldown` reports the provider, zero-based `key_index`,
 `key_count`, upstream `status`, and configured `cooldown_seconds`. It follows
 the same slot-only disclosure policy and never logs credential material.
+
+`provider.models.key_retry` reports the provider, optional non-default
+`credential_profile`, the zero-based `key_index` that returned HTTP 429, the
+`next_key_index` that will be tried, `status`, and the 1-based failed
+`attempt`. It is emitted only for automatic model discovery before a later key
+is requested.
 
 ## References
 
