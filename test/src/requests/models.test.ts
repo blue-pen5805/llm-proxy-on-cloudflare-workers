@@ -183,7 +183,10 @@ describe("models", () => {
     const response = await models({} as any);
     const timeoutPromise = vi.mocked(helpers.withTimeout).mock.calls[0][0];
 
-    await expect(timeoutPromise).resolves.toBe(formattedModels);
+    await expect(timeoutPromise).resolves.toEqual({
+      rateLimited: false,
+      models: formattedModels,
+    });
     expect(json).toHaveBeenCalledOnce();
     expect(parsingProviderClass.modelsToOpenAIFormat).toHaveBeenCalledWith(
       responseJson,
@@ -500,5 +503,325 @@ describe("models", () => {
       expect.any(Object),
       2,
     );
+  });
+
+  it("retries with the next API key when the first key is rate limited", async () => {
+    const formattedModels = {
+      object: "list",
+      data: [
+        {
+          id: "retry-model",
+          object: "model",
+          created: 1234567890,
+          owned_by: "test",
+        },
+      ],
+    };
+    const retryProviderClass = {
+      ...mockProviderClass,
+      getApiKeys: vi.fn().mockReturnValue(["key-0", "key-1", "key-2"]),
+      fetch: vi
+        .fn()
+        .mockImplementation(
+          (_url: string, _init: RequestInit, apiKeyIndex?: number) => {
+            if (apiKeyIndex === 0) {
+              return Promise.resolve(
+                new Response("rate limited", { status: 429 }),
+              );
+            }
+            return Promise.resolve(
+              new Response(JSON.stringify({ data: [{ id: "retry-model" }] })),
+            );
+          },
+        ),
+      modelsToOpenAIFormat: vi.fn().mockReturnValue(formattedModels),
+    };
+
+    Object.keys(Providers).forEach((key) => {
+      delete Providers[key];
+    });
+
+    Providers.test = mockProviderConstructor(retryProviderClass);
+    vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(false);
+
+    const response = await models({} as any);
+    const body = (await response.json()) as ModelsResponse;
+
+    expect(retryProviderClass.fetch).toHaveBeenCalledTimes(2);
+    expect(retryProviderClass.fetch).toHaveBeenNthCalledWith(
+      1,
+      expect.any(String),
+      expect.any(Object),
+      0,
+    );
+    expect(retryProviderClass.fetch).toHaveBeenNthCalledWith(
+      2,
+      expect.any(String),
+      expect.any(Object),
+      1,
+    );
+    expect(retryProviderClass.modelsToOpenAIFormat).toHaveBeenCalledOnce();
+    expect(Secrets.getNext).not.toHaveBeenCalled();
+    expect(body.data).toEqual([
+      {
+        id: "test/retry-model",
+        object: "model",
+        created: 1234567890,
+        owned_by: "test",
+      },
+    ]);
+  });
+
+  it("does not rotate keys for non-429 responses", async () => {
+    const errorJson = { error: "server error" };
+    const errorProviderClass = {
+      ...mockProviderClass,
+      getApiKeys: vi.fn().mockReturnValue(["key-0", "key-1"]),
+      fetch: vi
+        .fn()
+        .mockResolvedValue(
+          new Response(JSON.stringify(errorJson), { status: 500 }),
+        ),
+      modelsToOpenAIFormat: vi.fn().mockReturnValue({
+        object: "list",
+        data: [],
+      }),
+    };
+
+    Object.keys(Providers).forEach((key) => {
+      delete Providers[key];
+    });
+
+    Providers.test = mockProviderConstructor(errorProviderClass);
+    vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(false);
+
+    await models({} as any);
+
+    expect(errorProviderClass.fetch).toHaveBeenCalledTimes(1);
+    expect(errorProviderClass.fetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Object),
+      0,
+    );
+    expect(errorProviderClass.modelsToOpenAIFormat).toHaveBeenCalledWith(
+      errorJson,
+    );
+  });
+
+  it("does not rotate keys when the fetch rejects", async () => {
+    const errorProviderClass = {
+      ...mockProviderClass,
+      getApiKeys: vi.fn().mockReturnValue(["key-0", "key-1"]),
+      fetch: vi.fn().mockRejectedValue(new Error("Network error")),
+    };
+
+    Object.keys(Providers).forEach((key) => {
+      delete Providers[key];
+    });
+
+    Providers.test = mockProviderConstructor(errorProviderClass);
+    vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(false);
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const response = await models({} as any);
+    const body = (await response.json()) as ModelsResponse;
+
+    expect(errorProviderClass.fetch).toHaveBeenCalledTimes(1);
+    expect(body.data).toEqual([]);
+    expect(consoleSpy).toHaveBeenCalledWith(
+      "Error fetching models for provider test:",
+      expect.any(Error),
+    );
+
+    consoleSpy.mockRestore();
+  });
+
+  it("omits a provider after every allowed key is rate limited", async () => {
+    const rateLimitedProviderClass = {
+      ...mockProviderClass,
+      getApiKeys: vi.fn().mockReturnValue(["key-0", "key-1"]),
+      fetch: vi
+        .fn()
+        .mockResolvedValue(new Response("rate limited", { status: 429 })),
+      modelsToOpenAIFormat: vi.fn(),
+    };
+
+    Object.keys(Providers).forEach((key) => {
+      delete Providers[key];
+    });
+
+    Providers.test = mockProviderConstructor(rateLimitedProviderClass);
+    vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(false);
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const response = await models({} as any);
+    const body = (await response.json()) as ModelsResponse;
+
+    expect(rateLimitedProviderClass.fetch).toHaveBeenCalledTimes(2);
+    expect(
+      rateLimitedProviderClass.modelsToOpenAIFormat,
+    ).not.toHaveBeenCalled();
+    expect(body.data).toEqual([]);
+    expect(consoleSpy).toHaveBeenCalledWith(
+      "Error fetching models for provider test:",
+      expect.any(Error),
+    );
+
+    consoleSpy.mockRestore();
+  });
+
+  it("retries rate-limited AI Gateway requests with the next key", async () => {
+    const formattedModels = {
+      object: "list",
+      data: [
+        {
+          id: "gateway-model",
+          object: "model",
+          created: 1234567890,
+          owned_by: "openai",
+        },
+      ],
+    };
+    const gatewayProviderClass = {
+      ...mockProviderClass,
+      getApiKeys: vi.fn().mockReturnValue(["key-0", "key-1"]),
+      headers: vi.fn().mockImplementation((apiKeyIndex?: number) => ({
+        Authorization: `Bearer key-${apiKeyIndex ?? 0}`,
+      })),
+      modelsToOpenAIFormat: vi.fn().mockReturnValue(formattedModels),
+    };
+
+    Object.keys(Providers).forEach((key) => {
+      delete Providers[key];
+    });
+
+    Providers.openai = mockProviderConstructor(gatewayProviderClass);
+    mockAIGateway.buildProviderEndpointRequest.mockReturnValue([
+      "https://gateway.ai.cloudflare.com/v1/account/gateway/openai/models",
+      { method: "GET", headers: {} },
+    ]);
+    vi.mocked(helpers.fetch2)
+      .mockResolvedValueOnce(new Response("rate limited", { status: 429 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: [{ id: "gateway-model" }] })),
+      );
+
+    const response = await models({} as any, mockAIGateway as any);
+    const body = (await response.json()) as ModelsResponse;
+
+    expect(helpers.fetch2).toHaveBeenCalledTimes(2);
+    expect(gatewayProviderClass.headers).toHaveBeenNthCalledWith(1, 0);
+    expect(gatewayProviderClass.headers).toHaveBeenNthCalledWith(2, 1);
+    expect(gatewayProviderClass.modelsToOpenAIFormat).toHaveBeenCalledOnce();
+    expect(body.data[0].id).toBe("openai/gateway-model");
+  });
+
+  it("retries from an explicit key index and wraps to earlier keys", async () => {
+    const formattedModels = {
+      object: "list",
+      data: [
+        {
+          id: "wrap-model",
+          object: "model",
+          created: 1234567890,
+          owned_by: "test",
+        },
+      ],
+    };
+    const wrapProviderClass = {
+      ...mockProviderClass,
+      getApiKeys: vi.fn().mockReturnValue(["key-0", "key-1", "key-2"]),
+      fetch: vi
+        .fn()
+        .mockImplementation(
+          (_url: string, _init: RequestInit, apiKeyIndex?: number) => {
+            if (apiKeyIndex === 2) {
+              return Promise.resolve(
+                new Response("rate limited", { status: 429 }),
+              );
+            }
+            return Promise.resolve(
+              new Response(JSON.stringify({ data: [{ id: "wrap-model" }] })),
+            );
+          },
+        ),
+      modelsToOpenAIFormat: vi.fn().mockReturnValue(formattedModels),
+    };
+
+    Object.keys(Providers).forEach((key) => {
+      delete Providers[key];
+    });
+
+    Providers.test = mockProviderConstructor(wrapProviderClass);
+    vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(false);
+
+    const response = await models({ apiKeyIndex: 2 } as any);
+    const body = (await response.json()) as ModelsResponse;
+
+    expect(wrapProviderClass.fetch).toHaveBeenNthCalledWith(
+      1,
+      expect.any(String),
+      expect.any(Object),
+      2,
+    );
+    expect(wrapProviderClass.fetch).toHaveBeenNthCalledWith(
+      2,
+      expect.any(String),
+      expect.any(Object),
+      0,
+    );
+    expect(body.data[0].id).toBe("test/wrap-model");
+  });
+
+  it("does not retry keys outside an explicit range after a 429", async () => {
+    const formattedModels = {
+      object: "list",
+      data: [
+        {
+          id: "range-model",
+          object: "model",
+          created: 1234567890,
+          owned_by: "test",
+        },
+      ],
+    };
+    const rangeProviderClass = {
+      ...mockProviderClass,
+      getApiKeys: vi.fn().mockReturnValue(["key-0", "key-1", "key-2", "key-3"]),
+      fetch: vi
+        .fn()
+        .mockImplementation(
+          (_url: string, _init: RequestInit, apiKeyIndex?: number) => {
+            if (apiKeyIndex === 1) {
+              return Promise.resolve(
+                new Response("rate limited", { status: 429 }),
+              );
+            }
+            return Promise.resolve(
+              new Response(JSON.stringify({ data: [{ id: "range-model" }] })),
+            );
+          },
+        ),
+      modelsToOpenAIFormat: vi.fn().mockReturnValue(formattedModels),
+    };
+
+    Object.keys(Providers).forEach((key) => {
+      delete Providers[key];
+    });
+
+    Providers.test = mockProviderConstructor(rangeProviderClass);
+    vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(false);
+    vi.mocked(Secrets.resolveApiKeyIndex).mockReturnValue(1);
+
+    const response = await models({
+      apiKeyIndex: { start: 1, end: 2 },
+    } as any);
+    const body = (await response.json()) as ModelsResponse;
+
+    expect(rangeProviderClass.fetch).toHaveBeenCalledTimes(2);
+    expect(rangeProviderClass.fetch.mock.calls.map((call) => call[2])).toEqual([
+      1, 2,
+    ]);
+    expect(body.data[0].id).toBe("test/range-model");
   });
 });

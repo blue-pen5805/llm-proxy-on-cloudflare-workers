@@ -55,6 +55,7 @@ The aggregated `GET /v1/models` endpoint is designed to be best-effort:
 
 - The proxy attempts to collect models from each configured and available provider.
 - Each provider model list fetch has an individual 5 second timeout.
+- If a provider returns HTTP 429, the proxy retries with the next allowed API key before treating that provider as failed.
 - If a provider fails or times out, that provider's models are omitted, but the overall `GET /v1/models` response still returns models from other providers.
 
 ### Prefer Static `models` for Custom Endpoints

@@ -36,7 +36,7 @@ The rotation logic is centralized in the `ProviderBase` class.
 
 ### Exceptions
 
-- **Model Listing**: The `/models` endpoint explicitly bypasses rotation and always uses the first key (index 0) to ensure deterministic responses when aggregating model lists.
+- **Model Listing**: The `/models` endpoint starts with the first key (index 0), rather than round-robin or random rotation, so aggregated model lists stay deterministic. If that upstream request returns HTTP 429, the proxy tries the remaining keys in index order (wrapping) until one succeeds or every allowed key has been attempted. Timeouts, network errors, and non-429 HTTP statuses do not rotate. An explicit `/key/{index}/` selection starts at that index and may fail over to other keys; a `/key/{start}-{end}/` range stays inside the range.
 
 ## Logic Flow
 
