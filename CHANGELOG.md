@@ -12,9 +12,9 @@ update is explicitly approved.
 
 ### 2026-08-16
 
-- Replaced provider-specific credential headers on each AI Gateway
-  Compatibility fallback attempt so a later key cannot keep the first slot's
-  `x-api-key`, `x-goog-api-key`, or `api-key` value.
+- Rebuilt provider headers for each AI Gateway Compatibility fallback attempt
+  so a later credential cannot keep the first slot's native authentication
+  headers.
 
 ### 2026-08-15
 

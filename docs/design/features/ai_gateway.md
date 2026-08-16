@@ -152,9 +152,9 @@ tries another credential only after a network error, HTTP 401/403, or HTTP 429;
 deterministic client and provider errors return immediately. An explicit
 `/key/<selection>` resolves one credential and sends exactly one request, so
 fallback cannot override the caller's selection. Each attempted credential is
-logged with its actual slot. Native provider credential headers such as
-`x-api-key`, `x-goog-api-key`, and `api-key` are replaced with that slot's
-value so a later attempt cannot keep the first key. The model is rewritten to
+logged with its actual slot. Each attempt rebuilds adapter headers for that
+credential slot so a later request cannot keep the first key's native
+authentication headers. The model is rewritten to
 `<provider>/<model>` for Gateway's compatibility endpoint.
 
 OpenRouter is included in this subset under a tested operational contract for

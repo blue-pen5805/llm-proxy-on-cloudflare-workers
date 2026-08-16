@@ -447,6 +447,42 @@ describe("CloudflareAIGateway", () => {
       });
     });
 
+    it("uses per-credential adapter headers when supplied", () => {
+      const requests = gateway.buildChatCompletionsRequests({
+        provider: "anthropic",
+        body: JSON.stringify({
+          model: "claude-3-opus-20240229",
+          messages: [{ role: "user", content: "Hello" }],
+        }),
+        headers: { "x-provider-auth": "first-key" },
+        headersByCredential: [
+          {
+            "x-api-key": "first-key",
+            "x-provider-auth": "first-key",
+            "anthropic-version": "2023-06-01",
+          },
+          {
+            "x-api-key": "second-key",
+            "x-provider-auth": "second-key",
+            "anthropic-version": "2023-06-01",
+          },
+        ],
+        apiKeys: ["first-key", "second-key"],
+      });
+
+      expect(requests).toHaveLength(2);
+      const firstHeaders = new Headers(requests[0][1].headers);
+      expect(firstHeaders.get("authorization")).toBe("Bearer first-key");
+      expect(firstHeaders.get("x-api-key")).toBe("first-key");
+      expect(firstHeaders.get("x-provider-auth")).toBe("first-key");
+
+      const secondHeaders = new Headers(requests[1][1].headers);
+      expect(secondHeaders.get("authorization")).toBe("Bearer second-key");
+      expect(secondHeaders.get("x-api-key")).toBe("second-key");
+      expect(secondHeaders.get("x-provider-auth")).toBe("second-key");
+      expect(secondHeaders.get("anthropic-version")).toBe("2023-06-01");
+    });
+
     it("replaces native credential headers for each fallback key", () => {
       const requests = gateway.buildChatCompletionsRequests({
         provider: "anthropic",

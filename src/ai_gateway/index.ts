@@ -200,12 +200,14 @@ export class CloudflareAIGateway {
     body,
     parsedBody,
     headers,
+    headersByCredential,
     apiKeys = [],
   }: {
     provider: CloudflareAIGatewayOpenAICompatibleProvider;
     body: string;
     parsedBody?: { model: string; [key: string]: unknown };
     headers: CloudflareAIGatewayHeaders | HeadersInit;
+    headersByCredential?: readonly HeadersInit[];
     apiKeys?: readonly string[];
   }): [RequestInfo, RequestInit][] {
     const chatRequestBody =
@@ -221,6 +223,7 @@ export class CloudflareAIGateway {
       apiKeys.length > 0
         ? apiKeys.slice(0, MAX_COMPATIBILITY_FALLBACK_ATTEMPTS)
         : [undefined];
+    const attemptHeaders = headersByCredential?.slice(0, credentials.length);
 
     // Only headers differ between credential attempts, so the (potentially
     // large) body is serialized once and shared.
@@ -229,22 +232,23 @@ export class CloudflareAIGateway {
       model: `${provider}/${chatRequestBody.model}`,
     });
 
-    return credentials.map((apiKey) => {
-      // Compatibility Endpoint auth is Authorization: Bearer. Provider
-      // adapters may also set native credential headers on the shared
-      // header snapshot; replace those values so fallback attempts cannot
-      // keep the first slot's key.
-      const newHeaders = new Headers(headers);
+    return credentials.map((apiKey, attemptIndex) => {
+      const newHeaders = new Headers(attemptHeaders?.[attemptIndex] ?? headers);
+      // Compatibility Endpoint auth is Authorization: Bearer. When a caller
+      // supplies one shared header snapshot, also replace native credential
+      // headers so later keys cannot keep the first slot's value.
       if (apiKey) {
         newHeaders.set("authorization", `Bearer ${apiKey}`);
-        if (newHeaders.has("x-api-key")) {
-          newHeaders.set("x-api-key", apiKey);
-        }
-        if (newHeaders.has("x-goog-api-key")) {
-          newHeaders.set("x-goog-api-key", apiKey);
-        }
-        if (newHeaders.has("api-key")) {
-          newHeaders.set("api-key", apiKey);
+        if (!attemptHeaders) {
+          if (newHeaders.has("x-api-key")) {
+            newHeaders.set("x-api-key", apiKey);
+          }
+          if (newHeaders.has("x-goog-api-key")) {
+            newHeaders.set("x-goog-api-key", apiKey);
+          }
+          if (newHeaders.has("api-key")) {
+            newHeaders.set("api-key", apiKey);
+          }
         }
       } else {
         newHeaders.delete("authorization");
