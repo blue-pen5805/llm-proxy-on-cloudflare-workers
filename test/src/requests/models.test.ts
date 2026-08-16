@@ -8,6 +8,7 @@ import {
   handleModelsRequest,
   MAX_AGGREGATED_MODELS_BYTES,
   MAX_MODELS_PER_PROVIDER,
+  MAX_MODELS_RATE_LIMIT_KEY_ATTEMPTS,
 } from "~/src/requests/models";
 import { Config } from "~/src/utils/config";
 import { Environments } from "~/src/utils/environments";
@@ -979,6 +980,229 @@ describe("models", () => {
       expect.any(Object),
       2,
     );
+  });
+
+  describe("rate-limit key rotation", () => {
+    const successfulModels = {
+      object: "list",
+      data: [
+        {
+          id: "retry-model",
+          object: "model",
+          created: 0,
+          owned_by: "test",
+        },
+      ],
+    };
+
+    function createKeyedProvider(
+      fetch: ReturnType<typeof vi.fn>,
+      keys: string[],
+    ) {
+      return {
+        ...mockProviderClass,
+        getApiKeys: vi.fn().mockReturnValue(keys),
+        fetch,
+        convertModelsToOpenAIFormat: vi.fn().mockReturnValue(successfulModels),
+      };
+    }
+
+    it("retries sequential later keys after HTTP 429 and returns the first success", async () => {
+      const rateLimited = new Response("rate limited", { status: 429 });
+      const cancel = vi.spyOn(rateLimited.body!, "cancel");
+      const fetch = vi
+        .fn()
+        .mockResolvedValueOnce(rateLimited)
+        .mockResolvedValueOnce(new Response(JSON.stringify({ data: [] })));
+      const provider = createKeyedProvider(fetch, ["key-a", "key-b", "key-c"]);
+      const consoleWarn = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+
+      const response = await handleModelsRequest({
+        providers: { all: () => ({ test: provider }) },
+      } as any);
+      const body = (await response.json()) as ModelsResponse;
+
+      expect(body.data.map((model) => model.id)).toEqual(["test/retry-model"]);
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(fetch).toHaveBeenNthCalledWith(
+        1,
+        "/models",
+        expect.objectContaining({ method: "GET" }),
+        0,
+      );
+      expect(fetch).toHaveBeenNthCalledWith(
+        2,
+        "/models",
+        expect.objectContaining({ method: "GET" }),
+        1,
+      );
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(consoleWarn).toHaveBeenCalledWith({
+        event: "provider.models.key_retry",
+        request_id: null,
+        provider: "test",
+        key_index: 0,
+        next_key_index: 1,
+        status: 429,
+        attempt: 1,
+        message:
+          "Retrying provider model discovery with the next credential after HTTP 429: provider=test, key_index=0, next_key_index=1, status=429, attempt=1",
+      });
+    });
+
+    it("continues after a 429 even when discarding the failed body throws", async () => {
+      const rateLimited = new Response("rate limited", { status: 429 });
+      vi.spyOn(rateLimited.body!, "cancel").mockRejectedValue(
+        new Error("already locked"),
+      );
+      const fetch = vi
+        .fn()
+        .mockResolvedValueOnce(rateLimited)
+        .mockResolvedValueOnce(new Response(JSON.stringify({ data: [] })));
+      const provider = createKeyedProvider(fetch, ["key-a", "key-b"]);
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const response = await handleModelsRequest({
+        providers: { all: () => ({ test: provider }) },
+      } as any);
+
+      expect(((await response.json()) as ModelsResponse).data).toEqual([
+        {
+          id: "test/retry-model",
+          object: "model",
+          created: 0,
+          owned_by: "test",
+        },
+      ]);
+      expect(fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it("stops after the bounded number of 429 attempts", async () => {
+      const keys = ["key-a", "key-b", "key-c", "key-d"];
+      const fetch = vi
+        .fn()
+        .mockImplementation(() =>
+          Promise.resolve(new Response("rate limited", { status: 429 })),
+        );
+      const provider = createKeyedProvider(fetch, keys);
+      provider.convertModelsToOpenAIFormat = vi.fn();
+      const consoleWarn = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      const response = await handleModelsRequest({
+        providers: { all: () => ({ test: provider }) },
+      } as any);
+
+      expect(((await response.json()) as ModelsResponse).data).toEqual([]);
+      expect(fetch.mock.calls.map(([, , apiKeyIndex]) => apiKeyIndex)).toEqual([
+        0, 1, 2,
+      ]);
+      expect(fetch).toHaveBeenCalledTimes(MAX_MODELS_RATE_LIMIT_KEY_ATTEMPTS);
+      expect(
+        consoleWarn.mock.calls.filter(
+          ([record]) => record.event === "provider.models.key_retry",
+        ),
+      ).toHaveLength(MAX_MODELS_RATE_LIMIT_KEY_ATTEMPTS - 1);
+      expect(consoleError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: "provider.models.failed",
+          error_message: "Provider models request failed with HTTP 429.",
+        }),
+      );
+      expect(provider.convertModelsToOpenAIFormat).not.toHaveBeenCalled();
+    });
+
+    it("does not rotate after a non-429 failure", async () => {
+      const fetch = vi
+        .fn()
+        .mockResolvedValue(new Response("unauthorized", { status: 401 }));
+      const provider = createKeyedProvider(fetch, ["key-a", "key-b", "key-c"]);
+      provider.convertModelsToOpenAIFormat = vi.fn();
+      vi.spyOn(console, "error").mockImplementation(() => {});
+
+      const response = await handleModelsRequest({
+        providers: { all: () => ({ test: provider }) },
+      } as any);
+
+      expect(((await response.json()) as ModelsResponse).data).toEqual([]);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(fetch).toHaveBeenCalledWith(
+        "/models",
+        expect.objectContaining({ method: "GET" }),
+        0,
+      );
+    });
+
+    it("does not rotate when an explicit key selection is present", async () => {
+      const fetch = vi
+        .fn()
+        .mockResolvedValue(new Response("rate limited", { status: 429 }));
+      const provider = createKeyedProvider(fetch, ["key-a", "key-b", "key-c"]);
+      vi.spyOn(console, "error").mockImplementation(() => {});
+
+      const response = await handleModelsRequest({
+        apiKeyIndex: 1,
+        providers: { all: () => ({ test: provider }) },
+      } as any);
+
+      expect(((await response.json()) as ModelsResponse).data).toEqual([]);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(fetch).toHaveBeenCalledWith(
+        "/models",
+        expect.objectContaining({ method: "GET" }),
+        1,
+      );
+    });
+
+    it("retries the next credential through AI Gateway after HTTP 429", async () => {
+      mockAIGateway.buildProviderEndpointRequest.mockReturnValue([
+        "https://gateway.ai.cloudflare.com/v1/account/gateway/openai/models",
+        { method: "GET", headers: {} },
+      ]);
+      const rateLimited = new Response("rate limited", { status: 429 });
+      const cancel = vi.spyOn(rateLimited.body!, "cancel");
+      vi.mocked(helpers.fetchWithLogging)
+        .mockResolvedValueOnce(rateLimited)
+        .mockResolvedValueOnce(new Response(JSON.stringify({ data: [] })));
+      const provider = createKeyedProvider(vi.fn(), ["key-a", "key-b"]);
+      provider.headers = vi.fn().mockImplementation((apiKeyIndex?: number) => ({
+        Authorization: `Bearer key-${apiKeyIndex ?? 0}`,
+      }));
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const response = await handleModelsRequest(
+        { providers: { all: () => ({ openai: provider }) } } as any,
+        mockAIGateway as any,
+      );
+
+      expect(((await response.json()) as ModelsResponse).data).toEqual([
+        {
+          id: "openai/retry-model",
+          object: "model",
+          created: 0,
+          owned_by: "test",
+        },
+      ]);
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(provider.fetch).not.toHaveBeenCalled();
+      expect(helpers.fetchWithLogging).toHaveBeenCalledTimes(2);
+      expect(provider.headers).toHaveBeenNthCalledWith(1, 0);
+      expect(provider.headers).toHaveBeenNthCalledWith(2, 1);
+      const firstGatewayHeaders = new Headers(
+        mockAIGateway.buildProviderEndpointRequest.mock.calls[0][0].headers,
+      );
+      const secondGatewayHeaders = new Headers(
+        mockAIGateway.buildProviderEndpointRequest.mock.calls[1][0].headers,
+      );
+      expect(firstGatewayHeaders.get("Authorization")).toBe("Bearer key-0");
+      expect(secondGatewayHeaders.get("Authorization")).toBe("Bearer key-1");
+    });
   });
 
   it("bounds both per-provider model count and aggregate output size", async () => {

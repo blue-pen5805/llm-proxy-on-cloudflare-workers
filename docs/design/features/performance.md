@@ -56,7 +56,8 @@ serialized aggregate model entries at 4 MiB. A truncated response includes
 built-in registry and validated configuration limits; the response limits
 prevent individually bounded provider responses from accumulating beyond the
 Worker's isolate memory limit. Non-successful upstream responses are not parsed
-as provider model payloads.
+as provider model payloads. Automatic HTTP 429 retries are bounded to three
+sequential keys per provider and share that provider's 60-second timeout.
 
 ## Model aggregate caching
 

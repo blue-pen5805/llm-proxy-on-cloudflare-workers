@@ -57,6 +57,13 @@ const LOG_MESSAGE_FIELDS: Readonly<Record<string, readonly string[]>> = {
   "provider.models.failed": ["provider", "error_name", "error_message"],
   "provider.models.invalid_response": ["provider"],
   "provider.models.aggregate_truncated": ["maximum_bytes"],
+  "provider.models.key_retry": [
+    "provider",
+    "key_index",
+    "next_key_index",
+    "status",
+    "attempt",
+  ],
   "models.cache.unavailable": ["operation"],
   "provider.connectivity.failed": ["provider", "error_name", "error_message"],
   "provider.status.failed": ["provider", "error_name", "error_message"],

@@ -19,6 +19,10 @@ selection has higher precedence than cooldown filtering.
 
 Model aggregation is an exception: it uses the first key by default so
 read-only discovery does not advance rotation. Explicit key selection applies.
+If that first-key request returns HTTP 429, aggregation retries sequential
+later keys, up to three attempts or the configured key count, whichever is
+smaller. Other statuses do not rotate, and an explicit index or range disables
+the retry. All attempts for one provider share the existing 60-second timeout.
 
 ## Striped isolate-local rotation
 
@@ -82,8 +86,9 @@ remain usable when no selection prefix is supplied.
   selection, OpenAI-compatible Gateway chat tries the selected rotation slot
   first, then shuffled remaining keys until a request succeeds. An explicit
   index or range resolves one key and disables this fallback.
-- Cooldowns affect only automatic chat, Responses, Messages, and provider pass-through selection;
-  model discovery retains its first-key contract, diagnostics scan every key,
+- Cooldowns affect only automatic chat, Responses, Messages, and provider
+  pass-through selection. Model discovery retains its first-key contract except
+  for the bounded HTTP 429 retry described above. Diagnostics scan every key,
   and Universal Endpoint responses cannot be attributed to one step credential.
 - Reordering the configured array changes which credential a stored numeric
   counter refers to for the remainder of each isolate's lifetime; a redeploy
