@@ -61,6 +61,9 @@ describe("handleChatCompletionsRequest", () => {
     vi.mocked(Secrets.getNext).mockResolvedValue(0);
     mockProviderClass.getApiKeys.mockReturnValue(["test-key"]);
     mockProviderClass.getNextApiKeyIndex.mockResolvedValue(0);
+    mockProviderClass.headers.mockImplementation(async () => ({
+      "x-provider-auth": "provider-header",
+    }));
   });
 
   it("should handle valid chat completions request", async () => {

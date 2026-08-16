@@ -224,6 +224,14 @@ export class CloudflareAIGateway {
         ? apiKeys.slice(0, MAX_COMPATIBILITY_FALLBACK_ATTEMPTS)
         : [undefined];
     const attemptHeaders = headersByCredential?.slice(0, credentials.length);
+    if (
+      headersByCredential !== undefined &&
+      attemptHeaders?.length !== credentials.length
+    ) {
+      throw new Error(
+        "headersByCredential must contain one header set per compatibility credential attempt.",
+      );
+    }
 
     // Only headers differ between credential attempts, so the (potentially
     // large) body is serialized once and shared.
@@ -233,13 +241,14 @@ export class CloudflareAIGateway {
     });
 
     return credentials.map((apiKey, attemptIndex) => {
-      const newHeaders = new Headers(attemptHeaders?.[attemptIndex] ?? headers);
+      const perAttemptHeaders = attemptHeaders?.[attemptIndex];
+      const newHeaders = new Headers(perAttemptHeaders ?? headers);
       // Compatibility Endpoint auth is Authorization: Bearer. When a caller
       // supplies one shared header snapshot, also replace native credential
       // headers so later keys cannot keep the first slot's value.
       if (apiKey) {
         newHeaders.set("authorization", `Bearer ${apiKey}`);
-        if (!attemptHeaders) {
+        if (perAttemptHeaders === undefined) {
           if (newHeaders.has("x-api-key")) {
             newHeaders.set("x-api-key", apiKey);
           }

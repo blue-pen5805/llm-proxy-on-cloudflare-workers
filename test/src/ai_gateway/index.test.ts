@@ -483,6 +483,20 @@ describe("CloudflareAIGateway", () => {
       expect(secondHeaders.get("anthropic-version")).toBe("2023-06-01");
     });
 
+    it("rejects headersByCredential that does not cover every credential", () => {
+      expect(() =>
+        gateway.buildChatCompletionsRequests({
+          provider: "anthropic",
+          body: JSON.stringify({ model: "claude", messages: [] }),
+          headers: { "x-api-key": "first-key" },
+          headersByCredential: [{ "x-api-key": "first-key" }],
+          apiKeys: ["first-key", "second-key"],
+        }),
+      ).toThrow(
+        "headersByCredential must contain one header set per compatibility credential attempt.",
+      );
+    });
+
     it("replaces native credential headers for each fallback key", () => {
       const requests = gateway.buildChatCompletionsRequests({
         provider: "anthropic",
