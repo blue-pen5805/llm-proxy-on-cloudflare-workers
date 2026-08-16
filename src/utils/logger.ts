@@ -57,9 +57,13 @@ const LOG_MESSAGE_FIELDS: Readonly<Record<string, readonly string[]>> = {
   "provider.models.failed": ["provider", "error_name", "error_message"],
   "provider.models.invalid_response": ["provider"],
   "provider.models.aggregate_truncated": ["maximum_bytes"],
+  "models.cache.unavailable": ["operation"],
   "provider.connectivity.failed": ["provider", "error_name", "error_message"],
+  "provider.status.failed": ["provider", "error_name", "error_message"],
+  "provider.credential.missing": ["provider", "credential"],
   "provider.key.selected": [
     "provider",
+    "credential_profile",
     "operation",
     "key_index",
     "key_count",
@@ -67,6 +71,7 @@ const LOG_MESSAGE_FIELDS: Readonly<Record<string, readonly string[]>> = {
     "selection_policy",
     "via_ai_gateway",
     "step",
+    "provider_request_id",
   ],
   "provider.key.cooldown": [
     "provider",

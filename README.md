@@ -148,6 +148,7 @@ profile and request `openai:second/gpt-5.6-sol`. See the
   - [AI Gateway API](docs/api/ai-gateway.md)
   - [Proxy management API](docs/api/proxy-management.md)
 - [Operations and troubleshooting](docs/operations.md)
+- [Live provider Chat Completions testing](docs/live-provider-testing.md)
 - [Development and verification](docs/development.md)
 - [Architecture and design](docs/design/overview.md)
 - [Project principles](docs/project-principles.md)

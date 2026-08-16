@@ -41,6 +41,12 @@ body once. A body beyond the 5 MiB metadata budget is forwarded unchanged by
 replaying the bytes already read before the untouched remainder. Malformed or
 non-object JSON similarly replays the original bytes.
 
+Vertex AI memoizes parsed service-account JSON and Base64 Gateway credentials
+in isolate-local maps keyed by the raw secret string. The cache is a pure
+function of operator configuration: it stores no request data, resets when
+the secret value changes or the isolate is recycled, and exists only to avoid
+re-parsing multi-kilobyte key material on every credential read.
+
 ## Bounded model aggregation
 
 Model discovery reads at most 1 MiB from one provider, queries every configured

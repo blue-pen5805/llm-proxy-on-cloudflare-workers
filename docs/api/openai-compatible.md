@@ -210,8 +210,9 @@ conversion. Failures are logged and omitted, so a successful response may be
 partial.
 
 `?provider=openai,anthropic` restricts aggregation to the named registered
-providers. The normalized provider set is part of the cache key. Unknown,
-empty, repeated, or excessive filters return HTTP 400.
+providers. After trimming and de-duplication, at most 32 names are accepted.
+The normalized provider set is part of the cache key. Unknown, empty,
+repeated, or excessive filters return HTTP 400.
 
 Successful complete aggregates are cached for `MODELS_CACHE_TTL_SECONDS`
 (default 300; `0` disables caching) per Gateway and key selection, and served
