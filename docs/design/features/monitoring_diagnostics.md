@@ -96,7 +96,7 @@ The following events support operational queries:
 | `subrequest.failed`                   | Provider request failed before a response           |
 | `provider.models.failed`              | A provider model-list operation failed              |
 | `provider.models.invalid_response`    | A model-list response could not be used             |
-| `provider.models.aggregate_truncated` | The model list hit its count or byte bound        |
+| `provider.models.aggregate_truncated` | The model list hit its count or byte bound          |
 | `provider.models.key_retry`           | Model discovery will retry the next key after 429   |
 | `models.cache.unavailable`            | An optional model cache operation failed            |
 | `status.cache.unavailable`            | An optional status cache operation failed           |

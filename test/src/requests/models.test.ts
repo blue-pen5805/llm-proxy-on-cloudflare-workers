@@ -1149,15 +1149,20 @@ describe("models", () => {
       ],
     };
 
-    function createKeyedProvider(
-      fetch: ReturnType<typeof vi.fn>,
-      keys: string[],
-    ) {
+    function createKeyedProvider(fetch: Provider["send"], keys: string[]) {
       return {
         ...mockProviderClass,
         getApiKeys: vi.fn().mockReturnValue(keys),
-        fetch,
-        convertModelsToOpenAIFormat: vi.fn().mockReturnValue(successfulModels),
+        send: fetch,
+        headers: vi.fn(async (index?: number) => ({
+          Authorization: `Bearer ${keys[index ?? 0]}`,
+        })),
+        endpoints: {
+          models: {
+            path: "/models",
+            convertResponse: vi.fn().mockReturnValue(successfulModels),
+          },
+        },
       };
     }
 
@@ -1173,26 +1178,35 @@ describe("models", () => {
         .spyOn(console, "warn")
         .mockImplementation(() => {});
 
-      const response = await handleModelsRequest({
-        providers: { all: () => ({ test: provider }) },
-      } as any);
+      const response = await requestModels({
+        providers: registryFor({ test: provider }),
+      });
       const body = (await response.json()) as ModelsResponse;
 
       expect(body.data.map((model) => model.id)).toEqual(["test/retry-model"]);
       expect(cancel).toHaveBeenCalledOnce();
       expect(fetch).toHaveBeenNthCalledWith(
         1,
-        "/models",
-        expect.objectContaining({ method: "GET" }),
-        0,
+        "https://api.example.com/models",
+        expect.objectContaining({
+          method: "GET",
+          headers: expect.any(Headers),
+        }),
       );
       expect(fetch).toHaveBeenNthCalledWith(
         2,
-        "/models",
-        expect.objectContaining({ method: "GET" }),
-        1,
+        "https://api.example.com/models",
+        expect.objectContaining({
+          method: "GET",
+          headers: expect.any(Headers),
+        }),
       );
       expect(fetch).toHaveBeenCalledTimes(2);
+      expect(
+        fetch.mock.calls.map(([, init]) =>
+          new Headers(init.headers).get("authorization"),
+        ),
+      ).toEqual(["Bearer key-a", "Bearer key-b"]);
       expect(consoleWarn).toHaveBeenCalledWith({
         event: "provider.models.key_retry",
         request_id: null,
@@ -1218,9 +1232,9 @@ describe("models", () => {
       const provider = createKeyedProvider(fetch, ["key-a", "key-b"]);
       vi.spyOn(console, "warn").mockImplementation(() => {});
 
-      const response = await handleModelsRequest({
-        providers: { all: () => ({ test: provider }) },
-      } as any);
+      const response = await requestModels({
+        providers: registryFor({ test: provider }),
+      });
 
       expect(((await response.json()) as ModelsResponse).data).toEqual([
         {
@@ -1241,7 +1255,7 @@ describe("models", () => {
           Promise.resolve(new Response("rate limited", { status: 429 })),
         );
       const provider = createKeyedProvider(fetch, keys);
-      provider.convertModelsToOpenAIFormat = vi.fn();
+      provider.endpoints.models.convertResponse = vi.fn();
       const consoleWarn = vi
         .spyOn(console, "warn")
         .mockImplementation(() => {});
@@ -1249,14 +1263,16 @@ describe("models", () => {
         .spyOn(console, "error")
         .mockImplementation(() => {});
 
-      const response = await handleModelsRequest({
-        providers: { all: () => ({ test: provider }) },
-      } as any);
+      const response = await requestModels({
+        providers: registryFor({ test: provider }),
+      });
 
       expect(((await response.json()) as ModelsResponse).data).toEqual([]);
-      expect(fetch.mock.calls.map(([, , apiKeyIndex]) => apiKeyIndex)).toEqual([
-        0, 1, 2,
-      ]);
+      expect(
+        fetch.mock.calls.map(([, init]) =>
+          new Headers(init.headers).get("authorization"),
+        ),
+      ).toEqual(["Bearer key-a", "Bearer key-b", "Bearer key-c"]);
       expect(fetch).toHaveBeenCalledTimes(MAX_MODELS_RATE_LIMIT_KEY_ATTEMPTS);
       expect(
         consoleWarn.mock.calls.filter(
@@ -1269,7 +1285,7 @@ describe("models", () => {
           error_message: "Provider models request failed with HTTP 429.",
         }),
       );
-      expect(provider.convertModelsToOpenAIFormat).not.toHaveBeenCalled();
+      expect(provider.endpoints.models.convertResponse).not.toHaveBeenCalled();
     });
 
     it("does not rotate after a non-429 failure", async () => {
@@ -1277,19 +1293,21 @@ describe("models", () => {
         .fn()
         .mockResolvedValue(new Response("unauthorized", { status: 401 }));
       const provider = createKeyedProvider(fetch, ["key-a", "key-b", "key-c"]);
-      provider.convertModelsToOpenAIFormat = vi.fn();
+      provider.endpoints.models.convertResponse = vi.fn();
       vi.spyOn(console, "error").mockImplementation(() => {});
 
-      const response = await handleModelsRequest({
-        providers: { all: () => ({ test: provider }) },
-      } as any);
+      const response = await requestModels({
+        providers: registryFor({ test: provider }),
+      });
 
       expect(((await response.json()) as ModelsResponse).data).toEqual([]);
       expect(fetch).toHaveBeenCalledTimes(1);
       expect(fetch).toHaveBeenCalledWith(
-        "/models",
-        expect.objectContaining({ method: "GET" }),
-        0,
+        "https://api.example.com/models",
+        expect.objectContaining({
+          method: "GET",
+          headers: expect.any(Headers),
+        }),
       );
     });
 
@@ -1300,17 +1318,22 @@ describe("models", () => {
       const provider = createKeyedProvider(fetch, ["key-a", "key-b", "key-c"]);
       vi.spyOn(console, "error").mockImplementation(() => {});
 
-      const response = await handleModelsRequest({
+      const response = await requestModels({
         apiKeyIndex: 1,
-        providers: { all: () => ({ test: provider }) },
-      } as any);
+        providers: registryFor({ test: provider }),
+      });
 
       expect(((await response.json()) as ModelsResponse).data).toEqual([]);
+      expect(
+        new Headers(fetch.mock.calls[0][1].headers).get("authorization"),
+      ).toBe("Bearer key-b");
       expect(fetch).toHaveBeenCalledTimes(1);
       expect(fetch).toHaveBeenCalledWith(
-        "/models",
-        expect.objectContaining({ method: "GET" }),
-        1,
+        "https://api.example.com/models",
+        expect.objectContaining({
+          method: "GET",
+          headers: expect.any(Headers),
+        }),
       );
     });
 
@@ -1321,10 +1344,10 @@ describe("models", () => {
       const provider = createKeyedProvider(fetch, ["key-a", "key-b", "key-c"]);
       vi.spyOn(console, "error").mockImplementation(() => {});
 
-      const response = await handleModelsRequest({
+      const response = await requestModels({
         apiKeyIndex: { start: 0, end: 2 },
-        providers: { all: () => ({ test: provider }) },
-      } as any);
+        providers: registryFor({ test: provider }),
+      });
 
       expect(((await response.json()) as ModelsResponse).data).toEqual([]);
       expect(fetch).toHaveBeenCalledTimes(1);
@@ -1343,9 +1366,9 @@ describe("models", () => {
       vi.spyOn(console, "warn").mockImplementation(() => {});
       vi.spyOn(console, "error").mockImplementation(() => {});
 
-      const response = await handleModelsRequest({
-        providers: { all: () => ({ test: provider }) },
-      } as any);
+      const response = await requestModels({
+        providers: registryFor({ test: provider }),
+      });
 
       expect(((await response.json()) as ModelsResponse).data).toEqual([]);
       expect(fetch).toHaveBeenCalledTimes(2);
@@ -1363,9 +1386,13 @@ describe("models", () => {
         .spyOn(console, "warn")
         .mockImplementation(() => {});
 
-      await handleModelsRequest({
-        providers: { all: () => ({ "openai:paid": provider }) },
-      } as any);
+      vi.spyOn(provider, "getCredentialProfiles").mockReturnValue(["paid"]);
+      await requestModels({
+        request: new Request(
+          "https://proxy.example.invalid/v1/models?provider=openai:paid",
+        ),
+        providers: registryFor({ openai: provider }),
+      });
 
       expect(consoleWarn).toHaveBeenCalledWith({
         event: "provider.models.key_retry",
@@ -1397,8 +1424,8 @@ describe("models", () => {
       }));
       vi.spyOn(console, "warn").mockImplementation(() => {});
 
-      const response = await handleModelsRequest(
-        { providers: { all: () => ({ openai: provider }) } } as any,
+      const response = await requestModels(
+        { providers: registryFor({ openai: provider }) },
         mockAIGateway as any,
       );
 
@@ -1411,7 +1438,7 @@ describe("models", () => {
         },
       ]);
       expect(cancel).toHaveBeenCalledOnce();
-      expect(provider.fetch).not.toHaveBeenCalled();
+      expect(provider.send).not.toHaveBeenCalled();
       expect(helpers.fetchWithLogging).toHaveBeenCalledTimes(2);
       expect(provider.headers).toHaveBeenNthCalledWith(1, 0);
       expect(provider.headers).toHaveBeenNthCalledWith(2, 1);
