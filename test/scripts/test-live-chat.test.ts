@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  AI_GATEWAY_COMPATIBILITY_PROVIDERS,
+  AI_GATEWAY_CHAT_PROVIDERS,
   BUILT_IN_LIVE_CHAT_CONTRACTS,
   MAX_ERROR_DETAIL_BYTES,
   MIN_COMPLETION_TOKENS,
@@ -11,7 +11,6 @@ import {
   verifyLocalDevelopmentServer,
 } from "../../scripts/test-live-chat";
 import { CloudflareAIGateway } from "../../src/ai_gateway";
-import { BUILT_IN_PROVIDER_CONSTRUCTORS } from "../../src/providers";
 
 describe("live Chat Completions test script", () => {
   it("accepts provider names as positional or named arguments", () => {
@@ -45,11 +44,15 @@ describe("live Chat Completions test script", () => {
         '{"DEV":false,"PROXY_API_KEY":["first","second"]}',
       ),
     ).toEqual({
+      alwaysUseAiGateway: false,
+      defaultGatewayName: undefined,
       developmentMode: false,
       proxyApiKey: "first",
       sensitiveValues: ["second", "first"],
     });
     expect(parseLocalWorkerAuthentication('{"DEV":true}')).toEqual({
+      alwaysUseAiGateway: false,
+      defaultGatewayName: undefined,
       developmentMode: true,
       proxyApiKey: undefined,
       sensitiveValues: [],
@@ -90,7 +93,7 @@ describe("live Chat Completions test script", () => {
     ).not.toContain("deep-secret");
   });
 
-  it("provides valid Direct paths for every provider in the example", () => {
+  it("tracks Gateway support for every provider in the example", () => {
     const exampleProviders = [
       "anthropic",
       "aws-bedrock",
@@ -103,6 +106,7 @@ describe("live Chat Completions test script", () => {
       "google-vertex-ai",
       "grok",
       "groq",
+      "huggingface",
       "mistral",
       "nvidia-nim",
       "ollama",
@@ -118,23 +122,12 @@ describe("live Chat Completions test script", () => {
     });
 
     expect(Object.keys(BUILT_IN_LIVE_CHAT_CONTRACTS)).toEqual(exampleProviders);
-    expect(parseLiveChatConfig(configuredExample)).toHaveLength(18);
+    expect(parseLiveChatConfig(configuredExample)).toHaveLength(19);
 
     for (const providerName of exampleProviders) {
-      const ProviderConstructor = BUILT_IN_PROVIDER_CONSTRUCTORS[providerName];
-      const provider = new ProviderConstructor();
-      const contract =
-        BUILT_IN_LIVE_CHAT_CONTRACTS[
-          providerName as keyof typeof BUILT_IN_LIVE_CHAT_CONTRACTS
-        ];
-      expect(contract.directPath).toBe(provider.chatCompletionPath);
-      expect(contract.supportsMaxCompletionTokens).toBe(
-        provider.CHAT_COMPLETIONS_SUPPORTED_PARAMETERS.includes(
-          "max_completion_tokens",
-        ),
-      );
-      expect(AI_GATEWAY_COMPATIBILITY_PROVIDERS.has(providerName)).toBe(
-        CloudflareAIGateway.isSupportedProvider(providerName, true),
+      expect(AI_GATEWAY_CHAT_PROVIDERS.has(providerName)).toBe(
+        providerName !== "huggingface" &&
+          CloudflareAIGateway.isSupportedProvider(providerName),
       );
     }
   });
@@ -152,40 +145,25 @@ describe("live Chat Completions test script", () => {
       expect.objectContaining({
         provider: "openai",
         model: "gpt-test",
-        directPath: "/chat/completions",
       }),
     ]);
   });
 
-  it("requires a direct path for unsupported or custom providers", () => {
-    expect(() =>
-      parseLiveChatConfig('{"providers":{"huggingface":"model"}}'),
-    ).toThrow("has no Chat Completions direct path");
-    expect(() =>
-      parseLiveChatConfig('{"providers":{"custom":"model"}}'),
-    ).toThrow("has no Chat Completions direct path");
-
+  it("accepts custom model selections without a provider path", () => {
+    expect(parseLiveChatConfig('{"providers":{"custom":"model"}}')).toEqual([
+      { provider: "custom", model: "model", supportsMaxCompletionTokens: true },
+    ]);
     expect(
       parseLiveChatConfig(
         '{"providers":{"custom":{"model":"model","directPath":"/v1/chat/completions"}}}',
       ),
-    ).toEqual([
-      {
-        provider: "custom",
-        model: "model",
-        directPath: "/v1/chat/completions",
-        supportsMaxCompletionTokens: true,
-      },
-    ]);
+    ).toEqual(parseLiveChatConfig('{"providers":{"custom":"model"}}'));
+  });
 
+  it("accepts model objects without a path override", () => {
     expect(
-      parseLiveChatConfig('{"providers":{"openai":{"model":"gpt-test"}}}'),
-    ).toEqual([
-      expect.objectContaining({
-        provider: "openai",
-        directPath: "/chat/completions",
-      }),
-    ]);
+      parseLiveChatConfig('{"providers":{"custom":{"model":"model"}}}'),
+    ).toEqual(parseLiveChatConfig('{"providers":{"custom":"model"}}'));
   });
 
   it("rejects unsafe direct paths", () => {
@@ -229,114 +207,170 @@ describe("live Chat Completions test script", () => {
     }
   });
 
-  it("calls direct, compatibility, and AI Gateway routes", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(null, {
-        status: 200,
-      }),
-    );
-    const testCases = parseLiveChatConfig(
-      '{"providers":{"openai":"gpt-test"}}',
-    );
-
-    await expect(
-      runLiveChatTests(testCases, {
+  it("uses the same public Chat route with separate direct and Gateway destinations", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    const results = await runLiveChatTests(
+      parseLiveChatConfig('{"providers":{"openai":"gpt-test"}}'),
+      {
         baseUrl: "http://127.0.0.1:8787/",
         proxyApiKey: "proxy-secret",
         gatewayName: "live gateway",
         fetcher,
-      }),
-    ).resolves.toEqual([
-      { provider: "openai", route: "direct", status: 200 },
-      { provider: "openai", route: "compatibility", status: 200 },
-      { provider: "openai", route: "ai-gateway", status: 200 },
+      },
+    );
+    expect(results).toEqual([
+      { provider: "openai", route: "chat-direct", status: 200 },
+      { provider: "openai", route: "chat-gateway", status: 200 },
     ]);
-
-    expect(fetcher).toHaveBeenCalledTimes(3);
-    expect(fetcher.mock.calls[0][0]).toBe(
-      "http://127.0.0.1:8787/key/0/g/live%20gateway/openai/chat/completions",
-    );
-    expect(fetcher.mock.calls[1][0]).toBe(
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
+      "http://127.0.0.1:8787/key/0/v1/chat/completions",
       "http://127.0.0.1:8787/key/0/g/live%20gateway/v1/chat/completions",
-    );
-    expect(fetcher.mock.calls[2][0]).toBe(
-      "http://127.0.0.1:8787/key/0/g/live%20gateway/chat/completions",
-    );
-    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual({
-      model: "gpt-test",
-      messages: [{ role: "user", content: "Reply with OK." }],
-      stream: false,
-      max_completion_tokens: MIN_COMPLETION_TOKENS,
-    });
-    expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body))).toEqual({
-      model: "openai/gpt-test",
-      messages: [{ role: "user", content: "Reply with OK." }],
-      stream: false,
-      max_completion_tokens: MIN_COMPLETION_TOKENS,
-    });
-    expect(JSON.parse(String(fetcher.mock.calls[2][1]?.body))).toEqual({
-      model: "openai/gpt-test",
-      messages: [{ role: "user", content: "Reply with OK." }],
-      stream: false,
-      max_completion_tokens: MIN_COMPLETION_TOKENS,
-    });
+    ]);
+    for (const [, init] of fetcher.mock.calls)
+      expect(JSON.parse(String(init?.body))).toEqual({
+        model: "openai/gpt-test",
+        messages: [{ role: "user", content: "Reply with OK." }],
+        stream: false,
+        max_completion_tokens: MIN_COMPLETION_TOKENS,
+      });
   });
 
-  it("uses the default Gateway and skips unsupported providers", async () => {
+  it("uses the default Gateway only for supported providers", async () => {
     const fetcher = vi
       .fn<typeof fetch>()
       .mockResolvedValue(new Response(null, { status: 200 }));
-    const testCases = parseLiveChatConfig(
-      '{"providers":{"openai":"gpt-test","ollama":"model-test"}}',
+    const results = await runLiveChatTests(
+      parseLiveChatConfig(
+        '{"providers":{"openai":"gpt-test","ollama":"model-test","custom":"model-test"}}',
+      ),
+      {
+        baseUrl: "http://127.0.0.1:8787",
+        fetcher,
+      },
     );
-
-    const results = await runLiveChatTests(testCases, {
-      baseUrl: "http://127.0.0.1:8787",
-      proxyApiKey: "proxy-secret",
-      fetcher,
-    });
-
     expect(results.map(({ provider, route }) => ({ provider, route }))).toEqual(
       [
-        { provider: "openai", route: "direct" },
-        { provider: "openai", route: "compatibility" },
-        { provider: "openai", route: "ai-gateway" },
-        { provider: "ollama", route: "direct" },
-        { provider: "ollama", route: "compatibility" },
+        { provider: "openai", route: "chat-direct" },
+        { provider: "openai", route: "chat-gateway" },
+        { provider: "ollama", route: "chat-direct" },
+        { provider: "custom", route: "chat-direct" },
       ],
     );
-    expect(fetcher.mock.calls[2][0]).toBe(
-      "http://127.0.0.1:8787/key/0/g/default/chat/completions",
+    expect(fetcher.mock.calls[1][0]).toBe(
+      "http://127.0.0.1:8787/key/0/g/default/v1/chat/completions",
     );
   });
 
-  it("runs only the providers selected by arguments", async () => {
+  it("tests Anthropic Chat directly and skips direct requests for Gateway-required providers", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async () => new Response("ok"));
+    const results = await runLiveChatTests(
+      parseLiveChatConfig(
+        '{"providers":{"anthropic":"claude-test","google-vertex-ai":"gemini","workers-ai":"@cf/model"}}',
+      ),
+      {
+        baseUrl: "http://127.0.0.1:8787",
+        fetcher,
+      },
+    );
+    expect(results.map(({ provider, route }) => ({ provider, route }))).toEqual(
+      [
+        { provider: "anthropic", route: "chat-direct" },
+        { provider: "anthropic", route: "chat-gateway" },
+        { provider: "google-vertex-ai", route: "chat-gateway" },
+        { provider: "workers-ai", route: "chat-gateway" },
+      ],
+    );
+  });
+
+  it("omits duplicate default routing when the Worker already selects a Gateway", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async () => new Response("ok"));
+    const cases = parseLiveChatConfig(
+      '{"providers":{"openai":"model","ollama":"model"}}',
+    );
+    const results = await runLiveChatTests(cases, {
+      baseUrl: "http://localhost:8787",
+      defaultGatewayName: "configured",
+      fetcher,
+    });
+    expect(results.map(({ route }) => route)).toEqual([
+      "chat-gateway",
+      "chat-direct",
+    ]);
+    expect(fetcher.mock.calls[0][0]).toBe(
+      "http://localhost:8787/key/0/g/configured/v1/chat/completions",
+    );
+    expect(fetcher.mock.calls[1][0]).toBe(
+      "http://localhost:8787/key/0/v1/chat/completions",
+    );
+    fetcher.mockClear();
+    const strict = await runLiveChatTests(cases, {
+      baseUrl: "http://localhost:8787",
+      alwaysUseAiGateway: true,
+      defaultGatewayName: "configured",
+      gatewayName: "selected",
+      fetcher,
+    });
+    expect(strict.map(({ route }) => route)).toEqual([
+      "chat-gateway",
+      "chat-gateway",
+    ]);
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual(
+      Array(2).fill(
+        "http://localhost:8787/key/0/g/selected/v1/chat/completions",
+      ),
+    );
+  });
+
+  it("reads the local routing policy without inferring a Gateway from credentials alone", () => {
+    for (const [config, expected] of [
+      [{}, { alwaysUseAiGateway: false, defaultGatewayName: undefined }],
+      [
+        { CLOUDFLARE_ACCOUNT_ID: "account" },
+        { alwaysUseAiGateway: false, defaultGatewayName: undefined },
+      ],
+      [
+        { CLOUDFLARE_ACCOUNT_ID: "account", AI_GATEWAY_NAME: "configured" },
+        { alwaysUseAiGateway: false, defaultGatewayName: "configured" },
+      ],
+      [
+        { CLOUDFLARE_ACCOUNT_ID: "account", ALWAYS_USE_AI_GATEWAY: "TRUE" },
+        { alwaysUseAiGateway: true, defaultGatewayName: "default" },
+      ],
+    ]) {
+      expect(
+        parseLocalWorkerAuthentication(
+          JSON.stringify({ DEV: true, ...config }),
+        ),
+      ).toMatchObject(expected);
+    }
+  });
+
+  it("runs only the selected providers", async () => {
     const fetcher = vi
       .fn<typeof fetch>()
       .mockResolvedValue(new Response(null, { status: 200 }));
-    const testCases = parseLiveChatConfig(
+    const cases = parseLiveChatConfig(
       '{"providers":{"openai":"gpt-test","ollama":"model-test"}}',
     );
-
-    const results = await runLiveChatTests(testCases, {
+    const results = await runLiveChatTests(cases, {
       baseUrl: "http://127.0.0.1:8787",
-      proxyApiKey: "proxy-secret",
       providers: new Set(["ollama"]),
       fetcher,
     });
-
-    expect(results.map(({ provider, route }) => ({ provider, route }))).toEqual(
-      [
-        { provider: "ollama", route: "direct" },
-        { provider: "ollama", route: "compatibility" },
-      ],
-    );
-    expect(fetcher).toHaveBeenCalledTimes(2);
-
+    expect(results).toEqual([
+      { provider: "ollama", route: "chat-direct", status: 200 },
+    ]);
+    expect(fetcher).toHaveBeenCalledTimes(1);
     await expect(
-      runLiveChatTests(testCases, {
+      runLiveChatTests(cases, {
         baseUrl: "http://127.0.0.1:8787",
-        providers: new Set(["not-configured"]),
+        providers: new Set(["absent"]),
         fetcher,
       }),
     ).rejects.toThrow("No configured providers matched the requested names");
@@ -349,7 +383,6 @@ describe("live Chat Completions test script", () => {
           {
             provider: "openai",
             model: "gpt-test",
-            directPath: "/chat/completions",
             supportsMaxCompletionTokens: true,
           },
         ],
@@ -437,8 +470,8 @@ describe("live Chat Completions test script", () => {
       { baseUrl: "http://localhost:8787", fetcher },
     );
 
-    expect(results).toHaveLength(2);
-    expect(body.cancel).toHaveBeenCalledTimes(3);
+    expect(results).toHaveLength(1);
+    expect(body.cancel).toHaveBeenCalledTimes(2);
   });
 
   it("times out an unresponsive readiness check", async () => {
@@ -544,15 +577,10 @@ describe("live Chat Completions test script", () => {
       fetcher,
     });
 
-    expect(fetcher.mock.calls[0][0]).toBe(
-      "http://127.0.0.1:8787/openai/chat/completions",
-    );
-    expect(fetcher.mock.calls[1][0]).toBe(
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
       "http://127.0.0.1:8787/v1/chat/completions",
-    );
-    expect(fetcher.mock.calls[2][0]).toBe(
-      "http://127.0.0.1:8787/g/default/chat/completions",
-    );
+      "http://127.0.0.1:8787/g/default/v1/chat/completions",
+    ]);
   });
 
   it("reports structured HTTP error details with credentials redacted", async () => {
@@ -588,21 +616,14 @@ describe("live Chat Completions test script", () => {
     expect(results).toEqual([
       {
         provider: "openai",
-        route: "direct",
+        route: "chat-direct",
         status: 401,
         error:
           'HTTP 401 Unauthorized: {"error":{"message":"model not found","type":"invalid_request_error","code":"model_not_found","api_key":"***","authorization":"***"},"proxy":"***","detail":"*** is invalid"}',
       },
       {
         provider: "openai",
-        route: "compatibility",
-        status: 401,
-        error:
-          'HTTP 401 Unauthorized: {"error":{"message":"model not found","type":"invalid_request_error","code":"model_not_found","api_key":"***","authorization":"***"},"proxy":"***","detail":"*** is invalid"}',
-      },
-      {
-        provider: "openai",
-        route: "ai-gateway",
+        route: "chat-gateway",
         status: 401,
         error:
           'HTTP 401 Unauthorized: {"error":{"message":"model not found","type":"invalid_request_error","code":"model_not_found","api_key":"***","authorization":"***"},"proxy":"***","detail":"*** is invalid"}',
@@ -648,7 +669,6 @@ describe("live Chat Completions test script", () => {
       new Response(JSON.stringify(["AIza1234567890123456", 42, null]), {
         status: 400,
       }),
-      new Response(null, { status: 502 }),
     ];
     const fetcher = vi
       .fn<typeof fetch>()
@@ -660,7 +680,6 @@ describe("live Chat Completions test script", () => {
 
     expect(results[0].error).toBe("HTTP 500 Internal Server Error");
     expect(results[1].error).toBe('HTTP 400 Bad Request: ["AIza***",42,null]');
-    expect(results[2].error).toBe("HTTP 502 Bad Gateway");
   });
 
   it("bounds recursive error redaction", async () => {

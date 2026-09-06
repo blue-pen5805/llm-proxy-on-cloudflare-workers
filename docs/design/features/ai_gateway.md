@@ -133,9 +133,10 @@ the Worker sends no model-list request unless the provider's required local
 credential and routing identifier are both valid. When a local credential
 exists, adapters can transform it before the Gateway request is built. Azure
 OpenAI chat uses the provider-native Gateway path because the resource and
-deployment are URL segments. Vertex AI and Amazon Bedrock use the Compatibility
-Endpoint for OpenAI-formatted chat; Bedrock provider-native paths include the
-configured runtime region.
+deployment are URL segments. Vertex AI uses Google Chat or publisher-specific inference;
+Amazon Bedrock selects region-specific matching APIs or Converse conversion.
+Workers AI inference uses the account REST API and requires a selected
+`CLOUDFLARE_API_KEY`; it cannot use Gateway BYOK alone.
 
 Vertex AI is Gateway-only and requires `CF_AIG_TOKEN` plus
 `GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON`. The JSON must include `region`; the
@@ -145,42 +146,44 @@ are rejected when either required credential is absent.
 
 ### OpenAI-compatible chat
 
-For providers in the OpenAI-compatible Gateway subset, automatic selection puts
-the credential selected by striped per-isolate rotation first, shuffles the
-remaining keys, and creates at most four Compatibility Endpoint requests. It
-tries another credential only after a network error, HTTP 401/403, or HTTP 429;
-deterministic client and provider errors return immediately. An explicit
-`/key/<selection>` resolves one credential and sends exactly one request, so
-fallback cannot override the caller's selection. Each attempted credential is
-logged with its actual slot. Each attempt rebuilds adapter headers for that
-credential slot so a later request cannot keep the first key's native
-authentication headers. The model is rewritten to
-`<provider>/<model>` for Gateway's compatibility endpoint.
+Automatic chat routing uses the selected provider's inference endpoint. The
+adapter first prefers the requested public API when a matching capability is
+declared, then chooses a model-specific conversion endpoint or its default.
+Messages, GenerateContent, and Converse payloads and responses are converted
+at this boundary; providers with a Chat Completions endpoint retain Chat format.
+The concrete model is sent without the proxy's provider selector. Automatic
+routing does not use Gateway's Unified `/compat/chat/completions` endpoint.
+See [Native inference](native_inference.md) for endpoint selection and limits.
 
-OpenRouter is included in this subset under a tested operational contract for
-the Compatibility Endpoint.
+Automatic credential selection puts the key selected by striped per-isolate
+rotation first, shuffles eligible remaining keys, and allows at most four
+attempts. Each attempt lazily builds its payload, provider path, authentication,
+and metadata for that credential. Another credential is tried only after a
+network error, HTTP 401/403, or HTTP 429. Request-conversion errors and other
+upstream errors return immediately. An explicit `/key/<selection>` sends one
+request, so fallback cannot override the caller's selection.
 
 ### Converted compatibility APIs
 
-The public Responses and Messages compatibility routes convert through Chat
-Completions before routing. Their requests therefore follow the same
-Compatibility Endpoint, provider-native chat, or strict Custom Provider path as
-direct Chat Completions, and AI Gateway receives Chat Completions format. The
-Worker converts successful JSON or SSE back to the requested public protocol.
-Provider-native paths such as `/<provider>/v1/messages` remain separate
-pass-through contracts.
+The public Responses and Messages routes use the matching upstream protocol
+when the adapter declares it. Native payloads and responses retain their
+protocol fields and SSE events. Otherwise the request converts through Chat
+Completions and follows the provider's conversion default or strict Custom
+Provider path, then converts the successful response back. Protocol selection
+is repeated for each concrete virtual-model candidate. See
+[Native inference](native_inference.md) for capability declarations and limits.
 
 ### Universal Endpoint and compatibility pass-through
 
 `POST /g/<gateway>/` accepts the repository's Universal Endpoint request shape,
 validates provider names against both the Gateway-supported set and the local
-request-scoped Provider Registry, injects selected provider headers, and
+request-scoped Provider Registry, injects selected path-specific provider headers, and
 forwards the mapped steps to Gateway's Universal Endpoint. Gateway providers
 without a local adapter fail with HTTP 400. This also normalizes each optional
 endpoint to a bounded, safe relative path. This explicit route is available
-alongside normal OpenAI-compatible chat through the Compatibility
-Endpoint. `POST /g/<gateway>/compat/chat/completions` forwards directly to that
-fixed Gateway endpoint after stripping proxy credentials. No other path under
+alongside automatic provider-native inference.
+`POST /g/<gateway>/compat/chat/completions` forwards directly to Gateway
+`/compat/chat/completions` after stripping proxy credentials. No other path under
 `/compat` is exposed.
 
 Gateway-bound inference requests add bounded `cf-aig-metadata` tags for the
@@ -218,3 +221,9 @@ Custom Provider route.
 - [AI Gateway provider endpoints](https://developers.cloudflare.com/ai-gateway/providers/)
 - [AI Gateway Custom Providers](https://developers.cloudflare.com/ai-gateway/configuration/custom-providers/)
 - [AI Gateway Custom Provider API](https://developers.cloudflare.com/api/resources/ai_gateway/subresources/custom_providers/)
+
+Native Gateway availability is checked for the selected inference operation.
+Azure Responses and Hugging Face Router operations use direct connections in
+non-strict mode and synchronized Custom Providers in strict mode. Hugging Face
+uses an independent inference origin; its native pass-through integration is
+unchanged. See [provider API boundaries](native_inference.md#provider-api-boundaries).

@@ -72,7 +72,7 @@ origin response by the route that initiated it. Callers must not replay the
 proxy credential when following a pass-through redirect.
 
 AI Gateway tokens are added as `cf-aig-authorization`. Provider credentials are
-sent in the upstream authorization headers of Compatibility Endpoint requests,
+sent in provider-specific authentication headers of inference requests,
 or embedded into Universal Endpoint steps, because Gateway needs them to call
 providers.
 

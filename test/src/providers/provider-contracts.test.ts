@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Anthropic } from "~/src/providers/anthropic/provider";
 import { Cerebras } from "~/src/providers/cerebras/provider";
+import { chatParameterFilter } from "~/src/providers/chat_parameters";
 import { Cline } from "~/src/providers/cline/provider";
 import { Cohere } from "~/src/providers/cohere/provider";
 import { CustomOpenAI } from "~/src/providers/custom-openai";
@@ -9,7 +10,9 @@ import { GoogleAiStudio } from "~/src/providers/google-ai-studio/provider";
 import { Grok } from "~/src/providers/grok/provider";
 import { Groq } from "~/src/providers/groq/provider";
 import { HuggingFace } from "~/src/providers/huggingface/provider";
+import { chatCompletionsEndpoint } from "~/src/providers/inference";
 import { Mistral } from "~/src/providers/mistral/provider";
+import { buildModelsRequest } from "~/src/providers/models";
 import { NvidiaNim } from "~/src/providers/nvidia-nim/provider";
 import { Ollama } from "~/src/providers/ollama/provider";
 import { OpenAI } from "~/src/providers/openai/provider";
@@ -19,12 +22,12 @@ import {
   createProvider,
   OpenAICompatibleProvider,
   ProviderBase,
-  ProviderNotSupportedError,
   withProviderProfile,
 } from "~/src/providers/provider";
 import { Replicate } from "~/src/providers/replicate/provider";
 import { WorkersAi } from "~/src/providers/workers_ai/provider";
 import { Secrets } from "~/src/utils/secrets";
+import { buildInferenceRequest } from "../../helpers/provider";
 
 describe("provider contracts", () => {
   beforeEach(() => {
@@ -57,21 +60,14 @@ describe("provider contracts", () => {
       expect(
         new Headers(await provider.buildHeadersForPath("/resource")),
       ).toEqual(new Headers());
-      expect(provider.getStaticModels()).toBeUndefined();
+      expect(
+        provider.endpoints.models?.getStaticModels?.call(provider),
+      ).toBeUndefined();
       expect(provider.aiGatewayPath("/models")).toBe("/models");
-      const response = new Response("streamed");
-      await expect(
-        provider.transformChatCompletionsResponse(response),
-      ).resolves.toBe(response);
-      await expect(
-        provider.buildAiGatewayChatCompletionsRequest({
-          data: { model: "model-id" },
-          headers: {},
-        }),
-      ).resolves.toBeUndefined();
-
-      const models = { object: "list", data: [] } as const;
-      expect(provider.convertModelsToOpenAIFormat(models)).toBe(models);
+      expect(provider.endpoints).toEqual({});
+      expect(
+        provider.resolveInference("model-id", "chat_completions"),
+      ).toBeUndefined();
     });
 
     it("rotates configured credentials and merges request headers", async () => {
@@ -143,24 +139,30 @@ describe("provider contracts", () => {
     });
 
     it("drops explicitly unsupported fields and retains extensions", async () => {
-      const provider = new ProviderBase();
+      const provider = createProvider({
+        endpoints: {
+          chat_completions: chatCompletionsEndpoint(),
+          models: { path: "/models" },
+        },
+      });
       vi.spyOn(provider, "headers").mockResolvedValue({
         Authorization: "provider-header",
         "X-Provider": "kept",
       });
 
-      const [chatPath, chatInit] = await provider.buildChatCompletionsRequest({
-        body: JSON.stringify({
+      const [chatPath, chatInit] = await buildInferenceRequest(provider, {
+        data: {
           model: "model-id",
           messages: [],
           temperature: 0.5,
           verbosity: "high",
           unsupported: "retained",
-        }),
+        },
         headers: { Authorization: "caller-header" },
         apiKeyIndex: 1,
+        target: "direct",
       });
-      expect(chatPath).toBe("/chat/completions");
+      expect(chatPath).toBe("https://example.com/chat/completions");
       expect(chatInit).toMatchObject({
         method: "POST",
         body: JSON.stringify({
@@ -174,6 +176,7 @@ describe("provider contracts", () => {
       // Provider-computed headers take precedence over caller-supplied ones.
       expect(new Headers(chatInit.headers)).toEqual(
         new Headers({
+          "content-type": "application/json",
           Authorization: "provider-header",
           "X-Provider": "kept",
         }),
@@ -184,23 +187,25 @@ describe("provider contracts", () => {
         messages: [],
         unsupported: "removed",
       };
-      const [, preparedInit] = await provider.buildChatCompletionsRequest({
-        body: "not parsed when prepared data is supplied",
-        preparedData: { model: preparedData.model, messages: [] },
+      const [, preparedInit] = await buildInferenceRequest(provider, {
+        data: { model: preparedData.model, messages: [] },
         headers: {},
+        target: "direct",
       });
       expect(preparedInit.body).toBe(
         JSON.stringify({ model: "prepared-model", messages: [] }),
       );
 
-      await expect(provider.buildModelsRequest(1)).resolves.toEqual([
+      await expect(
+        buildModelsRequest(provider, provider.endpoints.models!, 1),
+      ).resolves.toEqual([
         "/models",
         {
           method: "GET",
-          headers: {
+          headers: new Headers({
             Authorization: "provider-header",
             "X-Provider": "kept",
-          },
+          }),
         },
       ]);
     });
@@ -439,10 +444,16 @@ describe("provider contracts", () => {
         expect(provider.pathnamePrefix()).toBe(
           declaration.pathnamePrefix ?? "",
         );
-        expect(provider.chatCompletionPath).toBe(
-          declaration.chatCompletionPath ?? "/chat/completions",
+        expect(provider.endpoints.chat_completions?.path).toBe(
+          ["huggingface", "replicate"].includes(_name)
+            ? undefined
+            : (declaration.chatCompletionPath ?? "/chat/completions"),
         );
-        expect(provider.modelsPath).toBe(declaration.modelsPath ?? "/models");
+        expect(provider.endpoints.models?.path).toBe(
+          ["huggingface", "replicate", "perplexity-ai"].includes(_name)
+            ? undefined
+            : (declaration.modelsPath ?? "/models"),
+        );
       },
     );
 
@@ -459,7 +470,7 @@ describe("provider contracts", () => {
   describe("provider-specific behavior", () => {
     it("tracks the current OpenAI Chat Completions top-level parameters", () => {
       expect(
-        new OpenAI().filterSupportedChatParameters({
+        chatParameterFilter()({
           model: "gpt-test",
           messages: [],
           moderation: { type: "omni-moderation-latest" },
@@ -490,7 +501,7 @@ describe("provider contracts", () => {
         "anthropic-version": "2023-06-01",
       });
       expect(
-        provider.convertModelsToOpenAIFormat({
+        provider.endpoints.models!.convertResponse!.call(provider, {
           data: [
             {
               id: "claude",
@@ -519,7 +530,7 @@ describe("provider contracts", () => {
 
     it("converts provider model lists to the common format", () => {
       expect(
-        new Cohere().convertModelsToOpenAIFormat({
+        new Cohere().endpoints.models!.convertResponse!.call(new Cohere(), {
           models: [{ name: "command", endpoints: ["chat"] }],
           next_page_token: null,
         }),
@@ -537,23 +548,26 @@ describe("provider contracts", () => {
       });
 
       expect(
-        new GoogleAiStudio().convertModelsToOpenAIFormat({
-          models: [
-            {
-              name: "models/gemini",
-              version: "1",
-              displayName: "Gemini",
-              description: "model",
-              inputTokenLimit: 1,
-              outputTokenLimit: 1,
-              supportedGenerationMethods: ["generateContent"],
-              temperature: 1,
-              maxTemperature: 2,
-              topP: 1,
-              topK: 1,
-            },
-          ],
-        }),
+        new GoogleAiStudio().endpoints.models!.convertResponse!.call(
+          new GoogleAiStudio(),
+          {
+            models: [
+              {
+                name: "models/gemini",
+                version: "1",
+                displayName: "Gemini",
+                description: "model",
+                inputTokenLimit: 1,
+                outputTokenLimit: 1,
+                supportedGenerationMethods: ["generateContent"],
+                temperature: 1,
+                maxTemperature: 2,
+                topP: 1,
+                topK: 1,
+              },
+            ],
+          },
+        ),
       ).toMatchObject({
         object: "list",
         data: [
@@ -578,19 +592,12 @@ describe("provider contracts", () => {
           },
         ],
       };
-      expect(new Groq().convertModelsToOpenAIFormat(openAiShaped)).toEqual({
-        object: "list",
-        data: [
-          {
-            id: "model",
-            object: "model",
-            created: 12,
-            owned_by: "owner",
-            _: { active: true },
-          },
-        ],
-      });
-      expect(new Mistral().convertModelsToOpenAIFormat(openAiShaped)).toEqual({
+      expect(
+        new Groq().endpoints.models!.convertResponse!.call(
+          new Groq(),
+          openAiShaped,
+        ),
+      ).toEqual({
         object: "list",
         data: [
           {
@@ -603,9 +610,29 @@ describe("provider contracts", () => {
         ],
       });
       expect(
-        new OpenRouter().convertModelsToOpenAIFormat({
-          data: [{ id: "router-model", created: 42, name: "Router" }],
-        }),
+        new Mistral().endpoints.models!.convertResponse!.call(
+          new Mistral(),
+          openAiShaped,
+        ),
+      ).toEqual({
+        object: "list",
+        data: [
+          {
+            id: "model",
+            object: "model",
+            created: 12,
+            owned_by: "owner",
+            _: { active: true },
+          },
+        ],
+      });
+      expect(
+        new OpenRouter().endpoints.models!.convertResponse!.call(
+          new OpenRouter(),
+          {
+            data: [{ id: "router-model", created: 42, name: "Router" }],
+          },
+        ),
       ).toEqual({
         object: "list",
         data: [
@@ -676,17 +703,22 @@ describe("provider contracts", () => {
         }),
       );
       vi.mocked(Secrets.getAll).mockReturnValue(["key-0", "key-1"]);
-      const [builtChatPath, builtChatInit] =
-        await provider.buildChatCompletionsRequest({
-          body: JSON.stringify({ model: "gemini", messages: [] }),
+      const [builtChatPath, builtChatInit] = await buildInferenceRequest(
+        provider,
+        {
+          data: { model: "gemini", messages: [] },
           headers: {
             Authorization: "Bearer caller-key",
             "x-goog-api-key": "caller-key",
             "X-Custom": "value",
           },
           apiKeyIndex: 1,
-        });
-      expect(builtChatPath).toBe("/v1beta/openai/chat/completions");
+          target: "direct",
+        },
+      );
+      expect(builtChatPath).toBe(
+        "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      );
       expect(new Headers(builtChatInit.headers)).toEqual(
         new Headers({
           Authorization: "Bearer key-1",
@@ -735,14 +767,17 @@ describe("provider contracts", () => {
         "Content-Type": "application/json",
         Authorization: "Bearer key-1",
       });
-      const [modelsUrl] = await provider.buildRequest(provider.modelsPath, {
-        method: "GET",
-      });
+      const [modelsUrl] = await provider.buildRequest(
+        provider.endpoints.models!.path,
+        {
+          method: "GET",
+        },
+      );
       expect(modelsUrl).toBe(
         "https://api.cloudflare.com/client/v4/accounts/account-id/ai/models/search?task=Text%20Generation",
       );
       expect(
-        provider.convertModelsToOpenAIFormat({
+        provider.endpoints.models!.convertResponse!.call(provider, {
           success: true,
           errors: [],
           messages: [],
@@ -784,28 +819,18 @@ describe("provider contracts", () => {
       expect(() => provider.baseUrl()).toThrow("missing or invalid");
     });
 
-    it.each([
-      [new HuggingFace(), "HuggingFace"],
-      [new Replicate(), "Replicate"],
-    ])("rejects unsupported operations for %s", async (provider, name) => {
-      await expect(
-        provider.buildChatCompletionsRequest({ body: "{}", headers: {} }),
-      ).rejects.toThrow(
-        new ProviderNotSupportedError(
-          `${name} does not support chat completions`,
-        ),
-      );
-      await expect(provider.buildModelsRequest()).rejects.toThrow(
-        new ProviderNotSupportedError(
-          `${name} does not support models list via this proxy.`,
-        ),
-      );
-    });
+    it.each([new Replicate()])(
+      "does not declare unsupported inference or models for %s",
+      (provider) => {
+        expect(
+          provider.resolveInference("model", "chat_completions"),
+        ).toBeUndefined();
+        expect(provider.endpoints.models).toBeUndefined();
+      },
+    );
 
-    it("rejects the unsupported Perplexity models operation", async () => {
-      await expect(new PerplexityAi().buildModelsRequest()).rejects.toThrow(
-        "Perplexity AI does not support models list via this proxy.",
-      );
+    it("does not declare a Perplexity models operation", () => {
+      expect(new PerplexityAi().endpoints.models).toBeUndefined();
     });
   });
 
@@ -831,7 +856,9 @@ describe("provider contracts", () => {
         "Content-Type": "application/json",
         Authorization: "Bearer first",
       });
-      expect(provider.getStaticModels()).toMatchObject({
+      expect(
+        provider.endpoints.models?.getStaticModels?.call(provider),
+      ).toMatchObject({
         object: "list",
         data: [
           { id: "one", object: "model", owned_by: "custom" },
@@ -849,7 +876,9 @@ describe("provider contracts", () => {
       await expect(withoutKeys.headers()).resolves.toEqual({
         "Content-Type": "application/json",
       });
-      expect(withoutKeys.getStaticModels()).toBeUndefined();
+      expect(
+        withoutKeys.endpoints.models?.getStaticModels?.call(withoutKeys),
+      ).toBeUndefined();
 
       const scalarKey = new CustomOpenAI({
         name: "scalar",
@@ -859,7 +888,9 @@ describe("provider contracts", () => {
       });
       expect(scalarKey.getApiKeys()).toEqual(["only"]);
       expect(await scalarKey.getNextApiKeyIndex()).toBe(0);
-      expect(scalarKey.getStaticModels()).toBeUndefined();
+      expect(
+        scalarKey.endpoints.models?.getStaticModels?.call(scalarKey),
+      ).toBeUndefined();
       expect(Secrets.getNextIndex).not.toHaveBeenCalled();
 
       expect(withProviderProfile(scalarKey, "paid").getApiKeys()).toEqual([]);

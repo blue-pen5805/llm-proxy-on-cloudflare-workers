@@ -68,7 +68,7 @@ describe("AI Gateway Custom Provider routing", () => {
       gatewayProviderPath(
         "ollama",
         provider,
-        provider.chatCompletionPath,
+        provider.endpoints.chat_completions!.path!,
         customProviderRoute("ollama"),
       ),
     ).toBe("/v1/chat/completions");
@@ -79,7 +79,7 @@ describe("AI Gateway Custom Provider routing", () => {
     const gatewayPath = gatewayProviderPath(
       "cline",
       provider,
-      provider.modelsPath,
+      provider.endpoints.models!.path,
       customProviderRoute("cline"),
     );
 

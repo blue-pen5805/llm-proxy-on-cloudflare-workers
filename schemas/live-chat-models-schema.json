@@ -21,6 +21,7 @@
             "properties": {
               "model": { "type": "string", "minLength": 1 },
               "directPath": {
+                "description": "Validated when present; live Chat checks use the Worker provider configuration instead of this path.",
                 "type": "string",
                 "pattern": "^/(?!/)[^?#]*$"
               }

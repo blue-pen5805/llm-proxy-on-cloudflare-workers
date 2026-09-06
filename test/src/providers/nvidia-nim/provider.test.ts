@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { buildModelsRequest } from "~/src/providers/models";
 import { NvidiaNim } from "~/src/providers/nvidia-nim/provider";
 import { Secrets } from "~/src/utils/secrets";
+import { buildInferenceRequest } from "../../../helpers/provider";
 
 describe("NVIDIA NIM provider", () => {
   beforeEach(() => {
@@ -19,8 +21,8 @@ describe("NVIDIA NIM provider", () => {
     expect(provider.apiKeyName).toBe("NVIDIA_NIM_API_KEY");
     expect(provider.baseUrl()).toBe("https://integrate.api.nvidia.com");
     expect(provider.pathnamePrefix()).toBe("/v1");
-    expect(provider.chatCompletionPath).toBe("/chat/completions");
-    expect(provider.modelsPath).toBe("/models");
+    expect(provider.endpoints.chat_completions?.path).toBe("/chat/completions");
+    expect(provider.endpoints.models?.path).toBe("/models");
     expect(provider.available()).toBe(true);
   });
 
@@ -31,19 +33,17 @@ describe("NVIDIA NIM provider", () => {
 
   it("builds authenticated chat and model requests", async () => {
     const provider = new NvidiaNim();
-    const [chatPath, chatInit] = await provider.buildChatCompletionsRequest({
-      body: JSON.stringify({
+    const [chatPath, chatInit] = await buildInferenceRequest(provider, {
+      data: {
         model: "meta/model",
         messages: [{ role: "user", content: "hello" }],
         temperature: 0.2,
         unsupported: "retained",
-      }),
+      },
       headers: { "X-Request": "kept" },
+      target: "direct",
     });
-    const [chatUrl, builtChatInit] = await provider.buildRequest(
-      chatPath,
-      chatInit,
-    );
+    const [chatUrl, builtChatInit] = [chatPath, chatInit];
 
     expect(chatUrl).toBe(
       "https://integrate.api.nvidia.com/v1/chat/completions",
@@ -62,7 +62,10 @@ describe("NVIDIA NIM provider", () => {
       }),
     );
 
-    const [modelsPath, modelsInit] = await provider.buildModelsRequest();
+    const [modelsPath, modelsInit] = await buildModelsRequest(
+      provider,
+      provider.endpoints.models!,
+    );
     const [modelsUrl, builtModelsInit] = await provider.buildRequest(
       modelsPath,
       modelsInit,
@@ -77,21 +80,7 @@ describe("NVIDIA NIM provider", () => {
     );
   });
 
-  it("preserves OpenAI-compatible model-list responses", () => {
-    const response = {
-      object: "list" as const,
-      data: [
-        {
-          id: "meta/model",
-          object: "model" as const,
-          created: 0,
-          owned_by: "nvidia",
-        },
-      ],
-    };
-
-    expect(new NvidiaNim().convertModelsToOpenAIFormat(response)).toBe(
-      response,
-    );
+  it("uses the shared OpenAI model-list handling", () => {
+    expect(new NvidiaNim().endpoints.models).toEqual({ path: "/models" });
   });
 });

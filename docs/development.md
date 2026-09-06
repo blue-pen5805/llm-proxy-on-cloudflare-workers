@@ -58,6 +58,16 @@ After changing the schema, run `npm run cf-typegen`; do not edit
 1. Add a `defineProvider` definition under `src/providers/<name>/`. Set
    `openAICompatible: true` when the provider uses JSON and Bearer authentication,
    and declare only the values or hooks that differ from the shared behavior.
+   Group operation definitions in `endpoints`. Use
+   `chat_completions: chatCompletionsEndpoint(path, options)` for Chat filtering
+   and `jsonEndpoint(pathOrPrepare, options)` for native APIs. Put model-list
+   paths, `validate`, `convertResponse`, `getStaticModels`, `supportsAiGateway`,
+   and `requiresProviderCredentials` in `endpoints.models` as applicable.
+   Omit unsupported operations. Declare `chatFallback` with
+   `convertedChatEndpoint(codec)` when translation is needed, and use
+   `resolveEndpoint` / `resolveChatFallback` for model-specific selection.
+   Test both direct and Gateway targets; `prepareGateway` handles differences
+   in their upstream APIs.
 2. Register its route in `src/providers.ts`.
 3. Add its key to the schema, example configuration, creation script, and docs.
 4. Add contract tests for availability, headers, URL construction, model

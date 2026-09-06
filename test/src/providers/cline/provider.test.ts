@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Cline } from "~/src/providers/cline/provider";
+import { buildModelsRequest } from "~/src/providers/models";
 import { Secrets } from "~/src/utils/secrets";
+import { buildInferenceRequest } from "../../../helpers/provider";
 
 describe("Cline provider", () => {
   beforeEach(() => {
@@ -18,8 +20,10 @@ describe("Cline provider", () => {
 
     expect(provider.apiKeyName).toBe("CLINE_API_KEY");
     expect(provider.baseUrl()).toBe("https://api.cline.bot/api/v1");
-    expect(provider.chatCompletionPath).toBe("/chat/completions");
-    expect(provider.modelsPath).toBe("/ai/cline/recommended-models");
+    expect(provider.endpoints.chat_completions?.path).toBe("/chat/completions");
+    expect(provider.endpoints.models?.path).toBe(
+      "/ai/cline/recommended-models",
+    );
     expect(provider.available()).toBe(true);
   });
 
@@ -30,19 +34,17 @@ describe("Cline provider", () => {
 
   it("builds authenticated chat and recommended-model requests", async () => {
     const provider = new Cline();
-    const [chatPath, chatInit] = await provider.buildChatCompletionsRequest({
-      body: JSON.stringify({
+    const [chatPath, chatInit] = await buildInferenceRequest(provider, {
+      data: {
         model: "anthropic/claude-sonnet",
         messages: [{ role: "user", content: "hello" }],
         temperature: 0.2,
         unsupported: "retained",
-      }),
+      },
       headers: { "X-Request": "kept" },
+      target: "direct",
     });
-    const [chatUrl, builtChatInit] = await provider.buildRequest(
-      chatPath,
-      chatInit,
-    );
+    const [chatUrl, builtChatInit] = [chatPath, chatInit];
 
     expect(chatUrl).toBe("https://api.cline.bot/api/v1/chat/completions");
     expect(JSON.parse(String(builtChatInit.body))).toEqual({
@@ -59,7 +61,10 @@ describe("Cline provider", () => {
       }),
     );
 
-    const [modelsPath, modelsInit] = await provider.buildModelsRequest();
+    const [modelsPath, modelsInit] = await buildModelsRequest(
+      provider,
+      provider.endpoints.models!,
+    );
     const [modelsUrl, builtModelsInit] = await provider.buildRequest(
       modelsPath,
       modelsInit,
@@ -118,9 +123,13 @@ describe("Cline provider", () => {
       },
     );
 
-    const response = await new Cline().transformChatCompletionsResponse(
-      upstream,
-    );
+    const response =
+      await new Cline().endpoints.chat_completions!.transformResponse!.call(
+        new Cline(),
+        upstream,
+        "model",
+        {},
+      );
 
     expect(response).not.toBe(upstream);
     expect(response.status).toBe(200);
@@ -148,9 +157,13 @@ describe("Cline provider", () => {
         }),
     } as unknown as Response;
 
-    const response = await new Cline().transformChatCompletionsResponse(
-      upstream,
-    );
+    const response =
+      await new Cline().endpoints.chat_completions!.transformResponse!.call(
+        new Cline(),
+        upstream,
+        "model",
+        {},
+      );
 
     expect(cancel).toHaveBeenCalled();
     await expect(response.json()).resolves.toEqual(completion);
@@ -167,9 +180,13 @@ describe("Cline provider", () => {
       headers: { "Content-Type": "text/event-stream" },
     });
 
-    const response = await new Cline().transformChatCompletionsResponse(
-      upstream,
-    );
+    const response =
+      await new Cline().endpoints.chat_completions!.transformResponse!.call(
+        new Cline(),
+        upstream,
+        "model",
+        {},
+      );
 
     expect(response).toBe(upstream);
     expect(await response.text()).toBe(sse);
@@ -199,15 +216,19 @@ describe("Cline provider", () => {
       }),
     ],
   ])("preserves %s", async (_description, upstream) => {
-    const response = await new Cline().transformChatCompletionsResponse(
-      upstream,
-    );
+    const response =
+      await new Cline().endpoints.chat_completions!.transformResponse!.call(
+        new Cline(),
+        upstream,
+        "model",
+        {},
+      );
     expect(response).toBe(upstream);
   });
 
   it("converts every recommended-model group and retains its metadata", () => {
     expect(
-      new Cline().convertModelsToOpenAIFormat({
+      new Cline().endpoints.models!.convertResponse!.call(new Cline(), {
         recommended: [
           {
             id: "anthropic/claude-sonnet",
@@ -277,7 +298,9 @@ describe("Cline provider", () => {
   });
 
   it("treats missing recommended-model groups as empty", () => {
-    expect(new Cline().convertModelsToOpenAIFormat({})).toEqual({
+    expect(
+      new Cline().endpoints.models!.convertResponse!.call(new Cline(), {}),
+    ).toEqual({
       object: "list",
       data: [],
     });

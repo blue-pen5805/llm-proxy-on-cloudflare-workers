@@ -10,6 +10,32 @@ dated section; when multiple changes share a date, put the newest change first.
 Planned version: `1.0.0`. The package remains at `0.2.1` until the version
 update is explicitly approved.
 
+### 2026-09-06
+
+- Preferred an available matching upstream API before conversion for public
+  Chat Completions, Responses, and Messages requests. Added matching APIs for
+  Anthropic Chat, Vertex Google Chat, DeepSeek Responses/Messages, Bedrock
+  OpenAI Responses and Anthropic Chat/Messages, Perplexity Agent Chat/Responses,
+  Azure Responses, and Hugging Face Router Chat/Responses/Messages. Azure
+  Responses and Hugging Face inference use direct connections in non-strict
+  mode and dedicated Custom Provider routing in strict Gateway mode.
+- Added optional `responsesPath` and `messagesPath` to custom OpenAI endpoints
+  for native Responses and Messages routing, preserving JSON/SSE and retaining
+  Chat conversion when the matching path is omitted.
+- Returned HTTP 400 before dispatch for unsupported inference operations and
+  Universal Endpoint steps without a declared default or explicit path. Model
+  discovery and connectivity checks skip undeclared model-list operations.
+- Applied provider conversion to direct inference as well as Gateway routing,
+  including the Anthropic Messages fallback and Bedrock Converse; Bedrock
+  OpenAI models use their native Chat endpoint. Rejected empty and dot-segment Bedrock model IDs.
+
+- Routed automatic AI Gateway inference through provider-specific endpoints,
+  with provider defaults and model-specific protocol selection. Added bounded
+  Chat Completions conversion for Anthropic Messages, Google GenerateContent,
+  and Bedrock Converse, including streaming and tool calls.
+- Routed Workers AI chat through its account REST endpoint with the selected
+  provider API key and Gateway ID; missing provider credentials return HTTP 503.
+
 ### 2026-08-16
 
 - Retried `GET /v1/models` provider discovery with sequential later keys after

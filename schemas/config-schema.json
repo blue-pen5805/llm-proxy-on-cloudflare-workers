@@ -540,6 +540,16 @@
             "type": "string",
             "maxLength": 2048,
             "pattern": "^/(?:[^/].*)?$"
+          },
+          "responsesPath": {
+            "type": "string",
+            "maxLength": 2048,
+            "pattern": "^/(?:[^/].*)?$"
+          },
+          "messagesPath": {
+            "type": "string",
+            "maxLength": 2048,
+            "pattern": "^/(?:[^/].*)?$"
           }
         },
         "required": ["name", "baseUrl"]

@@ -1,6 +1,7 @@
 import { CloudflareAIGateway } from "../ai_gateway";
 import { gatewayProviderPath } from "../ai_gateway/custom_provider";
 import { getAllProviderInstances } from "../providers";
+import { buildModelsRequest } from "../providers/models";
 import { OpenAIModelsListResponseBody } from "../providers/openai/types";
 import { parseProviderSelector } from "../providers/profile";
 import { ProviderBase, ProviderNotSupportedError } from "../providers/provider";
@@ -144,19 +145,22 @@ async function fetchProviderModels(
   /* istanbul ignore next -- registry entries always use valid selectors */
   if (!parsedSelector) return EMPTY_MODELS;
   const { providerName, profile } = parsedSelector;
+  const operation = provider.endpoints.models;
+  if (!operation) return EMPTY_MODELS;
   const aiGatewayProvider = resolveAiGatewayModelsProvider(
     providerName,
     provider,
+    operation,
     aiGateway,
   );
   if (
     !provider.available() &&
-    (!aiGatewayProvider || provider.requiresProviderCredentialsForModels)
+    (!aiGatewayProvider || operation.requiresProviderCredentials)
   ) {
     return EMPTY_MODELS;
   }
 
-  const getStaticModels = provider.getStaticModels();
+  const getStaticModels = operation.getStaticModels?.call(provider);
   if (getStaticModels) {
     return getStaticModels;
   }
@@ -183,11 +187,13 @@ async function fetchProviderModels(
       selectionPolicy,
       viaAiGateway: aiGatewayProvider !== undefined,
     });
-    const [path, init] = await provider.buildModelsRequest(apiKeyIndex);
+    const [path, init] = await buildModelsRequest(
+      provider,
+      operation,
+      apiKeyIndex,
+      aiGatewayProvider ? clientGatewayHeaders : undefined,
+    );
     if (aiGateway && aiGatewayProvider) {
-      const gatewayHeaders = new Headers(clientGatewayHeaders);
-      const providerHeaders = new Headers(await provider.headers(apiKeyIndex));
-      providerHeaders.forEach((value, key) => gatewayHeaders.set(key, value));
       const [gatewayUrl, gatewayInit] = aiGateway.buildProviderEndpointRequest({
         provider: aiGatewayProvider,
         method: init.method,
@@ -197,7 +203,7 @@ async function fetchProviderModels(
           path,
           aiGatewayProvider,
         ),
-        headers: gatewayHeaders,
+        headers: init.headers!,
       });
       return RequestLogger.withFields(keyLogFields, () =>
         fetchWithLogging(gatewayUrl, {
@@ -207,11 +213,10 @@ async function fetchProviderModels(
       );
     }
     return RequestLogger.withFields(keyLogFields, () =>
-      provider.fetch(
-        path,
-        { ...init, signal: abortController.signal },
-        apiKeyIndex,
-      ),
+      provider.send(provider.baseUrl() + provider.pathnamePrefix() + path, {
+        ...init,
+        signal: abortController.signal,
+      }),
     );
   };
 
@@ -221,12 +226,13 @@ async function fetchProviderModels(
       const apiKeyIndex = initialApiKeyIndex + attempt;
       const upstreamResponse = await fetchModelsWithKey(apiKeyIndex);
       if (upstreamResponse.ok) {
-        return provider.convertModelsToOpenAIFormat(
-          await readResponseJson(
-            upstreamResponse,
-            MAX_PROVIDER_MODELS_RESPONSE_BYTES,
-          ),
+        const data = await readResponseJson(
+          upstreamResponse,
+          MAX_PROVIDER_MODELS_RESPONSE_BYTES,
         );
+        return operation.convertResponse
+          ? operation.convertResponse.call(provider, data)
+          : (data as OpenAIModelsListResponseBody);
       }
       lastStatus = upstreamResponse.status;
       await discardUpstreamBody(upstreamResponse);

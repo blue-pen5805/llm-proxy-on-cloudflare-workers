@@ -158,9 +158,15 @@ export async function handleUniversalEndpointRequest(
               `Provider ${providerName} is not supported by this proxy.`,
             );
           }
-          const endpointPath = normalizeUniversalEndpointPath(
-            endpointRequest.endpoint ?? providerInstance.chatCompletionPath,
-          );
+          const requestedEndpoint =
+            endpointRequest.endpoint ??
+            providerInstance.endpoints.chat_completions?.path;
+          if (requestedEndpoint === undefined)
+            throw new BadRequestError(
+              `Provider ${providerName} requires an explicit endpoint.`,
+            );
+          const endpointPath =
+            normalizeUniversalEndpointPath(requestedEndpoint);
           const apiKeyIndex = await providerInstance.getNextApiKeyIndex();
           const apiKeys = providerInstance.getApiKeys();
           recordApiKeySelection({
@@ -173,14 +179,12 @@ export async function handleUniversalEndpointRequest(
             viaAiGateway: true,
             step: stepIndex,
           });
-          const requestHeaders = stripProxyAuthorizationHeaders(
-            endpointRequest.headers ?? {},
-          );
-          const providerHeaders = new Headers(
-            await providerInstance.headers(apiKeyIndex),
-          );
-          providerHeaders.forEach((value, key) =>
-            requestHeaders.set(key, value),
+          const requestHeaders = new Headers(
+            await providerInstance.buildHeadersForPath(
+              `/${endpointPath}`,
+              stripProxyAuthorizationHeaders(endpointRequest.headers ?? {}),
+              apiKeyIndex,
+            ),
           );
 
           return {

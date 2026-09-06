@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
 import { BUILT_IN_PROVIDER_CONSTRUCTORS } from "~/src/providers";
+import { createProvider } from "~/src/providers/provider";
 import { handleProviderProxyRequest } from "~/src/requests/proxy";
 import { NotFoundError } from "~/src/utils/error";
 import { fetchWithLogging } from "~/src/utils/helpers";
@@ -13,6 +14,7 @@ vi.mock("~/src/utils/secrets");
 
 describe("proxy", () => {
   const mockProviderClass = {
+    ...createProvider(),
     baseUrl: vi.fn().mockReturnValue("https://api.example.com"),
     endpoint: {
       baseUrl: vi.fn().mockReturnValue("https://api.example.com/test"),

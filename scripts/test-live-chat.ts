@@ -14,14 +14,14 @@ const SENSITIVE_FIELD_NAME_PATTERN =
   /api.?key|authorization|credential|password|private.?key|secret|access.?token|refresh.?token|(?:^|[_-])token(?:$|[_-])/i;
 
 export interface BuiltInLiveChatContract {
-  directPath: string;
   supportsMaxCompletionTokens: boolean;
 }
 
-/** Node-compatible snapshot of providers routed through Gateway compatibility. */
-export const AI_GATEWAY_COMPATIBILITY_PROVIDERS: ReadonlySet<string> = new Set([
+/** Node-compatible snapshot of providers with native Gateway inference routing. */
+export const AI_GATEWAY_CHAT_PROVIDERS: ReadonlySet<string> = new Set([
   "anthropic",
   "aws-bedrock",
+  "azure-openai",
   "cerebras",
   "cohere",
   "deepseek",
@@ -41,76 +41,55 @@ export const AI_GATEWAY_COMPATIBILITY_PROVIDERS: ReadonlySet<string> = new Set([
  * A Worker-runtime test keeps it synchronized with the provider registry.
  */
 export const BUILT_IN_LIVE_CHAT_CONTRACTS = {
-  anthropic: {
-    directPath: "/v1/chat/completions",
-    supportsMaxCompletionTokens: true,
-  },
-  "aws-bedrock": {
-    directPath: "/chat/completions",
-    supportsMaxCompletionTokens: true,
-  },
+  anthropic: { supportsMaxCompletionTokens: true },
+  "aws-bedrock": { supportsMaxCompletionTokens: true },
   "azure-openai": {
-    directPath: "/chat/completions",
     supportsMaxCompletionTokens: true,
   },
   cerebras: {
-    directPath: "/chat/completions",
     supportsMaxCompletionTokens: true,
   },
   cohere: {
-    directPath: "/compatibility/v1/chat/completions",
     supportsMaxCompletionTokens: false,
   },
   cline: {
-    directPath: "/chat/completions",
     supportsMaxCompletionTokens: true,
   },
   deepseek: {
-    directPath: "/chat/completions",
     supportsMaxCompletionTokens: true,
   },
   "google-ai-studio": {
-    directPath: "/v1beta/openai/chat/completions",
     supportsMaxCompletionTokens: true,
   },
   "google-vertex-ai": {
-    directPath: "/chat/completions",
     supportsMaxCompletionTokens: true,
   },
   grok: {
-    directPath: "/v1/chat/completions",
     supportsMaxCompletionTokens: true,
   },
   groq: {
-    directPath: "/chat/completions",
     supportsMaxCompletionTokens: true,
   },
+  huggingface: { supportsMaxCompletionTokens: true },
   mistral: {
-    directPath: "/v1/chat/completions",
     supportsMaxCompletionTokens: true,
   },
   "nvidia-nim": {
-    directPath: "/chat/completions",
     supportsMaxCompletionTokens: true,
   },
   ollama: {
-    directPath: "/chat/completions",
     supportsMaxCompletionTokens: true,
   },
   openai: {
-    directPath: "/chat/completions",
     supportsMaxCompletionTokens: true,
   },
   openrouter: {
-    directPath: "/v1/chat/completions",
     supportsMaxCompletionTokens: true,
   },
   "perplexity-ai": {
-    directPath: "/v1/chat/completions",
     supportsMaxCompletionTokens: true,
   },
   "workers-ai": {
-    directPath: "/v1/chat/completions",
     supportsMaxCompletionTokens: true,
   },
 } as const satisfies Record<string, BuiltInLiveChatContract>;
@@ -118,13 +97,12 @@ export const BUILT_IN_LIVE_CHAT_CONTRACTS = {
 export interface LiveChatTestCase {
   provider: string;
   model: string;
-  directPath: string;
   supportsMaxCompletionTokens: boolean;
 }
 
 export interface LiveChatTestResult {
   provider: string;
-  route: "direct" | "compatibility" | "ai-gateway";
+  route: "chat-direct" | "chat-gateway";
   status?: number;
   error?: string;
 }
@@ -134,6 +112,8 @@ interface RunOptions {
   proxyApiKey?: string;
   sensitiveValues?: readonly string[];
   gatewayName?: string;
+  defaultGatewayName?: string;
+  alwaysUseAiGateway?: boolean;
   keySelection?: string | null;
   timeoutMs?: number;
   fetcher?: typeof fetch;
@@ -152,6 +132,8 @@ type NormalizedRunOptions = Omit<
 };
 
 export interface LocalWorkerAuthentication {
+  defaultGatewayName?: string;
+  alwaysUseAiGateway: boolean;
   developmentMode: boolean;
   proxyApiKey?: string;
   sensitiveValues: readonly string[];
@@ -183,7 +165,20 @@ export function parseLocalWorkerAuthentication(
       "config.develop.jsonc must set PROXY_API_KEY unless DEV is true.",
     );
   }
-  return { developmentMode, proxyApiKey, sensitiveValues };
+  const alwaysUseAiGateway =
+    String(parsed.ALWAYS_USE_AI_GATEWAY).trim().toLowerCase() === "true";
+  const defaultGatewayName =
+    parsed.CLOUDFLARE_ACCOUNT_ID &&
+    (alwaysUseAiGateway || parsed.AI_GATEWAY_NAME)
+      ? String(parsed.AI_GATEWAY_NAME ?? "default")
+      : undefined;
+  return {
+    developmentMode,
+    proxyApiKey,
+    sensitiveValues,
+    alwaysUseAiGateway,
+    defaultGatewayName,
+  };
 }
 
 function collectSensitiveConfigValues(value: unknown): string[] {
@@ -290,16 +285,11 @@ export function parseLiveChatConfig(source: string): LiveChatTestCase[] {
       );
     }
 
-    const directPath = configuredDirectPath ?? builtInContract?.directPath;
-    if (!directPath) {
-      throw new Error(
-        `${provider} has no Chat Completions direct path; set directPath only if the configured endpoint supports one.`,
-      );
-    }
+    if (configuredDirectPath !== undefined)
+      normalizeDirectPath(configuredDirectPath, provider);
     testCases.push({
       provider,
       model,
-      directPath: normalizeDirectPath(directPath, provider),
       supportsMaxCompletionTokens:
         builtInContract?.supportsMaxCompletionTokens ?? true,
     });
@@ -311,14 +301,9 @@ export function parseLiveChatConfig(source: string): LiveChatTestCase[] {
   return testCases;
 }
 
-function buildChatBody(
-  testCase: LiveChatTestCase,
-  qualifiedModel: boolean,
-): Record<string, unknown> {
+function buildChatBody(testCase: LiveChatTestCase): Record<string, unknown> {
   return {
-    model: qualifiedModel
-      ? `${testCase.provider}/${testCase.model}`
-      : testCase.model,
+    model: `${testCase.provider}/${testCase.model}`,
     messages: [{ role: "user", content: "Reply with OK." }],
     stream: false,
     [testCase.supportsMaxCompletionTokens
@@ -491,17 +476,10 @@ async function executeRequest(
   route: LiveChatTestResult["route"],
   options: NormalizedRunOptions,
 ): Promise<LiveChatTestResult> {
-  const usesCompatibilityFormat = route !== "direct";
-  const requestPath =
-    route === "direct"
-      ? `/${testCase.provider}${testCase.directPath}`
-      : route === "ai-gateway"
-        ? "/chat/completions"
-        : "/v1/chat/completions";
   const gatewayName =
-    route === "ai-gateway"
-      ? (options.gatewayName ?? "default")
-      : options.gatewayName;
+    route === "chat-gateway"
+      ? (options.gatewayName ?? options.defaultGatewayName ?? "default")
+      : undefined;
   const abortController = new AbortController();
   const timeout = setTimeout(() => abortController.abort(), options.timeoutMs);
 
@@ -511,12 +489,12 @@ async function executeRequest(
         options.baseUrl,
         gatewayName,
         options.keySelection,
-        requestPath,
+        "/v1/chat/completions",
       ),
       {
         method: "POST",
         headers: createProxyHeaders(options.proxyApiKey),
-        body: JSON.stringify(buildChatBody(testCase, usesCompatibilityFormat)),
+        body: JSON.stringify(buildChatBody(testCase)),
         signal: abortController.signal,
       },
     );
@@ -595,13 +573,21 @@ export async function runLiveChatTests(
   };
   const results: LiveChatTestResult[] = [];
   for (const testCase of selectedTestCases) {
-    results.push(await executeRequest(testCase, "direct", normalizedOptions));
-    results.push(
-      await executeRequest(testCase, "compatibility", normalizedOptions),
-    );
-    if (AI_GATEWAY_COMPATIBILITY_PROVIDERS.has(testCase.provider)) {
+    const nativeGateway = AI_GATEWAY_CHAT_PROVIDERS.has(testCase.provider);
+    const requiresGateway =
+      testCase.provider === "google-vertex-ai" ||
+      testCase.provider === "workers-ai";
+    const defaultUsesGateway =
+      options.alwaysUseAiGateway ||
+      (options.defaultGatewayName && nativeGateway);
+    if (!requiresGateway && !defaultUsesGateway) {
       results.push(
-        await executeRequest(testCase, "ai-gateway", normalizedOptions),
+        await executeRequest(testCase, "chat-direct", normalizedOptions),
+      );
+    }
+    if (nativeGateway || options.alwaysUseAiGateway) {
+      results.push(
+        await executeRequest(testCase, "chat-gateway", normalizedOptions),
       );
     }
   }
@@ -700,7 +686,12 @@ export async function runLiveChatCli(): Promise<void> {
       return;
     }
     const testCases = parseLiveChatConfig(readFileSync(configPath, "utf8"));
-    const { proxyApiKey, sensitiveValues } = parseLocalWorkerAuthentication(
+    const {
+      proxyApiKey,
+      sensitiveValues,
+      defaultGatewayName,
+      alwaysUseAiGateway,
+    } = parseLocalWorkerAuthentication(
       readFileSync(DEFAULT_WORKER_CONFIG_PATH, "utf8"),
     );
     const timeoutValue = process.env.LIVE_CHAT_TIMEOUT_MS;
@@ -711,6 +702,8 @@ export async function runLiveChatCli(): Promise<void> {
       baseUrl,
       proxyApiKey,
       sensitiveValues,
+      defaultGatewayName,
+      alwaysUseAiGateway,
       gatewayName: process.env.LLM_PROXY_GATEWAY_NAME || undefined,
       keySelection:
         keySelectionValue?.toLowerCase() === "none"

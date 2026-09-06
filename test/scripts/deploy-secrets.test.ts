@@ -269,6 +269,25 @@ describe("deploy-secrets", () => {
       expect(result.messages).toContain("   - VIRTUAL_MODELS: [set]");
     });
 
+    it("accepts custom native API paths through deployment validation", async () => {
+      const mockFs = createMockFsOps({
+        "/root/config.jsonc": JSON.stringify({
+          CUSTOM_OPENAI_ENDPOINTS: [
+            {
+              name: "custom",
+              baseUrl: "https://custom.example/v1",
+              responsesPath: "/responses",
+              messagesPath: "/messages",
+            },
+          ],
+          VIRTUAL_MODELS: null,
+        }),
+      });
+      const result = await deploySecrets("/root", undefined, true, mockFs);
+      expect(result.success).toBe(true);
+      expect(result.messages).toContain("   - CUSTOM_OPENAI_ENDPOINTS: [set]");
+    });
+
     it("honors custom-provider precedence while checking graph edges", async () => {
       const mockFs = createMockFsOps({
         "/root/config.jsonc": JSON.stringify({

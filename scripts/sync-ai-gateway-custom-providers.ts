@@ -91,7 +91,9 @@ function needsCustomProvider(
   return (
     provider.requiresCustomAiGatewayProvider ||
     !CloudflareAIGateway.isSupportedProvider(providerName) ||
-    (provider.modelsPath !== "" && provider.supportsAiGatewayModels === false)
+    Object.values(provider.endpoints).some(
+      (operation) => operation.supportsAiGateway === false,
+    )
   );
 }
 
@@ -105,6 +107,10 @@ export function buildCustomProviderTargets(
     createProviderRegistry(Environments.all()).all(),
   );
   const targets: CustomProviderTarget[] = [];
+  const inferenceUpstreams = new Map<
+    string,
+    { name: string; baseUrl(): string }
+  >();
 
   for (const [providerSelector, provider] of Object.entries(providers)) {
     // Credential profiles only change which API key is presented per request;
@@ -117,6 +123,11 @@ export function buildCustomProviderTargets(
     if (!parsedSelector) continue;
     const { providerName, profile } = parsedSelector;
     if (profile !== DEFAULT_PROVIDER_PROFILE) continue;
+    for (const operation of Object.values(provider.endpoints)) {
+      if ("upstream" in operation && operation.upstream) {
+        inferenceUpstreams.set(operation.upstream.name, operation.upstream);
+      }
+    }
     if (!needsCustomProvider(providerName, provider)) continue;
 
     // Some provider origins depend on optional deployment metadata. They are
@@ -136,6 +147,14 @@ export function buildCustomProviderTargets(
       ...(CUSTOM_PROVIDER_LOGOS[providerName]
         ? { logo: CUSTOM_PROVIDER_LOGOS[providerName] }
         : {}),
+    });
+  }
+
+  for (const upstream of inferenceUpstreams.values()) {
+    targets.push({
+      name: `LLM Proxy / ${upstream.name}`,
+      slug: customProviderSlug(upstream.name),
+      baseUrl: customProviderBaseUrl(upstream),
     });
   }
 

@@ -63,6 +63,8 @@ forwarded.
 
 ### Provider behavior and reliability
 
+- [Native inference endpoint selection](features/native_inference.md)
+
 - [Provider abstraction](features/provider_abstraction.md)
 - [Key rotation](features/key_rotation.md)
 - [Virtual models](features/virtual_models.md)

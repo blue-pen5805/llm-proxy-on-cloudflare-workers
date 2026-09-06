@@ -31,6 +31,9 @@ describe("resolveRoute", () => {
 
   it.each([
     ["/v1/chat/completions?trace=true", false, { kind: "chat_completions" }],
+    ["/chat/completions?trace=true", false, { kind: "chat_completions" }],
+    ["/v1/chat/completions", true, { kind: "chat_completions" }],
+    ["/chat/completions", true, { kind: "chat_completions" }],
     ["/v1/responses?trace=true", false, { kind: "responses" }],
     ["/v1/messages?trace=true", false, { kind: "messages" }],
     [

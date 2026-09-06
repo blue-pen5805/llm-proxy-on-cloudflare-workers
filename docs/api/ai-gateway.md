@@ -11,7 +11,10 @@ prefix uses `AI_GATEWAY_NAME`.
 Gateway context already exists, `POST /` is the same route without an explicit
 prefix and uses `AI_GATEWAY_NAME` or `default`. The
 body must be a non-empty JSON array with at most 16 steps. Each step needs a
-supported `provider` and an object-valued `query`.
+supported `provider` and an object-valued `query`. Omitting `endpoint` uses the
+provider's declared fixed Chat path. Providers without that default, including
+Anthropic, Bedrock, and Vertex AI, require an explicit `endpoint`; otherwise the
+proxy returns HTTP 400 without forwarding the request.
 
 Client-provided authentication headers cannot override configured provider
 credentials. A custom step `endpoint` is normalized to a relative path, limited
@@ -53,6 +56,11 @@ Client `cf-aig-authorization`, `cf-aig-byok-alias`, and `cf-aig-cache-key` are
 always removed. A configured `CF_AIG_TOKEN`, REST API authorization, and the
 route-selected Gateway ID are applied by the Worker after client header
 processing and therefore take precedence where applicable.
+
+Automatic `/v1/chat/completions` routing selects a provider-native inference
+endpoint, including the account REST endpoint for Workers AI. The selection
+and supported conversions are defined in
+[Native inference](../design/features/native_inference.md).
 
 ## Compatibility pass-through
 

@@ -83,9 +83,11 @@
     //   "name": "my-custom-llm",
     //   "baseUrl": "https://llm.example.com/v1",
     //   "apiKeys": [], // Or { "default": [...], "second": [...] }
-    //   "models": ["model-1", "model-2"] // Optional
-    //   "chatCompletionPath": "/v1/chat/completions", // Optional
-    //   "modelsPath": "/v1/models" // Optional
+    //   "models": ["model-1", "model-2"], // Optional
+    //   "chatCompletionPath": "/chat/completions", // Optional
+    //   "modelsPath": "/models", // Optional
+    //   "responsesPath": "/responses", // Optional: native Responses API
+    //   "messagesPath": "/messages" // Optional: native Messages API
     // }
   ],
 

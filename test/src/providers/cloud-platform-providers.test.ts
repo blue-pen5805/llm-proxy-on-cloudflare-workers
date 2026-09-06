@@ -2,12 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AwsBedrock } from "~/src/providers/aws-bedrock/provider";
 import { AzureOpenAI } from "~/src/providers/azure-openai/provider";
 import { GoogleVertexAi } from "~/src/providers/google-vertex-ai/provider";
+import { buildModelsRequest } from "~/src/providers/models";
 import {
   ProviderNotSupportedError,
   withProviderProfile,
 } from "~/src/providers/provider";
 import { Environments } from "~/src/utils/environments";
 import { Secrets } from "~/src/utils/secrets";
+import { buildInferenceRequest } from "../../helpers/provider";
 
 const values: Partial<Record<keyof Env, string>> = {
   AZURE_OPENAI_API_KEY: "azure-key",
@@ -52,7 +54,7 @@ describe("cloud platform providers", () => {
     const provider = new AzureOpenAI();
 
     expect(provider.available()).toBe(true);
-    expect(provider.requiresProviderCredentialsForModels).toBe(true);
+    expect(provider.endpoints.models?.requiresProviderCredentials).toBe(true);
     expect(provider.baseUrl()).toBe(
       "https://example-resource.openai.azure.com",
     );
@@ -61,23 +63,26 @@ describe("cloud platform providers", () => {
       "Content-Type": "application/json",
       "api-key": "azure-key",
     });
-    await expect(provider.buildModelsRequest()).resolves.toEqual([
+    await expect(
+      buildModelsRequest(provider, provider.endpoints.models!),
+    ).resolves.toEqual([
       "/models",
       {
         method: "GET",
-        headers: {
+        headers: new Headers({
           "Content-Type": "application/json",
           "api-key": "azure-key",
-        },
+        }),
       },
     ]);
   });
 
   it("builds Azure provider-native AI Gateway chat requests", async () => {
     const provider = new AzureOpenAI();
-    const gatewayRequest = await provider.buildAiGatewayChatCompletionsRequest({
+    const gatewayRequest = await buildInferenceRequest(provider, {
       data: { model: "gpt-4o", messages: [{ role: "user", content: "hi" }] },
       headers: { "x-client": "kept" },
+      target: "gateway",
     });
     expect(gatewayRequest).toBeDefined();
     const [path, init] = gatewayRequest!;
@@ -109,9 +114,10 @@ describe("cloud platform providers", () => {
     expect(provider.aiGatewayPath("/openai/v1/models")).toBe(
       "/openai/v1/models",
     );
-    const gatewayRequest = await provider.buildAiGatewayChatCompletionsRequest({
+    const gatewayRequest = await buildInferenceRequest(provider, {
       data: { model: "gpt-4o", messages: [] },
       headers: {},
+      target: "gateway",
     });
     expect(gatewayRequest).toBeDefined();
     const [path] = gatewayRequest!;
@@ -146,10 +152,7 @@ describe("cloud platform providers", () => {
       Authorization: `Bearer ${credential}`,
     });
     expect(provider.configurationError()).toBeUndefined();
-    expect(provider.modelsPath).toBe("");
-    await expect(provider.buildModelsRequest()).rejects.toBeInstanceOf(
-      ProviderNotSupportedError,
-    );
+    expect(provider.endpoints.models).toBeUndefined();
     await expect(provider.fetch("")).rejects.toThrow(
       "Google Vertex AI requires Cloudflare AI Gateway.",
     );
@@ -268,7 +271,7 @@ describe("cloud platform providers", () => {
     const provider = new AwsBedrock();
 
     expect(provider.available()).toBe(true);
-    expect(provider.requiresProviderCredentialsForModels).toBe(true);
+    expect(provider.endpoints.models?.requiresProviderCredentials).toBe(true);
     expect(provider.apiKeyName).toBe("AWS_BEARER_TOKEN_BEDROCK");
     expect(provider.baseUrl()).toBe(
       "https://bedrock-runtime.us-east-1.amazonaws.com",
@@ -288,7 +291,10 @@ describe("cloud platform providers", () => {
     try {
       expect(new AwsBedrock().available()).toBe(false);
       await expect(
-        new AwsBedrock().buildModelsRequest(),
+        buildModelsRequest(
+          new AwsBedrock(),
+          new AwsBedrock().endpoints.models!,
+        ),
       ).rejects.toBeInstanceOf(ProviderNotSupportedError);
     } finally {
       values.AWS_BEDROCK_REGION = "us-east-1";
@@ -296,14 +302,16 @@ describe("cloud platform providers", () => {
   });
 
   it("builds Bedrock model discovery when its region is configured", async () => {
-    await expect(new AwsBedrock().buildModelsRequest()).resolves.toEqual([
+    await expect(
+      buildModelsRequest(new AwsBedrock(), new AwsBedrock().endpoints.models!),
+    ).resolves.toEqual([
       "/models",
       {
         method: "GET",
-        headers: {
+        headers: new Headers({
           "Content-Type": "application/json",
           Authorization: "Bearer bedrock-key",
-        },
+        }),
       },
     ]);
   });
@@ -312,25 +320,30 @@ describe("cloud platform providers", () => {
     [
       new AzureOpenAI(),
       "https://example-resource.openai.azure.com/openai/v1/chat/completions",
+      "model-id",
     ],
     [
       new AwsBedrock(),
-      "https://bedrock-runtime.us-east-1.amazonaws.com/v1/chat/completions",
+      "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1/chat/completions",
+      "openai.gpt-oss-20b-1:0",
     ],
-  ])("builds the complete direct chat URL for %s", async (provider, url) => {
-    const [path, init] = await provider.buildChatCompletionsRequest({
-      body: JSON.stringify({ model: "model-id", messages: [] }),
-      headers: {},
-    });
-    const [requestUrl, requestInit] = await provider.buildRequest(path, init);
+  ])(
+    "builds the complete direct chat URL for %s",
+    async (provider, url, model) => {
+      const [requestUrl, requestInit] = await buildInferenceRequest(provider, {
+        data: { model, messages: [] },
+        headers: {},
+        target: "direct",
+      });
 
-    expect(requestUrl).toBe(url);
-    expect(requestInit.method).toBe("POST");
-    expect(JSON.parse(requestInit.body as string)).toEqual({
-      model: "model-id",
-      messages: [],
-    });
-  });
+      expect(requestUrl).toBe(url);
+      expect(requestInit.method).toBe("POST");
+      expect(JSON.parse(requestInit.body as string)).toEqual({
+        model,
+        messages: [],
+      });
+    },
+  );
 
   it("rejects invalid host configuration instead of constructing URLs", () => {
     values.AZURE_OPENAI_RESOURCE_NAME = "bad.example/path";

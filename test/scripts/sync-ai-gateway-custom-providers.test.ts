@@ -77,6 +77,23 @@ describe("AI Gateway Custom Provider synchronization", () => {
     );
   });
 
+  it("registers one Hugging Face inference origin shared by all protocols and profiles", () => {
+    const targets = buildCustomProviderTargets({
+      ...strictConfig,
+      HUGGINGFACE_API_KEY: { default: "example-key", paid: "example-paid-key" },
+    });
+    expect(
+      targets.filter(
+        ({ name }) => name === "LLM Proxy / huggingface/inference",
+      ),
+    ).toEqual([
+      expect.objectContaining({ baseUrl: "https://router.huggingface.co/v1" }),
+    ]);
+    expect(
+      targets.find(({ name }) => name === "LLM Proxy / huggingface"),
+    ).toBeUndefined();
+  });
+
   it("plans one definition per provider regardless of credential profiles", () => {
     const targets = buildCustomProviderTargets({
       ...strictConfig,

@@ -70,9 +70,16 @@ export function resolveGatewayProvider(
 }
 
 /**
- * Compensate for AI Gateway's version-segment rewriting on Custom routes while
- * retaining native-provider path conversion for native routes.
+ * Compensate for AI Gateway's version-segment rewriting on Custom routes.
  */
+export function customGatewayPath(
+  provider: Pick<Provider, "baseUrl">,
+  pathname: string,
+): string {
+  return customProviderUrlParts(provider).requestPathPrefix + pathname;
+}
+
+/** Apply native path conversion or the Custom route prefix to a provider path. */
 export function gatewayProviderPath(
   providerName: string,
   provider: Pick<Provider, "aiGatewayPath" | "baseUrl" | "pathnamePrefix">,
@@ -80,9 +87,8 @@ export function gatewayProviderPath(
   gatewayProvider: string,
 ): string {
   if (gatewayProvider === providerName) {
-    return provider.aiGatewayPath?.(pathname) ?? pathname;
+    return provider.aiGatewayPath(pathname);
   }
 
-  const { requestPathPrefix } = customProviderUrlParts(provider);
-  return `${requestPathPrefix}${provider.pathnamePrefix?.() ?? ""}${pathname}`;
+  return customGatewayPath(provider, provider.pathnamePrefix() + pathname);
 }

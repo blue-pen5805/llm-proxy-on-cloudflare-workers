@@ -15,6 +15,7 @@
     "google-vertex-ai": null,
     "grok": null,
     "groq": null,
+    "huggingface": null,
     "mistral": null,
     "nvidia-nim": null,
     "ollama": null,
@@ -23,12 +24,9 @@
     "perplexity-ai": null,
     "workers-ai": null
 
-    // Hugging Face and Replicate are omitted because this proxy does not
-    // implement Chat Completions for them. For a custom OpenAI-compatible
-    // endpoint, add an object such as:
-    // "my-endpoint": {
-    //   "model": "model-id",
-    //   "directPath": "/v1/chat/completions"
-    // }
+    // Replicate is omitted because this proxy does not
+    // implement Chat Completions for it. For a custom OpenAI-compatible
+    // endpoint, add its configured name and model:
+    // "my-endpoint": "model-id"
   }
 }

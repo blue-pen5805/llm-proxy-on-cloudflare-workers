@@ -3,7 +3,10 @@ import { CloudflareAIGateway } from "~/src/ai_gateway";
 import { BUILT_IN_PROVIDER_CONSTRUCTORS } from "~/src/providers";
 import { getAllProviderInstances } from "~/src/providers";
 import { CustomOpenAI } from "~/src/providers/custom-openai";
-import { ProviderNotSupportedError } from "~/src/providers/provider";
+import {
+  createProvider,
+  ProviderNotSupportedError,
+} from "~/src/providers/provider";
 import { handleStatusRequest } from "~/src/requests/status";
 import { Config } from "~/src/utils/config";
 import { Environments } from "~/src/utils/environments";
@@ -25,14 +28,18 @@ vi.mock("~/src/utils/helpers");
 
 describe("status", () => {
   const mockProviderClass = {
+    ...createProvider(),
+    endpoints: {
+      models: { path: "/models", validate: vi.fn(), supportsAiGateway: true },
+    },
+
     apiKeyName: "OPENAI_API_KEY",
     baseUrl: vi.fn(() => "https://api.example.com"),
-    modelsPath: "/models",
-    supportsAiGatewayModels: true,
+
     available: vi.fn(),
     getApiKeys: vi.fn(() => Secrets.getAll("OPENAI_API_KEY")),
-    buildModelsRequest: vi.fn(),
-    fetch: vi.fn(),
+
+    send: vi.fn(),
     headers: vi.fn().mockResolvedValue({ Authorization: "Bearer key" }),
   };
 
@@ -76,8 +83,8 @@ describe("status", () => {
     });
 
     mockProviderClass.available.mockReturnValue(true);
-    mockProviderClass.supportsAiGatewayModels = true;
-    mockProviderClass.buildModelsRequest.mockReturnValue([
+    mockProviderClass.endpoints.models.supportsAiGateway = true;
+    mockProviderClass.endpoints.models.validate.mockReturnValue([
       "/models",
       { method: "GET" },
     ]);
@@ -86,7 +93,7 @@ describe("status", () => {
 
   it("should return structured JSON with config and provider status", async () => {
     vi.mocked(Secrets.getAll).mockReturnValue(["sk-123456789", "sk-abcdefghi"]);
-    mockProviderClass.fetch.mockResolvedValue(
+    mockProviderClass.send.mockResolvedValue(
       new Response(null, { status: 200 }),
     );
 
@@ -131,7 +138,7 @@ describe("status", () => {
       ...mockProviderClass,
       available: vi.fn().mockReturnValue(true),
       getApiKeys: vi.fn().mockReturnValue(["paid-key"]),
-      fetch: vi.fn().mockResolvedValue(new Response(null, { status: 200 })),
+      send: vi.fn().mockResolvedValue(new Response(null, { status: 200 })),
     };
 
     const response = await handleStatusRequest(undefined, {
@@ -150,7 +157,7 @@ describe("status", () => {
 
   it("should handle invalid API keys", async () => {
     vi.mocked(Secrets.getAll).mockReturnValue(["invalid-key"]);
-    mockProviderClass.fetch.mockResolvedValue(
+    mockProviderClass.send.mockResolvedValue(
       new Response(null, { status: 401 }),
     );
 
@@ -162,7 +169,7 @@ describe("status", () => {
 
   it("should handle unknown status for other error codes", async () => {
     vi.mocked(Secrets.getAll).mockReturnValue(["unknown-key"]);
-    mockProviderClass.fetch.mockResolvedValue(
+    mockProviderClass.send.mockResolvedValue(
       new Response(null, { status: 500 }),
     );
 
@@ -214,7 +221,7 @@ describe("status", () => {
       "short",
       "longest-key-ever-123",
     ]);
-    mockProviderClass.fetch.mockResolvedValue(
+    mockProviderClass.send.mockResolvedValue(
       new Response(null, { status: 200 }),
     );
 
@@ -229,11 +236,11 @@ describe("status", () => {
     expect(JSON.stringify(body.providers)).not.toContain("123");
   });
 
-  it("should skip connectivity check when modelsPath is missing", async () => {
+  it("should skip connectivity check when models are not declared", async () => {
     BUILT_IN_PROVIDER_CONSTRUCTORS.skip = vi.fn(function () {
       return {
         apiKeyName: "SKIP_API_KEY",
-        modelsPath: "",
+        endpoints: {},
         available: vi.fn().mockReturnValue(true),
         getApiKeys: vi.fn(() => Secrets.getAll("SKIP_API_KEY" as keyof Env)),
       };
@@ -252,11 +259,7 @@ describe("status", () => {
       baseUrl: "https://custom.example",
       apiKeys: ["abc", "x"],
     });
-    vi.spyOn(custom, "buildModelsRequest").mockResolvedValue([
-      "/models",
-      { method: "GET" },
-    ]);
-    vi.spyOn(custom, "fetch").mockResolvedValue(
+    vi.mocked(fetchWithLogging).mockResolvedValue(
       new Response(null, { status: 200 }),
     );
     vi.mocked(getAllProviderInstances).mockReturnValue({ custom });
@@ -275,9 +278,9 @@ describe("status", () => {
 
   it("treats unsupported model listing as unknown connectivity", async () => {
     vi.mocked(Secrets.getAll).mockReturnValue(["key"]);
-    mockProviderClass.buildModelsRequest.mockRejectedValue(
-      new ProviderNotSupportedError("unsupported"),
-    );
+    mockProviderClass.endpoints.models.validate.mockImplementation(() => {
+      throw new ProviderNotSupportedError("unsupported");
+    });
 
     const response = await handleStatusRequest();
     const body = (await response.json()) as any;
@@ -306,7 +309,9 @@ describe("status", () => {
   it("reports unexpected connectivity failures as invalid", async () => {
     const error = new Error("network unavailable");
     vi.mocked(Secrets.getAll).mockReturnValue(["key"]);
-    mockProviderClass.buildModelsRequest.mockRejectedValue(error);
+    mockProviderClass.endpoints.models.validate.mockImplementation(() => {
+      throw error;
+    });
     const consoleError = vi
       .spyOn(console, "error")
       .mockImplementation(() => {});
@@ -328,7 +333,7 @@ describe("status", () => {
 
   it("leaves a credential unknown when the subrequest limit is exhausted", async () => {
     vi.mocked(Secrets.getAll).mockReturnValue(["key"]);
-    mockProviderClass.fetch.mockRejectedValue(
+    mockProviderClass.send.mockRejectedValue(
       new Error("Too many subrequests."),
     );
     vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -361,7 +366,7 @@ describe("status", () => {
       "unknown",
     ]);
     expect(gateway.buildProviderEndpointRequest).toHaveBeenCalledTimes(3);
-    expect(mockProviderClass.fetch).not.toHaveBeenCalled();
+    expect(mockProviderClass.send).not.toHaveBeenCalled();
     expect(fetchWithLogging).toHaveBeenCalledWith(
       "https://gateway.example/models",
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
@@ -370,8 +375,8 @@ describe("status", () => {
 
   it("uses direct connectivity when Gateway model discovery is unsupported", async () => {
     vi.mocked(Secrets.getAll).mockReturnValue(["key"]);
-    mockProviderClass.supportsAiGatewayModels = false;
-    mockProviderClass.fetch.mockResolvedValue(
+    mockProviderClass.endpoints.models.supportsAiGateway = false;
+    mockProviderClass.send.mockResolvedValue(
       new Response(null, { status: 200 }),
     );
     const gateway = {
@@ -381,14 +386,14 @@ describe("status", () => {
     const body = (await (await handleStatusRequest(gateway)).json()) as any;
 
     expect(body.providers.openai.keys[0].status).toBe("valid");
-    expect(mockProviderClass.fetch).toHaveBeenCalledOnce();
+    expect(mockProviderClass.send).toHaveBeenCalledOnce();
     expect(gateway.buildProviderEndpointRequest).not.toHaveBeenCalled();
     expect(fetchWithLogging).not.toHaveBeenCalled();
   });
 
   it("uses a Custom Provider for unsupported connectivity in strict mode", async () => {
     vi.mocked(Secrets.getAll).mockReturnValue(["key"]);
-    mockProviderClass.supportsAiGatewayModels = false;
+    mockProviderClass.endpoints.models.supportsAiGateway = false;
     vi.spyOn(CloudflareAIGateway, "isSupportedProvider").mockReturnValue(false);
     vi.mocked(fetchWithLogging).mockResolvedValue(
       new Response(null, { status: 200 }),
@@ -412,15 +417,15 @@ describe("status", () => {
         path: "/models",
       }),
     );
-    expect(mockProviderClass.fetch).not.toHaveBeenCalled();
+    expect(mockProviderClass.send).not.toHaveBeenCalled();
   });
 
   it("reports unknown when neither Gateway nor direct model discovery is supported", async () => {
     vi.mocked(Secrets.getAll).mockReturnValue(["key"]);
-    mockProviderClass.supportsAiGatewayModels = false;
-    mockProviderClass.buildModelsRequest.mockRejectedValue(
-      new ProviderNotSupportedError("unsupported"),
-    );
+    mockProviderClass.endpoints.models.supportsAiGateway = false;
+    mockProviderClass.endpoints.models.validate.mockImplementation(() => {
+      throw new ProviderNotSupportedError("unsupported");
+    });
     const gateway = {
       buildProviderEndpointRequest: vi.fn(),
     } as any;
@@ -439,17 +444,29 @@ describe("status", () => {
     });
     const first = {
       ...mockProviderClass,
+      endpoints: {
+        models: {
+          ...mockProviderClass.endpoints.models,
+          validate: vi.fn().mockResolvedValue(["/models", {}]),
+        },
+      },
       apiKeyName: "FIRST_API_KEY",
       available: vi.fn().mockReturnValue(true),
-      buildModelsRequest: vi.fn().mockResolvedValue(["/models", {}]),
-      fetch: vi.fn().mockReturnValue(firstResponse),
+
+      send: vi.fn().mockReturnValue(firstResponse),
     };
     const second = {
       ...mockProviderClass,
+      endpoints: {
+        models: {
+          ...mockProviderClass.endpoints.models,
+          validate: vi.fn().mockResolvedValue(["/models", {}]),
+        },
+      },
       apiKeyName: "SECOND_API_KEY",
       available: vi.fn().mockReturnValue(true),
-      buildModelsRequest: vi.fn().mockResolvedValue(["/models", {}]),
-      fetch: vi.fn().mockResolvedValue(new Response(null, { status: 200 })),
+
+      send: vi.fn().mockResolvedValue(new Response(null, { status: 200 })),
     };
     vi.mocked(getAllProviderInstances).mockReturnValue({
       first,
@@ -458,7 +475,7 @@ describe("status", () => {
     vi.mocked(Secrets.getAll).mockReturnValue(["key"]);
 
     const statusPromise = handleStatusRequest();
-    await vi.waitFor(() => expect(second.fetch).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(second.send).toHaveBeenCalledOnce());
     releaseFirst(new Response(null, { status: 200 }));
 
     const body = (await (await statusPromise).json()) as any;
@@ -472,7 +489,7 @@ describe("status", () => {
     vi.mocked(Secrets.getAll).mockReturnValue(
       Array.from({ length: apiKeyCount }, (_, index) => `key-${index}`),
     );
-    mockProviderClass.fetch.mockImplementation(async () => {
+    mockProviderClass.send.mockImplementation(async () => {
       activeChecks++;
       maximumActiveChecks = Math.max(maximumActiveChecks, activeChecks);
       await Promise.resolve();
@@ -481,7 +498,7 @@ describe("status", () => {
     });
 
     const body = (await (await handleStatusRequest()).json()) as any;
-    expect(mockProviderClass.fetch).toHaveBeenCalledTimes(apiKeyCount);
+    expect(mockProviderClass.send).toHaveBeenCalledTimes(apiKeyCount);
     expect(maximumActiveChecks).toBe(apiKeyCount);
     expect(body.providers.openai.keys.at(-1)).toEqual({
       slot: apiKeyCount - 1,
@@ -493,7 +510,7 @@ describe("status", () => {
     vi.mocked(Secrets.getAll).mockReturnValue(["key"]);
     const upstreamResponse = new Response("unused", { status: 200 });
     const cancel = vi.spyOn(upstreamResponse.body!, "cancel");
-    mockProviderClass.fetch.mockResolvedValue(upstreamResponse);
+    mockProviderClass.send.mockResolvedValue(upstreamResponse);
 
     await handleStatusRequest();
     expect(cancel).toHaveBeenCalledOnce();
@@ -505,7 +522,7 @@ describe("status", () => {
     vi.spyOn(upstreamResponse.body!, "cancel").mockRejectedValue(
       new Error("already locked"),
     );
-    mockProviderClass.fetch.mockResolvedValue(upstreamResponse);
+    mockProviderClass.send.mockResolvedValue(upstreamResponse);
 
     const body = (await (await handleStatusRequest()).json()) as any;
     expect(body.providers.openai.keys[0].status).toBe("valid");
@@ -514,7 +531,7 @@ describe("status", () => {
   it("still reports other providers when one cannot describe itself", async () => {
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.mocked(Secrets.getAll).mockReturnValue(["key"]);
-    mockProviderClass.fetch.mockResolvedValue(
+    mockProviderClass.send.mockResolvedValue(
       new Response(null, { status: 200 }),
     );
     vi.mocked(getAllProviderInstances).mockReturnValue({
@@ -572,10 +589,14 @@ describe("status", () => {
         ...mockProviderClass,
         available: vi.fn(() => true),
         getApiKeys: vi.fn(() => ["key"]),
-        get modelsPath() {
-          modelsPathReads += 1;
-          if (modelsPathReads > 1) throw new Error("Too many subrequests.");
-          return "/models";
+        endpoints: {
+          models: {
+            get path() {
+              modelsPathReads += 1;
+              if (modelsPathReads > 1) throw new Error("Too many subrequests.");
+              return "/models";
+            },
+          },
         },
       },
     } as any);

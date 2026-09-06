@@ -8,8 +8,12 @@ function shouldTryAnotherCredential(status: number): boolean {
   return status === 401 || status === 403 || status === 429;
 }
 
+export type GatewayRequestAttempt =
+  | [RequestInfo, RequestInit]
+  | (() => Promise<[RequestInfo, RequestInit]>);
+
 export async function fetchCompatibilityFallback(
-  requests: [RequestInfo, RequestInit][],
+  requests: GatewayRequestAttempt[],
   signal?: AbortSignal,
   beforeAttempt?: (attemptIndex: number) => LogFields,
   afterResponse?: (attemptIndex: number, response: Response) => void,
@@ -21,13 +25,17 @@ export async function fetchCompatibilityFallback(
   let lastResponse: Response | undefined;
   let lastError: unknown;
 
-  for (const [attemptIndex, [requestInfo, requestInit]] of requests
+  for (const [attemptIndex, attempt] of requests
     .slice(0, MAX_COMPATIBILITY_FALLBACK_ATTEMPTS)
     .entries()) {
     if (signal?.aborted) {
       throw signal.reason;
     }
 
+    // Request conversion/configuration errors are deterministic and must not
+    // trigger credential fallback. Prepare only the credential being attempted.
+    const [requestInfo, requestInit] =
+      typeof attempt === "function" ? await attempt() : attempt;
     try {
       const fetchAttempt = () =>
         fetchWithLogging(requestInfo, {

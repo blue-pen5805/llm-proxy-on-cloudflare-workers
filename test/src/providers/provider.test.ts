@@ -27,15 +27,12 @@ describe("ProviderBase", () => {
   describe("fetch", () => {
     it("should call its own headers method", async () => {
       const headersSpy = vi.spyOn(providerBase, "headers");
-      await providerBase.buildChatCompletionsRequest({
-        body: JSON.stringify({ messages: [] }),
-        headers: {},
-      });
+      await providerBase.buildRequest("/resource", { method: "POST" });
       expect(headersSpy).toHaveBeenCalled();
     });
 
     it("builds request init with provider headers", async () => {
-      const init = await providerBase.buildRequestInit({
+      const [, init] = await providerBase.buildRequest("/resource", {
         method: "POST",
         headers: { "X-Request": "test" },
       });

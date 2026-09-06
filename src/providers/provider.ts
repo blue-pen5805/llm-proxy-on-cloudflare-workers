@@ -1,108 +1,33 @@
 import { fetchWithLogging } from "../utils/helpers";
 import { Secrets } from "../utils/secrets";
-import {
-  OpenAIChatCompletionsRequestBody,
-  OpenAIModelsListResponseBody,
-} from "./openai/types";
+import type {
+  InferenceEndpoint,
+  PublicInferenceProtocol,
+  ResolvedInference,
+} from "./inference";
+import type { ModelsEndpoint } from "./models";
 
-interface ModelWithMetadata {
-  id: string;
-  object: string;
-  created: number;
-  owned_by: string;
-}
-
-export function convertModelsToOpenAIFormatWithMetadata<
-  T extends ModelWithMetadata,
->(providerResponse: { data: T[] }): OpenAIModelsListResponseBody {
-  return {
-    object: "list",
-    data: providerResponse.data.map(
-      ({ id, object, created, owned_by, ...providerMetadata }) => ({
-        id,
-        object,
-        created,
-        owned_by,
-        _: providerMetadata,
-      }),
-    ),
-  };
-}
-
-const DEFAULT_CHAT_COMPLETIONS_SUPPORTED_PARAMETERS: (keyof OpenAIChatCompletionsRequestBody)[] =
-  [
-    "messages",
-    "model",
-    "store",
-    "metadata",
-    "frequency_penalty",
-    "logit_bias",
-    "logprobs",
-    "top_logprobs",
-    "max_tokens",
-    "max_completion_tokens",
-    "reasoning_effort",
-    "n",
-    "modalities",
-    "moderation",
-    "prediction",
-    "audio",
-    "presence_penalty",
-    "prompt_cache_key",
-    "prompt_cache_options",
-    "prompt_cache_retention",
-    "response_format",
-    "safety_identifier",
-    "seed",
-    "service_tier",
-    "stop",
-    "stream",
-    "stream_options",
-    "temperature",
-    "top_p",
-    "tools",
-    "tool_choice",
-    "parallel_tool_calls",
-    "user",
-    "verbosity",
-    "web_search_options",
-    "function_call",
-    "functions",
-  ];
-
-const KNOWN_CHAT_COMPLETIONS_PARAMETERS = new Set<
-  keyof OpenAIChatCompletionsRequestBody
->([...DEFAULT_CHAT_COMPLETIONS_SUPPORTED_PARAMETERS, "suffix"]);
-
-interface AiGatewayChatRequestArguments {
-  data: Readonly<Record<string, unknown>> & { model: string };
-  headers: HeadersInit;
-  apiKeyIndex?: number;
-}
-
-interface ChatCompletionsRequestArguments {
-  body: string;
-  preparedData?: Readonly<Record<string, unknown>>;
-  headers: HeadersInit;
-  apiKeyIndex?: number;
-}
+export type ProviderEndpoints = Partial<
+  Record<PublicInferenceProtocol, InferenceEndpoint>
+> & {
+  readonly models?: ModelsEndpoint;
+};
 
 /** The stable interface consumed by request handlers and provider callers. */
 export interface Provider {
+  resolveInference(
+    model: string,
+    protocol: PublicInferenceProtocol,
+  ): ResolvedInference | undefined;
   readonly credentialProfile: string;
   readonly apiKeyName: keyof Env | undefined;
   readonly baseUrlProp: string;
   readonly pathnamePrefixProp: string;
-  readonly chatCompletionPath: string;
-  readonly modelsPath: string;
-  readonly supportsAiGatewayModels: boolean;
-  readonly supportsAiGatewayNativeChat: boolean;
+  readonly endpoints: ProviderEndpoints;
   readonly requiresAiGateway: boolean;
   readonly requiresAuthenticatedAiGateway: boolean;
   readonly requiresProviderCredentials: boolean;
-  readonly requiresProviderCredentialsForModels: boolean;
   readonly requiresCustomAiGatewayProvider: boolean;
-  readonly CHAT_COMPLETIONS_SUPPORTED_PARAMETERS: (keyof OpenAIChatCompletionsRequestBody)[];
 
   available(): boolean;
   getApiKeys(): string[];
@@ -111,6 +36,7 @@ export interface Provider {
   getAiGatewayApiKeys(): string[];
   configurationError(): string | undefined;
   getNextApiKeyIndex(): Promise<number>;
+  send(url: string, init?: RequestInit): Promise<Response>;
   fetch(
     pathname: string,
     init?: RequestInit,
@@ -129,24 +55,7 @@ export interface Provider {
     init?: RequestInit,
     apiKeyIndex?: number,
   ): Promise<[string, RequestInit]>;
-  buildRequestInit(
-    init?: RequestInit,
-    apiKeyIndex?: number,
-  ): Promise<RequestInit>;
-  buildChatCompletionsRequest(
-    args: ChatCompletionsRequestArguments,
-  ): Promise<[string, RequestInit]>;
-  transformChatCompletionsResponse(response: Response): Promise<Response>;
-  filterSupportedChatParameters(
-    data: Readonly<Record<string, unknown>>,
-  ): Record<string, unknown>;
-  buildModelsRequest(apiKeyIndex?: number): Promise<[string, RequestInit]>;
   aiGatewayPath(pathname: string): string;
-  buildAiGatewayChatCompletionsRequest(
-    args: AiGatewayChatRequestArguments,
-  ): Promise<[string, RequestInit] | undefined>;
-  convertModelsToOpenAIFormat(data: unknown): OpenAIModelsListResponseBody;
-  getStaticModels(): OpenAIModelsListResponseBody | undefined;
 }
 
 /**
@@ -154,22 +63,30 @@ export interface Provider {
  * `this`, so one hook can reuse another without a base-class dependency.
  */
 export interface ProviderDefinition {
+  endpoints?: ProviderEndpoints;
+  /** Null disables the declared operation for one concrete model. */
+  resolveEndpoint?(
+    this: Provider,
+    model: string,
+    protocol: PublicInferenceProtocol,
+  ): InferenceEndpoint | null | undefined;
+  /** Converts Chat payloads when a requested public operation is unavailable. */
+  chatFallback?: InferenceEndpoint;
+  resolveChatFallback?(
+    this: Provider,
+    model: string,
+  ): InferenceEndpoint | undefined;
   /** Additional public metadata retained on the composed provider object. */
   properties?: Readonly<Record<string, unknown>>;
   apiKeyName?: keyof Env;
   baseUrl?: string | ((this: Provider) => string);
   pathnamePrefix?: string | ((this: Provider) => string);
-  chatCompletionPath?: string;
-  modelsPath?: string;
-  supportsAiGatewayModels?: boolean;
-  supportsAiGatewayNativeChat?: boolean;
+
   requiresAiGateway?: boolean;
   requiresAuthenticatedAiGateway?: boolean;
   requiresProviderCredentials?: boolean;
-  requiresProviderCredentialsForModels?: boolean;
   requiresCustomAiGatewayProvider?: boolean;
   openAICompatible?: boolean;
-  chatCompletionSupportedParameters?: readonly (keyof OpenAIChatCompletionsRequestBody)[];
   available?(this: Provider): boolean;
   getApiKeys?(this: Provider): string[];
   getCredentialProfiles?(this: Provider): string[];
@@ -189,28 +106,7 @@ export interface ProviderDefinition {
     headers?: HeadersInit,
     apiKeyIndex?: number,
   ): Promise<HeadersInit>;
-  buildChatCompletionsRequest?(
-    this: Provider,
-    args: ChatCompletionsRequestArguments,
-  ): Promise<[string, RequestInit]>;
-  transformChatCompletionsResponse?(
-    this: Provider,
-    response: Response,
-  ): Promise<Response>;
-  buildModelsRequest?(
-    this: Provider,
-    apiKeyIndex?: number,
-  ): Promise<[string, RequestInit]>;
   aiGatewayPath?(this: Provider, pathname: string): string;
-  buildAiGatewayChatCompletionsRequest?(
-    this: Provider,
-    args: AiGatewayChatRequestArguments,
-  ): Promise<[string, RequestInit] | undefined>;
-  convertModelsToOpenAIFormat?(
-    this: Provider,
-    data: unknown,
-  ): OpenAIModelsListResponseBody;
-  getStaticModels?(this: Provider): OpenAIModelsListResponseBody | undefined;
 }
 
 export function mergeHeaders(
@@ -249,10 +145,6 @@ function configuredApiKeys(provider: Provider): string[] {
 
 /** Build one provider by composing common behavior with explicit hooks. */
 export function createProvider(definition: ProviderDefinition = {}): Provider {
-  let supportedChatParameters:
-    | ReadonlySet<keyof OpenAIChatCompletionsRequestBody>
-    | undefined;
-
   const provider: Provider = {
     ...definition.properties,
     credentialProfile: "default",
@@ -265,25 +157,14 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
       typeof definition.pathnamePrefix === "string"
         ? definition.pathnamePrefix
         : "",
-    chatCompletionPath: definition.chatCompletionPath ?? "/chat/completions",
-    modelsPath: definition.modelsPath ?? "/models",
-    supportsAiGatewayModels: definition.supportsAiGatewayModels ?? true,
-    supportsAiGatewayNativeChat:
-      definition.supportsAiGatewayNativeChat ?? false,
+    endpoints: definition.endpoints ?? {},
     requiresAiGateway: definition.requiresAiGateway ?? false,
     requiresAuthenticatedAiGateway:
       definition.requiresAuthenticatedAiGateway ?? false,
     requiresProviderCredentials:
       definition.requiresProviderCredentials ?? false,
-    requiresProviderCredentialsForModels:
-      definition.requiresProviderCredentialsForModels ?? false,
     requiresCustomAiGatewayProvider:
       definition.requiresCustomAiGatewayProvider ?? false,
-    CHAT_COMPLETIONS_SUPPORTED_PARAMETERS:
-      definition.chatCompletionSupportedParameters
-        ? [...definition.chatCompletionSupportedParameters]
-        : [...DEFAULT_CHAT_COMPLETIONS_SUPPORTED_PARAMETERS],
-
     available() {
       if (definition.available) return definition.available.call(this);
       return this.getApiKeys().length > 0;
@@ -323,11 +204,15 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
         : Secrets.getNext(this.apiKeyName, this.credentialProfile);
     },
 
+    send(url, init) {
+      return fetchWithLogging(url, init);
+    },
+
     async fetch(pathname, init, apiKeyIndex) {
       if (definition.fetch) {
         return definition.fetch.call(this, pathname, init, apiKeyIndex);
       }
-      return fetchWithLogging(
+      return this.send(
         ...(await this.buildRequest(pathname, init, apiKeyIndex)),
       );
     },
@@ -386,91 +271,22 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
       ];
     },
 
-    async buildRequestInit(init, apiKeyIndex) {
-      return {
-        ...init,
-        headers: mergeHeaders(init?.headers, await this.headers(apiKeyIndex)),
-      };
-    },
-
-    async buildChatCompletionsRequest(args) {
-      if (definition.buildChatCompletionsRequest) {
-        return definition.buildChatCompletionsRequest.call(this, args);
-      }
-      const { body, preparedData, headers, apiKeyIndex } = args;
-      const trimmedData =
-        preparedData ??
-        this.filterSupportedChatParameters(
-          JSON.parse(body) as Record<string, unknown>,
-        );
-      return [
-        this.chatCompletionPath,
-        {
-          method: "POST",
-          body: JSON.stringify(trimmedData),
-          // Provider-computed headers win over caller-supplied ones, and
-          // path-specific authentication matches provider pass-through.
-          headers: await this.buildHeadersForPath(
-            this.chatCompletionPath,
-            headers,
-            apiKeyIndex,
-          ),
-        },
-      ];
-    },
-
-    async transformChatCompletionsResponse(response) {
-      return definition.transformChatCompletionsResponse
-        ? definition.transformChatCompletionsResponse.call(this, response)
-        : response;
-    },
-
-    filterSupportedChatParameters(data) {
-      supportedChatParameters ??= new Set(
-        this.CHAT_COMPLETIONS_SUPPORTED_PARAMETERS,
-      );
-      const filteredData: Record<string, unknown> = {};
-      for (const key in data) {
-        const parameter = key as keyof OpenAIChatCompletionsRequestBody;
-        if (
-          Object.prototype.hasOwnProperty.call(data, key) &&
-          (!KNOWN_CHAT_COMPLETIONS_PARAMETERS.has(parameter) ||
-            supportedChatParameters.has(parameter))
-        ) {
-          filteredData[key] = data[key];
-        }
-      }
-      return filteredData;
-    },
-
-    async buildModelsRequest(apiKeyIndex) {
-      if (definition.buildModelsRequest) {
-        return definition.buildModelsRequest.call(this, apiKeyIndex);
-      }
-      return [
-        this.modelsPath,
-        { method: "GET", headers: await this.headers(apiKeyIndex) },
-      ];
-    },
-
     aiGatewayPath(pathname) {
       return definition.aiGatewayPath
         ? definition.aiGatewayPath.call(this, pathname)
         : pathname;
     },
 
-    async buildAiGatewayChatCompletionsRequest(args) {
-      return definition.buildAiGatewayChatCompletionsRequest?.call(this, args);
-    },
-
-    convertModelsToOpenAIFormat(data) {
-      return definition.convertModelsToOpenAIFormat
-        ? definition.convertModelsToOpenAIFormat.call(this, data)
-        : (data as OpenAIModelsListResponseBody);
-    },
-
-    getStaticModels() {
-      return definition.getStaticModels?.call(this);
+    resolveInference(model, protocol) {
+      const override = definition.resolveEndpoint?.call(this, model, protocol);
+      const endpoint =
+        override === null ? undefined : (override ?? this.endpoints[protocol]);
+      if (endpoint) return { endpoint, native: true };
+      const fallback =
+        definition.resolveChatFallback?.call(this, model) ??
+        definition.chatFallback ??
+        this.endpoints.chat_completions;
+      return fallback ? { endpoint: fallback, native: false } : undefined;
     },
   };
 

@@ -53,6 +53,15 @@ provider-independent LLM abstraction. Each provider independently declares
 support for pass-through, chat translation, model discovery, and AI Gateway
 routing. One capability does not imply another.
 
+Public inference selects an upstream API matching the requested protocol whenever
+the selected provider and model support it. Chat Completions selects Chat
+Completions, Responses selects Responses, and Messages selects Messages. A
+provider-hosted compatibility API counts as a match. A provider's preferred
+API or a proxy conversion default must not override an available match. Use
+protocol conversion only when no matching operation is declared for that model;
+an upstream error does not cause a switch to another protocol. This rule applies
+to built-in and custom providers, direct connections, and Gateway routing.
+
 Adapters filter known parameters or make the smallest structural conversion
 required by an upstream API. Provider-specific semantics and material
 differences are visible to callers.

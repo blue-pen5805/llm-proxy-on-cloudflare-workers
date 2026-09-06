@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { handleRouting } from "~/src/middlewares/router";
 import {
   BUILT_IN_PROVIDER_CONSTRUCTORS,
@@ -6,6 +6,7 @@ import {
 } from "~/src/providers";
 import { ProviderRegistry } from "~/src/providers/registry";
 import type { RoutedRequestContext } from "~/src/request_context";
+import { handleChatCompletionsRequest } from "~/src/requests/chat_completions";
 import { handleVirtualModelsRequest } from "~/src/requests/virtual_models";
 import { resolveRoute } from "~/src/routing";
 import { Config } from "~/src/utils/config";
@@ -147,11 +148,11 @@ describe("adversarial provider selectors", () => {
     expect(response.status).toBe(401);
   });
 
-  it("rejects a non-object Responses reasoning field", async () => {
+  it("rejects a non-object Responses reasoning field during Chat conversion", async () => {
     const response = await Environments.run(environment, () =>
       handleRouting(
         routingContext(
-          { model: "openai/model", input: "hi", reasoning: "high" },
+          { model: "cerebras/model", input: "hi", reasoning: "high" },
           "/v1/responses",
         ),
       ),
@@ -314,5 +315,98 @@ describe("adversarial virtual model keys", () => {
     await expect(response.json()).resolves.toMatchObject({
       data: [{ id: "__proto__", access_order: [{ model: "openai/gpt-4" }] }],
     });
+  });
+});
+
+describe("direct Bedrock model paths", () => {
+  it.each(["", ".", ".."])(
+    "rejects the path segment %j before dispatch",
+    async (model) => {
+      const fetch = vi.spyOn(globalThis, "fetch");
+      try {
+        await Environments.runWithConfig(
+          {
+            AWS_BEARER_TOKEN_BEDROCK: "example-key",
+            AWS_BEDROCK_REGION: "us-east-1",
+          },
+          async () => {
+            const state = routingContext(
+              { model: `aws-bedrock/${model}`, messages: [] },
+              "/v1/chat/completions",
+            );
+            await expect(
+              handleChatCompletionsRequest(state),
+            ).rejects.toMatchObject({
+              status: 400,
+              message: "Invalid Bedrock model identifier.",
+            });
+          },
+        );
+        expect(fetch).not.toHaveBeenCalled();
+      } finally {
+        fetch.mockRestore();
+      }
+    },
+  );
+});
+
+describe("custom native API path configuration", () => {
+  it.each(["responsesPath", "messagesPath"])(
+    "rejects origin URLs in %s without echoing configuration",
+    (field) => {
+      for (const path of ["https://other.example/api", "//other.example/api"]) {
+        Environments.runWithConfig(
+          {
+            CUSTOM_OPENAI_ENDPOINTS: [
+              {
+                name: "custom",
+                baseUrl: "https://upstream.example",
+                [field]: path,
+              },
+            ],
+          },
+          () => {
+            expect(() => Config.customOpenAIEndpoints()).toThrow(
+              "Invalid configuration for CUSTOM_OPENAI_ENDPOINTS.",
+            );
+          },
+        );
+      }
+    },
+  );
+});
+
+describe("matching API model boundaries", () => {
+  it("keeps a URL-shaped Perplexity model inside the fixed upstream request body", async () => {
+    const { handleResponsesRequest } = await import("~/src/requests/responses");
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        Response.json({ error: "unsupported model" }, { status: 400 }),
+      );
+    try {
+      await Environments.runWithConfig(
+        { PERPLEXITYAI_API_KEY: "example-key" },
+        async () => {
+          const model = "https://untrusted.example/../responses?key=value";
+          const response = await handleResponsesRequest(
+            routingContext(
+              { model: `perplexity-ai/${model}`, input: "hello" },
+              "/v1/responses",
+            ),
+          );
+          expect(response.status).toBe(400);
+          expect(String(fetch.mock.lastCall![0])).toBe(
+            "https://api.perplexity.ai/v1/responses",
+          );
+          expect(JSON.parse(String(fetch.mock.lastCall![1]!.body)).model).toBe(
+            model,
+          );
+          expect(fetch).toHaveBeenCalledOnce();
+        },
+      );
+    } finally {
+      fetch.mockRestore();
+    }
   });
 });

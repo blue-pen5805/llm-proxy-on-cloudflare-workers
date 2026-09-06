@@ -65,6 +65,12 @@ to identify the endpoint, provider, and model, but before credential selection
 and upstream I/O. The outer logging middleware supplies a method/path-only
 fallback for requests that return before route metadata becomes available.
 
+Inference dispatch resolves the provider's operation before protocol conversion
+or network I/O. The selected operation supplies both request construction and
+response handling for direct and Gateway transport. Missing operations without a
+conversion fallback return HTTP 400. Model discovery and diagnostics skip
+providers without a declared model-list operation.
+
 ## Key prefix and route matching
 
 The leading forms `/key/N`, `/key/N-M`, `/key/N-`, and `/key/-M` are supported.
@@ -117,7 +123,9 @@ use the Anthropic error object. `HEAD` health and model routes execute their
 The Responses and Messages compatibility implementations are organized by
 protocol stage. Each has a request translator, a bounded JSON response
 translator, an SSE stream translator, and a handler that coordinates the
-existing Chat Completions flow. Their top-level modules are stable facades for
+shared inference flow. Same-protocol endpoints bypass these translators; the
+converters run lazily only for candidates lacking a matching capability.
+Their top-level modules are stable facades for
 the route handler and stream-conversion entry points.
 
 ## References

@@ -1,5 +1,5 @@
 import { MAX_COMPATIBILITY_FALLBACK_ATTEMPTS } from "../requests/compatibility_fallback";
-import { BadRequestError } from "../utils/error";
+import { BadRequestError, ServiceUnavailableError } from "../utils/error";
 import {
   CloudflareAIGatewayHeaders,
   CloudflareAIGatewayOpenAICompatibleProvider,
@@ -123,6 +123,27 @@ export class CloudflareAIGateway {
         headers: this.buildHeaders(headers),
         body,
       },
+    ];
+  }
+
+  /** Workers AI uses its account-scoped provider API with an explicit Gateway ID. */
+  buildWorkersAiInferenceRequest({
+    path = "/v1/chat/completions",
+    body,
+    headers,
+  }: {
+    path?: string;
+    body?: BodyInit | null;
+    headers: HeadersInit;
+  }): [RequestInfo, RequestInit] {
+    const providerHeaders = new Headers(headers);
+    if (!providerHeaders.has("authorization"))
+      throw new ServiceUnavailableError("workers-ai is not configured.");
+    providerHeaders.delete("cf-aig-authorization");
+    providerHeaders.set("cf-aig-gateway-id", this.gatewayId);
+    return [
+      `${CloudflareAIGateway.restApiOrigin}/${encodeURIComponent(this.accountId)}/ai${path}`,
+      { method: "POST", headers: providerHeaders, body },
     ];
   }
 

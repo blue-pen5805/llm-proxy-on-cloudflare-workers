@@ -1,7 +1,7 @@
 # OpenAI-compatible API
 
-The OpenAI-compatible API provides Chat Completions, an experimental Responses
-conversion, and aggregated model discovery. Models use a provider-qualified
+The OpenAI-compatible API provides Chat Completions, Responses routing with an
+experimental conversion fallback, and aggregated model discovery. Models use a provider-qualified
 selector such as `openai/gpt-5.4`; append `:<profile>` to the provider name to
 select a named credential pool, such as `openai:paid/gpt-5.4`.
 
@@ -35,6 +35,17 @@ Adapters retain only parameters supported by each upstream API. Translation is
 OpenAI-compatible at the endpoint level, not a guarantee that every OpenAI field
 or provider feature has identical semantics.
 
+The selected provider operation is used for both direct and Gateway requests.
+A declared Chat Completions API takes priority over conversion, including
+Anthropic's `/v1/chat/completions` and Google AI Studio's OpenAI-compatible
+endpoint. Anthropic's compatibility API uses Bearer authentication and preserves
+Chat payloads; its [upstream compatibility limitations](https://platform.claude.com/docs/en/cli-sdks-libraries/libraries/openai-sdk)
+apply. Vertex Google models and Bedrock OpenAI/Anthropic models also use matching Chat APIs; other Bedrock families use Converse.
+Conversion paths have the
+[bounded native conversion contract](../design/features/native_inference.md#conversion-contract).
+A provider with no applicable operation or conversion returns HTTP 400 before
+an upstream request.
+
 `CHAT_RESPONSE_METADATA_ENABLED=true` adds a top-level `llm_proxy` object after
 a concrete route is selected. It reports routing, credential slot, Gateway,
 request ID, and timing metadata without credential material. Streaming output
@@ -42,16 +53,47 @@ adds one empty-choice metadata chunk before `[DONE]`. The feature defaults to
 `false`; bodies that cannot be safely transformed remain unchanged. See the
 [metadata contract](../design/features/provider_abstraction.md#compatibility-response-metadata).
 
+When AI Gateway is selected, automatic routing uses provider-specific upstream
+APIs: the provider's Chat Completions endpoint when selected, or a conversion
+endpoint such as Vertex Messages/GenerateContent or Bedrock Converse. Vertex and Bedrock can select a different
+protocol by model. These conversions support a defined subset; unsupported
+fields return HTTP 400. Messages conversion requires `max_tokens` or
+`max_completion_tokens`. Gemini and Converse image conversion accepts base64
+data URLs only. See [Native inference](../design/features/native_inference.md)
+for defaults, credentials, and conversion limits.
+
 ## Responses
 
-The Responses compatibility API is experimental. It accepts OpenAI Responses
-request and response shapes for providers that offer Chat Completions, but does
-not call a provider-native Responses endpoint. Its accepted subset and
-converted JSON and SSE contract are defined below.
+`POST /v1/responses` and `/responses` use the upstream Responses API for
+Azure OpenAI, DeepSeek, Hugging Face Inference Providers, Bedrock OpenAI models,
+Perplexity Agent models, OpenAI, Groq, xAI (`grok`), OpenRouter, Ollama, Workers AI, and custom OpenAI
+endpoints with `responsesPath` configured. Request fields
+such as `previous_response_id`, built-in tools, and encrypted reasoning are
+preserved; support for each field or model is validated upstream. Successful
+JSON, SSE events, and upstream errors pass through without conversion. Only
+the model selector and provider-required routing envelope are adjusted.
+
+Azure Responses and Hugging Face inference connect directly in non-strict mode
+and use Custom Providers in strict Gateway mode. Perplexity Responses requires
+a provider-prefixed Agent model; unprefixed Sonar models use conversion.
+
+Workers AI Responses requires a Gateway context and an `@cf/` model that
+supports Responses.
+
+Other providers use the experimental Chat conversion described below. Native
+capability is selected per concrete model, including each virtual-model
+candidate. See [Native inference](../design/features/native_inference.md).
+
+Native Responses does not inject `llm_proxy` response metadata. The optional
+metadata setting applies to Chat and converted responses. Gateway metadata and
+logs remain available for every route. Stateful identifiers belong to the
+upstream provider; this POST route does not add response retrieval or deletion
+routes.
 
 Both routes use the same provider selection, virtual-model fallback, credential
-profiles, key rotation and cooldown, provider parameter filtering, AI Gateway
-routing, and cancellation behavior as Chat Completions. The conversion maps
+profiles, key rotation and cooldown, AI Gateway
+routing, and cancellation behavior as Chat Completions. On conversion paths,
+the provider filters Chat fields. The conversion maps
 constructs with a direct Chat equivalent and ignores independently removable
 fields or items that have no equivalent. It does not add proxy-owned state or
 tool execution.
@@ -77,7 +119,10 @@ curl https://your-worker.example/v1/responses \
   }'
 ```
 
-### Request conversion
+### Request conversion fallback
+
+This section and the conversion limits below apply only when the selected
+provider lacks a native Responses capability.
 
 The handler reads at most 10 MiB, validates the Responses object, and constructs
 a Chat Completions request with the original provider-qualified `model`.
@@ -166,7 +211,7 @@ The final event retains at most 8 MiB of generated content: up to 4 MiB of text
 plus up to 4 MiB of tool arguments, with item and metadata overhead bounded
 separately.
 
-### Ignored and unsupported features
+### Ignored and unsupported conversion features
 
 The Worker has no persistent conversation state and does not execute tools.
 Top-level fields without a supported Chat Completions conversion, including

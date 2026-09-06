@@ -969,6 +969,30 @@ describe("configuration parsing and validation", () => {
     expect(() => parseConfigSource("null")).toThrow("not valid JSONC");
   });
 
+  it.each(["responsesPath", "messagesPath"])(
+    "validates custom %s in the configuration schema",
+    (field) => {
+      const config = (path: unknown) => ({
+        $schema: "schemas/config-schema.json",
+        PROXY_API_KEY: "example-proxy-key",
+        CUSTOM_OPENAI_ENDPOINTS: [
+          { name: "custom", baseUrl: "https://example.com/v1", [field]: path },
+        ],
+      });
+      expect(validateConfig(config("/native/api"))).toEqual([]);
+      for (const path of [
+        null,
+        42,
+        "",
+        "relative",
+        "//other.example/api",
+        `/${"x".repeat(2048)}`,
+      ]) {
+        expect(validateConfig(config(path)).length).toBeGreaterThan(0);
+      }
+    },
+  );
+
   it("validates complete configuration and safe field input without disclosing values", () => {
     expect(
       validateConfig({

@@ -327,11 +327,34 @@ describe("Config", () => {
           models: ["model-1", "model-2"],
           chatCompletionPath: "/chat/completions",
           modelsPath: "/models",
+          responsesPath: "/responses",
+          messagesPath: "/messages",
         },
       ];
       vi.mocked(Environments.get).mockReturnValue(endpoints);
       expect(Config.customOpenAIEndpoints()).toBe(endpoints);
     });
+
+    it.each(["responsesPath", "messagesPath"])(
+      "validates optional %s",
+      (field) => {
+        for (const path of [
+          null,
+          42,
+          "",
+          "relative",
+          "//other.example/api",
+          `/${"x".repeat(2048)}`,
+        ]) {
+          vi.mocked(Environments.get).mockReturnValue([
+            { name: "local", baseUrl: "https://example.com", [field]: path },
+          ] as never);
+          expect(() => Config.customOpenAIEndpoints()).toThrow(
+            ConfigurationError,
+          );
+        }
+      },
+    );
 
     it("memoizes validated endpoints while the raw value is unchanged", () => {
       vi.mocked(Environments.get).mockReturnValue(

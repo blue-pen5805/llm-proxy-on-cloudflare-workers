@@ -62,7 +62,7 @@ Filtering is availability-preserving. A provider with zero or one key follows
 its ordinary selection. If every slot is cooling, selection ignores all
 cooldowns and uses the ordinary rotation result. Explicit numeric or range
 selection also bypasses cooldown filtering because caller selection has higher
-precedence. AI Gateway Compatibility fallback omits cooling slots when at least
+precedence. AI Gateway native inference fallback omits cooling slots when at least
 one eligible local credential is available and records each attributable
 attempt separately.
 

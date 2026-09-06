@@ -3,9 +3,9 @@ import {
   BUILT_IN_PROVIDER_CONSTRUCTORS,
   createProviderRegistry,
 } from "~/src/providers";
+import { chatParameterFilter } from "~/src/providers/chat_parameters";
 import { GoogleVertexAi } from "~/src/providers/google-vertex-ai";
 import { OpenAI } from "~/src/providers/openai";
-import { ProviderBase } from "~/src/providers/provider";
 import { ProviderRegistry } from "~/src/providers/registry";
 import { enrichChatResponseWithMetadata } from "~/src/requests/chat_response_metadata";
 import { convertStreamingResponse as convertMessagesStream } from "~/src/requests/messages";
@@ -29,9 +29,11 @@ const chatBody = JSON.stringify({
   unsupported: "discarded",
 });
 
-const provider = new ProviderBase();
+const filterChat = chatParameterFilter();
 const openAiProvider = new OpenAI();
-const parsedChatBody = JSON.parse(chatBody) as Record<string, unknown>;
+const parsedChatBody = JSON.parse(chatBody) as Record<string, unknown> & {
+  model: string;
+};
 const registry = new ProviderRegistry(BUILT_IN_PROVIDER_CONSTRUCTORS, [
   { name: "internal.v2", baseUrl: "https://internal.example" },
 ]);
@@ -40,16 +42,18 @@ const loggedUrl =
 
 describe("request hot paths", () => {
   bench("build a chat-completions request", async () => {
-    const preparedData = provider.filterSupportedChatParameters(parsedChatBody);
-    await provider.buildChatCompletionsRequest({
-      body: "",
-      preparedData,
-      headers: { Accept: "application/json" },
-    });
+    await openAiProvider.endpoints.chat_completions!.buildRequest.call(
+      openAiProvider,
+      {
+        data: parsedChatBody,
+        headers: { Accept: "application/json" },
+        target: "direct",
+      },
+    );
   });
 
   bench("filter supported chat parameters", () => {
-    provider.filterSupportedChatParameters(parsedChatBody);
+    filterChat(parsedChatBody);
   });
 
   bench("match a provider route", () => {

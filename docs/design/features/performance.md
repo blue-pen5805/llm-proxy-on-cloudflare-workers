@@ -17,14 +17,21 @@ describe where the implementation applies the project-wide priorities.
 ## Chat request parsing
 
 The chat handler parses and validates the incoming JSON once. The resulting
-object is filtered by the selected provider, serialized once by the provider
-request builder, and passed in parsed form to the AI Gateway request builder.
-The serialized-only builder interfaces are available to callers, but the Worker
-request path performs one JSON parse for both direct provider and AI Gateway
-requests. Upstream responses are streamed through unchanged.
+object is passed to one resolved operation without another parse. Filtering is
+owned by that operation; the default filter and narrowed parameter sets are
+prepared outside request execution. Protocol resolution occurs once per concrete
+candidate, and authentication is built once per attempted credential. Prepared
+direct requests are sent without another header merge. Gateway attempts are lazy:
+only an attempted credential incurs native conversion and serialization.
+Chat-format upstream responses can pass through unchanged. Native inference
+uses bounded JSON or incremental stream conversion as described in
+[Native inference](native_inference.md).
 
-The Responses and Messages compatibility routes pass their converted object
-and sanitized headers directly into the Chat handler. They do not serialize the
+Responses and Messages pass the parsed request to shared routing. A matching
+native capability preserves protocol fields and streams the response without
+conversion. Otherwise the lazy converter runs once and caches its Chat object
+for subsequent fallback candidates. The converted object and sanitized headers
+are passed directly to provider request construction. They do not serialize the
 converted payload into an intermediate `Request` or make the Chat handler parse
 it again. Response conversion remains bounded and streaming where the
 compatibility contract permits it.

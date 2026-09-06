@@ -4,6 +4,7 @@ import {
   PROVIDER_PROFILE_PATTERN,
   Secrets,
 } from "../utils/secrets";
+import { chatCompletionsEndpoint, jsonEndpoint } from "./inference";
 import { OpenAIModelsListResponseBody } from "./openai/types";
 import { defineProvider, Provider, ProviderConstructor } from "./provider";
 
@@ -38,11 +39,38 @@ export const CustomOpenAI = defineProvider<[CustomOpenAIEndpointConfig]>(
   (config) => {
     assertSafeEndpointConfig(config);
     return {
+      endpoints: {
+        chat_completions: chatCompletionsEndpoint(
+          config.chatCompletionPath ?? "/chat/completions",
+        ),
+
+        ...(config.responsesPath !== undefined
+          ? { responses: jsonEndpoint(config.responsesPath) }
+          : {}),
+        ...(config.messagesPath !== undefined
+          ? { messages: jsonEndpoint(config.messagesPath) }
+          : {}),
+
+        models: {
+          path: config.modelsPath ?? "/models",
+          getStaticModels(): OpenAIModelsListResponseBody | undefined {
+            if (!config.models || config.models.length === 0) return undefined;
+            return {
+              object: "list",
+              data: config.models.map((modelId) => ({
+                id: modelId,
+                object: "model",
+                created: Math.floor(Date.now() / 1000),
+                owned_by: config.name,
+              })),
+            };
+          },
+        },
+      },
+
       properties: { name: config.name },
       requiresCustomAiGatewayProvider: true,
       baseUrl: config.baseUrl,
-      chatCompletionPath: config.chatCompletionPath ?? "/chat/completions",
-      modelsPath: config.modelsPath ?? "/models",
 
       async getNextApiKeyIndex(): Promise<number> {
         const apiKeys = this.getApiKeys();
@@ -69,19 +97,6 @@ export const CustomOpenAI = defineProvider<[CustomOpenAIEndpointConfig]>(
 
       // Custom endpoints are available by definition.
       available: () => true,
-
-      getStaticModels(): OpenAIModelsListResponseBody | undefined {
-        if (!config.models || config.models.length === 0) return undefined;
-        return {
-          object: "list",
-          data: config.models.map((modelId) => ({
-            id: modelId,
-            object: "model",
-            created: Math.floor(Date.now() / 1000),
-            owned_by: config.name,
-          })),
-        };
-      },
 
       getApiKeys(): string[] {
         if (!config.apiKeys) return [];

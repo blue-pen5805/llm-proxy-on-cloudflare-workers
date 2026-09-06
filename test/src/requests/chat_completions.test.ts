@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
 import { BUILT_IN_PROVIDER_CONSTRUCTORS } from "~/src/providers";
+import { createProvider } from "~/src/providers/provider";
 import { handleChatCompletionsRequest } from "~/src/requests/chat_completions";
 import { Config } from "~/src/utils/config";
 import * as helpers from "~/src/utils/helpers";
@@ -15,23 +16,26 @@ vi.mock("~/src/utils/secrets");
 
 describe("handleChatCompletionsRequest", () => {
   const mockProviderClass = {
+    ...createProvider(),
     baseUrl: vi.fn(() => "https://api.example.com"),
-    buildChatCompletionsRequest: vi.fn(),
-    transformChatCompletionsResponse: vi.fn(
-      async (response: Response) => response,
-    ),
-    filterSupportedChatParameters: vi.fn(
-      (data: Record<string, unknown>) => data,
-    ),
-    fetch: vi.fn(),
-    headers: vi.fn(async () => ({ "x-provider-auth": "provider-header" })),
+    endpoints: {
+      chat_completions: {
+        path: "/chat/completions",
+        buildRequest: vi.fn(),
+        transformResponse: vi.fn(async (response: Response) => response),
+      },
+    },
+    send: vi.fn(),
+    headers: vi.fn(async (_index?: number) => ({
+      "x-provider-auth": "provider-header",
+    })),
     apiKeyName: "OPENAI_API_KEY",
     getApiKeys: vi.fn().mockReturnValue(["test-key"]),
     getNextApiKeyIndex: vi.fn().mockResolvedValue(0),
   };
 
   const mockAIGateway = {
-    buildChatCompletionsRequests: vi.fn(),
+    buildProviderEndpointRequest: vi.fn(),
   };
 
   beforeEach(() => {
@@ -61,6 +65,24 @@ describe("handleChatCompletionsRequest", () => {
     vi.mocked(Secrets.getNext).mockResolvedValue(0);
     mockProviderClass.getApiKeys.mockReturnValue(["test-key"]);
     mockProviderClass.getNextApiKeyIndex.mockResolvedValue(0);
+    mockProviderClass.endpoints.chat_completions.buildRequest.mockImplementation(
+      async ({ data, headers, apiKeyIndex }) => {
+        const merged = new Headers(headers);
+        new Headers(await mockProviderClass.headers(apiKeyIndex)).forEach(
+          (value, name) => merged.set(name, value),
+        );
+        return [
+          "/chat/completions",
+          { method: "POST", body: JSON.stringify(data), headers: merged },
+        ];
+      },
+    );
+    mockAIGateway.buildProviderEndpointRequest.mockImplementation(
+      ({ provider, path, ...init }) => [
+        `https://gateway.ai.cloudflare.com/v1/account/gateway/${provider}${path}`,
+        init,
+      ],
+    );
     mockProviderClass.headers.mockImplementation(async () => ({
       "x-provider-auth": "provider-header",
     }));
@@ -81,33 +103,35 @@ describe("handleChatCompletionsRequest", () => {
       },
     });
 
-    mockProviderClass.buildChatCompletionsRequest.mockReturnValue([
+    mockProviderClass.endpoints.chat_completions.buildRequest.mockReturnValue([
       "/chat/completions",
       {
         method: "POST",
         body: JSON.stringify({ ...requestBody, model: "gpt-4" }),
       },
     ]);
-    mockProviderClass.fetch.mockResolvedValue(new Response());
+    mockProviderClass.send.mockResolvedValue(new Response());
 
     const providers = { get: vi.fn(() => mockProviderClass) };
     await handleChatCompletionsRequest({ request, providers } as any);
 
     expect(providers.get).toHaveBeenCalledWith("openai");
-    expect(mockProviderClass.buildChatCompletionsRequest).toHaveBeenCalledWith({
-      body: "",
-      preparedData: { ...requestBody, model: "gpt-4" },
+    expect(
+      mockProviderClass.endpoints.chat_completions.buildRequest,
+    ).toHaveBeenCalledWith({
+      target: "direct",
+      data: { ...requestBody, model: "gpt-4" },
       headers: expect.any(Headers),
       apiKeyIndex: 0,
     });
     expect(
-      mockProviderClass.buildChatCompletionsRequest.mock.calls[0][0].headers.has(
+      mockProviderClass.endpoints.chat_completions.buildRequest.mock.calls[0][0].headers.has(
         "cf-aig-skip-cache",
       ),
     ).toBe(false);
-    expect(mockProviderClass.fetch).toHaveBeenCalled();
+    expect(mockProviderClass.send).toHaveBeenCalled();
     expect(
-      mockProviderClass.transformChatCompletionsResponse,
+      mockProviderClass.endpoints.chat_completions.transformResponse,
     ).toHaveBeenCalledOnce();
   });
 
@@ -120,11 +144,11 @@ describe("handleChatCompletionsRequest", () => {
       }),
       headers: { "cf-ray": "abcdef123456" },
     });
-    mockProviderClass.buildChatCompletionsRequest.mockReturnValue([
+    mockProviderClass.endpoints.chat_completions.buildRequest.mockReturnValue([
       "/chat/completions",
       { method: "POST" },
     ]);
-    mockProviderClass.fetch.mockResolvedValue(new Response());
+    mockProviderClass.send.mockResolvedValue(new Response());
     const providers = { get: vi.fn(() => mockProviderClass) };
     const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
 
@@ -154,11 +178,10 @@ describe("handleChatCompletionsRequest", () => {
         body: JSON.stringify({ model: requestedModel, messages: [] }),
         headers: { "cf-ray": "abcdef123456" },
       });
-      mockProviderClass.buildChatCompletionsRequest.mockReturnValue([
-        "/chat/completions",
-        { method: "POST" },
-      ]);
-      mockProviderClass.fetch.mockResolvedValue(new Response());
+      mockProviderClass.endpoints.chat_completions.buildRequest.mockReturnValue(
+        ["/chat/completions", { method: "POST" }],
+      );
+      mockProviderClass.send.mockResolvedValue(new Response());
       const consoleInfo = vi
         .spyOn(console, "info")
         .mockImplementation(() => {});
@@ -187,19 +210,23 @@ describe("handleChatCompletionsRequest", () => {
       method: "POST",
       body: JSON.stringify({ model: "ollama:paid/gpt-oss-120b", messages: [] }),
     });
-    mockProviderClass.buildChatCompletionsRequest.mockReturnValue([
+    mockProviderClass.endpoints.chat_completions.buildRequest.mockReturnValue([
       "/chat/completions",
       { method: "POST" },
     ]);
-    mockProviderClass.fetch.mockResolvedValue(new Response());
+    mockProviderClass.send.mockResolvedValue(new Response());
     const providers = { get: vi.fn(() => mockProviderClass) };
 
     await handleChatCompletionsRequest({ request, providers } as any);
 
     expect(providers.get).toHaveBeenCalledWith("ollama:paid");
     expect(
-      mockProviderClass.filterSupportedChatParameters,
-    ).toHaveBeenCalledWith(expect.objectContaining({ model: "gpt-oss-120b" }));
+      mockProviderClass.endpoints.chat_completions.buildRequest,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ model: "gpt-oss-120b" }),
+      }),
+    );
   });
 
   it("preserves the upstream JSON body when response metadata is disabled", async () => {
@@ -208,11 +235,10 @@ describe("handleChatCompletionsRequest", () => {
       method: "POST",
       body: JSON.stringify({ model: "openai/gpt-4", messages: [] }),
     });
-    mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
-      "/chat/completions",
-      { method: "POST", body: "{}" },
-    ]);
-    mockProviderClass.fetch.mockResolvedValue(Response.json(upstreamBody));
+    mockProviderClass.endpoints.chat_completions.buildRequest.mockResolvedValue(
+      ["/chat/completions", { method: "POST", body: "{}" }],
+    );
+    mockProviderClass.send.mockResolvedValue(Response.json(upstreamBody));
 
     const response = await handleChatCompletionsRequest(
       createTestRoutedContext({ request }),
@@ -227,11 +253,10 @@ describe("handleChatCompletionsRequest", () => {
       method: "POST",
       body: JSON.stringify({ model: "openai/gpt-4", messages: [] }),
     });
-    mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
-      "/chat/completions",
-      { method: "POST", body: "{}" },
-    ]);
-    mockProviderClass.fetch.mockResolvedValue(
+    mockProviderClass.endpoints.chat_completions.buildRequest.mockResolvedValue(
+      ["/chat/completions", { method: "POST", body: "{}" }],
+    );
+    mockProviderClass.send.mockResolvedValue(
       Response.json({ id: "chatcmpl-test", choices: [] }),
     );
 
@@ -261,11 +286,11 @@ describe("handleChatCompletionsRequest", () => {
       body: JSON.stringify(requestBody),
     });
     vi.mocked(Secrets.resolveApiKeyIndex).mockReturnValue(2);
-    mockProviderClass.buildChatCompletionsRequest.mockReturnValue([
+    mockProviderClass.endpoints.chat_completions.buildRequest.mockReturnValue([
       "/chat/completions",
       { method: "POST", body: JSON.stringify(requestBody) },
     ]);
-    mockProviderClass.fetch.mockResolvedValue(new Response());
+    mockProviderClass.send.mockResolvedValue(new Response());
 
     await handleChatCompletionsRequest(
       createTestRoutedContext({
@@ -279,13 +304,12 @@ describe("handleChatCompletionsRequest", () => {
       1,
     );
     expect(mockProviderClass.getNextApiKeyIndex).not.toHaveBeenCalled();
-    expect(mockProviderClass.buildChatCompletionsRequest).toHaveBeenCalledWith(
-      expect.objectContaining({ apiKeyIndex: 2 }),
-    );
-    expect(mockProviderClass.fetch).toHaveBeenCalledWith(
+    expect(
+      mockProviderClass.endpoints.chat_completions.buildRequest,
+    ).toHaveBeenCalledWith(expect.objectContaining({ apiKeyIndex: 2 }));
+    expect(mockProviderClass.send).toHaveBeenCalledWith(
       "/chat/completions",
       expect.any(Object),
-      2,
     );
   });
 
@@ -301,21 +325,23 @@ describe("handleChatCompletionsRequest", () => {
       headers: { "Content-Type": "application/json" },
     });
 
-    mockProviderClass.buildChatCompletionsRequest.mockReturnValue([
+    mockProviderClass.endpoints.chat_completions.buildRequest.mockReturnValue([
       "/chat/completions",
       {
         method: "POST",
         body: JSON.stringify({ ...requestBody, model: "gpt-4" }),
       },
     ]);
-    mockProviderClass.fetch.mockResolvedValue(new Response());
+    mockProviderClass.send.mockResolvedValue(new Response());
 
     await handleChatCompletionsRequest(createTestRoutedContext({ request }));
 
     expect(Config.defaultModel).toHaveBeenCalled();
-    expect(mockProviderClass.buildChatCompletionsRequest).toHaveBeenCalledWith({
-      body: "",
-      preparedData: { ...requestBody, model: "gpt-4" },
+    expect(
+      mockProviderClass.endpoints.chat_completions.buildRequest,
+    ).toHaveBeenCalledWith({
+      target: "direct",
+      data: { ...requestBody, model: "gpt-4" },
       headers: expect.any(Headers),
       apiKeyIndex: 0,
     });
@@ -470,13 +496,6 @@ describe("handleChatCompletionsRequest", () => {
       },
     });
 
-    mockAIGateway.buildChatCompletionsRequests.mockReturnValue([
-      [
-        "https://gateway.ai.cloudflare.com/v1/account/gateway/compat/chat/completions",
-        { method: "POST", body: JSON.stringify(requestBody) },
-      ],
-    ]);
-
     await handleChatCompletionsRequest(
       createTestRoutedContext({ request }),
       mockAIGateway as any,
@@ -484,29 +503,30 @@ describe("handleChatCompletionsRequest", () => {
 
     expect(CloudflareAIGateway.isSupportedProvider).toHaveBeenCalledWith(
       "openai",
-      true,
     );
-    // The Compatibility Endpoint serializes its own body, so the provider
-    // request builder is not invoked; its header merge is reproduced inline.
     expect(
-      mockProviderClass.buildChatCompletionsRequest,
-    ).not.toHaveBeenCalled();
+      mockProviderClass.endpoints.chat_completions.buildRequest,
+    ).toHaveBeenCalledWith({
+      data: { ...requestBody, model: "gpt-4" },
+      headers: expect.any(Headers),
+      apiKeyIndex: 0,
+      target: "gateway",
+    });
     const gatewayHeaders =
-      mockAIGateway.buildChatCompletionsRequests.mock.calls[0][0].headers;
+      mockAIGateway.buildProviderEndpointRequest.mock.calls[0][0].headers;
     expect(new Headers(gatewayHeaders).get("cf-aig-skip-cache")).toBe("true");
     expect(new Headers(gatewayHeaders).get("x-provider-auth")).toBe(
       "provider-header",
     );
-    expect(mockAIGateway.buildChatCompletionsRequests).toHaveBeenCalledWith({
+    expect(mockAIGateway.buildProviderEndpointRequest).toHaveBeenCalledWith({
       provider: "openai",
-      body: "",
-      parsedBody: { ...requestBody, model: "gpt-4" },
-      headers: expect.any(Object),
-      headersByCredential: expect.any(Array),
-      apiKeys: ["test-key"],
+      path: "/chat/completions",
+      method: "POST",
+      body: JSON.stringify({ ...requestBody, model: "gpt-4" }),
+      headers: expect.any(Headers),
     });
     expect(helpers.fetchWithLogging).toHaveBeenCalledWith(
-      "https://gateway.ai.cloudflare.com/v1/account/gateway/compat/chat/completions",
+      "https://gateway.ai.cloudflare.com/v1/account/gateway/openai/chat/completions",
       expect.objectContaining({ signal: request.signal }),
     );
   });
@@ -520,16 +540,6 @@ describe("handleChatCompletionsRequest", () => {
     mockProviderClass.headers.mockImplementation(async (index?: number) => ({
       "x-provider-auth": `provider-header-${index ?? 0}`,
     }));
-    mockAIGateway.buildChatCompletionsRequests.mockImplementation(
-      ({ headers, headersByCredential, apiKeys }) =>
-        apiKeys.map((_apiKey: string, index: number) => [
-          `https://gateway.example/attempt-${index}`,
-          {
-            method: "POST",
-            headers: new Headers(headersByCredential?.[index] ?? headers),
-          },
-        ]),
-    );
     vi.mocked(helpers.fetchWithLogging)
       .mockRejectedValueOnce(new Error("network failure"))
       .mockResolvedValueOnce(new Response(null, { status: 200 }));
@@ -571,14 +581,15 @@ describe("handleChatCompletionsRequest", () => {
     });
     const provider = {
       ...mockProviderClass,
-      chatCompletionPath: "/chat/completions",
+      endpoints: {
+        chat_completions: { ...mockProviderClass.endpoints.chat_completions },
+      },
       pathnamePrefix: vi.fn(() => "/v1"),
       requiresCustomAiGatewayProvider: false,
       getApiKeys: vi.fn().mockReturnValue([]),
-      buildAiGatewayChatCompletionsRequest: vi.fn(),
     };
-    provider.buildChatCompletionsRequest.mockReturnValue([
-      "/chat/completions",
+    provider.endpoints.chat_completions.buildRequest.mockReturnValue([
+      "/v1/chat/completions",
       {
         method: "POST",
         body: JSON.stringify({ ...requestBody, model: "model-a" }),
@@ -607,12 +618,12 @@ describe("handleChatCompletionsRequest", () => {
         path: "/v1/chat/completions",
       }),
     );
-    expect(provider.fetch).not.toHaveBeenCalled();
+    expect(provider.send).not.toHaveBeenCalled();
     expect(helpers.fetchWithLogging).toHaveBeenCalled();
     const metadata = JSON.parse(
-      new Headers(
-        provider.buildChatCompletionsRequest.mock.calls[0][0].headers,
-      ).get("cf-aig-metadata")!,
+      new Headers(buildProviderEndpointRequest.mock.calls[0][0].headers).get(
+        "cf-aig-metadata",
+      )!,
     ) as Record<string, string>;
     expect(metadata.llm_proxy_credentials).toBe("default:null");
   });
@@ -635,25 +646,16 @@ describe("handleChatCompletionsRequest", () => {
       },
     ];
     const azureProvider = {
+      ...createProvider(),
       apiKeyName: "AZURE_OPENAI_API_KEY",
       getApiKeys: vi.fn().mockReturnValue(["azure-key"]),
       getNextApiKeyIndex: vi.fn().mockResolvedValue(0),
-      filterSupportedChatParameters: vi.fn(
-        (data: Record<string, unknown>) => data,
-      ),
-      buildChatCompletionsRequest: vi
-        .fn()
-        .mockResolvedValue([
-          "/chat/completions",
-          { method: "POST", body: JSON.stringify({ model: "gpt-4o" }) },
-        ]),
-      buildAiGatewayChatCompletionsRequest: vi
-        .fn()
-        .mockResolvedValue(providerRequest),
-      transformChatCompletionsResponse: vi.fn(
-        async (response: Response) => response,
-      ),
-      fetch: vi.fn(),
+      endpoints: {
+        chat_completions: {
+          buildRequest: vi.fn().mockResolvedValue(providerRequest),
+        },
+      },
+      send: vi.fn(),
     };
     vi.mocked(CloudflareAIGateway.isSupportedProvider).mockImplementation(
       (_provider, compatibility) => !compatibility,
@@ -675,7 +677,7 @@ describe("handleChatCompletionsRequest", () => {
     );
 
     expect(
-      azureProvider.buildAiGatewayChatCompletionsRequest,
+      azureProvider.endpoints.chat_completions.buildRequest,
     ).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ model: "gpt-4o" }),
@@ -687,10 +689,16 @@ describe("handleChatCompletionsRequest", () => {
       method: "POST",
       path: providerRequest[0],
       body: providerRequest[1].body,
-      headers: providerRequest[1].headers,
+      headers: expect.any(Headers),
+    });
+    const nativeHeaders = buildProviderEndpointRequest.mock.calls[0]![0]
+      .headers as Headers;
+    expect(nativeHeaders.get("api-key")).toBe("azure-key");
+    expect(JSON.parse(nativeHeaders.get("cf-aig-metadata")!)).toMatchObject({
+      llm_proxy_credentials: "default:0",
     });
     expect(await response.text()).toBe("ok");
-    expect(azureProvider.fetch).not.toHaveBeenCalled();
+    expect(azureProvider.send).not.toHaveBeenCalled();
 
     providerRequest[1].headers = undefined;
     await handleChatCompletionsRequest(
@@ -701,37 +709,23 @@ describe("handleChatCompletionsRequest", () => {
       { buildProviderEndpointRequest } as any,
     );
     expect(buildProviderEndpointRequest).toHaveBeenLastCalledWith(
-      expect.objectContaining({ headers: {} }),
+      expect.objectContaining({ headers: expect.any(Headers) }),
     );
   });
 
-  it("uses the direct endpoint when no native Gateway request is available", async () => {
+  it("fails closed when a registered Gateway provider opts out of native inference", async () => {
     const request = new Request("https://example.com/v1/chat/completions", {
       method: "POST",
       body: JSON.stringify({ model: "openai/gpt-4", messages: [] }),
     });
-    const provider = {
-      ...mockProviderClass,
-      buildAiGatewayChatCompletionsRequest: vi
-        .fn()
-        .mockResolvedValue(undefined),
-    };
-    provider.buildChatCompletionsRequest.mockReturnValue([
-      "/chat/completions",
-      { method: "POST", body: JSON.stringify({ model: "gpt-4" }) },
-    ]);
-    provider.fetch.mockResolvedValue(new Response());
-    vi.mocked(CloudflareAIGateway.isSupportedProvider)
-      .mockReturnValueOnce(false)
-      .mockReturnValueOnce(true);
-
-    await handleChatCompletionsRequest(
-      { request, providers: { get: vi.fn(() => provider) } } as any,
-      mockAIGateway as any,
-    );
-
-    expect(provider.buildAiGatewayChatCompletionsRequest).toHaveBeenCalled();
-    expect(provider.fetch).toHaveBeenCalled();
+    const context = createTestRoutedContext({ request });
+    vi.spyOn(context.providers, "get").mockReturnValue(createProvider());
+    expect(
+      (await handleChatCompletionsRequest(context, mockAIGateway as any))
+        .status,
+    ).toBe(400);
+    expect(mockProviderClass.send).not.toHaveBeenCalled();
+    expect(mockAIGateway.buildProviderEndpointRequest).not.toHaveBeenCalled();
   });
 
   it("should remove all proxy authorization headers", async () => {
@@ -752,27 +746,27 @@ describe("handleChatCompletionsRequest", () => {
       },
     });
 
-    mockProviderClass.buildChatCompletionsRequest.mockReturnValue([
+    mockProviderClass.endpoints.chat_completions.buildRequest.mockReturnValue([
       "/chat/completions",
       {
         method: "POST",
         body: JSON.stringify({ ...requestBody, model: "gpt-4" }),
       },
     ]);
-    mockProviderClass.fetch.mockResolvedValue(new Response());
+    mockProviderClass.send.mockResolvedValue(new Response());
 
     await handleChatCompletionsRequest(createTestRoutedContext({ request }));
 
     const headersArg =
-      mockProviderClass.buildChatCompletionsRequest.mock.calls[0][0].headers;
+      mockProviderClass.endpoints.chat_completions.buildRequest.mock.calls[0][0]
+        .headers;
     expect(headersArg.has("Authorization")).toBe(false);
     expect(headersArg.has("x-api-key")).toBe(false);
     expect(headersArg.has("x-goog-api-key")).toBe(false);
     expect(headersArg.get("x-client-header")).toBe("preserved");
-    expect(mockProviderClass.fetch).toHaveBeenCalledWith(
+    expect(mockProviderClass.send).toHaveBeenCalledWith(
       "/chat/completions",
       expect.objectContaining({ signal: request.signal }),
-      0,
     );
   });
 
@@ -788,20 +782,22 @@ describe("handleChatCompletionsRequest", () => {
       headers: { "Content-Type": "application/json" },
     });
 
-    mockProviderClass.buildChatCompletionsRequest.mockReturnValue([
+    mockProviderClass.endpoints.chat_completions.buildRequest.mockReturnValue([
       "/chat/completions",
       {
         method: "POST",
         body: JSON.stringify({ ...requestBody, model: "gpt-4/turbo" }),
       },
     ]);
-    mockProviderClass.fetch.mockResolvedValue(new Response());
+    mockProviderClass.send.mockResolvedValue(new Response());
 
     await handleChatCompletionsRequest(createTestRoutedContext({ request }));
 
-    expect(mockProviderClass.buildChatCompletionsRequest).toHaveBeenCalledWith({
-      body: "",
-      preparedData: { ...requestBody, model: "gpt-4/turbo" },
+    expect(
+      mockProviderClass.endpoints.chat_completions.buildRequest,
+    ).toHaveBeenCalledWith({
+      target: "direct",
+      data: { ...requestBody, model: "gpt-4/turbo" },
       headers: expect.any(Headers),
       apiKeyIndex: 0,
     });
@@ -826,11 +822,10 @@ describe("handleChatCompletionsRequest", () => {
           { model: "openai/gpt-3.5", retries: 0 },
         ],
       });
-      mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
-        "/chat/completions",
-        { method: "POST", body: "{}" },
-      ]);
-      mockProviderClass.fetch.mockResolvedValue(
+      mockProviderClass.endpoints.chat_completions.buildRequest.mockResolvedValue(
+        ["/chat/completions", { method: "POST", body: "{}" }],
+      );
+      mockProviderClass.send.mockResolvedValue(
         new Response("ok", { status: 200 }),
       );
 
@@ -839,7 +834,7 @@ describe("handleChatCompletionsRequest", () => {
       );
 
       expect(await response.text()).toBe("ok");
-      expect(mockProviderClass.fetch).toHaveBeenCalledTimes(1);
+      expect(mockProviderClass.send).toHaveBeenCalledTimes(1);
     });
 
     it("resolves a virtual model candidate through another virtual model", async () => {
@@ -852,19 +847,18 @@ describe("handleChatCompletionsRequest", () => {
           { model: "openai/gpt-4", retries: 0 },
         ],
       });
-      mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
-        "/chat/completions",
-        { method: "POST", body: "{}" },
-      ]);
-      mockProviderClass.fetch.mockResolvedValue(new Response("nested ok"));
+      mockProviderClass.endpoints.chat_completions.buildRequest.mockResolvedValue(
+        ["/chat/completions", { method: "POST", body: "{}" }],
+      );
+      mockProviderClass.send.mockResolvedValue(new Response("nested ok"));
 
       const response = await handleChatCompletionsRequest(
         createTestRoutedContext({ request: buildRequest("virtual/front") }),
       );
 
       expect(await response.text()).toBe("nested ok");
-      expect(mockProviderClass.fetch).toHaveBeenCalledOnce();
-      expect(mockProviderClass.fetch.mock.calls[0]?.[1]?.signal).toBeInstanceOf(
+      expect(mockProviderClass.send).toHaveBeenCalledOnce();
+      expect(mockProviderClass.send.mock.calls[0]?.[1]?.signal).toBeInstanceOf(
         AbortSignal,
       );
     });
@@ -874,11 +868,10 @@ describe("handleChatCompletionsRequest", () => {
       vi.mocked(Config.virtualModels).mockReturnValue({
         "virtual/fast-tier": [{ model: "openai/gpt-4", retries: 0 }],
       });
-      mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
-        "/chat/completions",
-        { method: "POST", body: "{}" },
-      ]);
-      mockProviderClass.fetch.mockResolvedValue(
+      mockProviderClass.endpoints.chat_completions.buildRequest.mockResolvedValue(
+        ["/chat/completions", { method: "POST", body: "{}" }],
+      );
+      mockProviderClass.send.mockResolvedValue(
         Response.json({ id: "chatcmpl-virtual", choices: [] }),
       );
 
@@ -907,7 +900,7 @@ describe("handleChatCompletionsRequest", () => {
           createTestRoutedContext({ request: buildRequest("virtual/one") }),
         ),
       ).rejects.toThrow("Invalid configuration for VIRTUAL_MODELS.");
-      expect(mockProviderClass.fetch).not.toHaveBeenCalled();
+      expect(mockProviderClass.send).not.toHaveBeenCalled();
     });
 
     it("applies a candidate timeout signal to the upstream fetch", async () => {
@@ -916,18 +909,17 @@ describe("handleChatCompletionsRequest", () => {
           { model: "openai/gpt-4", retries: 0, timeout: 5000 },
         ],
       });
-      mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
-        "/chat/completions",
-        { method: "POST", body: "{}" },
-      ]);
-      mockProviderClass.fetch.mockResolvedValue(new Response("ok"));
+      mockProviderClass.endpoints.chat_completions.buildRequest.mockResolvedValue(
+        ["/chat/completions", { method: "POST", body: "{}" }],
+      );
+      mockProviderClass.send.mockResolvedValue(new Response("ok"));
       const request = buildRequest("virtual/fast-tier");
 
       const response = await handleChatCompletionsRequest(
         createTestRoutedContext({ request }),
       );
 
-      const fetchSignal = mockProviderClass.fetch.mock.calls[0]?.[1]?.signal;
+      const fetchSignal = mockProviderClass.send.mock.calls[0]?.[1]?.signal;
       expect(await response.text()).toBe("ok");
       expect(fetchSignal).toBeInstanceOf(AbortSignal);
       expect(fetchSignal).not.toBe(request.signal);
@@ -939,15 +931,6 @@ describe("handleChatCompletionsRequest", () => {
         "virtual/front": [{ model: "virtual/fallback", retries: 0 }],
         "virtual/fallback": [{ model: "openai/gpt-4", retries: 0 }],
       });
-      mockAIGateway.buildChatCompletionsRequests.mockImplementation(
-        ({ headers }) => [
-          [
-            "https://gateway.ai.cloudflare.com/v1/account/gateway/compat/chat/completions",
-            { method: "POST", body: "{}", headers: new Headers(headers) },
-          ],
-        ],
-      );
-
       await handleChatCompletionsRequest(
         createTestRoutedContext({ request: buildRequest("virtual/front") }),
         mockAIGateway as any,
@@ -976,11 +959,10 @@ describe("handleChatCompletionsRequest", () => {
           { model: "openai/gpt-3.5", retries: 0 },
         ],
       });
-      mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
-        "/chat/completions",
-        { method: "POST", body: "{}" },
-      ]);
-      mockProviderClass.fetch
+      mockProviderClass.endpoints.chat_completions.buildRequest.mockResolvedValue(
+        ["/chat/completions", { method: "POST", body: "{}" }],
+      );
+      mockProviderClass.send
         .mockResolvedValueOnce(new Response("rate limited", { status: 429 }))
         .mockResolvedValueOnce(new Response("ok", { status: 200 }));
 
@@ -990,7 +972,7 @@ describe("handleChatCompletionsRequest", () => {
 
       expect(response.status).toBe(200);
       expect(await response.text()).toBe("ok");
-      expect(mockProviderClass.fetch).toHaveBeenCalledTimes(2);
+      expect(mockProviderClass.send).toHaveBeenCalledTimes(2);
     });
 
     it("selects a provider key again for each configured retry", async () => {
@@ -1001,11 +983,10 @@ describe("handleChatCompletionsRequest", () => {
       mockProviderClass.getNextApiKeyIndex
         .mockResolvedValueOnce(0)
         .mockResolvedValueOnce(1);
-      mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
-        "/chat/completions",
-        { method: "POST", body: "{}" },
-      ]);
-      mockProviderClass.fetch
+      mockProviderClass.endpoints.chat_completions.buildRequest.mockResolvedValue(
+        ["/chat/completions", { method: "POST", body: "{}" }],
+      );
+      mockProviderClass.send
         .mockResolvedValueOnce(new Response("rate limited", { status: 429 }))
         .mockResolvedValueOnce(new Response("ok", { status: 200 }));
 
@@ -1016,7 +997,7 @@ describe("handleChatCompletionsRequest", () => {
       expect(await response.text()).toBe("ok");
       expect(mockProviderClass.getNextApiKeyIndex).toHaveBeenCalledTimes(2);
       expect(
-        mockProviderClass.buildChatCompletionsRequest.mock.calls.map(
+        mockProviderClass.endpoints.chat_completions.buildRequest.mock.calls.map(
           ([options]) => options.apiKeyIndex,
         ),
       ).toEqual([0, 1]);
@@ -1029,11 +1010,10 @@ describe("handleChatCompletionsRequest", () => {
           { model: "openai/gpt-3.5", retries: 0 },
         ],
       });
-      mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
-        "/chat/completions",
-        { method: "POST", body: "{}" },
-      ]);
-      mockProviderClass.fetch.mockResolvedValue(
+      mockProviderClass.endpoints.chat_completions.buildRequest.mockResolvedValue(
+        ["/chat/completions", { method: "POST", body: "{}" }],
+      );
+      mockProviderClass.send.mockResolvedValue(
         new Response("bad request", { status: 400 }),
       );
 
@@ -1042,7 +1022,7 @@ describe("handleChatCompletionsRequest", () => {
       );
 
       expect(response.status).toBe(400);
-      expect(mockProviderClass.fetch).toHaveBeenCalledTimes(1);
+      expect(mockProviderClass.send).toHaveBeenCalledTimes(1);
     });
 
     it("returns the last candidate's response once every candidate fails", async () => {
@@ -1052,11 +1032,10 @@ describe("handleChatCompletionsRequest", () => {
           { model: "openai/gpt-3.5", retries: 0 },
         ],
       });
-      mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
-        "/chat/completions",
-        { method: "POST", body: "{}" },
-      ]);
-      mockProviderClass.fetch.mockResolvedValue(
+      mockProviderClass.endpoints.chat_completions.buildRequest.mockResolvedValue(
+        ["/chat/completions", { method: "POST", body: "{}" }],
+      );
+      mockProviderClass.send.mockResolvedValue(
         new Response("unavailable", { status: 503 }),
       );
 
@@ -1065,7 +1044,7 @@ describe("handleChatCompletionsRequest", () => {
       );
 
       expect(response.status).toBe(503);
-      expect(mockProviderClass.fetch).toHaveBeenCalledTimes(2);
+      expect(mockProviderClass.send).toHaveBeenCalledTimes(2);
     });
 
     it("returns a local candidate error without response metadata", async () => {
@@ -1081,7 +1060,7 @@ describe("handleChatCompletionsRequest", () => {
       expect(await response.json()).toEqual({
         error: expect.objectContaining({ message: "Invalid provider." }),
       });
-      expect(mockProviderClass.fetch).not.toHaveBeenCalled();
+      expect(mockProviderClass.send).not.toHaveBeenCalled();
     });
 
     it("returns 400 for an unknown virtual model", async () => {
@@ -1099,7 +1078,7 @@ describe("handleChatCompletionsRequest", () => {
       expect(await response.json()).toEqual({
         error: expect.objectContaining({ message: "Invalid provider." }),
       });
-      expect(mockProviderClass.fetch).not.toHaveBeenCalled();
+      expect(mockProviderClass.send).not.toHaveBeenCalled();
     });
 
     it("returns 400 when no virtual models are configured", async () => {
@@ -1119,11 +1098,10 @@ describe("handleChatCompletionsRequest", () => {
       vi.mocked(Config.virtualModels).mockReturnValue({
         "group/fast": [{ model: "openai/gpt-4", retries: 0 }],
       });
-      mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
-        "/chat/completions",
-        { method: "POST", body: "{}" },
-      ]);
-      mockProviderClass.fetch.mockResolvedValue(
+      mockProviderClass.endpoints.chat_completions.buildRequest.mockResolvedValue(
+        ["/chat/completions", { method: "POST", body: "{}" }],
+      );
+      mockProviderClass.send.mockResolvedValue(
         new Response("ok", { status: 200 }),
       );
 
@@ -1133,18 +1111,17 @@ describe("handleChatCompletionsRequest", () => {
 
       expect(response.status).toBe(200);
       expect(await response.text()).toBe("ok");
-      expect(mockProviderClass.fetch).toHaveBeenCalledTimes(1);
+      expect(mockProviderClass.send).toHaveBeenCalledTimes(1);
     });
 
     it("resolves a virtual model key without a provider separator", async () => {
       vi.mocked(Config.virtualModels).mockReturnValue({
         fast: [{ model: "openai/gpt-4", retries: 0 }],
       });
-      mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
-        "/chat/completions",
-        { method: "POST", body: "{}" },
-      ]);
-      mockProviderClass.fetch.mockResolvedValue(
+      mockProviderClass.endpoints.chat_completions.buildRequest.mockResolvedValue(
+        ["/chat/completions", { method: "POST", body: "{}" }],
+      );
+      mockProviderClass.send.mockResolvedValue(
         new Response("ok", { status: 200 }),
       );
 
@@ -1174,11 +1151,10 @@ describe("handleChatCompletionsRequest", () => {
       vi.mocked(Config.virtualModels).mockReturnValue({
         "openai/gpt-4": [{ model: "groq/other", retries: 0 }],
       });
-      mockProviderClass.buildChatCompletionsRequest.mockResolvedValue([
-        "/chat/completions",
-        { method: "POST", body: "{}" },
-      ]);
-      mockProviderClass.fetch.mockResolvedValue(
+      mockProviderClass.endpoints.chat_completions.buildRequest.mockResolvedValue(
+        ["/chat/completions", { method: "POST", body: "{}" }],
+      );
+      mockProviderClass.send.mockResolvedValue(
         new Response("ok", { status: 200 }),
       );
 

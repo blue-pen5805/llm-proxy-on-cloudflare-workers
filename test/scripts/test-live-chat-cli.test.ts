@@ -58,11 +58,32 @@ describe("live Chat Completions CLI", () => {
 
     await runLiveChatCli();
 
-    expect(log).toHaveBeenCalledWith("PASS ollama direct: HTTP 204");
+    expect(log).toHaveBeenCalledWith("PASS ollama chat-direct: HTTP 204");
     expect(log).toHaveBeenCalledWith(
-      "2/2 live Chat Completions checks passed.",
+      "1/1 live Chat Completions checks passed.",
     );
     expect(process.exitCode).toBeUndefined();
+  });
+
+  it("applies the local strict Gateway policy to custom providers", async () => {
+    vi.mocked(readFileSync)
+      .mockReturnValueOnce('{"providers":{"custom":"model-test"}}')
+      .mockReturnValueOnce(
+        '{"DEV":true,"CLOUDFLARE_ACCOUNT_ID":"account","AI_GATEWAY_NAME":"configured","ALWAYS_USE_AI_GATEWAY":true}',
+      );
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetcher);
+    await runLiveChatCli();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(String(fetcher.mock.calls[1][0])).toContain(
+      "/g/configured/v1/chat/completions",
+    );
+    expect(log).toHaveBeenCalledWith("PASS custom chat-gateway: HTTP 204");
+    expect(log).toHaveBeenCalledWith(
+      "1/1 live Chat Completions checks passed.",
+    );
   });
 
   it("sets a failure exit code for failed checks and invalid arguments", async () => {
@@ -80,7 +101,7 @@ describe("live Chat Completions CLI", () => {
     await runLiveChatCli();
 
     expect(log).toHaveBeenCalledWith(
-      "FAIL ollama direct: HTTP 500 Internal Server Error",
+      "FAIL ollama chat-direct: HTTP 500 Internal Server Error",
     );
     expect(process.exitCode).toBe(1);
 

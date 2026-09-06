@@ -4,7 +4,18 @@ import {
   DEFAULT_PROVIDER_PROFILE,
   PROVIDER_PROFILE_PATTERN,
 } from "../../utils/secrets";
-import { defineProvider, ProviderNotSupportedError } from "../provider";
+import {
+  convertedChatEndpoint,
+  jsonEndpoint,
+  type ChatConversionCodec,
+} from "../inference";
+import { generateContentEndpoint, messagesEndpoint } from "../native";
+import { unsupportedNativeField } from "../native_request";
+import {
+  defineProvider,
+  ProviderNotSupportedError,
+  type Provider,
+} from "../provider";
 
 interface ServiceAccountJson extends Record<string, unknown> {
   type: "service_account";
@@ -168,14 +179,109 @@ function computeServiceAccountCredentials(
   return { credentials };
 }
 
+const vertexGenerateContentEndpoint: ChatConversionCodec = {
+  ...generateContentEndpoint,
+  prepare(data) {
+    if (data.model.includes("/") && !data.model.startsWith("google/"))
+      return unsupportedNativeField("this Vertex publisher");
+    const prepared = generateContentEndpoint.prepare({
+      ...data,
+      model: data.model.replace(/^google\//, ""),
+    });
+    return {
+      path: `/publishers/google${prepared.path.replace("/v1beta", "")}`,
+      data: prepared.data,
+    };
+  },
+};
+
+const vertexMessagesEndpoint: ChatConversionCodec = {
+  ...messagesEndpoint,
+  prepare(data) {
+    const prepared = messagesEndpoint.prepare(data);
+    delete prepared.data.model;
+    prepared.data.anthropic_version = "vertex-2023-10-16";
+    return {
+      path: `/publishers/anthropic/models/${encodeURIComponent(data.model.slice("anthropic/".length))}:${data.stream ? "streamRawPredict" : "rawPredict"}`,
+      data: prepared.data,
+    };
+  },
+};
+
+function vertexPath(
+  provider: Provider,
+  path: string,
+  apiKeyIndex?: number,
+): string {
+  const credentials = parseServiceAccountCredentials(
+    provider.credentialProfile,
+  ).credentials;
+  // Configuration validation requires at least one valid service account.
+  const credential = credentials[(apiKeyIndex ?? 0) % credentials.length]!;
+  return `/v1/projects/${encodeURIComponent(credential.project_id)}/locations/${encodeURIComponent(credential.region)}${path}`;
+}
+
+function vertexChatEndpoint(codec: ChatConversionCodec) {
+  return convertedChatEndpoint(codec, {
+    prepareGateway(data, apiKeyIndex) {
+      const prepared = codec.prepare(data);
+      return {
+        ...prepared,
+        path: vertexPath(this, prepared.path, apiKeyIndex),
+      };
+    },
+  });
+}
+
+const vertexAnthropicChatEndpoint = vertexChatEndpoint(vertexMessagesEndpoint);
+
+const vertexNativeMessagesEndpoint = jsonEndpoint(function (data, apiKeyIndex) {
+  const { model: _model, ...body } = data;
+  return {
+    path: vertexPath(
+      this,
+      `/publishers/anthropic/models/${encodeURIComponent(data.model.slice("anthropic/".length))}:${data.stream ? "streamRawPredict" : "rawPredict"}`,
+      apiKeyIndex,
+    ),
+    data: { ...body, anthropic_version: "vertex-2023-10-16" },
+  };
+});
+
+const vertexNativeChatEndpoint = jsonEndpoint(function (data, apiKeyIndex) {
+  return {
+    path: vertexPath(this, "/endpoints/openapi/chat/completions", apiKeyIndex),
+    data: {
+      ...data,
+      model: data.model.startsWith("google/")
+        ? data.model
+        : `google/${data.model}`,
+    },
+  };
+});
+
 export const GoogleVertexAi = defineProvider({
+  resolveEndpoint(model, protocol) {
+    if (
+      protocol === "chat_completions" &&
+      (!model.includes("/") || model.startsWith("google/"))
+    )
+      return vertexNativeChatEndpoint;
+    return protocol === "messages" && model.startsWith("anthropic/")
+      ? vertexNativeMessagesEndpoint
+      : undefined;
+  },
   openAICompatible: true,
+  chatFallback: vertexChatEndpoint(vertexGenerateContentEndpoint),
+  resolveChatFallback(model) {
+    return model.startsWith("anthropic/")
+      ? vertexAnthropicChatEndpoint
+      : undefined;
+  },
   apiKeyName: API_KEY_NAME,
-  supportsAiGatewayModels: false,
   requiresAiGateway: true,
   requiresAuthenticatedAiGateway: true,
   requiresProviderCredentials: true,
-  modelsPath: "",
+
   getApiKeys(): string[] {
     const { credentials, error } = parseServiceAccountCredentials(
       this.credentialProfile,
@@ -210,12 +316,6 @@ export const GoogleVertexAi = defineProvider({
 
   configurationError(): string | undefined {
     return parseServiceAccountCredentials(this.credentialProfile).error;
-  },
-
-  async buildModelsRequest(): Promise<[string, RequestInit]> {
-    throw new ProviderNotSupportedError(
-      "Vertex AI does not expose OpenAI-compatible model discovery.",
-    );
   },
 
   async fetch(): Promise<Response> {

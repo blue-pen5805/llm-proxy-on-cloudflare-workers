@@ -1,3 +1,6 @@
+import { jsonEndpoint } from "../inference";
+import { convertedChatEndpoint } from "../inference";
+import { generateContentEndpoint } from "../native";
 import {
   OpenAIChatCompletionsRequestBody,
   OpenAIModelsListResponseBody,
@@ -6,25 +9,46 @@ import { defineProvider } from "../provider";
 import { GoogleAiStudioModelsListResponseBody } from "./types";
 
 export const GoogleAiStudio = defineProvider({
+  endpoints: {
+    chat_completions: jsonEndpoint("/v1beta/openai/chat/completions"),
+
+    models: {
+      path: "/v1beta/models",
+      convertResponse(data): OpenAIModelsListResponseBody {
+        const providerResponse = data as GoogleAiStudioModelsListResponseBody;
+        return {
+          object: "list",
+          data: providerResponse.models.map(({ name, ...model }) => ({
+            id: `${name.replace("models/", "")}`,
+            object: "model",
+            created: 0,
+            owned_by: "google_ai_studio",
+            _: model,
+          })),
+        };
+      },
+    },
+  },
+
+  chatFallback: convertedChatEndpoint(generateContentEndpoint, {
+    supportedParameters: [
+      "messages",
+      "model",
+      "max_tokens",
+      "max_completion_tokens",
+      "n",
+      "response_format",
+      "stop",
+      "stream",
+      "stream_options",
+      "temperature",
+      "top_p",
+      "tools",
+      "tool_choice",
+    ] satisfies (keyof OpenAIChatCompletionsRequestBody)[],
+  }),
   apiKeyName: "GEMINI_API_KEY",
   baseUrl: "https://generativelanguage.googleapis.com",
-  chatCompletionPath: "/v1beta/openai/chat/completions",
-  modelsPath: "/v1beta/models",
-  chatCompletionSupportedParameters: [
-    "messages",
-    "model",
-    "max_tokens",
-    "max_completion_tokens",
-    "n",
-    "response_format",
-    "stop",
-    "stream",
-    "stream_options",
-    "temperature",
-    "top_p",
-    "tools",
-    "tool_choice",
-  ] satisfies (keyof OpenAIChatCompletionsRequestBody)[],
 
   async headers(apiKeyIndex): Promise<HeadersInit> {
     const apiKeys = this.getApiKeys();
@@ -55,20 +79,5 @@ export const GoogleAiStudio = defineProvider({
       }
     }
     return mergedHeaders;
-  },
-
-  // Convert model list to OpenAI format
-  convertModelsToOpenAIFormat(data): OpenAIModelsListResponseBody {
-    const providerResponse = data as GoogleAiStudioModelsListResponseBody;
-    return {
-      object: "list",
-      data: providerResponse.models.map(({ name, ...model }) => ({
-        id: `${name.replace("models/", "")}`,
-        object: "model",
-        created: 0,
-        owned_by: "google_ai_studio",
-        _: model,
-      })),
-    };
   },
 });

@@ -1,8 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { Anthropic } from "~/src/providers/anthropic/provider";
+import { AwsBedrock } from "~/src/providers/aws-bedrock/provider";
+import { createProvider } from "~/src/providers/provider";
 import {
   handleUniversalEndpointRequest,
   MAX_UNIVERSAL_ENDPOINT_STEPS,
 } from "~/src/requests/universal_endpoint";
+import { Environments } from "~/src/utils/environments";
 import { BadRequestError } from "~/src/utils/error";
 import * as helpers from "~/src/utils/helpers";
 
@@ -14,7 +18,8 @@ describe("handleUniversalEndpointRequest", () => {
     "cf-aig-metadata": '{"llm_proxy_endpoint":"universal_endpoint"}',
   };
   const mockProviderClass = {
-    chatCompletionPath: "/chat/completions",
+    ...createProvider(),
+    endpoints: { chat_completions: { path: "/chat/completions" } },
     headers: vi.fn(),
     getNextApiKeyIndex: vi.fn(),
     getApiKeys: vi.fn(),
@@ -50,6 +55,71 @@ describe("handleUniversalEndpointRequest", () => {
     });
     mockProviderClass.getApiKeys.mockReturnValue(["test-key"]);
     mockProviderClass.getNextApiKeyIndex.mockResolvedValue(0);
+  });
+
+  it("requires an explicit endpoint when the provider has no fixed Chat operation", async () => {
+    const provider = new AwsBedrock();
+    mockProviderRegistry.get.mockReturnValueOnce(
+      provider as unknown as typeof mockProviderClass,
+    );
+    await expect(
+      handleUniversalRequest(
+        new Request("https://example.com", {
+          method: "POST",
+          body: JSON.stringify([
+            { provider: "aws-bedrock", query: { messages: [] } },
+          ]),
+        }),
+      ),
+    ).rejects.toThrow("Provider aws-bedrock requires an explicit endpoint.");
+    expect(helpers.fetchWithLogging).not.toHaveBeenCalled();
+  });
+
+  it("uses path-specific authentication for Anthropic's default Chat and explicit Messages operations", async () => {
+    mockAIGateway.buildUniversalEndpointRequest.mockReturnValue([
+      "https://gateway.example",
+      { method: "POST" },
+    ]);
+    await Environments.runWithConfig(
+      { ANTHROPIC_API_KEY: "example-provider-key" },
+      async () => {
+        mockProviderRegistry.get
+          .mockReturnValueOnce(
+            new Anthropic() as unknown as typeof mockProviderClass,
+          )
+          .mockReturnValueOnce(
+            new Anthropic() as unknown as typeof mockProviderClass,
+          );
+        await handleUniversalRequest(
+          new Request("https://proxy.example", {
+            method: "POST",
+            body: JSON.stringify([
+              {
+                provider: "anthropic",
+                query: { model: "claude", messages: [] },
+              },
+              {
+                provider: "anthropic",
+                endpoint: "/v1/messages",
+                query: { model: "claude", messages: [], max_tokens: 64 },
+              },
+            ]),
+          }),
+        );
+      },
+    );
+    const steps =
+      mockAIGateway.buildUniversalEndpointRequest.mock.calls[0][0].data;
+    expect(steps[0]).toMatchObject({
+      endpoint: "v1/chat/completions",
+      headers: { authorization: "Bearer example-provider-key" },
+    });
+    expect(steps[0].headers).not.toHaveProperty("x-api-key");
+    expect(steps[1]).toMatchObject({
+      endpoint: "v1/messages",
+      headers: { "x-api-key": "example-provider-key" },
+    });
+    expect(steps[1].headers).not.toHaveProperty("authorization");
   });
 
   it("should handle single provider request", async () => {
@@ -165,7 +235,8 @@ describe("handleUniversalEndpointRequest", () => {
 
   it("should handle multiple provider requests", async () => {
     const anthropicProviderClass = {
-      chatCompletionPath: "/v1/messages",
+      ...mockProviderClass,
+      endpoints: { chat_completions: { path: "/v1/chat/completions" } },
       getNextApiKeyIndex: vi.fn().mockResolvedValue(0),
       getApiKeys: vi.fn().mockReturnValue(["sk-ant-test"]),
       headers: vi.fn().mockReturnValue({
@@ -222,7 +293,7 @@ describe("handleUniversalEndpointRequest", () => {
         },
         {
           provider: "anthropic",
-          endpoint: "v1/messages",
+          endpoint: "v1/chat/completions",
           headers: {
             "content-type": "application/json",
             authorization: "Bearer sk-ant-test",
@@ -466,9 +537,10 @@ describe("handleUniversalEndpointRequest", () => {
     expect(mockAIGateway.buildUniversalEndpointRequest).not.toHaveBeenCalled();
   });
 
-  it("should handle provider without explicit chatCompletionPath", async () => {
+  it("should handle provider with a custom default Chat endpoint", async () => {
     const customProviderClass = {
-      chatCompletionPath: "/v1/chat/completions",
+      ...mockProviderClass,
+      endpoints: { chat_completions: { path: "/v1/chat/completions" } },
       getNextApiKeyIndex: vi.fn().mockResolvedValue(0),
       getApiKeys: vi.fn().mockReturnValue(["test-key"]),
       headers: vi.fn().mockReturnValue({

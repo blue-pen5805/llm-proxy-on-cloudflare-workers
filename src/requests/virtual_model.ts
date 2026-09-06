@@ -4,6 +4,7 @@ import { RequestLogger } from "../utils/logger";
 export interface ChatCompletionAttemptResult {
   response: Response;
   retryable: boolean;
+  nativeProtocol?: boolean;
   route?: import("./chat_response_metadata").ChatResponseRouteMetadata;
 }
 

@@ -1,4 +1,5 @@
 import { Secrets } from "../../utils/secrets";
+import { chatCompletionsEndpoint, jsonEndpoint } from "../inference";
 import { defineProvider, Provider, ProviderConstructor } from "../provider";
 
 const AZURE_RESOURCE_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,62}$/;
@@ -22,16 +23,32 @@ function getAzureApiVersion(provider: AzureOpenAI): string {
 }
 
 export const AzureOpenAI = defineProvider({
+  endpoints: {
+    responses: jsonEndpoint("/responses", { supportsAiGateway: false }),
+    chat_completions: chatCompletionsEndpoint(undefined, {
+      prepareGateway(data) {
+        const { model, ...body } = data;
+        return {
+          path: `/${encodeURIComponent(getAzureResourceName(this as AzureOpenAI))}/${encodeURIComponent(model)}/chat/completions?api-version=${encodeURIComponent(getAzureApiVersion(this as AzureOpenAI))}`,
+          data: body,
+        };
+      },
+    }),
+
+    models: {
+      requiresProviderCredentials: true,
+      supportsAiGateway: false,
+      path: "/models",
+    },
+  },
+
   properties: {
     resourceName: "AZURE_OPENAI_RESOURCE_NAME" as keyof Env,
     apiVersionName: "AZURE_OPENAI_API_VERSION" as keyof Env,
   },
   openAICompatible: true,
   apiKeyName: "AZURE_OPENAI_API_KEY",
-  requiresProviderCredentialsForModels: true,
   pathnamePrefix: "/openai/v1",
-  supportsAiGatewayModels: false,
-  supportsAiGatewayNativeChat: true,
   available() {
     return (
       this.getApiKeys().length > 0 &&
@@ -61,29 +78,5 @@ export const AzureOpenAI = defineProvider({
     if (!deploymentPathMatch) return pathname;
 
     return `/${encodeURIComponent(getAzureResourceName(this as AzureOpenAI))}/${deploymentPathMatch[1]}/${deploymentPathMatch[2]}`;
-  },
-
-  async buildAiGatewayChatCompletionsRequest({
-    data,
-    headers,
-    apiKeyIndex,
-  }: {
-    data: Readonly<Record<string, unknown>> & { model: string };
-    headers: HeadersInit;
-    apiKeyIndex?: number;
-  }): Promise<[string, RequestInit]> {
-    const { model, ...body } = data;
-    const gatewayHeaders = new Headers(headers);
-    const providerHeaders = new Headers(await this.headers(apiKeyIndex));
-    providerHeaders.forEach((value, key) => gatewayHeaders.set(key, value));
-
-    return [
-      `/${encodeURIComponent(getAzureResourceName(this as AzureOpenAI))}/${encodeURIComponent(model)}/chat/completions?api-version=${encodeURIComponent(getAzureApiVersion(this as AzureOpenAI))}`,
-      {
-        method: "POST",
-        body: JSON.stringify(body),
-        headers: gatewayHeaders,
-      },
-    ];
   },
 }) as ProviderConstructor<[], AzureOpenAI>;

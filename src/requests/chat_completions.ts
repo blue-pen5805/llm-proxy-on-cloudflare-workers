@@ -1,11 +1,10 @@
 import { CloudflareAIGateway } from "../ai_gateway";
 import {
-  gatewayProviderPath,
+  customGatewayPath,
   resolveGatewayProvider,
 } from "../ai_gateway/custom_provider";
 import { addProxyAiGatewayMetadata } from "../ai_gateway/metadata";
 import { parseProviderSelector } from "../providers/profile";
-import { mergeHeaders } from "../providers/provider";
 import type { RoutedRequestContext } from "../request_context";
 import {
   determineApiKeySelectionPolicy,
@@ -47,29 +46,41 @@ function invalidRequestResponse(message: string, status = 400): Response {
   return openAIErrorResponse(message, status);
 }
 
+export interface ProtocolConversion {
+  prepareChat(): (Record<string, unknown> & { model: string }) | Response;
+  transformResponse(response: Response): Promise<Response>;
+}
+
 export interface PreparedChatCompletionsRequest {
   body: Record<string, unknown> & { model: string };
   endpoint?: "messages" | "responses";
   headers: HeadersInit;
   responseMetadataEnabled: boolean;
+  conversion?: ProtocolConversion;
 }
 
-function finalizeChatResponse(
+async function finalizeChatResponse(
   result: ChatCompletionAttemptResult,
   responseMetadataEnabled: boolean,
   requestedModel: string,
   startedAt: string,
   startedAtPerformance: number,
-): Response | Promise<Response> {
-  if (!result.route || !responseMetadataEnabled) return result.response;
-  return enrichChatResponseWithMetadata({
-    response: result.response,
-    route: result.route,
-    requestedModel,
-    requestId: RequestLogger.requestId(),
-    startedAt,
-    startedAtPerformance,
-  });
+  conversion?: ProtocolConversion,
+): Promise<Response> {
+  // Native protocol responses retain their JSON/SSE bytes, including provider fields.
+  if (result.nativeProtocol) return result.response;
+  const response =
+    !result.route || !responseMetadataEnabled
+      ? result.response
+      : await enrichChatResponseWithMetadata({
+          response: result.response,
+          route: result.route,
+          requestedModel,
+          requestId: RequestLogger.requestId(),
+          startedAt,
+          startedAtPerformance,
+        });
+  return conversion ? conversion.transformResponse(response) : response;
 }
 
 export async function handleChatCompletionsRequest(
@@ -155,6 +166,8 @@ export async function handleChatCompletionsRequest(
         endpoint,
         new Set(),
         preparedRequest?.headers ?? request.headers,
+        undefined,
+        preparedRequest?.conversion,
       );
       return finalizeChatResponse(
         result,
@@ -162,6 +175,7 @@ export async function handleChatCompletionsRequest(
         requestedModel,
         startedAt,
         startedAtPerformance,
+        preparedRequest?.conversion,
       );
     }
   }
@@ -174,6 +188,8 @@ export async function handleChatCompletionsRequest(
     preparedRequest?.headers ?? request.headers,
     endpoint,
     undefined,
+    undefined,
+    preparedRequest?.conversion,
   );
   return finalizeChatResponse(
     result,
@@ -181,6 +197,7 @@ export async function handleChatCompletionsRequest(
     requestedModel,
     startedAt,
     startedAtPerformance,
+    preparedRequest?.conversion,
   );
 }
 
@@ -191,10 +208,13 @@ async function attemptResolvedChatCompletion(
   requestedModel: string,
   virtualModels: VirtualModels,
   virtualModel: string,
-  endpoint: PreparedChatCompletionsRequest["endpoint"] | "chat_completions",
+  endpoint:
+    | NonNullable<PreparedChatCompletionsRequest["endpoint"]>
+    | "chat_completions",
   resolving: ReadonlySet<string>,
   requestHeaders: HeadersInit,
   inheritedTimeout?: number,
+  conversion?: ProtocolConversion,
 ): Promise<ChatCompletionAttemptResult> {
   const separatorIndex = requestedModel.indexOf("/");
   const providerSelector =
@@ -211,6 +231,7 @@ async function attemptResolvedChatCompletion(
       endpoint,
       inheritedTimeout,
       virtualModel,
+      conversion,
     );
   }
 
@@ -225,6 +246,7 @@ async function attemptResolvedChatCompletion(
       endpoint,
       inheritedTimeout,
       virtualModel,
+      conversion,
     );
   }
   // Config validation rejects cycles before this point. Keep a request-local
@@ -249,6 +271,7 @@ async function attemptResolvedChatCompletion(
         nextResolving,
         requestHeaders,
         timeout ?? inheritedTimeout,
+        conversion,
       ),
   );
 }
@@ -259,9 +282,12 @@ async function attemptChatCompletion(
   chatRequestBody: Record<string, unknown> & { model: string },
   requestedModel: string,
   requestHeaders: HeadersInit,
-  endpoint: PreparedChatCompletionsRequest["endpoint"] | "chat_completions",
+  endpoint:
+    | NonNullable<PreparedChatCompletionsRequest["endpoint"]>
+    | "chat_completions",
   timeout?: number,
   virtualModel?: string,
+  conversion?: ProtocolConversion,
 ): Promise<ChatCompletionAttemptResult> {
   const { request, apiKeyIndex: contextApiKeyIndex } = context;
   const fetchWithTimeout = (
@@ -297,10 +323,25 @@ async function attemptChatCompletion(
   if (providerError) {
     return { response: providerError, retryable: true };
   }
-  const transformResponse = async (
-    responsePromise: Promise<Response>,
-  ): Promise<Response> =>
-    providerInstance.transformChatCompletionsResponse(await responsePromise);
+  const resolved = providerInstance.resolveInference(model, endpoint);
+  if (!resolved) {
+    return {
+      response: invalidRequestResponse(
+        `${providerName} does not support ${endpoint}.`,
+      ),
+      retryable: true,
+    };
+  }
+  const operation = resolved.endpoint;
+  if (operation.requiresAiGateway && !aiGateway) {
+    return {
+      response: invalidRequestResponse(
+        `${providerName} requires Cloudflare AI Gateway for ${endpoint}.`,
+        503,
+      ),
+      retryable: true,
+    };
+  }
 
   // Get API key apiKeyIndex
   const apiKeyIndex = await selectApiKeyIndex(
@@ -309,20 +350,16 @@ async function attemptChatCompletion(
     "rotate",
     providerSelector,
   );
-  const aiGatewayProvider =
-    aiGateway &&
-    !providerInstance.requiresCustomAiGatewayProvider &&
-    CloudflareAIGateway.isSupportedProvider(providerName, true)
-      ? providerName
-      : undefined;
-  // Retain request-level Gateway controls only when this provider will use
-  // AI Gateway. Direct provider requests must not receive Cloudflare metadata.
-  const willUseAiGateway = Boolean(
-    aiGateway &&
-    (aiGateway.alwaysUse ||
-      (!providerInstance.requiresCustomAiGatewayProvider &&
-        CloudflareAIGateway.isSupportedProvider(providerName))),
+  const aiGatewayProvider = resolveGatewayProvider(
+    operation.upstream?.name ?? providerName,
+    aiGateway,
+    !operation.upstream &&
+      operation.supportsAiGateway !== false &&
+      !providerInstance.requiresCustomAiGatewayProvider &&
+      CloudflareAIGateway.isSupportedProvider(providerName),
   );
+  const nativeGateway = aiGatewayProvider === providerName;
+  const willUseAiGateway = aiGatewayProvider !== undefined;
   const sanitizedHeaders = stripProxyAuthorizationHeaders(requestHeaders, {
     preserveAiGatewayHeaders: willUseAiGateway,
   });
@@ -335,8 +372,6 @@ async function attemptChatCompletion(
     });
   }
   const configuredApiKeys = providerInstance.getApiKeys();
-  const gatewayApiKeys =
-    providerInstance.getAiGatewayApiKeys?.() ?? configuredApiKeys;
   const selectionPolicy = determineApiKeySelectionPolicy(
     contextApiKeyIndex,
     "rotate",
@@ -349,12 +384,7 @@ async function attemptChatCompletion(
       keyIndex: selectedIndex,
       keyCount: configuredApiKeys.length,
       selectionPolicy,
-      viaAiGateway:
-        aiGatewayProvider !== undefined ||
-        Boolean(
-          aiGateway &&
-          (aiGateway.alwaysUse || providerInstance.supportsAiGatewayNativeChat),
-        ),
+      viaAiGateway: willUseAiGateway,
     });
   const routeMetadata = (
     viaAiGateway: boolean,
@@ -368,11 +398,37 @@ async function attemptChatCompletion(
     ...(viaAiGateway && aiGateway ? { gateway: aiGateway.gatewayId } : {}),
   });
 
-  // Generate chat completions request
-  const supportedRequestBody = providerInstance.filterSupportedChatParameters({
-    ...chatRequestBody,
-    model,
-  });
+  // Resolve before conversion so native requests retain their complete payload.
+  const preparedBody = resolved.native
+    ? chatRequestBody
+    : (conversion?.prepareChat() ?? chatRequestBody);
+  if (preparedBody instanceof Response)
+    return { response: preparedBody, retryable: false };
+  if (conversion && !resolved.native) {
+    sanitizedHeaders.delete("anthropic-version");
+    sanitizedHeaders.delete("anthropic-beta");
+  }
+  const supportedRequestBody = { ...preparedBody, model };
+  const transformResponse = async (response: Response): Promise<Response> =>
+    operation.transformResponse
+      ? operation.transformResponse.call(
+          providerInstance,
+          response,
+          model,
+          supportedRequestBody,
+        )
+      : response;
+  const buildRequest = (selectedIndex?: number) =>
+    operation.buildRequest.call(providerInstance, {
+      data: supportedRequestBody,
+      headers: sanitizedHeaders,
+      apiKeyIndex: selectedIndex,
+      target: aiGatewayProvider
+        ? nativeGateway
+          ? "gateway"
+          : "custom-gateway"
+        : "direct",
+    });
 
   // If AI Gateway is enabled and the provider supports it, use AI Gateway
   if (aiGateway && aiGatewayProvider) {
@@ -391,202 +447,82 @@ async function attemptChatCompletion(
     const gatewayApiKeyIndexes =
       configuredApiKeys.length === 0
         ? []
-        : contextApiKeyIndex === undefined
+        : contextApiKeyIndex === undefined && nativeGateway
           ? [apiKeyIndex, ...remainingApiKeyIndexes]
           : [apiKeyIndex];
     const compatibilityAttempts =
       configuredApiKeys.length === 0
         ? [undefined]
         : gatewayApiKeyIndexes.slice(0, MAX_COMPATIBILITY_FALLBACK_ATTEMPTS);
-    // The Compatibility Endpoint serializes its own request body from the
-    // parsed data, so the provider request builder (whose serialized body
-    // would be discarded) is skipped; only its header merge is reproduced.
-    // Providers reaching this path use the default builder, which layers
-    // provider-computed headers over the sanitized client headers. Rebuild
-    // that merge for each credential so fallback cannot keep the first slot's
-    // native authentication headers.
-    const headersByCredential = await Promise.all(
-      compatibilityAttempts.map(async (candidateIndex) =>
-        mergeHeaders(
-          sanitizedHeaders,
-          await providerInstance.headers(candidateIndex),
-        ),
-      ),
-    );
-    const gatewayRequests = aiGateway.buildChatCompletionsRequests({
-      provider: aiGatewayProvider,
-      body: "",
-      parsedBody: supportedRequestBody as {
-        model: string;
-        [key: string]: unknown;
-      },
-      headers: headersByCredential[0]!,
-      headersByCredential,
-      apiKeys: gatewayApiKeyIndexes.map(
-        (candidateIndex) =>
-          gatewayApiKeys[candidateIndex] ?? configuredApiKeys[candidateIndex],
-      ),
-    });
-    gatewayRequests.forEach(([, requestInit], attemptIndex) => {
-      const headers = new Headers(requestInit.headers);
-      addProxyAiGatewayMetadata(headers, {
-        credentials: {
-          credentialProfile: profile,
-          providerKeyIndex:
-            configuredApiKeys.length === 0
-              ? null
-              : // Gateway requests and credential indexes are built one-to-one.
-                gatewayApiKeyIndexes[attemptIndex]!,
-        },
-      });
-      requestInit.headers = headers;
-    });
-    const response = await transformResponse(
-      fetchWithTimeout((signal) =>
-        fetchCompatibilityFallback(
-          gatewayRequests,
-          signal,
-          /* istanbul ignore next -- Gateway requests and credential indexes are built one-to-one */
-          (attemptIndex) => {
-            selectedApiKeyIndex = gatewayApiKeyIndexes[attemptIndex] ?? 0;
-            return {
-              ...recordSelection(selectedApiKeyIndex),
-              model: loggedModel,
-            };
+    const gatewayRequests = compatibilityAttempts.map(
+      (candidateIndex) => async (): Promise<[RequestInfo, RequestInit]> => {
+        const [path, init] = await buildRequest(candidateIndex);
+        const headers = new Headers(init.headers);
+        addProxyAiGatewayMetadata(headers, {
+          credentials: {
+            credentialProfile: profile,
+            providerKeyIndex: candidateIndex ?? null,
           },
-          (attemptIndex, attemptResponse) =>
-            recordApiKeyOutcome(
-              providerSelector,
-              gatewayApiKeyIndexes[attemptIndex] ?? 0,
-              configuredApiKeys.length,
-              attemptResponse.status,
-            ),
-        ),
+        });
+        return operation.transport === "workers-ai-rest"
+          ? aiGateway.buildWorkersAiInferenceRequest({
+              path,
+              body: init.body,
+              headers,
+            })
+          : aiGateway.buildProviderEndpointRequest({
+              provider: aiGatewayProvider,
+              path: nativeGateway
+                ? path
+                : customGatewayPath(
+                    operation.upstream ?? providerInstance,
+                    path,
+                  ),
+              method: init.method,
+              body: init.body,
+              headers,
+            });
+      },
+    );
+    const upstreamResponse = await fetchWithTimeout((signal) =>
+      fetchCompatibilityFallback(
+        gatewayRequests,
+        signal,
+        /* istanbul ignore next -- Gateway requests and credential indexes are built one-to-one */
+        (attemptIndex) => {
+          selectedApiKeyIndex = gatewayApiKeyIndexes[attemptIndex] ?? 0;
+          return {
+            ...recordSelection(selectedApiKeyIndex),
+            model: loggedModel,
+          };
+        },
+        (attemptIndex, attemptResponse) =>
+          recordApiKeyOutcome(
+            providerSelector,
+            gatewayApiKeyIndexes[attemptIndex] ?? 0,
+            configuredApiKeys.length,
+            attemptResponse.status,
+          ),
       ),
     );
+    const response = await transformResponse(upstreamResponse);
     return {
       response,
       retryable: isRetryableCandidateStatus(response.status),
       route: routeMetadata(true, selectedApiKeyIndex),
+      nativeProtocol: Boolean(resolved.native && conversion),
     };
   }
 
-  if (willUseAiGateway) {
-    addProxyAiGatewayMetadata(sanitizedHeaders, {
-      credentials: {
-        credentialProfile: profile,
-        providerKeyIndex: configuredApiKeys.length === 0 ? null : apiKeyIndex,
-      },
-    });
-  }
-
-  const [requestInfo, requestInit] =
-    await providerInstance.buildChatCompletionsRequest({
-      body: "",
-      preparedData: supportedRequestBody,
-      headers: sanitizedHeaders,
-      apiKeyIndex,
-    });
-
+  const [url, init] = await buildRequest(apiKeyIndex);
   const keyLogFields = recordSelection(apiKeyIndex);
-  const completeGatewayRequest = async ([url, gatewayInit]: [
-    RequestInfo,
-    RequestInit,
-  ]): Promise<ChatCompletionAttemptResult> => {
-    const response = await transformResponse(
-      RequestLogger.withFields(
-        { ...keyLogFields, via_ai_gateway: true, model: loggedModel },
-        () =>
-          fetchWithTimeout((signal) =>
-            fetchCompatibilityFallback([[url, gatewayInit]], signal),
-          ),
-      ),
-    );
-    recordApiKeyOutcome(
-      providerSelector,
-      apiKeyIndex,
-      configuredApiKeys.length,
-      response.status,
-    );
-    return {
-      response,
-      retryable: isRetryableCandidateStatus(response.status),
-      route: routeMetadata(true),
-    };
-  };
-
-  // Some Gateway providers (notably Azure OpenAI) require account-specific
-  // path segments and are not represented by the Compatibility Endpoint.
-  if (
-    aiGateway &&
-    !providerInstance.requiresCustomAiGatewayProvider &&
-    CloudflareAIGateway.isSupportedProvider(providerName)
-  ) {
-    const providerRequest =
-      await providerInstance.buildAiGatewayChatCompletionsRequest({
-        data: supportedRequestBody as Record<string, unknown> & {
-          model: string;
-        },
-        headers: sanitizedHeaders,
-        apiKeyIndex,
-      });
-    if (providerRequest) {
-      const [path, init] = providerRequest;
-      return completeGatewayRequest(
-        aiGateway.buildProviderEndpointRequest({
-          provider: providerName,
-          method: init.method,
-          path,
-          body: init.body,
-          headers: init.headers ?? {},
-        }),
-      );
-    }
-  }
-
-  // In strict Gateway mode, a provider-specific endpoint is the final route
-  // for native providers without Compatibility support and for Custom
-  // Providers registered by the deployment helper. Direct fallback is never
-  // allowed in this mode.
-  const strictGatewayProvider = aiGateway?.alwaysUse
-    ? resolveGatewayProvider(
-        providerName,
-        aiGateway,
-        !providerInstance.requiresCustomAiGatewayProvider &&
-          CloudflareAIGateway.isSupportedProvider(providerName),
-      )
-    : undefined;
-  if (aiGateway && strictGatewayProvider) {
-    return completeGatewayRequest(
-      aiGateway.buildProviderEndpointRequest({
-        provider: strictGatewayProvider,
-        method: requestInit.method,
-        path: gatewayProviderPath(
-          providerName,
-          providerInstance,
-          providerInstance.chatCompletionPath,
-          strictGatewayProvider,
-        ),
-        body: requestInit.body,
-        // Provider request builders always normalize headers before returning.
-        headers: requestInit.headers!,
-      }),
-    );
-  }
-
-  // Request to the provider endpoint
   const response = await transformResponse(
-    RequestLogger.withFields({ ...keyLogFields, model: loggedModel }, () =>
-      fetchWithTimeout((signal) =>
-        providerInstance.fetch(
-          requestInfo,
-          {
-            ...requestInit,
-            signal,
-          },
-          apiKeyIndex,
+    await RequestLogger.withFields(
+      { ...keyLogFields, model: loggedModel },
+      () =>
+        fetchWithTimeout((signal) =>
+          providerInstance.send(url, { ...init, signal }),
         ),
-      ),
     ),
   );
   recordApiKeyOutcome(
@@ -599,5 +535,6 @@ async function attemptChatCompletion(
     response,
     retryable: isRetryableCandidateStatus(response.status),
     route: routeMetadata(false),
+    nativeProtocol: Boolean(resolved.native && conversion),
   };
 }

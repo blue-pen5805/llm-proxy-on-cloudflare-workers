@@ -2,7 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
 import { BUILT_IN_PROVIDER_CONSTRUCTORS } from "~/src/providers";
 import { getAllProviderInstances, getProviderByName } from "~/src/providers";
-import { ProviderNotSupportedError } from "~/src/providers/provider";
+import { PerplexityAi } from "~/src/providers/perplexity-ai/provider";
+import {
+  createProvider,
+  ProviderNotSupportedError,
+} from "~/src/providers/provider";
 import {
   handleModelRetrieveRequest,
   handleModelsRequest,
@@ -48,13 +52,22 @@ function mockProviderConstructor(instance: unknown) {
 
 describe("models", () => {
   const mockProviderClass = {
+    ...createProvider(),
+    endpoints: {
+      models: {
+        path: "/models",
+        validate: vi.fn(),
+        convertResponse: vi.fn(),
+        getStaticModels: vi.fn(),
+      },
+    },
+
     available: vi.fn(),
     baseUrl: vi.fn(() => "https://api.example.com"),
-    buildModelsRequest: vi.fn(),
-    convertModelsToOpenAIFormat: vi.fn(),
-    fetch: vi.fn(),
+
+    send: vi.fn(),
     headers: vi.fn(),
-    getStaticModels: vi.fn(),
+
     getApiKeys: vi.fn().mockReturnValue(["test-key"]),
     getNextApiKeyIndex: vi.fn().mockResolvedValue(0),
   };
@@ -125,11 +138,11 @@ describe("models", () => {
       mockProviderConstructor(mockProviderClass);
 
     mockProviderClass.available.mockReturnValue(true);
-    mockProviderClass.buildModelsRequest.mockReturnValue([
+    mockProviderClass.endpoints.models.validate.mockReturnValue([
       "/models",
       { method: "GET" },
     ]);
-    mockProviderClass.convertModelsToOpenAIFormat.mockReturnValue({
+    mockProviderClass.endpoints.models.convertResponse.mockReturnValue({
       object: "list",
       data: [
         {
@@ -143,7 +156,7 @@ describe("models", () => {
     mockProviderClass.headers.mockReturnValue({
       "Content-Type": "application/json",
     });
-    mockProviderClass.fetch.mockImplementation(() =>
+    mockProviderClass.send.mockImplementation(() =>
       Promise.resolve(new Response(JSON.stringify({ data: [] }))),
     );
   });
@@ -151,6 +164,46 @@ describe("models", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     Environments.setEnv(undefined);
+  });
+
+  it("omits undeclared model discovery without upstream I/O", async () => {
+    const provider = new PerplexityAi();
+    const send = vi.spyOn(provider, "send");
+    vi.mocked(getAllProviderInstances).mockReturnValue({
+      "perplexity-ai": provider,
+    });
+    const response = await handleModelsRequest({} as any, mockAIGateway as any);
+    expect(await response.json()).toEqual({ object: "list", data: [] });
+    expect(send).not.toHaveBeenCalled();
+    expect(helpers.fetchWithLogging).not.toHaveBeenCalled();
+  });
+
+  it("preserves OpenAI model metadata without a provider conversion hook", async () => {
+    const provider = createProvider({
+      endpoints: { models: { path: "/models" } },
+      available: () => true,
+    });
+    const send = vi.spyOn(provider, "send").mockResolvedValue(
+      Response.json({
+        object: "list",
+        data: [
+          {
+            id: "model",
+            object: "model",
+            created: 0,
+            owned_by: "source",
+            metadata: { context: 4096 },
+          },
+        ],
+      }),
+    );
+    vi.mocked(getAllProviderInstances).mockReturnValue({ openai: provider });
+    const response = await handleModelsRequest({} as any);
+    expect(await response.json()).toMatchObject({
+      object: "list",
+      data: [{ id: "openai/model", metadata: { context: 4096 } }],
+    });
+    expect(send).toHaveBeenCalledOnce();
   });
 
   it("should return models from all available providers", async () => {
@@ -188,7 +241,7 @@ describe("models", () => {
     } as any);
     const body = (await response.json()) as ModelsResponse;
     expect(body.data.map((model) => model.id)).toEqual(["anthropic/gpt-4"]);
-    expect(mockProviderClass.fetch).toHaveBeenCalledOnce();
+    expect(mockProviderClass.send).toHaveBeenCalledOnce();
   });
 
   it("omits virtual models when a real-provider filter is active", async () => {
@@ -325,8 +378,13 @@ describe("models", () => {
     const json = vi.spyOn(upstreamResponse, "json");
     const parsingProviderClass = {
       ...mockProviderClass,
-      fetch: vi.fn().mockResolvedValue(upstreamResponse),
-      convertModelsToOpenAIFormat: vi.fn().mockReturnValue(formattedModels),
+      endpoints: {
+        models: {
+          ...mockProviderClass.endpoints.models,
+          convertResponse: vi.fn().mockReturnValue(formattedModels),
+        },
+      },
+      send: vi.fn().mockResolvedValue(upstreamResponse),
     };
 
     BUILT_IN_PROVIDER_CONSTRUCTORS.test =
@@ -343,7 +401,7 @@ describe("models", () => {
     expect(providerName).toBe("test");
     expect(json).toHaveBeenCalledOnce();
     expect(
-      parsingProviderClass.convertModelsToOpenAIFormat,
+      parsingProviderClass.endpoints.models.convertResponse,
     ).toHaveBeenCalledWith(responseJson);
     await expect(response.json()).resolves.toEqual({
       object: "list",
@@ -362,7 +420,7 @@ describe("models", () => {
     const pendingResponses: Array<(response: Response) => void> = [];
     const concurrentProvider = {
       ...mockProviderClass,
-      fetch: vi.fn(
+      send: vi.fn(
         () =>
           new Promise<Response>((resolve) => {
             pendingResponses.push(resolve);
@@ -381,7 +439,7 @@ describe("models", () => {
     } as any);
 
     await vi.waitFor(() => {
-      expect(concurrentProvider.fetch).toHaveBeenCalledTimes(6);
+      expect(concurrentProvider.send).toHaveBeenCalledTimes(6);
     });
     for (const resolve of pendingResponses) {
       resolve(new Response(JSON.stringify({ data: [] })));
@@ -417,9 +475,14 @@ describe("models", () => {
   it("should skip unavailable providers that cannot list models through AI Gateway", async () => {
     const unavailableProviderClass = {
       ...mockProviderClass,
+      endpoints: {
+        models: {
+          ...mockProviderClass.endpoints.models,
+          validate: vi.fn(),
+          supportsAiGateway: false,
+        },
+      },
       available: vi.fn().mockReturnValue(false),
-      supportsAiGatewayModels: false,
-      buildModelsRequest: vi.fn(),
     };
 
     Object.keys(BUILT_IN_PROVIDER_CONSTRUCTORS).forEach((key) => {
@@ -435,15 +498,22 @@ describe("models", () => {
       object: "list",
       data: [],
     });
-    expect(unavailableProviderClass.buildModelsRequest).not.toHaveBeenCalled();
+    expect(
+      unavailableProviderClass.endpoints.models.validate,
+    ).not.toHaveBeenCalled();
   });
 
   it("skips AI Gateway model discovery when local provider credentials are required", async () => {
     const unavailableProviderClass = {
       ...mockProviderClass,
+      endpoints: {
+        models: {
+          ...mockProviderClass.endpoints.models,
+          validate: vi.fn(),
+          requiresProviderCredentials: true,
+        },
+      },
       available: vi.fn().mockReturnValue(false),
-      requiresProviderCredentialsForModels: true,
-      buildModelsRequest: vi.fn(),
     };
 
     Object.keys(BUILT_IN_PROVIDER_CONSTRUCTORS).forEach((key) => {
@@ -459,7 +529,9 @@ describe("models", () => {
       object: "list",
       data: [],
     });
-    expect(unavailableProviderClass.buildModelsRequest).not.toHaveBeenCalled();
+    expect(
+      unavailableProviderClass.endpoints.models.validate,
+    ).not.toHaveBeenCalled();
     expect(mockAIGateway.buildProviderEndpointRequest).not.toHaveBeenCalled();
     expect(helpers.fetchWithLogging).not.toHaveBeenCalled();
   });
@@ -501,12 +573,21 @@ describe("models", () => {
   it("uses a Custom Provider for unsupported model endpoints in strict mode", async () => {
     const provider = {
       ...mockProviderClass,
-      supportsAiGatewayModels: false,
+      endpoints: {
+        models: {
+          ...mockProviderClass.endpoints.models,
+          supportsAiGateway: false,
+        },
+      },
+
       requiresCustomAiGatewayProvider: false,
       pathnamePrefix: vi.fn(() => "/v1"),
     };
     provider.available.mockReturnValue(true);
-    provider.buildModelsRequest.mockReturnValue(["/models", { method: "GET" }]);
+    provider.endpoints.models.validate.mockReturnValue([
+      "/models",
+      { method: "GET" },
+    ]);
     const buildProviderEndpointRequest = vi
       .fn()
       .mockReturnValue([
@@ -528,7 +609,7 @@ describe("models", () => {
         path: "/v1/models",
       }),
     );
-    expect(provider.fetch).not.toHaveBeenCalled();
+    expect(provider.send).not.toHaveBeenCalled();
   });
 
   it("should isolate AI Gateway request failures", async () => {
@@ -580,7 +661,7 @@ describe("models", () => {
     expect(cancel).toHaveBeenCalledOnce();
     expect(helpers.readResponseJson).not.toHaveBeenCalled();
     expect(
-      mockProviderClass.convertModelsToOpenAIFormat,
+      mockProviderClass.endpoints.models.convertResponse,
     ).not.toHaveBeenCalled();
     expect(consoleSpy).toHaveBeenCalledWith({
       event: "provider.models.failed",
@@ -621,30 +702,45 @@ describe("models", () => {
     const cancelCohereBody = vi.spyOn(cohereResponse.body!, "cancel");
     const cohereProvider = {
       ...mockProviderClass,
-      fetch: vi.fn().mockResolvedValue(cohereResponse),
-      convertModelsToOpenAIFormat: vi.fn(),
+      endpoints: {
+        models: {
+          ...mockProviderClass.endpoints.models,
+          convertResponse: vi.fn(),
+        },
+      },
+      send: vi.fn().mockResolvedValue(cohereResponse),
     };
     const openAIProvider = {
       ...mockProviderClass,
-      fetch: vi.fn().mockReturnValue(new Promise<Response>(() => {})),
-      convertModelsToOpenAIFormat: vi.fn(),
+      endpoints: {
+        models: {
+          ...mockProviderClass.endpoints.models,
+          convertResponse: vi.fn(),
+        },
+      },
+      send: vi.fn().mockReturnValue(new Promise<Response>(() => {})),
     };
     const healthyProvider = {
       ...mockProviderClass,
-      fetch: vi
+      endpoints: {
+        models: {
+          ...mockProviderClass.endpoints.models,
+          convertResponse: vi.fn().mockReturnValue({
+            object: "list",
+            data: [
+              {
+                id: "available-model",
+                object: "model",
+                created: 0,
+                owned_by: "healthy",
+              },
+            ],
+          }),
+        },
+      },
+      send: vi
         .fn()
         .mockResolvedValue(new Response(JSON.stringify({ data: [] }))),
-      convertModelsToOpenAIFormat: vi.fn().mockReturnValue({
-        object: "list",
-        data: [
-          {
-            id: "available-model",
-            object: "model",
-            created: 0,
-            owned_by: "healthy",
-          },
-        ],
-      }),
     };
     vi.mocked(helpers.withTimeout).mockImplementation(
       async (promise, abortController, _timeoutMs, providerName) => {
@@ -685,14 +781,18 @@ describe("models", () => {
       ],
     });
     expect(cancelCohereBody).toHaveBeenCalledOnce();
-    expect(cohereProvider.convertModelsToOpenAIFormat).not.toHaveBeenCalled();
-    expect(openAIProvider.convertModelsToOpenAIFormat).not.toHaveBeenCalled();
+    expect(
+      cohereProvider.endpoints.models.convertResponse,
+    ).not.toHaveBeenCalled();
+    expect(
+      openAIProvider.endpoints.models.convertResponse,
+    ).not.toHaveBeenCalled();
   });
 
   it("should handle provider errors gracefully", async () => {
     const errorProviderClass = {
       ...mockProviderClass,
-      fetch: vi.fn().mockRejectedValue(new Error("Network error")),
+      send: vi.fn().mockRejectedValue(new Error("Network error")),
     };
 
     // Clear and reset providers
@@ -728,7 +828,7 @@ describe("models", () => {
   it("should handle ProviderNotSupportedError specially", async () => {
     const notSupportedProviderClass = {
       ...mockProviderClass,
-      fetch: vi
+      send: vi
         .fn()
         .mockRejectedValue(new ProviderNotSupportedError("Not supported")),
     };
@@ -759,12 +859,17 @@ describe("models", () => {
   it("should handle invalid response format", async () => {
     const invalidResponseProviderClass = {
       ...mockProviderClass,
-      fetch: vi
+      endpoints: {
+        models: {
+          ...mockProviderClass.endpoints.models,
+          convertResponse: vi.fn().mockReturnValue(null),
+        },
+      },
+      send: vi
         .fn()
         .mockImplementation(() =>
           Promise.resolve(new Response(JSON.stringify({ data: [] }))),
         ),
-      convertModelsToOpenAIFormat: vi.fn().mockReturnValue(null),
     };
 
     // Clear and reset providers
@@ -799,12 +904,17 @@ describe("models", () => {
   it("should handle response without data field", async () => {
     const noDataProviderClass = {
       ...mockProviderClass,
-      fetch: vi
+      endpoints: {
+        models: {
+          ...mockProviderClass.endpoints.models,
+          convertResponse: vi.fn().mockReturnValue({ object: "list" }),
+        },
+      },
+      send: vi
         .fn()
         .mockImplementation(() =>
           Promise.resolve(new Response(JSON.stringify({ data: [] }))),
         ),
-      convertModelsToOpenAIFormat: vi.fn().mockReturnValue({ object: "list" }),
     };
 
     // Clear and reset providers
@@ -838,23 +948,28 @@ describe("models", () => {
   it("should prefix model IDs with provider name", async () => {
     const multiModelProviderClass = {
       ...mockProviderClass,
-      convertModelsToOpenAIFormat: vi.fn().mockReturnValue({
-        object: "list",
-        data: [
-          {
-            id: "gpt-4",
-            object: "model",
-            created: 1234567890,
-            owned_by: "openai",
-          },
-          {
-            id: "gpt-3.5-turbo",
-            object: "model",
-            created: 1234567890,
-            owned_by: "openai",
-          },
-        ],
-      }),
+      endpoints: {
+        models: {
+          ...mockProviderClass.endpoints.models,
+          convertResponse: vi.fn().mockReturnValue({
+            object: "list",
+            data: [
+              {
+                id: "gpt-4",
+                object: "model",
+                created: 1234567890,
+                owned_by: "openai",
+              },
+              {
+                id: "gpt-3.5-turbo",
+                object: "model",
+                created: 1234567890,
+                owned_by: "openai",
+              },
+            ],
+          }),
+        },
+      },
     };
 
     // Clear and reset providers
@@ -877,18 +992,23 @@ describe("models", () => {
   it("prefixes models with a named profile selector", async () => {
     const profiledProvider = {
       ...mockProviderClass,
+      endpoints: {
+        models: {
+          ...mockProviderClass.endpoints.models,
+          getStaticModels: vi.fn().mockReturnValue({
+            object: "list",
+            data: [
+              {
+                id: "gpt-oss-120b",
+                object: "model",
+                created: 0,
+                owned_by: "ollama",
+              },
+            ],
+          }),
+        },
+      },
       available: vi.fn().mockReturnValue(true),
-      getStaticModels: vi.fn().mockReturnValue({
-        object: "list",
-        data: [
-          {
-            id: "gpt-oss-120b",
-            object: "model",
-            created: 0,
-            owned_by: "ollama",
-          },
-        ],
-      }),
     };
 
     const response = await handleModelsRequest({
@@ -902,17 +1022,22 @@ describe("models", () => {
   it("should return static models for custom providers when configured", async () => {
     const staticModelsProviderClass = {
       ...mockProviderClass,
-      getStaticModels: vi.fn().mockReturnValue({
-        object: "list",
-        data: [
-          {
-            id: "custom-model-1",
-            object: "model",
-            created: 1234567890,
-            owned_by: "custom",
-          },
-        ],
-      }),
+      endpoints: {
+        models: {
+          ...mockProviderClass.endpoints.models,
+          getStaticModels: vi.fn().mockReturnValue({
+            object: "list",
+            data: [
+              {
+                id: "custom-model-1",
+                object: "model",
+                created: 1234567890,
+                owned_by: "custom",
+              },
+            ],
+          }),
+        },
+      },
     };
 
     // Clear and reset providers
@@ -929,33 +1054,35 @@ describe("models", () => {
 
     expect(body.data).toHaveLength(1);
     expect(body.data[0].id).toBe("custom/custom-model-1");
-    expect(mockProviderClass.fetch).not.toHaveBeenCalled();
-    expect(staticModelsProviderClass.getStaticModels).toHaveBeenCalled();
+    expect(mockProviderClass.send).not.toHaveBeenCalled();
+    expect(
+      staticModelsProviderClass.endpoints.models.getStaticModels,
+    ).toHaveBeenCalled();
   });
 
-  it("should pass apiKeyIndex to provider.fetch call", async () => {
+  it("authenticates the model request with the selected key before sending", async () => {
     const testProviderClass = {
       ...mockProviderClass,
-      fetch: vi
-        .fn()
-        .mockImplementation(
-          (_url: string, init: RequestInit, apiKeyIndex?: number) => {
-            // Verify apiKeyIndex is passed correctly
-            expect(apiKeyIndex).toBe(2);
-            return Promise.resolve(new Response(JSON.stringify({ data: [] })));
-          },
-        ),
-      convertModelsToOpenAIFormat: vi.fn().mockReturnValue({
-        object: "list",
-        data: [
-          {
-            id: "test-model",
-            object: "model",
-            created: 1234567890,
-            owned_by: "test",
-          },
-        ],
-      }),
+      endpoints: {
+        models: {
+          ...mockProviderClass.endpoints.models,
+          convertResponse: vi.fn().mockReturnValue({
+            object: "list",
+            data: [
+              {
+                id: "test-model",
+                object: "model",
+                created: 1234567890,
+                owned_by: "test",
+              },
+            ],
+          }),
+        },
+      },
+      headers: vi.fn(async (index?: number) => ({
+        Authorization: `Bearer key-${index}`,
+      })),
+      send: vi.fn().mockResolvedValue(Response.json({ data: [] })),
     };
 
     // Clear and reset providers
@@ -975,11 +1102,12 @@ describe("models", () => {
 
     expect(body.data).toHaveLength(1);
     expect(body.data[0].id).toBe("test/test-model");
-    expect(testProviderClass.fetch).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.any(Object),
-      2,
-    );
+    expect(testProviderClass.headers).toHaveBeenCalledExactlyOnceWith(2);
+    expect(
+      new Headers(testProviderClass.send.mock.calls[0][1].headers).get(
+        "authorization",
+      ),
+    ).toBe("Bearer key-2");
   });
 
   describe("rate-limit key rotation", () => {
@@ -1278,18 +1406,23 @@ describe("models", () => {
     });
     const boundedProvider = {
       ...mockProviderClass,
-      convertModelsToOpenAIFormat: vi.fn().mockReturnValue({
-        object: "list",
-        data: Array.from(
-          { length: MAX_MODELS_PER_PROVIDER + 1 },
-          (_, index) => ({
-            id: `model-${index}`,
-            object: "model",
-            created: 0,
-            owned_by: "test",
+      endpoints: {
+        models: {
+          ...mockProviderClass.endpoints.models,
+          convertResponse: vi.fn().mockReturnValue({
+            object: "list",
+            data: Array.from(
+              { length: MAX_MODELS_PER_PROVIDER + 1 },
+              (_, index) => ({
+                id: `model-${index}`,
+                object: "model",
+                created: 0,
+                owned_by: "test",
+              }),
+            ),
           }),
-        ),
-      }),
+        },
+      },
     };
     BUILT_IN_PROVIDER_CONSTRUCTORS.test =
       mockProviderConstructor(boundedProvider);
@@ -1298,7 +1431,7 @@ describe("models", () => {
     const body = (await response.json()) as ModelsResponse;
     expect(body.data).toHaveLength(MAX_MODELS_PER_PROVIDER);
 
-    boundedProvider.convertModelsToOpenAIFormat.mockReturnValue({
+    boundedProvider.endpoints.models.convertResponse.mockReturnValue({
       object: "list",
       data: [
         {
@@ -1340,7 +1473,7 @@ describe("models", () => {
 
       expect(response.status).toBe(200);
       expect(response.headers.get("X-Proxy-Models-Cache")).toBeNull();
-      expect(mockProviderClass.fetch).toHaveBeenCalled();
+      expect(mockProviderClass.send).toHaveBeenCalled();
     });
 
     it("falls back to uncached discovery when reading Cache API fails", async () => {
@@ -1357,7 +1490,7 @@ describe("models", () => {
       expect(response.status).toBe(200);
       expect(response.headers.get("X-Proxy-Models-Cache")).toBeNull();
       expect(cache.put).not.toHaveBeenCalled();
-      expect(mockProviderClass.fetch).toHaveBeenCalled();
+      expect(mockProviderClass.send).toHaveBeenCalled();
     });
 
     it("serves a cache miss when an asynchronous cache write fails", async () => {
@@ -1387,7 +1520,7 @@ describe("models", () => {
       expect(missResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
       expect(waitUntil).toHaveBeenCalledOnce();
       await waitUntil.mock.calls[0][0];
-      const upstreamCalls = mockProviderClass.fetch.mock.calls.length;
+      const upstreamCalls = mockProviderClass.send.mock.calls.length;
 
       const hitResponse = await handleModelsRequest(context);
       expect(hitResponse.headers.get("X-Proxy-Models-Cache")).toBe("HIT");
@@ -1395,7 +1528,7 @@ describe("models", () => {
         "private, no-store",
       );
       expect(hitResponse.headers.get("Content-Type")).toBe("application/json");
-      expect(mockProviderClass.fetch.mock.calls.length).toBe(upstreamCalls);
+      expect(mockProviderClass.send.mock.calls.length).toBe(upstreamCalls);
       await expect(hitResponse.json()).resolves.toEqual(
         await missResponse.json(),
       );
@@ -1455,7 +1588,7 @@ describe("models", () => {
       } as any);
       expect(primeResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
 
-      mockProviderClass.convertModelsToOpenAIFormat.mockReturnValue({
+      mockProviderClass.endpoints.models.convertResponse.mockReturnValue({
         object: "list",
         data: [
           { id: "fresh-model", object: "model", created: 1, owned_by: "test" },
@@ -1583,7 +1716,7 @@ describe("models", () => {
     it("does not cache aggregates with a failed provider", async () => {
       const errorProviderClass = {
         ...mockProviderClass,
-        fetch: vi.fn().mockRejectedValue(new Error("Network error")),
+        send: vi.fn().mockRejectedValue(new Error("Network error")),
       };
       Object.keys(BUILT_IN_PROVIDER_CONSTRUCTORS).forEach((key) => {
         delete BUILT_IN_PROVIDER_CONSTRUCTORS[key];
@@ -1611,18 +1744,23 @@ describe("models", () => {
       });
       const oversizedProvider = {
         ...mockProviderClass,
-        convertModelsToOpenAIFormat: vi.fn().mockReturnValue({
-          object: "list",
-          data: [
-            {
-              id: "oversized",
-              object: "model",
-              created: 0,
-              owned_by: "test",
-              _: "x".repeat(MAX_AGGREGATED_MODELS_BYTES + 1),
-            },
-          ],
-        }),
+        endpoints: {
+          models: {
+            ...mockProviderClass.endpoints.models,
+            convertResponse: vi.fn().mockReturnValue({
+              object: "list",
+              data: [
+                {
+                  id: "oversized",
+                  object: "model",
+                  created: 0,
+                  owned_by: "test",
+                  _: "x".repeat(MAX_AGGREGATED_MODELS_BYTES + 1),
+                },
+              ],
+            }),
+          },
+        },
       };
       BUILT_IN_PROVIDER_CONSTRUCTORS.test =
         mockProviderConstructor(oversizedProvider);

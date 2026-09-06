@@ -15,8 +15,16 @@ import {
 import { Config } from "~/src/utils/config";
 import { PayloadTooLargeError } from "~/src/utils/error";
 
+// Exercise the conversion callbacks here; native routing has integration tests.
+const chatCompletionResponse = vi.hoisted(() => vi.fn());
 vi.mock("~/src/requests/chat_completions", () => ({
-  handleChatCompletionsRequest: vi.fn(),
+  handleChatCompletionsRequest: vi.fn(async (_context, _gateway, prepared) => {
+    const chat = prepared.conversion.prepareChat();
+    if (chat instanceof Response) return chat;
+    return prepared.conversion.transformResponse(
+      await chatCompletionResponse(chat),
+    );
+  }),
 }));
 
 describe("handleResponsesRequest", () => {
@@ -104,7 +112,7 @@ describe("handleResponsesRequest", () => {
 
   it("converts a Responses request to Chat Completions and converts JSON output back", async () => {
     vi.spyOn(Config, "chatResponseMetadataEnabled").mockReturnValue(true);
-    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+    chatCompletionResponse.mockResolvedValue(
       Response.json(
         {
           id: "chatcmpl-upstream",
@@ -241,7 +249,7 @@ describe("handleResponsesRequest", () => {
     const chatHeaders = new Headers(preparedRequest.headers);
     expect(chatHeaders.get("content-length")).toBeNull();
     expect(chatHeaders.get("x-client")).toBe("retained");
-    expect(preparedRequest.body).toEqual({
+    expect(preparedRequest.conversion!.prepareChat()).toEqual({
       model: "virtual/fast",
       messages: [
         { role: "system", content: "Be concise" },
@@ -369,7 +377,7 @@ describe("handleResponsesRequest", () => {
 
   it("converts message items, images, function calls, and outputs", async () => {
     vi.spyOn(Config, "chatResponseMetadataEnabled").mockReturnValue(true);
-    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+    chatCompletionResponse.mockResolvedValue(
       Response.json({ choices: [{ finish_reason: "length", message: {} }] }),
     );
     const response = await handleResponsesRequest({
@@ -426,7 +434,7 @@ describe("handleResponsesRequest", () => {
 
     const preparedRequest = vi.mocked(handleChatCompletionsRequest).mock
       .calls[0][2]!;
-    expect(preparedRequest.body).toMatchObject({
+    expect(preparedRequest.conversion!.prepareChat()).toMatchObject({
       messages: [
         {
           role: "system",
@@ -493,7 +501,7 @@ describe("handleResponsesRequest", () => {
   });
 
   it("converts nested file, custom-tool, allowed-tool, and verbosity fields", async () => {
-    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+    chatCompletionResponse.mockResolvedValue(
       Response.json({
         choices: [
           {
@@ -581,7 +589,7 @@ describe("handleResponsesRequest", () => {
 
     const preparedRequest = vi.mocked(handleChatCompletionsRequest).mock
       .calls[0][2]!;
-    expect(preparedRequest.body).toEqual({
+    expect(preparedRequest.conversion!.prepareChat()).toEqual({
       model: "openai/model",
       messages: [
         {
@@ -674,7 +682,7 @@ describe("handleResponsesRequest", () => {
       "data: [DONE]",
       "",
     ].join("\n");
-    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+    chatCompletionResponse.mockResolvedValue(
       new Response(sse, {
         headers: { "content-type": "text/event-stream" },
       }),
@@ -692,7 +700,7 @@ describe("handleResponsesRequest", () => {
   });
 
   it("ignores Responses fields without a supported Chat Completions conversion", async () => {
-    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+    chatCompletionResponse.mockResolvedValue(
       Response.json({ choices: [{ message: { content: "ok" } }] }),
     );
 
@@ -723,7 +731,7 @@ describe("handleResponsesRequest", () => {
 
     const preparedRequest = vi.mocked(handleChatCompletionsRequest).mock
       .calls[0][2]!;
-    expect(preparedRequest.body).toEqual({
+    expect(preparedRequest.conversion!.prepareChat()).toEqual({
       model: "openai/model",
       messages: [{ role: "user", content: "Hello" }],
       moderation: { type: "omni-moderation-latest" },
@@ -755,7 +763,7 @@ describe("handleResponsesRequest", () => {
       "data: [DONE]",
       "",
     ].join("\n");
-    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+    chatCompletionResponse.mockResolvedValue(
       new Response(`${sse}\n`, {
         headers: {
           "content-type": "text/event-stream",
@@ -871,7 +879,7 @@ describe("handleResponsesRequest", () => {
     });
     const preparedRequest = vi.mocked(handleChatCompletionsRequest).mock
       .calls[0][2]!;
-    expect(preparedRequest.body).toMatchObject({
+    expect(preparedRequest.conversion!.prepareChat()).toMatchObject({
       stream: true,
       stream_options: { include_obfuscation: false, include_usage: true },
     });
@@ -889,7 +897,7 @@ describe("handleResponsesRequest", () => {
       "data: [DONE]",
       "",
     ].join("\n");
-    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+    chatCompletionResponse.mockResolvedValue(
       new Response(sse, {
         headers: { "content-type": "text/event-stream" },
       }),
@@ -922,7 +930,7 @@ describe("handleResponsesRequest", () => {
       },
       cancel,
     });
-    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+    chatCompletionResponse.mockResolvedValue(
       new Response(stream, {
         headers: { "content-type": "text/event-stream" },
       }),
@@ -960,7 +968,7 @@ describe("handleResponsesRequest", () => {
       },
       cancel,
     });
-    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+    chatCompletionResponse.mockResolvedValue(
       new Response(stream, {
         headers: { "content-type": "text/event-stream" },
       }),
@@ -1079,7 +1087,7 @@ describe("handleResponsesRequest", () => {
     ];
 
     for (const testCase of cases) {
-      vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+      chatCompletionResponse.mockResolvedValue(
         new Response(testCase.sse, {
           headers: { "content-type": "text/event-stream" },
         }),
@@ -1100,7 +1108,7 @@ describe("handleResponsesRequest", () => {
 
   it("rejects oversized complete and unterminated SSE records", async () => {
     for (const suffix of ["\n\n", ""]) {
-      vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+      chatCompletionResponse.mockResolvedValue(
         new Response(`data: ${"x".repeat(MAX_SSE_RECORD_BYTES + 1)}${suffix}`, {
           headers: { "content-type": "text/event-stream" },
         }),
@@ -1120,7 +1128,7 @@ describe("handleResponsesRequest", () => {
 
   it("turns invalid UTF-8 during transform or flush into a terminal error", async () => {
     for (const bytes of [new Uint8Array([0xff]), new Uint8Array([0xc3])]) {
-      vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+      chatCompletionResponse.mockResolvedValue(
         new Response(bytes, {
           headers: { "content-type": "text/event-stream" },
         }),
@@ -1139,7 +1147,7 @@ describe("handleResponsesRequest", () => {
   });
 
   const streamResponse = async (upstream: string) => {
-    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+    chatCompletionResponse.mockResolvedValue(
       new Response(upstream, {
         headers: { "content-type": "text/event-stream" },
       }),
@@ -1220,11 +1228,11 @@ describe("handleResponsesRequest", () => {
     await expect(
       handleResponsesRequest({ request: oversized } as never),
     ).rejects.toBeInstanceOf(PayloadTooLargeError);
-    expect(handleChatCompletionsRequest).not.toHaveBeenCalled();
+    expect(chatCompletionResponse).not.toHaveBeenCalled();
   });
 
   it("passes upstream error responses through", async () => {
-    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+    chatCompletionResponse.mockResolvedValue(
       Response.json({ error: { message: "upstream" } }, { status: 429 }),
     );
 
@@ -1255,7 +1263,7 @@ describe("handleResponsesRequest", () => {
       }),
     );
     upstream.headers.delete("content-type");
-    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(upstream);
+    chatCompletionResponse.mockResolvedValue(upstream);
 
     const response = await handleResponsesRequest({
       request: request({ model: "openai/model", input: "Hello" }),
@@ -1469,7 +1477,7 @@ describe("handleResponsesRequest", () => {
       },
     ],
   ])("converts %s", async (_name, body, expected) => {
-    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+    chatCompletionResponse.mockResolvedValue(
       Response.json({ choices: [{ message: { content: "ok" } }] }),
     );
 
@@ -1478,7 +1486,7 @@ describe("handleResponsesRequest", () => {
     } as never);
     const preparedRequest = vi.mocked(handleChatCompletionsRequest).mock
       .calls[0][2]!;
-    expect(preparedRequest.body).toMatchObject(expected);
+    expect(preparedRequest.conversion!.prepareChat()).toMatchObject(expected);
   });
 
   it.each([
@@ -1489,7 +1497,7 @@ describe("handleResponsesRequest", () => {
       new Response(null, { headers: { "content-type": "text/event-stream" } }),
     ],
   ])("returns 502 for %s upstream output", async (_name, upstream) => {
-    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(upstream);
+    chatCompletionResponse.mockResolvedValue(upstream);
     const response = await handleResponsesRequest({
       request: request({ model: "openai/model", input: "Hello" }),
     } as never);
@@ -1502,9 +1510,7 @@ describe("handleResponsesRequest", () => {
   });
 
   it("converts an empty choices array", async () => {
-    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
-      Response.json({ choices: [] }),
-    );
+    chatCompletionResponse.mockResolvedValue(Response.json({ choices: [] }));
     const response = await handleResponsesRequest({
       request: request({ model: "openai/model", input: "Hello" }),
     } as never);
@@ -1529,7 +1535,7 @@ describe("handleResponsesRequest", () => {
       "data: [DONE]",
       "",
     ].join("\n");
-    vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+    chatCompletionResponse.mockResolvedValue(
       new Response(sse, {
         headers: { "content-type": "text/event-stream" },
       }),
@@ -1854,7 +1860,7 @@ describe("handleResponsesRequest", () => {
   ])("handles unsupported or invalid %s", async (name, body) => {
     const ignored = ignoredCompatibilityCases.has(name);
     if (ignored) {
-      vi.mocked(handleChatCompletionsRequest).mockResolvedValue(
+      chatCompletionResponse.mockResolvedValue(
         Response.json({ choices: [{ message: { content: "ok" } }] }),
       );
     }
@@ -1872,7 +1878,7 @@ describe("handleResponsesRequest", () => {
           type: "invalid_request_error",
         }),
       });
-      expect(handleChatCompletionsRequest).not.toHaveBeenCalled();
+      expect(chatCompletionResponse).not.toHaveBeenCalled();
     }
   });
 });

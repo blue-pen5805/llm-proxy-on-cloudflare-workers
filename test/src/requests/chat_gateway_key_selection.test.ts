@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
+import { chatCompletionsEndpoint } from "~/src/providers/inference";
 import { createProvider } from "~/src/providers/provider";
 import type {
   ApiKeySelection,
@@ -18,6 +19,7 @@ function createContext(
   gatewayApiKeys: string[] = apiKeys,
 ): RoutedRequestContext {
   const provider = createProvider({
+    endpoints: { chat_completions: chatCompletionsEndpoint() },
     openAICompatible: true,
     baseUrl: "https://api.example.com/v1",
     getApiKeys: () => apiKeys,
@@ -179,7 +181,7 @@ describe("Gateway chat key selection", () => {
     expect(authorizationHeaders(fetchMock)[0]).toBe("Bearer provider-key-0");
   });
 
-  it("retains the verified OpenRouter Compatibility Endpoint route", async () => {
+  it("uses the OpenRouter provider endpoint without adding a model prefix", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(new Response("ok"));
@@ -192,10 +194,10 @@ describe("Gateway chat key selection", () => {
 
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock.mock.calls[0][0]).toBe(
-      "https://gateway.ai.cloudflare.com/v1/account/gateway/compat/chat/completions",
+      "https://gateway.ai.cloudflare.com/v1/account/gateway/openrouter/chat/completions",
     );
     expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({
-      model: "openrouter/model",
+      model: "model",
     });
   });
 });

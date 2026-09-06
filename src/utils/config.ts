@@ -47,6 +47,8 @@ export interface CustomOpenAIEndpointConfig {
   models?: string[];
   chatCompletionPath?: string;
   modelsPath?: string;
+  responsesPath?: string;
+  messagesPath?: string;
 }
 
 function isOptionalStringArray(value: unknown): value is string[] | undefined {
@@ -88,6 +90,8 @@ function isSafeCustomEndpoint(
     "models",
     "chatCompletionPath",
     "modelsPath",
+    "responsesPath",
+    "messagesPath",
   ]);
   if (
     Object.keys(endpoint).some((key) => !allowedProperties.has(key)) ||
@@ -132,7 +136,9 @@ function isSafeCustomEndpoint(
     validApiKeys &&
     validModels &&
     validOptionalPath(endpoint.chatCompletionPath) &&
-    validOptionalPath(endpoint.modelsPath)
+    validOptionalPath(endpoint.modelsPath) &&
+    validOptionalPath(endpoint.responsesPath) &&
+    validOptionalPath(endpoint.messagesPath)
   );
 }
 
@@ -341,14 +347,7 @@ export class Config {
     return Math.min(seconds, MAX_API_KEY_COOLDOWN_SECONDS);
   }
 
-  static customOpenAIEndpoints():
-    | {
-        name: string;
-        baseUrl: string;
-        apiKeys?: ProfiledSecret;
-        models?: string[];
-      }[]
-    | undefined {
+  static customOpenAIEndpoints(): CustomOpenAIEndpointConfig[] | undefined {
     const endpoints = Environments.get("CUSTOM_OPENAI_ENDPOINTS", false);
 
     if (endpoints === undefined || endpoints === null) {

@@ -2,6 +2,7 @@ import { CloudflareAIGateway } from "../ai_gateway";
 import { gatewayProviderPath } from "../ai_gateway/custom_provider";
 import { getAllProviderInstances } from "../providers";
 import type { ProviderRegistry } from "../providers";
+import { buildModelsRequest, type ModelsEndpoint } from "../providers/models";
 import { parseProviderSelector } from "../providers/profile";
 import { ProviderBase, ProviderNotSupportedError } from "../providers/provider";
 import type { RoutedRequestContext } from "../request_context";
@@ -49,21 +50,18 @@ async function checkProviderConnectivity(
   providerSelector: string,
   apiKeyIndex: number,
   keyCount: number,
+  models: ModelsEndpoint,
   aiGateway?: CloudflareAIGateway,
 ): Promise<ConnectivityStatus> {
   const parsedSelector = parseProviderSelector(providerSelector);
   /* istanbul ignore next -- registry entries always use valid selectors */
   if (!parsedSelector) return "unknown";
   const { providerName, profile } = parsedSelector;
-  /* istanbul ignore next -- callers exclude providers without a models route */
-  if (!providerInstance.modelsPath) {
-    return "unknown";
-  }
-
   const abortController = new AbortController();
   const aiGatewayProvider = resolveAiGatewayModelsProvider(
     providerName,
     providerInstance,
+    models,
     aiGateway,
   );
   const keyLogFields = recordApiKeySelection({
@@ -77,6 +75,11 @@ async function checkProviderConnectivity(
   });
 
   try {
+    const [path, init] = await buildModelsRequest(
+      providerInstance,
+      models,
+      apiKeyIndex,
+    );
     let responsePromise: Promise<Response>;
 
     if (aiGateway && aiGatewayProvider) {
@@ -87,10 +90,10 @@ async function checkProviderConnectivity(
           path: gatewayProviderPath(
             providerName,
             providerInstance,
-            providerInstance.modelsPath,
+            path,
             aiGatewayProvider,
           ),
-          headers: await providerInstance.headers(apiKeyIndex),
+          headers: init.headers!,
         },
       );
 
@@ -101,17 +104,12 @@ async function checkProviderConnectivity(
         }),
       );
     } else {
-      responsePromise = (async () => {
-        const [requestInfo, requestInit] =
-          await providerInstance.buildModelsRequest(apiKeyIndex);
-        return RequestLogger.withFields(keyLogFields, () =>
-          providerInstance.fetch(
-            requestInfo,
-            { ...requestInit, signal: abortController.signal },
-            apiKeyIndex,
-          ),
-        );
-      })();
+      responsePromise = RequestLogger.withFields(keyLogFields, () =>
+        providerInstance.send(
+          providerInstance.baseUrl() + providerInstance.pathnamePrefix() + path,
+          { ...init, signal: abortController.signal },
+        ),
+      );
     }
 
     const connectivityResponse = await withTimeout(
@@ -246,7 +244,7 @@ export async function handleStatusRequest(
     providersStatus[providerName] = providerStatus;
 
     for (let apiKeyIndex = 0; apiKeyIndex < allApiKeys.length; apiKeyIndex++) {
-      if (!providerInstance.modelsPath) {
+      if (!providerInstance.endpoints.models) {
         continue;
       }
       connectivityTasks.push(async () => {
@@ -256,6 +254,7 @@ export async function handleStatusRequest(
             providerName,
             apiKeyIndex,
             allApiKeys.length,
+            providerInstance.endpoints.models!,
             aiGateway,
           );
       });

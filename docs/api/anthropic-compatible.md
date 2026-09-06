@@ -1,15 +1,19 @@
 # Anthropic-compatible API
 
-The Anthropic-compatible API provides an experimental Messages conversion to
-the proxy's Chat Completions path. It does not call a provider-native Messages
-endpoint. Use a pass-through path such as `/anthropic/v1/messages` when the
-complete provider-native contract is required.
+The Anthropic-compatible API routes Messages directly to Anthropic, OpenRouter,
+DeepSeek, Hugging Face Inference Providers, Bedrock Anthropic models,
+Vertex AI models selected as `anthropic/<model>`, and custom OpenAI endpoints
+with `messagesPath` configured. These paths preserve
+native content blocks, thinking, cache controls, tool definitions, beta headers,
+and JSON/SSE responses. Model selectors and Vertex's required request envelope
+are adjusted for routing; other semantic validation belongs to the upstream.
 
-The compatibility API uses the same provider selection, virtual-model
-fallback, credential profiles, key rotation and cooldown, provider filtering,
-AI Gateway routing, cancellation, and optional response metadata behavior as
-Chat Completions. Its accepted subset and converted JSON and SSE contract are
-defined below.
+Providers without a declared Messages endpoint use the experimental Chat
+conversion described below. All paths share provider selection, virtual-model
+fallback, credential profiles, key rotation and cooldown, Gateway routing,
+and cancellation. The selected capability is checked for each concrete model.
+Native responses do not inject optional `llm_proxy` response metadata; Gateway
+metadata and logs still apply. See [Native inference](../design/features/native_inference.md).
 
 The compatibility contract follows the
 [Anthropic Messages API](https://platform.claude.com/docs/en/api/messages/create),
@@ -34,10 +38,13 @@ curl https://your-worker.example/v1/messages \
   }'
 ```
 
-### Request conversion
+### Request conversion fallback
 
-The handler reads at most 10 MiB and requires `model`, `max_tokens`, and
-`messages`. The model retains its provider-qualified, named-profile, `default`,
+This section applies only when the selected provider lacks a native Messages
+capability.
+
+The handler reads at most 10 MiB and validates the JSON object and `model`.
+The conversion fallback additionally requires `max_tokens` and `messages`. The model retains its provider-qualified, named-profile, `default`,
 or virtual-model selector until the Chat handler resolves it.
 
 User and assistant text map to Chat messages. Anthropic base64 and URL image

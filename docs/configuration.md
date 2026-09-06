@@ -264,6 +264,8 @@ every slot is cooling. Explicit selection always takes precedence. See
       "models": ["model-a"],
       "chatCompletionPath": "/chat/completions",
       "modelsPath": "/models",
+      "responsesPath": "/responses",
+      "messagesPath": "/messages",
     },
   ],
 }
@@ -274,9 +276,27 @@ userinfo, a query string, or a fragment. At most 16 endpoints are accepted. The
 name must be unique and must not collide with a built-in provider route. One
 endpoint accepts at most 32 non-empty `apiKeys` and 1,000 non-empty static
 `models`. `apiKeys` is optional for endpoints that do not require
-authentication. The two path overrides default to `/chat/completions` and
-`/models`. Paths are appended directly to `baseUrl`, so avoid a trailing slash
-in `baseUrl` and include the upstream API version in one place only.
+authentication. `chatCompletionPath` and `modelsPath` default to
+`/chat/completions` and `/models`. Optional `responsesPath` and `messagesPath`
+declare native Responses and Messages support, respectively. Set them only
+when the upstream serves that protocol. Each path must start with a single `/`
+and contain at most 2,048 characters. Paths are appended directly to `baseUrl`,
+so avoid a trailing slash in `baseUrl` and include the upstream API version in
+one place only.
+
+Requests to the public Responses or Messages route use the matching configured
+path and preserve protocol-specific fields and JSON/SSE responses. If that path
+is omitted, the route converts through the configured Chat Completions endpoint.
+An upstream error from a declared native endpoint does not trigger Chat
+conversion. Chat requests always use `chatCompletionPath`.
+
+All operations share the configured Bearer credentials, profiles, and routing
+policy. Declaring Messages support does not select Anthropic-specific
+`x-api-key` authentication; the custom upstream must accept the configured
+Bearer credentials or require no authentication. Direct and strict Custom
+Gateway routing use the same operation declarations. Other APIs remain
+available through provider pass-through; these settings do not create new
+public routes or protocol converters.
 
 Because the full custom endpoint array is deployed as one Worker secret, treat
 the entire configuration file as sensitive.

@@ -4,7 +4,11 @@ import { Config } from "../../utils/config";
 import { AppError } from "../../utils/error";
 import { readRequestText } from "../../utils/helpers";
 import { RequestLogger } from "../../utils/logger";
-import { handleChatCompletionsRequest } from "../chat_completions";
+import {
+  handleChatCompletionsRequest,
+  type ProtocolConversion,
+} from "../chat_completions";
+import { isJsonObject } from "../sse";
 import {
   convertMessagesRequest,
   invalidRequest,
@@ -18,14 +22,13 @@ async function convertChatResponse(
   request: MessagesRequest,
   responseMetadataEnabled: boolean,
 ): Promise<Response> {
-  if (!response.ok) return response;
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
   return contentType.includes("text/event-stream")
     ? convertStreamingResponse(response, request, responseMetadataEnabled)
     : convertJsonResponse(response, request, responseMetadataEnabled);
 }
 
-/** Translate Anthropic Messages requests onto the existing Chat Completions flow. */
+/** Prefer native Messages; use Chat conversion only for other upstream protocols. */
 export async function handleMessagesRequest(
   context: RoutedRequestContext,
   aiGateway: CloudflareAIGateway | undefined = undefined,
@@ -38,28 +41,38 @@ export async function handleMessagesRequest(
     RequestLogger.start({ endpoint: "messages" });
     return invalidRequest("Request body must be valid JSON.");
   }
-  let converted: ReturnType<typeof convertMessagesRequest>;
-  try {
-    converted = convertMessagesRequest(parsed);
-  } catch (error) {
+  if (!isJsonObject(parsed) || typeof parsed.model !== "string") {
     RequestLogger.start({ endpoint: "messages" });
-    return invalidRequest((error as Error).message);
+    return invalidRequest("Invalid request.");
   }
+  let converted: ReturnType<typeof convertMessagesRequest>;
+  const responseMetadataEnabled = Config.chatResponseMetadataEnabled();
+  const conversion: ProtocolConversion = {
+    prepareChat() {
+      try {
+        converted ??= convertMessagesRequest(parsed);
+        return converted.chat;
+      } catch (error) {
+        return invalidRequest((error as Error).message);
+      }
+    },
+    transformResponse(response) {
+      if (!response.ok) return Promise.resolve(response);
+      return convertChatResponse(
+        response,
+        converted.request,
+        responseMetadataEnabled,
+      );
+    },
+  };
 
   const headers = new Headers(context.request.headers);
   headers.delete("content-length");
-  headers.delete("anthropic-version");
-  headers.delete("anthropic-beta");
-  const responseMetadataEnabled = Config.chatResponseMetadataEnabled();
-  const chatResponse = await handleChatCompletionsRequest(context, aiGateway, {
-    body: converted.chat,
+  return handleChatCompletionsRequest(context, aiGateway, {
+    body: parsed as Record<string, unknown> & { model: string },
+    conversion,
     endpoint: "messages",
     headers,
     responseMetadataEnabled,
   });
-  return convertChatResponse(
-    chatResponse,
-    converted.request,
-    responseMetadataEnabled,
-  );
 }

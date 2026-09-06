@@ -2,19 +2,58 @@
 
 ## Responsibilities
 
-The `Provider` interface defines upstream URL construction, key access, request
-headers, chat request filtering, model request construction, and model response
-normalization. `createProvider` composes the shared behavior with a small
-`ProviderDefinition` containing only provider-specific values and hooks.
-`defineProvider` exposes a `new ProviderName()` constructor interface without
-coupling adapters through a base-class hierarchy.
+`Provider` owns credential profiles, availability, upstream URL construction,
+authentication, and transport. `createProvider` composes these responsibilities
+from a `ProviderDefinition`; `defineProvider` provides the constructor interface
+used by the registry. Inference and model discovery are explicit operations in
+`endpoints`, not methods inherited from a generic Chat implementation.
 
-This is an adapter boundary rather than a promise of complete semantic parity.
-Provider adapters can filter chat fields, translate payloads, transform chat
-responses, or declare model listing unsupported. Response transformation is an
-explicit opt-in; the default preserves the upstream `Response`. Transformations
-that parse a body must remain bounded and leave streaming, error, and unknown
-responses unchanged.
+Each inference operation owns request construction and its optional response
+transformation. `chatCompletionsEndpoint(path, options)` filters declared Chat
+parameters; `jsonEndpoint(pathOrPrepare, options)` preserves a native JSON
+payload or applies a provider-specific envelope. `convertedChatEndpoint(codec)`
+pairs Chat-to-provider preparation with the reverse JSON/SSE conversion.
+These operations share serialization and authentication, while retaining native
+Gateway path differences such as Azure deployment routing.
+
+`resolveInference(model, protocol)` selects one operation per concrete candidate.
+An explicit operation matching the requested public protocol takes priority,
+including a provider-hosted compatibility API. The provider's proprietary API
+and conversion fallback do not override a match. Without a match it selects the declared Chat
+fallback or Chat endpoint. Selection happens before request conversion; every
+credential attempt and the resulting response use that same operation. Provider
+hooks receive the selected credential-profile view as `this`. See
+[Native inference](native_inference.md) for resolution and transport details.
+
+The `models` operation declares its path, optional prerequisite validation,
+response conversion, static list, and Gateway credential/capability settings.
+Model aggregation and connectivity checks use the same GET preparation and
+authenticate once per attempted key. Custom Provider synchronization reads the
+same capability declaration.
+
+For example, OpenAI declares:
+
+```ts
+endpoints: {
+  chat_completions: chatCompletionsEndpoint(),
+  responses: jsonEndpoint("/responses"),
+  models: { path: "/models" },
+}
+```
+
+An absent operation is unsupported. No Chat or model path is inferred from a
+provider's base URL or authentication scheme. Inference without a matching
+operation or conversion fallback returns HTTP 400 before network I/O. An absent
+`models` operation is omitted from discovery and leaves connectivity status
+`unknown`, including through Gateway. Universal Endpoint steps without an
+explicit `endpoint` require a declared, fixed Chat path.
+
+Custom OpenAI configuration fields `chatCompletionPath` and `modelsPath` map into
+the operation declarations. Their configuration defaults remain
+`/chat/completions` and `/models`. Optional `responsesPath` and `messagesPath`
+declare the corresponding native JSON operations. Absent native paths use the
+shared Chat conversion fallback. Custom operations share Bearer authentication
+and credential profiles; a path declaration does not change the auth scheme.
 
 ## Provider registry
 
@@ -43,8 +82,11 @@ AI Gateway-managed authentication is a deliberate exception: chat and model
 requests may be sent
 without a locally configured provider key when a Gateway context exists. The
 Gateway then injects its stored credential. Adapters can rewrite provider-native
-Gateway paths, opt model listing out of Gateway, or build a native Gateway chat
-request when the Compatibility Endpoint does not support the provider shape.
+Gateway paths, opt model listing out of Gateway, and select native inference
+endpoints with paired request and response codecs. A model-specific resolver
+overrides the provider default; see [Native inference](native_inference.md).
+Workers AI inference requires its selected local API key for the account REST
+API, and Vertex AI requires local service-account configuration.
 Amazon Bedrock and Azure OpenAI opt model discovery out of this exception:
 their model requests are omitted unless all locally required provider
 credentials and routing identifiers are valid. This prevents aggregate model
@@ -224,12 +266,16 @@ in content-minimal structured logs rather than client metadata.
 
 ## Converted compatibility flows
 
-Responses and Messages validate their protocol-specific request, convert it to
-Chat Completions, and invoke the ordinary chat flow. They therefore derive
-compatibility from each provider's declared Chat capability rather than
-provider-native Responses, Messages, or pass-through support.
+Responses and Messages first resolve the concrete provider and prefer a
+declared same-protocol endpoint. These routes preserve provider payloads and
+response streams. Matching capabilities and model overrides are defined in
+[Native inference](native_inference.md).
 
-Successful JSON and SSE responses are converted back to the selected public
+Without a matching capability, the protocol-specific request is converted
+lazily to Chat Completions. This fallback derives compatibility from the
+provider's Chat conversion capability.
+
+On conversion paths, successful JSON and SSE responses are converted back to the selected public
 protocol. Both streaming converters share the bounded Chat Completions SSE
 decoder and implement only their protocol-specific state and event output.
 Upstream errors pass through. The complete mappings, limits, and explicit
@@ -239,8 +285,9 @@ guides.
 
 ## Model aggregation flow
 
-Every registered and custom provider is considered concurrently. Unavailable
-providers return no models. Static lists avoid network access; other providers
+Declared model-list operations are considered concurrently. Providers without
+that operation or the required availability return no models. Static lists avoid
+network access; other providers
 receive a model-list request with a 60-second timeout. Automatic discovery
 starts at the first key. HTTP 429 retries sequential later keys, up to three
 attempts or the configured key count, without advancing striped rotation.
@@ -266,3 +313,12 @@ routing, and AI Gateway behavior independently. See
 - [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/)
 - [Cloudflare AI Gateway providers](https://developers.cloudflare.com/ai-gateway/providers/)
 - [AI Gateway Custom Providers](https://developers.cloudflare.com/ai-gateway/configuration/custom-providers/)
+
+Inference operations can independently disable native Gateway routing with
+`supportsAiGateway: false`, using direct connections in non-strict mode and
+Custom Providers in strict mode. An operation's optional `upstream` supplies a
+separate inference origin and internal Custom Provider name; it leaves the
+provider's pass-through origin intact. The deployment synchronizer registers
+these origins once across protocols and credential profiles. Operations with a
+separate origin do not supply a provider-relative Universal Endpoint default.
+See [Native inference boundaries](native_inference.md#provider-api-boundaries).
