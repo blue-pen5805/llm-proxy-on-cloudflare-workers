@@ -12,6 +12,28 @@ update is explicitly approved.
 
 ### 2026-09-06
 
+- Added a 4 MiB budget for retained Responses streaming logprobs; exceeding it
+  emits a terminal error and cancels the upstream stream.
+- Preserved large supported message and system-block arrays within the request
+  byte limit without argument-count failures during protocol conversion.
+- Stopped nested virtual-model retry chains after client cancellation and
+  revalidated virtual-model graph limits when custom endpoint configuration
+  changes.
+- Enforced the proxy origin allowlist when upstream responses include CORS
+  headers, and removed Connection-nominated headers before forwarding.
+- Preserved body-size validation errors when stream cleanup fails and released
+  upstream bodies rejected by their declared Content-Length.
+- Rejected percent-encoded and query-bearing dot-segment traversal in Universal
+  Endpoint paths before dispatch.
+- Isolated provider enumeration failures and malformed model-list entries so
+  healthy providers remain discoverable. Lists cut off at the per-provider
+  count limit now report truncation, retain later providers, and bypass cache
+  storage.
+- Prevented AI Gateway credential fallback from retrying completed requests
+  when discarding an earlier response fails. Pending bodies are released on
+  aborts and local failures, cancellation during preparation stops dispatch,
+  and response metadata identifies the credential that produced the returned
+  response even when subsequent attempts fail at the network layer.
 - Preferred an available matching upstream API before conversion for public
   Chat Completions, Responses, and Messages requests. Added matching APIs for
   Anthropic Chat, Vertex Google Chat, DeepSeek Responses/Messages, Bedrock

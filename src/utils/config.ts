@@ -153,10 +153,10 @@ const cachedProxyApiKeys = new WeakMap<
 let cachedCustomEndpointsRaw: unknown;
 let cachedCustomEndpoints: CustomOpenAIEndpointConfig[] | undefined;
 let cachedVirtualModelsRaw: unknown;
+let cachedVirtualModelsCustomEndpointsRaw: unknown;
 let cachedVirtualModels: VirtualModels | undefined;
 
-function configuredCustomProviderNames(): Set<string> {
-  const rawValue = Environments.get("CUSTOM_OPENAI_ENDPOINTS", false);
+function configuredCustomProviderNames(rawValue: unknown): Set<string> {
   let value: unknown = rawValue;
   if (typeof rawValue === "string") {
     try {
@@ -204,12 +204,25 @@ function parseProxyApiKeys(rawValue: string): string[] | undefined {
   return trimmedValue ? [trimmedValue] : [];
 }
 
+/** Read the shared non-negative, capped seconds format used by runtime policies. */
+function boundedSeconds(
+  key: keyof Env,
+  defaultValue: number,
+  maximum: number,
+): number {
+  const trimmedValue = Environments.get(key, false)?.trim();
+  if (trimmedValue === undefined || trimmedValue === "") return defaultValue;
+  const seconds = Number(trimmedValue);
+  return Number.isInteger(seconds) && seconds >= 0
+    ? Math.min(seconds, maximum)
+    : defaultValue;
+}
+
 export class Config {
   static isDevelopment(): boolean {
-    // DEV is a development-only flag. deploy-secrets never ships it, so a
-    // deployed Worker has no DEV binding and this is always false in
-    // production. It is enabled only locally via `npm run dev`, whose
-    // .dev.vars file carries DEV=true.
+    // deploy-secrets omits this local-development flag. The auth middleware
+    // also checks the runtime before honoring it, including when an operator
+    // installs DEV through another deployment path.
     const dev = Environments.get("DEV", false);
     return dev?.trim().toLowerCase() === "true";
   }
@@ -303,30 +316,20 @@ export class Config {
    * typo never turns the diagnostic fan-out into an uncached hot path.
    */
   static modelsCacheTtlSeconds(): number {
-    const rawValue = Environments.get("MODELS_CACHE_TTL_SECONDS", false);
-    const trimmedValue = rawValue?.trim();
-    if (trimmedValue === undefined || trimmedValue === "") {
-      return DEFAULT_MODELS_CACHE_TTL_SECONDS;
-    }
-    const ttl = Number(trimmedValue);
-    if (!Number.isInteger(ttl) || ttl < 0) {
-      return DEFAULT_MODELS_CACHE_TTL_SECONDS;
-    }
-    return Math.min(ttl, MAX_MODELS_CACHE_TTL_SECONDS);
+    return boundedSeconds(
+      "MODELS_CACHE_TTL_SECONDS",
+      DEFAULT_MODELS_CACHE_TTL_SECONDS,
+      MAX_MODELS_CACHE_TTL_SECONDS,
+    );
   }
 
   /** Opt-in TTL for the authenticated `/status` diagnostic cache. */
   static statusCacheTtlSeconds(): number {
-    const rawValue = Environments.get("STATUS_CACHE_TTL_SECONDS", false);
-    const trimmedValue = rawValue?.trim();
-    if (trimmedValue === undefined || trimmedValue === "") {
-      return DEFAULT_STATUS_CACHE_TTL_SECONDS;
-    }
-    const ttl = Number(trimmedValue);
-    if (!Number.isInteger(ttl) || ttl < 0) {
-      return DEFAULT_STATUS_CACHE_TTL_SECONDS;
-    }
-    return Math.min(ttl, MAX_STATUS_CACHE_TTL_SECONDS);
+    return boundedSeconds(
+      "STATUS_CACHE_TTL_SECONDS",
+      DEFAULT_STATUS_CACHE_TTL_SECONDS,
+      MAX_STATUS_CACHE_TTL_SECONDS,
+    );
   }
 
   /**
@@ -335,16 +338,11 @@ export class Config {
    * `0` disables cooldowns.
    */
   static apiKeyCooldownSeconds(): number {
-    const rawValue = Environments.get("API_KEY_COOLDOWN_SECONDS", false);
-    const trimmedValue = rawValue?.trim();
-    if (trimmedValue === undefined || trimmedValue === "") {
-      return DEFAULT_API_KEY_COOLDOWN_SECONDS;
-    }
-    const seconds = Number(trimmedValue);
-    if (!Number.isInteger(seconds) || seconds < 0) {
-      return DEFAULT_API_KEY_COOLDOWN_SECONDS;
-    }
-    return Math.min(seconds, MAX_API_KEY_COOLDOWN_SECONDS);
+    return boundedSeconds(
+      "API_KEY_COOLDOWN_SECONDS",
+      DEFAULT_API_KEY_COOLDOWN_SECONDS,
+      MAX_API_KEY_COOLDOWN_SECONDS,
+    );
   }
 
   static customOpenAIEndpoints(): CustomOpenAIEndpointConfig[] | undefined {
@@ -402,7 +400,14 @@ export class Config {
       return undefined;
     }
 
-    if (rawValue === cachedVirtualModelsRaw) {
+    const customEndpointsRaw = Environments.get(
+      "CUSTOM_OPENAI_ENDPOINTS",
+      false,
+    );
+    if (
+      rawValue === cachedVirtualModelsRaw &&
+      customEndpointsRaw === cachedVirtualModelsCustomEndpointsRaw
+    ) {
       return cachedVirtualModels;
     }
 
@@ -418,7 +423,7 @@ export class Config {
     const virtualModels = parseVirtualModels(parsedValue);
     const realProviderNames = new Set([
       ...BUILT_IN_PROVIDER_NAME_SET,
-      ...configuredCustomProviderNames(),
+      ...configuredCustomProviderNames(customEndpointsRaw),
     ]);
     if (
       !virtualModels ||
@@ -432,6 +437,7 @@ export class Config {
 
     // Only a validated configuration is memoized; invalid ones keep throwing.
     cachedVirtualModelsRaw = rawValue;
+    cachedVirtualModelsCustomEndpointsRaw = customEndpointsRaw;
     cachedVirtualModels = virtualModels;
     return cachedVirtualModels;
   }

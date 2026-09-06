@@ -163,6 +163,16 @@ network error, HTTP 401/403, or HTTP 429. Request-conversion errors and other
 upstream errors return immediately. An explicit `/key/<selection>` sends one
 request, so fallback cannot override the caller's selection.
 
+The fallback loop retains the latest retryable HTTP response in case later
+attempts fail at the network layer. A newer response replaces it, and the
+superseded body is cancelled without buffering. Cancellation failure cannot
+trigger another credential attempt or override a received response. Response
+credential metadata follows the latest received response, even when a later
+credential attempt fails without an HTTP response. Aborts and
+local preparation or outcome-observer errors stop the loop and release any
+retained body; cancellation is checked again after lazy request preparation.
+This follows the [Workers ReadableStream cancellation API](https://developers.cloudflare.com/workers/runtime-apis/streams/readablestream/#methods).
+
 ### Converted compatibility APIs
 
 The public Responses and Messages routes use the matching upstream protocol
@@ -177,10 +187,13 @@ is repeated for each concrete virtual-model candidate. See
 
 `POST /g/<gateway>/` accepts the repository's Universal Endpoint request shape,
 validates provider names against both the Gateway-supported set and the local
-request-scoped Provider Registry, injects selected path-specific provider headers, and
+provider registry attached to the request, injects selected path-specific
+provider headers, and
 forwards the mapped steps to Gateway's Universal Endpoint. Gateway providers
 without a local adapter fail with HTTP 400. This also normalizes each optional
-endpoint to a bounded, safe relative path. This explicit route is available
+endpoint to a bounded, safe relative path. Dot-segment traversal is rejected
+before dispatch, including percent-encoded dot segments and paths with query
+strings. This explicit route is available
 alongside automatic provider-native inference.
 `POST /g/<gateway>/compat/chat/completions` forwards directly to Gateway
 `/compat/chat/completions` after stripping proxy credentials. No other path under

@@ -11,7 +11,11 @@ import { BadRequestError } from "~/src/utils/error";
 import * as helpers from "~/src/utils/helpers";
 
 vi.mock("~/src/ai_gateway");
-vi.mock("~/src/utils/helpers");
+vi.mock("~/src/utils/helpers", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("~/src/utils/helpers")>()),
+  readJsonRequest: vi.fn(),
+  fetchWithLogging: vi.fn(),
+}));
 
 describe("handleUniversalEndpointRequest", () => {
   const universalMetadataHeaders = {
@@ -521,6 +525,8 @@ describe("handleUniversalEndpointRequest", () => {
     "",
     "https://attacker.example/v1",
     "../chat/completions",
+    "%2e%2e/chat/completions",
+    "v1/..?query=retained",
     "v1/../chat/completions",
     "v1\\chat\\completions",
     "v1/chat\ncompletions",

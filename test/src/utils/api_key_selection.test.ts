@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MiddlewareContext } from "~/src/middleware";
-import type { ProviderBase } from "~/src/providers/provider";
+import { createProvider } from "~/src/providers/provider";
 import {
   determineApiKeySelectionPolicy,
   getEligibleApiKeyIndexes,
@@ -34,10 +34,10 @@ describe("API key selection logging", () => {
   );
 
   it("resolves explicit and fallback selections", async () => {
-    const provider = {
+    const provider = createProvider({
       getApiKeys: vi.fn().mockReturnValue(["first", "second"]),
       getNextApiKeyIndex: vi.fn().mockResolvedValue(1),
-    } as unknown as ProviderBase;
+    });
     vi.spyOn(Secrets, "resolveApiKeyIndex").mockReturnValue(0);
 
     await expect(
@@ -53,10 +53,10 @@ describe("API key selection logging", () => {
 
   it("skips cooling keys during automatic rotation", async () => {
     const providerName = "cooldown-skip";
-    const provider = {
+    const provider = createProvider({
       getApiKeys: vi.fn().mockReturnValue(["first", "second", "third"]),
       getNextApiKeyIndex: vi.fn().mockResolvedValue(0),
-    } as unknown as ProviderBase;
+    });
     vi.spyOn(Config, "apiKeyCooldownSeconds").mockReturnValue(60);
     vi.spyOn(console, "warn").mockImplementation(() => {});
 
@@ -69,12 +69,34 @@ describe("API key selection logging", () => {
     expect(getEligibleApiKeyIndexes(providerName, 3)).toEqual([2]);
   });
 
+  it.each([
+    { selected: 0, cooling: [2], expected: 0 },
+    { selected: 1, cooling: [1], expected: 2 },
+    { selected: 2, cooling: [2, 3], expected: 0 },
+    { selected: 3, cooling: [0, 3], expected: 1 },
+  ])(
+    "preserves the rotation phase through cooldowns: %j",
+    async ({ selected, cooling, expected }) => {
+      const providerName = `cooldown-phase-${selected}`;
+      const provider = createProvider({
+        getApiKeys: () => ["first", "second", "third", "fourth"],
+        getNextApiKeyIndex: async () => selected,
+      });
+      vi.spyOn(Config, "apiKeyCooldownSeconds").mockReturnValue(60);
+      for (const index of cooling)
+        recordApiKeyOutcome(providerName, index, 4, 429);
+      await expect(
+        selectApiKeyIndex(provider, undefined, "rotate", providerName),
+      ).resolves.toBe(expected);
+    },
+  );
+
   it("ignores cooldowns when every key is cooling", async () => {
     const providerName = "cooldown-all";
-    const provider = {
+    const provider = createProvider({
       getApiKeys: vi.fn().mockReturnValue(["first", "second"]),
       getNextApiKeyIndex: vi.fn().mockResolvedValue(1),
-    } as unknown as ProviderBase;
+    });
     vi.spyOn(Config, "apiKeyCooldownSeconds").mockReturnValue(60);
     vi.spyOn(console, "warn").mockImplementation(() => {});
     recordApiKeyOutcome(providerName, 0, 2, 403);

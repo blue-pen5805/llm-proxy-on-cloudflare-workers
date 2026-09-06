@@ -8,6 +8,7 @@ import {
 const tinyLimits: StreamingResponseLimits = {
   sseRecordBytes: 1,
   textBytes: 1,
+  logprobBytes: 1,
   toolCalls: 1,
   toolArgumentBytes: 1,
   toolMetadataBytes: 1,
@@ -23,6 +24,9 @@ describe("StreamingResponseBudget", () => {
 
     expect(budget.addText("a")).toBeUndefined();
     expect(budget.addText("é")?.limit).toBe("text_bytes");
+
+    expect(budget.addLogprobs("a")).toBeUndefined();
+    expect(budget.addLogprobs("é")?.limit).toBe("logprob_bytes");
 
     expect(budget.addTool()).toBeUndefined();
     expect(budget.addTool()?.limit).toBe("tool_calls");

@@ -1,12 +1,20 @@
+import {
+  createExecutionContext,
+  waitOnExecutionContext,
+} from "cloudflare:test";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
-import { BUILT_IN_PROVIDER_CONSTRUCTORS } from "~/src/providers";
-import { getAllProviderInstances, getProviderByName } from "~/src/providers";
+import {
+  BUILT_IN_PROVIDER_CONSTRUCTORS,
+  ProviderRegistry,
+} from "~/src/providers";
 import { PerplexityAi } from "~/src/providers/perplexity-ai/provider";
 import {
   createProvider,
+  type Provider,
   ProviderNotSupportedError,
 } from "~/src/providers/provider";
+import type { RoutedRequestContext } from "~/src/request_context";
 import {
   handleModelRetrieveRequest,
   handleModelsRequest,
@@ -18,17 +26,9 @@ import { Config } from "~/src/utils/config";
 import { Environments } from "~/src/utils/environments";
 import * as helpers from "~/src/utils/helpers";
 import { Secrets } from "~/src/utils/secrets";
+import { createTestRoutedContext } from "../../helpers/request_context";
 
 vi.mock("~/src/ai_gateway");
-vi.mock("~/src/providers", async () => {
-  const actual =
-    await vi.importActual<typeof import("~/src/providers")>("~/src/providers");
-  return {
-    ...actual,
-    getProviderByName: vi.fn(),
-    getAllProviderInstances: vi.fn(),
-  };
-});
 vi.mock("~/src/utils/helpers");
 vi.mock("~/src/utils/secrets");
 
@@ -48,6 +48,42 @@ function mockProviderConstructor(instance: unknown) {
   return vi.fn(function () {
     return instance;
   }) as unknown as (typeof BUILT_IN_PROVIDER_CONSTRUCTORS)[string];
+}
+
+function registryFor(providers: Record<string, Provider>): ProviderRegistry {
+  return new ProviderRegistry(
+    Object.fromEntries(
+      Object.entries(providers).map(([name, provider]) => [
+        name,
+        mockProviderConstructor(provider),
+      ]),
+    ),
+  );
+}
+
+async function requestModels(
+  overrides: Partial<RoutedRequestContext> = {},
+  aiGateway?: CloudflareAIGateway,
+): Promise<Response> {
+  const context = createTestRoutedContext(overrides);
+  const response = await handleModelsRequest(context, aiGateway);
+  await waitOnExecutionContext(context.ctx);
+  return response;
+}
+
+async function requestModel(
+  overrides: Partial<RoutedRequestContext>,
+  modelId: string,
+  aiGateway?: CloudflareAIGateway,
+): Promise<Response> {
+  const context = createTestRoutedContext(overrides);
+  const response = await handleModelRetrieveRequest(
+    context,
+    modelId,
+    aiGateway,
+  );
+  await waitOnExecutionContext(context.ctx);
+  return response;
 }
 
 describe("models", () => {
@@ -110,25 +146,13 @@ describe("models", () => {
     );
     vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(true);
     vi.mocked(Secrets.getAll).mockReturnValue(["test-key"]);
+    vi.mocked(Secrets.getProfiles).mockReturnValue([]);
     vi.mocked(Secrets.getNext).mockResolvedValue(0);
     vi.mocked(Secrets.resolveApiKeyIndex).mockImplementation((selection) => {
       if (typeof selection === "number") {
         return selection;
       }
       return 0;
-    });
-
-    vi.mocked(getAllProviderInstances).mockImplementation(() => {
-      return Object.fromEntries(
-        Object.entries(BUILT_IN_PROVIDER_CONSTRUCTORS).map(
-          ([name, ProviderClass]) => [name, new (ProviderClass as any)()],
-        ),
-      );
-    });
-
-    vi.mocked(getProviderByName).mockImplementation((name) => {
-      const ProviderClass = BUILT_IN_PROVIDER_CONSTRUCTORS[name];
-      return ProviderClass ? new (ProviderClass as any)() : undefined;
     });
 
     // Set up default mock providers in a specific order
@@ -169,10 +193,10 @@ describe("models", () => {
   it("omits undeclared model discovery without upstream I/O", async () => {
     const provider = new PerplexityAi();
     const send = vi.spyOn(provider, "send");
-    vi.mocked(getAllProviderInstances).mockReturnValue({
-      "perplexity-ai": provider,
-    });
-    const response = await handleModelsRequest({} as any, mockAIGateway as any);
+    const response = await requestModels(
+      { providers: registryFor({ "perplexity-ai": provider }) },
+      mockAIGateway as any,
+    );
     expect(await response.json()).toEqual({ object: "list", data: [] });
     expect(send).not.toHaveBeenCalled();
     expect(helpers.fetchWithLogging).not.toHaveBeenCalled();
@@ -197,8 +221,9 @@ describe("models", () => {
         ],
       }),
     );
-    vi.mocked(getAllProviderInstances).mockReturnValue({ openai: provider });
-    const response = await handleModelsRequest({} as any);
+    const response = await requestModels({
+      providers: registryFor({ openai: provider }),
+    });
     expect(await response.json()).toMatchObject({
       object: "list",
       data: [{ id: "openai/model", metadata: { context: 4096 } }],
@@ -207,7 +232,7 @@ describe("models", () => {
   });
 
   it("should return models from all available providers", async () => {
-    const response = await handleModelsRequest({} as any);
+    const response = await requestModels({} as any);
 
     expect(response).toBeInstanceOf(Response);
     expect(response.headers.get("Content-Type")).toBe("application/json");
@@ -234,7 +259,7 @@ describe("models", () => {
   });
 
   it("filters aggregation by a canonical provider query", async () => {
-    const response = await handleModelsRequest({
+    const response = await requestModels({
       request: new Request(
         "https://example.com/v1/models?provider=anthropic,anthropic",
       ),
@@ -248,7 +273,7 @@ describe("models", () => {
     vi.spyOn(Config, "virtualModels").mockReturnValue({
       "virtual/fast": [{ model: "openai/gpt-4", retries: 0 }],
     });
-    const response = await handleModelsRequest({
+    const response = await requestModels({
       request: new Request("https://example.com/v1/models?provider=openai"),
     } as any);
     const body = (await response.json()) as ModelsResponse;
@@ -261,7 +286,7 @@ describe("models", () => {
     "provider=unknown",
     `provider=${Array.from({ length: 33 }, (_value, index) => `provider-${index}`).join(",")}`,
   ])("rejects an invalid provider query: %s", async (query) => {
-    const response = await handleModelsRequest({
+    const response = await requestModels({
       request: new Request(`https://example.com/v1/models?${query}`),
     } as any);
     expect(response.status).toBe(400);
@@ -274,7 +299,7 @@ describe("models", () => {
   });
 
   it("retrieves one provider-qualified model", async () => {
-    const response = await handleModelRetrieveRequest(
+    const response = await requestModel(
       {
         request: new Request("https://example.com/v1/models/openai%2Fgpt-4"),
       } as any,
@@ -288,7 +313,7 @@ describe("models", () => {
   });
 
   it("returns model_not_found for an absent model", async () => {
-    const response = await handleModelRetrieveRequest(
+    const response = await requestModel(
       {
         request: new Request("https://example.com/v1/models/missing"),
       } as any,
@@ -304,7 +329,7 @@ describe("models", () => {
   });
 
   it("propagates an aggregate validation error during retrieval", async () => {
-    const response = await handleModelRetrieveRequest(
+    const response = await requestModel(
       {
         request: new Request(
           "https://example.com/v1/models/missing?provider=unknown",
@@ -324,7 +349,7 @@ describe("models", () => {
       }),
     } as unknown as Env);
 
-    const response = await handleModelsRequest({} as any);
+    const response = await requestModels({} as any);
     const body = (await response.json()) as ModelsResponse;
 
     expect(body.data.slice(0, 2)).toEqual([
@@ -351,7 +376,7 @@ describe("models", () => {
   });
 
   it("omits virtual models when none are configured", async () => {
-    const response = await handleModelsRequest({} as any);
+    const response = await requestModels({} as any);
     const body = (await response.json()) as ModelsResponse;
 
     expect(body.data.every((model) => model.owned_by !== "virtual")).toBe(true);
@@ -391,7 +416,7 @@ describe("models", () => {
       mockProviderConstructor(parsingProviderClass);
     vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(false);
 
-    const response = await handleModelsRequest({} as any);
+    const response = await requestModels({} as any);
     const [timeoutPromise, abortController, timeoutMs, providerName] =
       vi.mocked(helpers.withTimeout).mock.calls[0];
 
@@ -434,8 +459,8 @@ describe("models", () => {
       ]),
     );
 
-    const responsePromise = handleModelsRequest({
-      providers: { all: vi.fn(() => providers) },
+    const responsePromise = requestModels({
+      providers: registryFor(providers),
     } as any);
 
     await vi.waitFor(() => {
@@ -465,7 +490,7 @@ describe("models", () => {
       unavailableProviderClass,
     );
 
-    const response = await handleModelsRequest({} as any);
+    const response = await requestModels({} as any);
     const body = (await response.json()) as ModelsResponse;
 
     expect(body.data).toHaveLength(1);
@@ -492,7 +517,7 @@ describe("models", () => {
       unavailableProviderClass,
     );
 
-    const response = await handleModelsRequest({} as any, mockAIGateway as any);
+    const response = await requestModels({} as any, mockAIGateway as any);
 
     await expect(response.json()).resolves.toEqual({
       object: "list",
@@ -523,7 +548,7 @@ describe("models", () => {
       unavailableProviderClass,
     );
 
-    const response = await handleModelsRequest({} as any, mockAIGateway as any);
+    const response = await requestModels({} as any, mockAIGateway as any);
 
     await expect(response.json()).resolves.toEqual({
       object: "list",
@@ -549,7 +574,7 @@ describe("models", () => {
         "x-client": "retained-outside-gateway-controls",
       },
     });
-    await handleModelsRequest({ request } as any, mockAIGateway as any);
+    await requestModels({ request } as any, mockAIGateway as any);
 
     expect(CloudflareAIGateway.isSupportedProvider).toHaveBeenCalledWith(
       "openai",
@@ -596,9 +621,9 @@ describe("models", () => {
       ]);
     vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(false);
 
-    await handleModelsRequest(
+    await requestModels(
       {
-        providers: { all: vi.fn(() => ({ ollama: provider })) },
+        providers: registryFor({ ollama: provider }),
       } as any,
       { alwaysUse: true, buildProviderEndpointRequest } as any,
     );
@@ -622,7 +647,7 @@ describe("models", () => {
     );
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const response = await handleModelsRequest({} as any, mockAIGateway as any);
+    const response = await requestModels({} as any, mockAIGateway as any);
     const body = (await response.json()) as ModelsResponse;
 
     expect(body.data).toEqual([]);
@@ -654,7 +679,7 @@ describe("models", () => {
     vi.mocked(helpers.fetchWithLogging).mockResolvedValue(upstreamResponse);
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const response = await handleModelsRequest({} as any, mockAIGateway as any);
+    const response = await requestModels({} as any, mockAIGateway as any);
     const body = (await response.json()) as ModelsResponse;
 
     expect(body.data).toEqual([]);
@@ -689,7 +714,7 @@ describe("models", () => {
     );
     vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const response = await handleModelsRequest({} as any, mockAIGateway as any);
+    const response = await requestModels({} as any, mockAIGateway as any);
 
     expect(((await response.json()) as ModelsResponse).data).toEqual([]);
   });
@@ -755,14 +780,12 @@ describe("models", () => {
     );
     vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const response = await handleModelsRequest({
-      providers: {
-        all: () => ({
-          cohere: cohereProvider,
-          openai: openAIProvider,
-          healthy: healthyProvider,
-        }),
-      },
+    const response = await requestModels({
+      providers: registryFor({
+        cohere: cohereProvider,
+        openai: openAIProvider,
+        healthy: healthyProvider,
+      }),
     } as any);
     const responseText = await response.text();
 
@@ -807,7 +830,7 @@ describe("models", () => {
 
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const response = await handleModelsRequest({} as any);
+    const response = await requestModels({} as any);
     const body = (await response.json()) as ModelsResponse;
 
     expect(body.data).toHaveLength(1);
@@ -846,7 +869,7 @@ describe("models", () => {
 
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const response = await handleModelsRequest({} as any);
+    const response = await requestModels({} as any);
     const body = (await response.json()) as ModelsResponse;
 
     expect(body.data).toHaveLength(1);
@@ -885,7 +908,7 @@ describe("models", () => {
 
     const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    const response = await handleModelsRequest({} as any);
+    const response = await requestModels({} as any);
     const body = (await response.json()) as ModelsResponse;
 
     expect(body.data).toHaveLength(1);
@@ -929,7 +952,7 @@ describe("models", () => {
 
     const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    const response = await handleModelsRequest({} as any);
+    const response = await requestModels({} as any);
     const body = (await response.json()) as ModelsResponse;
 
     expect(body.data).toHaveLength(1);
@@ -981,7 +1004,7 @@ describe("models", () => {
       multiModelProviderClass,
     );
 
-    const response = await handleModelsRequest({} as any);
+    const response = await requestModels({} as any);
     const body = (await response.json()) as ModelsResponse;
 
     expect(body.data).toHaveLength(2);
@@ -1008,11 +1031,14 @@ describe("models", () => {
           }),
         },
       },
-      available: vi.fn().mockReturnValue(true),
+      getCredentialProfiles: () => ["paid"],
+      available(this: Provider) {
+        return this.credentialProfile === "paid";
+      },
     };
 
-    const response = await handleModelsRequest({
-      providers: { all: () => ({ "ollama:paid": profiledProvider }) },
+    const response = await requestModels({
+      providers: registryFor({ ollama: profiledProvider }),
     } as any);
     const body = (await response.json()) as ModelsResponse;
 
@@ -1049,7 +1075,7 @@ describe("models", () => {
       staticModelsProviderClass,
     );
 
-    const response = await handleModelsRequest({} as any);
+    const response = await requestModels({} as any);
     const body = (await response.json()) as ModelsResponse;
 
     expect(body.data).toHaveLength(1);
@@ -1097,7 +1123,7 @@ describe("models", () => {
     // Mock CloudflareAIGateway.isSupportedProvider to return false
     vi.mocked(CloudflareAIGateway.isSupportedProvider).mockReturnValue(false);
 
-    const response = await handleModelsRequest({ apiKeyIndex: 2 } as any);
+    const response = await requestModels({ apiKeyIndex: 2 } as any);
     const body = (await response.json()) as ModelsResponse;
 
     expect(body.data).toHaveLength(1);
@@ -1427,7 +1453,7 @@ describe("models", () => {
     BUILT_IN_PROVIDER_CONSTRUCTORS.test =
       mockProviderConstructor(boundedProvider);
 
-    const response = await handleModelsRequest({} as any);
+    const response = await requestModels({} as any);
     const body = (await response.json()) as ModelsResponse;
     expect(body.data).toHaveLength(MAX_MODELS_PER_PROVIDER);
 
@@ -1443,7 +1469,7 @@ describe("models", () => {
         },
       ],
     });
-    const truncatedResponse = await handleModelsRequest({} as any);
+    const truncatedResponse = await requestModels({} as any);
     expect(truncatedResponse.headers.get("X-Proxy-Models-Truncated")).toBe(
       "true",
     );
@@ -1467,7 +1493,7 @@ describe("models", () => {
         new Error("Cache API unavailable"),
       );
 
-      const response = await handleModelsRequest({
+      const response = await requestModels({
         apiKeyIndex: 41,
       } as any);
 
@@ -1483,7 +1509,7 @@ describe("models", () => {
       } as unknown as Cache;
       vi.spyOn(caches, "open").mockResolvedValue(cache);
 
-      const response = await handleModelsRequest({
+      const response = await requestModels({
         apiKeyIndex: 42,
       } as any);
 
@@ -1499,11 +1525,12 @@ describe("models", () => {
         put: vi.fn().mockRejectedValue(new Error("Cache write unavailable")),
       } as unknown as Cache;
       vi.spyOn(caches, "open").mockResolvedValue(cache);
-      const waitUntil = vi.fn();
+      const ctx = createExecutionContext();
+      const waitUntil = vi.spyOn(ctx, "waitUntil");
 
-      const response = await handleModelsRequest({
+      const response = await requestModels({
         apiKeyIndex: 43,
-        ctx: { waitUntil },
+        ctx,
       } as any);
 
       expect(response.status).toBe(200);
@@ -1513,16 +1540,17 @@ describe("models", () => {
     });
 
     it("stores successful aggregates and serves subsequent requests from the cache", async () => {
-      const waitUntil = vi.fn();
-      const context = { ctx: { waitUntil }, apiKeyIndex: 11 } as any;
+      const ctx = createExecutionContext();
+      const waitUntil = vi.spyOn(ctx, "waitUntil");
+      const context = { ctx, apiKeyIndex: 11 } as any;
 
-      const missResponse = await handleModelsRequest(context);
+      const missResponse = await requestModels(context);
       expect(missResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
       expect(waitUntil).toHaveBeenCalledOnce();
       await waitUntil.mock.calls[0][0];
       const upstreamCalls = mockProviderClass.send.mock.calls.length;
 
-      const hitResponse = await handleModelsRequest(context);
+      const hitResponse = await requestModels(context);
       expect(hitResponse.headers.get("X-Proxy-Models-Cache")).toBe("HIT");
       expect(hitResponse.headers.get("Cache-Control")).toBe(
         "private, no-store",
@@ -1537,10 +1565,10 @@ describe("models", () => {
     it("awaits the cache write when no execution context is available", async () => {
       const context = { apiKeyIndex: 12 } as any;
 
-      const missResponse = await handleModelsRequest(context);
+      const missResponse = await requestModels(context);
       expect(missResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
 
-      const hitResponse = await handleModelsRequest(context);
+      const hitResponse = await requestModels(context);
       expect(hitResponse.headers.get("X-Proxy-Models-Cache")).toBe("HIT");
     });
 
@@ -1548,18 +1576,15 @@ describe("models", () => {
       // A cache hit carries no per-model fragments, so retrieval falls back to
       // reading the stored aggregate body.
       const context = { apiKeyIndex: 21 } as any;
-      await handleModelsRequest(context);
+      await requestModels(context);
 
-      const found = await handleModelRetrieveRequest(context, "openai/gpt-4");
+      const found = await requestModel(context, "openai/gpt-4");
       expect(found.headers.get("X-Proxy-Models-Cache")).toBe("HIT");
       await expect(found.json()).resolves.toMatchObject({
         id: "openai/gpt-4",
       });
 
-      const missing = await handleModelRetrieveRequest(
-        context,
-        "openai/absent",
-      );
+      const missing = await requestModel(context, "openai/absent");
       expect(missing.status).toBe(404);
       await expect(missing.json()).resolves.toEqual({
         error: expect.objectContaining({ code: "model_not_found" }),
@@ -1567,7 +1592,7 @@ describe("models", () => {
     });
 
     it("bypasses the cache when the client sends Cache-Control: no-store", async () => {
-      const bypassResponse = await handleModelsRequest({
+      const bypassResponse = await requestModels({
         apiKeyIndex: 13,
         request: new Request("https://example.com/models", {
           headers: { "Cache-Control": "no-store" },
@@ -1576,14 +1601,14 @@ describe("models", () => {
       expect(bypassResponse.headers.get("X-Proxy-Models-Cache")).toBeNull();
 
       // Nothing was stored, so a cache-enabled request still misses.
-      const missResponse = await handleModelsRequest({
+      const missResponse = await requestModels({
         apiKeyIndex: 13,
       } as any);
       expect(missResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
     });
 
     it("refreshes the cache when the client sends Cache-Control: no-cache", async () => {
-      const primeResponse = await handleModelsRequest({
+      const primeResponse = await requestModels({
         apiKeyIndex: 14,
       } as any);
       expect(primeResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
@@ -1594,7 +1619,7 @@ describe("models", () => {
           { id: "fresh-model", object: "model", created: 1, owned_by: "test" },
         ],
       });
-      const refreshResponse = await handleModelsRequest({
+      const refreshResponse = await requestModels({
         apiKeyIndex: 14,
         request: new Request("https://example.com/models", {
           headers: { "Cache-Control": "no-cache" },
@@ -1602,7 +1627,7 @@ describe("models", () => {
       } as any);
       expect(refreshResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
 
-      const hitResponse = await handleModelsRequest({ apiKeyIndex: 14 } as any);
+      const hitResponse = await requestModels({ apiKeyIndex: 14 } as any);
       expect(hitResponse.headers.get("X-Proxy-Models-Cache")).toBe("HIT");
       const body = (await hitResponse.json()) as ModelsResponse;
       expect(body.data.map((model) => model.id)).toEqual([
@@ -1626,19 +1651,19 @@ describe("models", () => {
           buildProviderEndpointRequest,
         }) as any;
 
-      const missResponse = await handleModelsRequest(
+      const missResponse = await requestModels(
         { request: new Request("https://example.com/g/gw-a/models") } as any,
         gateway("gw-a", false),
       );
       expect(missResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
 
-      const hitResponse = await handleModelsRequest(
+      const hitResponse = await requestModels(
         {} as any,
         gateway("gw-a", false),
       );
       expect(hitResponse.headers.get("X-Proxy-Models-Cache")).toBe("HIT");
 
-      const otherGatewayResponse = await handleModelsRequest(
+      const otherGatewayResponse = await requestModels(
         {} as any,
         gateway("gw-b", false),
       );
@@ -1646,7 +1671,7 @@ describe("models", () => {
         "MISS",
       );
 
-      const alwaysUseResponse = await handleModelsRequest(
+      const alwaysUseResponse = await requestModels(
         {} as any,
         gateway("gw-a", true),
       );
@@ -1656,22 +1681,22 @@ describe("models", () => {
     });
 
     it("scopes cache entries by key selection", async () => {
-      const missResponse = await handleModelsRequest({
+      const missResponse = await requestModels({
         apiKeyIndex: { start: 1 },
       } as any);
       expect(missResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
 
-      const hitResponse = await handleModelsRequest({
+      const hitResponse = await requestModels({
         apiKeyIndex: { start: 1 },
       } as any);
       expect(hitResponse.headers.get("X-Proxy-Models-Cache")).toBe("HIT");
 
-      const rangeResponse = await handleModelsRequest({
+      const rangeResponse = await requestModels({
         apiKeyIndex: { start: 1, end: 2 },
       } as any);
       expect(rangeResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
 
-      const endOnlyResponse = await handleModelsRequest({
+      const endOnlyResponse = await requestModels({
         apiKeyIndex: { end: 2 },
       } as any);
       expect(endOnlyResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
@@ -1691,7 +1716,7 @@ describe("models", () => {
         buildProviderEndpointRequest,
       } as any;
 
-      const bypassResponse = await handleModelsRequest(
+      const bypassResponse = await requestModels(
         {
           request: new Request("https://example.com/g/gw-tuning/models", {
             headers: { "cf-aig-metadata": '{"caller":"test"}' },
@@ -1701,12 +1726,12 @@ describe("models", () => {
       );
       expect(bypassResponse.headers.get("X-Proxy-Models-Cache")).toBeNull();
 
-      const missResponse = await handleModelsRequest({} as any, aiGateway);
+      const missResponse = await requestModels({} as any, aiGateway);
       expect(missResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
     });
 
     it("partitions cached aggregates by provider filter", async () => {
-      const filtered = await handleModelsRequest({
+      const filtered = await requestModels({
         request: new Request("https://example.com/v1/models?provider=openai"),
         apiKeyIndex: 51,
       } as any);
@@ -1727,12 +1752,12 @@ describe("models", () => {
         mockProviderConstructor(errorProviderClass);
       vi.spyOn(console, "error").mockImplementation(() => {});
 
-      const missResponse = await handleModelsRequest({
+      const missResponse = await requestModels({
         apiKeyIndex: 31,
       } as any);
       expect(missResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
 
-      const uncachedResponse = await handleModelsRequest({
+      const uncachedResponse = await requestModels({
         apiKeyIndex: 31,
       } as any);
       expect(uncachedResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");
@@ -1766,7 +1791,7 @@ describe("models", () => {
         mockProviderConstructor(oversizedProvider);
       vi.spyOn(console, "warn").mockImplementation(() => {});
 
-      const truncatedResponse = await handleModelsRequest({
+      const truncatedResponse = await requestModels({
         apiKeyIndex: 32,
       } as any);
       expect(truncatedResponse.headers.get("X-Proxy-Models-Truncated")).toBe(
@@ -1776,7 +1801,7 @@ describe("models", () => {
         "MISS",
       );
 
-      const uncachedResponse = await handleModelsRequest({
+      const uncachedResponse = await requestModels({
         apiKeyIndex: 32,
       } as any);
       expect(uncachedResponse.headers.get("X-Proxy-Models-Cache")).toBe("MISS");

@@ -8,6 +8,7 @@ import { utf8ByteLength } from "../utils/helpers";
  */
 export const MAX_SSE_RECORD_BYTES = 1 * 1024 * 1024;
 export const MAX_STREAM_TEXT_BYTES = 4 * 1024 * 1024;
+export const MAX_STREAM_LOGPROB_BYTES = 4 * 1024 * 1024;
 const MAX_STREAM_TOOL_CALLS = 64;
 export const MAX_STREAM_TOOL_ARGUMENT_BYTES = 4 * 1024 * 1024;
 export const MAX_STREAM_TOOL_METADATA_BYTES = 64 * 1024;
@@ -16,6 +17,7 @@ const MAX_STREAM_OUTPUT_ITEMS = 64;
 export type StreamingLimit =
   | "sse_record_bytes"
   | "text_bytes"
+  | "logprob_bytes"
   | "tool_calls"
   | "tool_argument_bytes"
   | "tool_metadata_bytes"
@@ -24,6 +26,7 @@ export type StreamingLimit =
 const LIMIT_MESSAGES: Record<StreamingLimit, string> = {
   sse_record_bytes: "Upstream SSE record exceeds the proxy limit.",
   text_bytes: "Streaming text exceeds the proxy limit.",
+  logprob_bytes: "Streaming logprobs exceed the proxy limit.",
   tool_calls: "Streaming tool call count exceeds the proxy limit.",
   tool_argument_bytes: "Streaming tool arguments exceed the proxy limit.",
   tool_metadata_bytes: "Streaming tool metadata exceeds the proxy limit.",
@@ -40,6 +43,7 @@ export class StreamingLimitError extends Error {
 export interface StreamingResponseLimits {
   sseRecordBytes: number;
   textBytes: number;
+  logprobBytes: number;
   toolCalls: number;
   toolArgumentBytes: number;
   toolMetadataBytes: number;
@@ -49,6 +53,7 @@ export interface StreamingResponseLimits {
 const DEFAULT_STREAMING_LIMITS: StreamingResponseLimits = {
   sseRecordBytes: MAX_SSE_RECORD_BYTES,
   textBytes: MAX_STREAM_TEXT_BYTES,
+  logprobBytes: MAX_STREAM_LOGPROB_BYTES,
   toolCalls: MAX_STREAM_TOOL_CALLS,
   toolArgumentBytes: MAX_STREAM_TOOL_ARGUMENT_BYTES,
   toolMetadataBytes: MAX_STREAM_TOOL_METADATA_BYTES,
@@ -57,6 +62,7 @@ const DEFAULT_STREAMING_LIMITS: StreamingResponseLimits = {
 
 export class StreamingResponseBudget {
   private textBytes = 0;
+  private logprobBytes = 0;
   private toolCalls = 0;
   private toolArgumentBytes = 0;
   private toolMetadataBytes = 0;
@@ -76,6 +82,13 @@ export class StreamingResponseBudget {
     this.textBytes += utf8ByteLength(text);
     if (this.textBytes > this.limits.textBytes) {
       return new StreamingLimitError("text_bytes");
+    }
+  }
+
+  addLogprobs(serialized: string): StreamingLimitError | undefined {
+    this.logprobBytes += utf8ByteLength(serialized);
+    if (this.logprobBytes > this.limits.logprobBytes) {
+      return new StreamingLimitError("logprob_bytes");
     }
   }
 

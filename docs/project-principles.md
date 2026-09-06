@@ -120,11 +120,17 @@ or malformed upstream cannot cause unbounded Worker resource use.
 
 ## Keep state request-scoped and persistent state minimal
 
-Request-specific environment, routing, logging, provider, and key-selection
-state is request-scoped. Mutable module state does not communicate between
-requests.
+The active environment, routing decisions, logging context, and selected
+credentials remain request-scoped. Shared provider registries contain no
+request-specific state; immutable configuration-derived values may be memoized
+when their cache keys include every dependency.
 
-The proxy has no cross-request persistent state.
+Documented per-isolate rotation counters and credential cooldowns are
+best-effort operational state. Model and status caches use the configured Cache
+API TTLs. None of these mechanisms provides durable or cross-isolate
+coordination, and correctness must not depend on their survival. The proxy
+stores no conversation state or request/response bodies beyond the documented
+aggregate caches.
 
 ## Make observability structured and content-minimal
 

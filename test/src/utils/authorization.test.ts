@@ -74,6 +74,26 @@ describe("isRequestAuthorized", () => {
 });
 
 describe("stripProxyAuthorizationHeaders", () => {
+  it.each([false, true])(
+    "removes Connection-nominated headers before Gateway preservation (%s)",
+    (preserveAiGatewayHeaders) => {
+      const original = new Headers({
+        connection:
+          "keep-alive, X-Transient, cf-aig-skip-cache, , invalid token",
+        "proxy-connection": "keep-alive",
+        "x-transient": "connection-only",
+        "cf-aig-skip-cache": "true",
+        "x-end-to-end": "preserved",
+      });
+      const sanitized = stripProxyAuthorizationHeaders(original, {
+        preserveAiGatewayHeaders,
+      });
+      expect([...sanitized.entries()]).toEqual([["x-end-to-end", "preserved"]]);
+      expect(original.get("x-transient")).toBe("connection-only");
+      expect(original.get("cf-aig-skip-cache")).toBe("true");
+    },
+  );
+
   it("removes proxy credentials while preserving other headers", () => {
     const original = new Headers({
       Authorization: "Bearer proxy-secret",

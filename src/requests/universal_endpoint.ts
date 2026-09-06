@@ -10,7 +10,11 @@ import { parseProviderSelector } from "../providers/profile";
 import { recordApiKeySelection } from "../utils/api_key_selection";
 import { stripProxyAuthorizationHeaders } from "../utils/authorization";
 import { BadRequestError } from "../utils/error";
-import { fetchWithLogging, readJsonRequest } from "../utils/helpers";
+import {
+  assertSafeProxyPath,
+  fetchWithLogging,
+  readJsonRequest,
+} from "../utils/helpers";
 import { RequestLogger } from "../utils/logger";
 
 type UniversalEndpointRequest = {
@@ -28,17 +32,16 @@ const MAX_UNIVERSAL_ENDPOINT_PATH_LENGTH = 2048;
 
 function normalizeUniversalEndpointPath(endpoint: string): string {
   const normalized = endpoint.replace(/^\/+/, "");
+  const invalidPath =
+    "Universal Endpoint step endpoint must be a safe relative path.";
   if (
     normalized.length === 0 ||
     normalized.length > MAX_UNIVERSAL_ENDPOINT_PATH_LENGTH ||
-    /[\\\u0000-\u001f\u007f]/.test(normalized) ||
-    /^[a-z][a-z\d+.-]*:/i.test(normalized) ||
-    normalized.split("/").some((segment) => segment === "." || segment === "..")
+    /[\\\u0000-\u001f\u007f]/.test(normalized)
   ) {
-    throw new BadRequestError(
-      "Universal Endpoint step endpoint must be a safe relative path.",
-    );
+    throw new BadRequestError(invalidPath);
   }
+  assertSafeProxyPath(normalized, invalidPath);
   return normalized;
 }
 

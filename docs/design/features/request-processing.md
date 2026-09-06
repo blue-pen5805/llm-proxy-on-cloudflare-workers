@@ -36,7 +36,8 @@ The order in `src/index.ts` is behaviorally significant:
    Authentication runs first so malformed selections cannot reveal the reserved
    prefix to an unauthenticated client.
 7. `providerRegistryMiddleware` validates custom endpoint configuration and
-   creates the request-scoped provider registry.
+   attaches the provider registry for that configuration to the request.
+   Registries contain no request state and are reused across requests.
 8. `aiGatewayMiddleware` selects the default or path-specific Gateway and
    removes an optional `/g/<name>` prefix. A prefix without
    `CLOUDFLARE_ACCOUNT_ID` fails with HTTP 400.
@@ -120,11 +121,21 @@ OpenAI-compatible local failures use the OpenAI error object; Messages routes
 use the Anthropic error object. `HEAD` health and model routes execute their
 `GET` contract and discard the response body.
 
+JSON-inspecting handlers share a bounded HTTP body reader. Invalid or oversized
+Content-Length values and streamed byte-limit violations release the rejected
+body; cancellation failure does not replace the validation error. Upstream JSON
+readers pass response headers and streams directly to the same reader instead
+of constructing an intermediate Request.
+
 The Responses and Messages compatibility implementations are organized by
 protocol stage. Each has a request translator, a bounded JSON response
-translator, an SSE stream translator, and a handler that coordinates the
-shared inference flow. Same-protocol endpoints bypass these translators; the
-converters run lazily only for candidates lacking a matching capability.
+translator, an SSE stream translator, and a small handler that declares its
+protocol adapters.
+`compatibility_handler.ts` owns their common bounded request parsing, validation,
+lazy Chat conversion, and JSON/SSE response dispatch. Protocol adapters retain
+their own validation errors and wire-format transformations. Same-protocol
+endpoints bypass these translators; the converters run lazily only for candidates
+lacking a matching capability.
 Their top-level modules are stable facades for
 the route handler and stream-conversion entry points.
 

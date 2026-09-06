@@ -39,7 +39,9 @@ responses expose the model cache and truncation diagnostic headers.
 absence preserves the wildcard default. Origins are matched as complete HTTP(S)
 origins rather than suffixes or patterns. Proxy authentication remains the
 security boundary; the allowlist reduces browser use of a disclosed credential
-without turning CORS into authorization.
+without turning CORS into authorization. Upstream allow-origin and expose-header
+values are replaced by the proxy's policy; a denied origin receives neither,
+even if the upstream response grants wildcard access.
 
 ## Credential isolation
 
@@ -62,6 +64,13 @@ this includes API-key variants, `token`, `access_token`, `authorization`,
 order, repetition, and empty fields. Path traversal is rejected before
 forwarding, including when the path carries a query string. `True-Client-IP` is
 included in the client network metadata that is removed.
+
+Connection-specific fields include `Proxy-Connection` and every header named
+by a case-insensitive `Connection` option, as required by
+[RFC 9110, section 7.6.1](https://www.rfc-editor.org/rfc/rfc9110.html#section-7.6.1).
+Those fields are removed before retaining Gateway tuning controls or injecting
+operator credentials. Universal Endpoint step paths share pass-through's
+percent-encoded dot-segment validation, including when a path carries a query.
 
 Every outbound provider, AI Gateway, model-list, and connectivity-check request
 uses manual redirect handling. The Worker never follows an upstream redirect,

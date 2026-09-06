@@ -7,6 +7,7 @@ import type {
   RoutedRequestContext,
 } from "~/src/request_context";
 import { handleChatCompletionsRequest } from "~/src/requests/chat_completions";
+import { Config } from "~/src/utils/config";
 import { createTestRoutedContext } from "../../helpers/request_context";
 
 const API_KEYS = ["provider-key-0", "provider-key-1", "provider-key-2"];
@@ -55,6 +56,31 @@ function authorizationHeaders(fetchMock: ReturnType<typeof vi.fn>): string[] {
 describe("Gateway chat key selection", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("attributes a retained HTTP response to its credential after a later network error", async () => {
+    vi.spyOn(Config, "chatResponseMetadataEnabled").mockReturnValue(true);
+    vi.spyOn(Config, "apiKeyCooldownSeconds").mockReturnValue(0);
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        Response.json({ error: { message: "rate limited" } }, { status: 429 }),
+      )
+      .mockRejectedValueOnce(new Error("network failure"));
+
+    const response = await handleChatCompletionsRequest(
+      createContext(undefined, "groq", 1, API_KEYS.slice(0, 2)),
+      new CloudflareAIGateway("account", "gateway", "operator-gateway-token"),
+    );
+    expect(response.status).toBe(429);
+    expect(await response.json()).toMatchObject({
+      error: { message: "rate limited" },
+      llm_proxy: { provider: "groq", credential_index: 1 },
+    });
+    expect(authorizationHeaders(fetch)).toEqual([
+      "Bearer provider-key-1",
+      "Bearer provider-key-0",
+    ]);
   });
 
   it("uses an explicitly selected index as the only Gateway credential", async () => {

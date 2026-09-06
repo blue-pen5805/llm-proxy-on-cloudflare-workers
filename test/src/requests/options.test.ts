@@ -61,6 +61,31 @@ describe("Vary", () => {
 });
 
 describe("handleOptions", () => {
+  it.each(["*", "https://denied.example"])(
+    "does not let upstream CORS %s override the operator origin allowlist",
+    async (upstreamOrigin) => {
+      vi.spyOn(Config, "allowedOrigins").mockReturnValue([
+        "https://allowed.example",
+      ]);
+      const upstream = new Response("upstream body", {
+        headers: {
+          "Access-Control-Allow-Origin": upstreamOrigin,
+          "Access-Control-Expose-Headers": "x-upstream-private",
+        },
+      });
+      const response = addCorsHeaders(
+        new Request("https://proxy.example", {
+          headers: { Origin: "https://denied.example" },
+        }),
+        upstream,
+      );
+      expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
+      expect(response.headers.get("Access-Control-Expose-Headers")).toBeNull();
+      expect(response.body).toBe(upstream.body);
+      expect(await response.text()).toBe("upstream body");
+    },
+  );
+
   it("reflects only an explicitly allowed origin", async () => {
     vi.spyOn(Config, "allowedOrigins").mockReturnValue([
       "https://allowed.example",

@@ -22,6 +22,9 @@ export function addCorsHeaders(request: Request, response: Response): Response {
   if (request.headers.get("Origin") === null) return response;
 
   const headers = new Headers(response.headers);
+  // Upstream CORS policy cannot grant access denied by this proxy's allowlist.
+  headers.delete("Access-Control-Allow-Origin");
+  headers.delete("Access-Control-Expose-Headers");
   // Error handling may reach this function after ALLOWED_ORIGINS itself failed
   // validation. Preserve the safe error response without recursively throwing.
   try {
@@ -31,7 +34,7 @@ export function addCorsHeaders(request: Request, response: Response): Response {
       headers.set("Access-Control-Expose-Headers", CORS_EXPOSE_HEADERS);
     }
   } catch {
-    headers.delete("Access-Control-Allow-Origin");
+    // Leave access disabled when the operator's origin configuration is invalid.
   }
   // The presence of the CORS headers depends on the request's Origin, so any
   // cache in front of the Worker must key on it.

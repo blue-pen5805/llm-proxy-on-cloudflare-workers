@@ -231,7 +231,8 @@ filtering runs first; remaining unmapped top-level fields return HTTP 400.
 Provider pass-through is the route for native features outside this subset.
 
 - Text, system/developer instructions, function tools, calls, and results map
-  to the corresponding native structures. Gemini tool results require a
+  to the corresponding native structures. System blocks preserve their order
+  through iterative accumulation within the request byte limit. Gemini tool results require a
   preceding call, and tool-call thought signatures round-trip through
   `extra_content.google.thought_signature`.
 - Images accept PNG, JPEG, WebP, and GIF base64 data URLs. Messages also accepts

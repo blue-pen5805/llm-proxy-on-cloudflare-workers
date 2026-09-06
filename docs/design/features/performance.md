@@ -54,12 +54,19 @@ function of operator configuration: it stores no request data, resets when
 the secret value changes or the isolate is recycled, and exists only to avoid
 re-parsing multi-kilobyte key material on every credential read.
 
+Automatic cooldown selection scans the ascending eligible-slot list from the
+selected rotation phase and wraps to its first entry. It requires no secondary
+membership set or scan across cooling slots.
+
 ## Bounded model aggregation
 
 Model discovery reads at most 1 MiB from one provider, queries every configured
 provider concurrently, retains at most 1,000 models per provider, and caps the
-serialized aggregate model entries at 4 MiB. A truncated response includes
-`X-Proxy-Models-Truncated: true`. The provider set is bounded by the fixed
+serialized aggregate model entries at 4 MiB. Exceeding either the per-provider
+count or aggregate byte limit includes
+`X-Proxy-Models-Truncated: true` and prevents cache storage. Reaching one
+provider's count limit does not skip later providers. The provider set is
+bounded by the fixed
 built-in registry and validated configuration limits; the response limits
 prevent individually bounded provider responses from accumulating beyond the
 Worker's isolate memory limit. Non-successful upstream responses are not parsed
@@ -106,8 +113,12 @@ default TTL bounds that staleness without a global purge mechanism.
 
 ## Provider route index
 
-`ProviderRegistry` snapshots built-in and custom provider names when the
-request-scoped registry is created. Route matching reads that immutable index,
+`ProviderRegistry` snapshots built-in and custom provider names when a registry
+is created. The built-in registry is reused across requests; custom registries
+are weakly cached by the validated configuration object's identity. Provider
+methods read the active request environment, so registry reuse does not retain
+another request's selected credentials or routing decisions. Route matching
+reads that immutable index,
 and custom-provider lookup uses a map. It does not rebuild provider-name arrays
 or scan custom endpoint configuration for each lookup.
 

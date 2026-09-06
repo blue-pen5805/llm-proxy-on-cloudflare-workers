@@ -25,56 +25,52 @@ export async function fetchCompatibilityFallback(
   let lastResponse: Response | undefined;
   let lastError: unknown;
 
-  for (const [attemptIndex, attempt] of requests
-    .slice(0, MAX_COMPATIBILITY_FALLBACK_ATTEMPTS)
-    .entries()) {
-    if (signal?.aborted) {
-      throw signal.reason;
-    }
+  try {
+    for (const [attemptIndex, attempt] of requests
+      .slice(0, MAX_COMPATIBILITY_FALLBACK_ATTEMPTS)
+      .entries()) {
+      signal?.throwIfAborted();
 
-    // Request conversion/configuration errors are deterministic and must not
-    // trigger credential fallback. Prepare only the credential being attempted.
-    const [requestInfo, requestInit] =
-      typeof attempt === "function" ? await attempt() : attempt;
-    try {
+      // Only fetch failures trigger credential fallback. Preparation and
+      // observer errors are local failures, not evidence of a bad credential.
+      const [requestInfo, requestInit] =
+        typeof attempt === "function" ? await attempt() : attempt;
+      signal?.throwIfAborted();
       const fetchAttempt = () =>
         fetchWithLogging(requestInfo, {
           ...requestInit,
           signal,
         });
       const attemptFields = beforeAttempt?.(attemptIndex);
-      const upstreamResponse = await (attemptFields
-        ? RequestLogger.withFields(attemptFields, fetchAttempt)
-        : fetchAttempt());
-      afterResponse?.(attemptIndex, upstreamResponse);
-      if (upstreamResponse.ok) {
-        if (lastResponse?.body) {
-          await lastResponse.body.cancel();
-        }
-        return upstreamResponse;
+      let upstreamResponse: Response;
+      try {
+        upstreamResponse = await (attemptFields
+          ? RequestLogger.withFields(attemptFields, fetchAttempt)
+          : fetchAttempt());
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        lastError = error;
+        continue;
       }
 
-      if (!shouldTryAnotherCredential(upstreamResponse.status)) {
-        if (lastResponse?.body) {
-          await lastResponse.body.cancel();
-        }
-        return upstreamResponse;
-      }
-
-      if (lastResponse?.body) {
-        await lastResponse.body.cancel();
-      }
+      // Retain the newest response before releasing the previous one. A
+      // failed cancellation must not replace this response or retry a request
+      // that has already succeeded upstream.
+      const previousResponse = lastResponse;
       lastResponse = upstreamResponse;
-    } catch (error) {
-      if (signal?.aborted) {
-        throw error;
+      await previousResponse?.body?.cancel().catch(() => undefined);
+      afterResponse?.(attemptIndex, upstreamResponse);
+      if (!shouldTryAnotherCredential(upstreamResponse.status)) {
+        return upstreamResponse;
       }
-      lastError = error;
     }
-  }
 
-  if (lastResponse) {
-    return lastResponse;
+    if (lastResponse) return lastResponse;
+    throw lastError;
+  } catch (error) {
+    // An abort or deterministic preparation/observer error transfers no body
+    // to the caller. Release the retained response without masking the cause.
+    await lastResponse?.body?.cancel().catch(() => undefined);
+    throw error;
   }
-  throw lastError;
 }

@@ -497,6 +497,31 @@ describe("Config", () => {
   });
 
   describe("virtualModels", () => {
+    it.each([
+      { "shadow/model": ["shadow/model"] },
+      {
+        "shadow/model": Array.from({ length: 16 }, () => ({
+          model: "openai/model",
+          retries: 5,
+        })),
+        "virtual/root": ["shadow/model", "shadow/model"],
+      },
+    ])(
+      "revalidates graph limits when custom provider shadowing changes: %j",
+      (models) => {
+        const rawModels = JSON.stringify(models);
+        let customEndpoints: string | undefined =
+          '[{"name":"shadow","baseUrl":"https://example.invalid"}]';
+        vi.mocked(Environments.get).mockImplementation((name) =>
+          name === "VIRTUAL_MODELS" ? rawModels : customEndpoints,
+        );
+        expect(Config.virtualModels()).toBeDefined();
+
+        customEndpoints = undefined;
+        expect(() => Config.virtualModels()).toThrow(ConfigurationError);
+      },
+    );
+
     it("parses JSON strings", () => {
       vi.mocked(Environments.get).mockReturnValue(
         '{"virtual/fast-tier":["groq/llama-3.3-70b","openai/gpt-4o-mini"]}',

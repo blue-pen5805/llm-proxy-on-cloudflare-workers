@@ -27,6 +27,37 @@ vi.mock("~/src/requests/chat_completions", () => ({
 }));
 
 describe("handleMessagesRequest", () => {
+  it.each(["system", "user"])(
+    "preserves large nested %s block arrays",
+    (role) => {
+      const blocks = Array.from({ length: 130_000 }, (_, index) => ({
+        type: "text",
+        text: String(index),
+      }));
+      const content =
+        role === "system"
+          ? [{ type: "mid_conv_system", content: blocks }]
+          : blocks.map((block) => ({
+              type: "mid_conv_system",
+              content: [block],
+            }));
+      const input = {
+        model: "openai/model",
+        max_tokens: 32,
+        messages: [{ role, content }],
+      };
+      expect(
+        new TextEncoder().encode(JSON.stringify(input)).byteLength,
+      ).toBeLessThan(10 * 1024 * 1024);
+      const { chat } = convertMessagesRequest(input);
+      expect(chat.messages).toEqual(
+        role === "system"
+          ? [{ role: "system", content: blocks }]
+          : blocks.map((block) => ({ role: "system", content: [block] })),
+      );
+    },
+  );
+
   const request = (body: unknown, headers: HeadersInit = {}) =>
     new Request("https://proxy.example/v1/messages", {
       method: "POST",

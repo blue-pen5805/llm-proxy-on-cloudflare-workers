@@ -32,6 +32,7 @@ export async function fetchWithCandidateTimeout(
   timeout: number | undefined,
   fetchAttempt: (signal: AbortSignal) => Promise<Response>,
 ): Promise<Response> {
+  requestSignal.throwIfAborted();
   if (timeout === undefined) return fetchAttempt(requestSignal);
   const timeoutController = new AbortController();
   const signal = AbortSignal.any([requestSignal, timeoutController.signal]);
@@ -65,6 +66,7 @@ export async function runVirtualModelChainAttempt(
   virtualModel: string,
   candidates: readonly VirtualModelCandidate[],
   attempt: ChatCompletionAttempt,
+  signal?: AbortSignal,
 ): Promise<ChatCompletionAttemptResult> {
   let totalAttempts = 0;
   for (const candidate of candidates) totalAttempts += candidate.retries + 1;
@@ -76,6 +78,7 @@ export async function runVirtualModelChainAttempt(
       candidateAttempt <= candidate.retries;
       candidateAttempt++, attemptIndex++
     ) {
+      signal?.throwIfAborted();
       const isLastAttempt = attemptIndex === totalAttempts - 1;
       const logFields = {
         virtual_model: virtualModel,
@@ -117,7 +120,7 @@ export async function runVirtualModelChainAttempt(
         );
         await response.body?.cancel().catch(() => undefined);
       } catch (error) {
-        if (isLastAttempt) {
+        if (isLastAttempt || signal?.aborted) {
           RequestLogger.error(
             "virtual_model.completed",
             "Virtual model candidate completed with an error",

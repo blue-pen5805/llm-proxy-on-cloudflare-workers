@@ -110,19 +110,25 @@ export function parseJsonOrReturnText(text: string): unknown {
   }
 }
 
-/** Read a request body without buffering more than the configured limit. */
+/** Read the shared HTTP body shape without buffering beyond the limit. */
 export async function readRequestText(
-  request: Request,
+  request: Request | Response,
   maximumBytes: number = MAX_BUFFERED_BODY_BYTES,
 ): Promise<string> {
   const contentLength = request.headers.get("content-length");
   if (contentLength !== null) {
     const declaredBytes = Number(contentLength);
+    let error: BadRequestError | PayloadTooLargeError | undefined;
     if (!Number.isSafeInteger(declaredBytes) || declaredBytes < 0) {
-      throw new BadRequestError("Invalid Content-Length header.");
+      error = new BadRequestError("Invalid Content-Length header.");
+    } else if (declaredBytes > maximumBytes) {
+      error = new PayloadTooLargeError();
     }
-    if (declaredBytes > maximumBytes) {
-      throw new PayloadTooLargeError();
+    if (error) {
+      // Header rejection must release an unread upstream body too. Cleanup
+      // failure cannot replace the authoritative validation error.
+      await request.body?.cancel().catch(() => undefined);
+      throw error;
     }
   }
 
@@ -139,7 +145,9 @@ export async function readRequestText(
       if (done) break;
       receivedBytes += value.byteLength;
       if (receivedBytes > maximumBytes) {
-        await reader.cancel("request body limit exceeded");
+        await reader
+          .cancel("request body limit exceeded")
+          .catch(() => undefined);
         throw new PayloadTooLargeError();
       }
       text += decoder.decode(value, { stream: true });
@@ -164,12 +172,7 @@ export async function readResponseJson(
   response: Response,
   maximumBytes: number = MAX_BUFFERED_RESPONSE_BYTES,
 ): Promise<unknown> {
-  const request = new Request("https://bounded-body.invalid", {
-    method: "POST",
-    headers: response.headers,
-    body: response.body,
-  });
-  const text = await readRequestText(request, maximumBytes);
+  const text = await readRequestText(response, maximumBytes);
   return JSON.parse(text) as unknown;
 }
 
@@ -233,18 +236,21 @@ export function utf8ByteLength(value: string): number {
  * is preserved unchanged. `%2e` is folded to `.` because the URL parser treats
  * percent-encoded dot segments as traversal.
  */
-export function assertSafeProxyPath(pathname: string): void {
+export function assertSafeProxyPath(
+  pathname: string,
+  message = "Invalid proxy request path.",
+): void {
   const pathOnly = pathname.split(/[?#]/, 1)[0];
   if (
     /[\\\u0000-\u001f\u007f]/.test(pathOnly) ||
     /^[a-z][a-z\d+.-]*:/i.test(pathOnly)
   ) {
-    throw new BadRequestError("Invalid proxy request path.");
+    throw new BadRequestError(message);
   }
   for (const segment of pathOnly.split("/")) {
     const decodedSegment = segment.replace(/%2e/gi, ".");
     if (decodedSegment === "." || decodedSegment === "..") {
-      throw new BadRequestError("Invalid proxy request path.");
+      throw new BadRequestError(message);
     }
   }
 }

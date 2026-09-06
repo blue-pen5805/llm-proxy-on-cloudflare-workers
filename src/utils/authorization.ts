@@ -11,6 +11,7 @@ const UPSTREAM_CONTROLLED_AUTHORIZATION_HEADERS = new Set([
   "host",
   "content-length",
   "connection",
+  "proxy-connection",
   "keep-alive",
   "proxy-authenticate",
   "te",
@@ -46,13 +47,26 @@ export function stripProxyAuthorizationHeaders(
   { preserveAiGatewayHeaders = false } = {},
 ): Headers {
   const sanitizedHeaders = new Headers(headers);
+  const connection = sanitizedHeaders.get("connection");
+  const connectionHeaders =
+    connection === null
+      ? undefined
+      : new Set(
+          connection
+            .toLowerCase()
+            .split(",")
+            .map((name) => name.trim()),
+        );
   let headersToDelete: string[] | undefined;
   for (const key of sanitizedHeaders.keys()) {
     const normalizedKey = key.toLowerCase();
     // Gateway authentication and stored-credential selection belong to the
     // operator-controlled configuration. Never accept either from a client,
     // even when request-level Gateway tuning controls are retained.
-    if (OPERATOR_CONTROLLED_AI_GATEWAY_HEADERS.has(normalizedKey)) {
+    if (
+      connectionHeaders?.has(normalizedKey) ||
+      OPERATOR_CONTROLLED_AI_GATEWAY_HEADERS.has(normalizedKey)
+    ) {
       (headersToDelete ??= []).push(key);
       continue;
     }

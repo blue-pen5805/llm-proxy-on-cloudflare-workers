@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
+import { CloudflareAIGateway } from "~/src/ai_gateway";
+import { corsMiddleware } from "~/src/middlewares/cors";
 import { handleRouting } from "~/src/middlewares/router";
 import {
   BUILT_IN_PROVIDER_CONSTRUCTORS,
@@ -46,6 +48,147 @@ function routingContext(body: unknown, pathname: string): RoutedRequestContext {
 }
 
 describe("adversarial provider selectors", () => {
+  it.each([false, true])(
+    "strips connection-scoped fields while retaining operator credentials (Gateway %s)",
+    async (viaGateway) => {
+      const fetch = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(new Response("upstream"));
+      try {
+        const context = createTestRoutedContext({
+          request: new Request("https://proxy.example/openai/v1/models", {
+            headers: {
+              authorization: "Bearer client-key",
+              connection: "Authorization, X-Hop-Only, CF-AIG-Skip-Cache",
+              "x-hop-only": "must-not-forward",
+              "cf-aig-skip-cache": "true",
+            },
+          }),
+          env: environment,
+        });
+        await Environments.run(environment, () =>
+          handleRouting(
+            context,
+            viaGateway
+              ? new CloudflareAIGateway("account", "gateway")
+              : undefined,
+          ),
+        );
+        expect(fetch).toHaveBeenCalledOnce();
+        const headers = new Headers(fetch.mock.calls[0][1]?.headers);
+        expect(headers.get("authorization")).toBe(
+          `Bearer ${environment.OPENAI_API_KEY}`,
+        );
+        expect(headers.has("x-hop-only")).toBe(false);
+        expect(headers.has("cf-aig-skip-cache")).toBe(false);
+        expect(headers.has("connection")).toBe(false);
+      } finally {
+        fetch.mockRestore();
+      }
+    },
+  );
+
+  it.each(["https://allowed.example.attacker.invalid", "null"])(
+    "withholds CORS access for origin %s even when upstream permits it",
+    async (origin) => {
+      const context = createTestRoutedContext({
+        request: new Request("https://proxy.example/openai/v1/models", {
+          headers: { Origin: origin },
+        }),
+      });
+      const env = {
+        ...context.env,
+        ALLOWED_ORIGINS: '["https://allowed.example"]',
+      };
+      const response = await Environments.run(env, () =>
+        corsMiddleware(
+          context,
+          async () =>
+            new Response("upstream body", {
+              headers: { "Access-Control-Allow-Origin": "*" },
+            }),
+        ),
+      );
+      expect(response.headers.has("Access-Control-Allow-Origin")).toBe(false);
+      expect(await response.text()).toBe("upstream body");
+    },
+  );
+
+  it.each([
+    ["invalid", 400],
+    [String(10 * 1024 * 1024 + 1), 413],
+  ] as const)(
+    "rejects client Content-Length %s with HTTP %s before inference",
+    async (contentLength, status) => {
+      const context = routingContext(
+        { model: "openai/model", messages: [] },
+        "/v1/chat/completions",
+      );
+      context.request.headers.set("content-length", contentLength);
+      await expect(
+        Environments.run(environment, () => handleRouting(context)),
+      ).rejects.toMatchObject({ status });
+    },
+  );
+
+  it.each([
+    "%2e%2e/chat/completions",
+    "v1/.%2E/chat/completions",
+    "v1/%2E./chat/completions",
+    "v1/..?ignored=true",
+  ])(
+    "rejects Universal Endpoint traversal %s before dispatch",
+    async (endpoint) => {
+      const gateway = new CloudflareAIGateway("account", "gateway");
+      const build = vi.spyOn(gateway, "buildUniversalEndpointRequest");
+      const fetch = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(new Response("unexpected dispatch"));
+      try {
+        await expect(
+          Environments.run(environment, () =>
+            handleRouting(
+              routingContext(
+                [{ provider: "openai", endpoint, query: {} }],
+                "/",
+              ),
+              gateway,
+            ),
+          ),
+        ).rejects.toThrow("safe relative path");
+        expect(build).not.toHaveBeenCalled();
+      } finally {
+        build.mockRestore();
+        fetch.mockRestore();
+      }
+    },
+  );
+
+  it.each(INHERITED_KEYS)(
+    "rejects unregistered model-list filter %s before upstream I/O",
+    async (providerName) => {
+      const fetch = vi.spyOn(globalThis, "fetch");
+      try {
+        const request = new Request(
+          `https://proxy.example/v1/models?provider=${encodeURIComponent(providerName)}`,
+        );
+        const response = await Environments.run(environment, () =>
+          handleRouting(createTestRoutedContext({ request, env: environment })),
+        );
+        expect(response.status).toBe(400);
+        await expect(response.json()).resolves.toEqual({
+          error: expect.objectContaining({
+            message: "Invalid provider filter.",
+            param: "provider",
+          }),
+        });
+        expect(fetch).not.toHaveBeenCalled();
+      } finally {
+        fetch.mockRestore();
+      }
+    },
+  );
+
   it.each(["TRACE", "CONNECT"])(
     "rejects provider pass-through method %s with 405",
     (method) => {
@@ -225,6 +368,47 @@ describe("adversarial provider selectors", () => {
 
     expect(response.status).toBe(400);
   });
+
+  it.each(["system", "user"])(
+    "rejects malformed nested %s instructions before dispatch",
+    async (role) => {
+      const fetch = vi.spyOn(globalThis, "fetch");
+      try {
+        const response = await Environments.run(environment, () =>
+          handleRouting(
+            routingContext(
+              {
+                model: "openai/model",
+                max_tokens: 8,
+                messages: [
+                  {
+                    role,
+                    content: [
+                      {
+                        type: "mid_conv_system",
+                        content: { text: "untrusted" },
+                      },
+                    ],
+                  },
+                ],
+              },
+              "/v1/messages",
+            ),
+          ),
+        );
+        expect(response.status).toBe(400);
+        expect(await response.json()).toMatchObject({
+          error: {
+            type: "invalid_request_error",
+            message: expect.stringContaining("messages.content.system.content"),
+          },
+        });
+        expect(fetch).not.toHaveBeenCalled();
+      } finally {
+        fetch.mockRestore();
+      }
+    },
+  );
 
   it("ignores an unsupported field in a Messages system block", async () => {
     const response = await Environments.run(environment, () =>

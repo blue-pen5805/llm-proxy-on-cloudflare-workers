@@ -1,6 +1,5 @@
 import { CloudflareAIGateway } from "../ai_gateway";
 import { gatewayProviderPath } from "../ai_gateway/custom_provider";
-import { getAllProviderInstances } from "../providers";
 import { buildModelsRequest } from "../providers/models";
 import { OpenAIModelsListResponseBody } from "../providers/openai/types";
 import { parseProviderSelector } from "../providers/profile";
@@ -13,7 +12,6 @@ import {
 } from "../utils/api_key_selection";
 import { stripProxyAuthorizationHeaders } from "../utils/authorization";
 import { Config, VIRTUAL_MODEL_PROVIDER_NAME } from "../utils/config";
-import { Environments } from "../utils/environments";
 import {
   fetchWithLogging,
   readResponseJson,
@@ -24,6 +22,7 @@ import { RequestLogger } from "../utils/logger";
 import { openAIErrorResponse } from "./error_response";
 import { resolveAiGatewayModelsProvider } from "./model_gateway";
 import { PRIVATE_NO_STORE_HEADERS } from "./response";
+import { isJsonObject } from "./sse";
 
 // Timeout for individual provider model fetch operations (milliseconds)
 const PROVIDER_FETCH_TIMEOUT_MS = 60_000;
@@ -103,10 +102,9 @@ async function discardUpstreamBody(response: Response): Promise<void> {
 }
 
 function requestedProviders(
-  request: Request | undefined,
+  request: Request,
   availableProviders: ReadonlySet<string>,
 ): string[] | Response | undefined {
-  if (!request) return undefined;
   const values = new URL(request.url).searchParams.getAll("provider");
   if (values.length === 0) return undefined;
   if (values.length !== 1) {
@@ -284,22 +282,25 @@ async function aggregateModels(
   context: RoutedRequestContext,
   aiGateway: CloudflareAIGateway | undefined,
 ): Promise<AggregatedModels> {
-  const allProviderEntries = Object.entries(
-    context.providers?.all() ?? getAllProviderInstances(Environments.all()),
-  );
+  const providerEnumeration = context.providers.allSettled();
+  const allProviderEntries = Object.entries(providerEnumeration.providers);
   const providerFilter = requestedProviders(
     context.request,
-    new Set(allProviderEntries.map(([providerName]) => providerName)),
+    new Set([
+      ...allProviderEntries.map(([providerName]) => providerName),
+      // A registered provider that cannot enumerate profiles is unavailable,
+      // not an unknown client selector.
+      ...providerEnumeration.failures.map(({ providerName }) => providerName),
+    ]),
   );
   if (providerFilter instanceof Response) return { response: providerFilter };
   const providerFilterSet =
     providerFilter === undefined ? undefined : new Set(providerFilter);
-  const sanitizedGatewayHeaders =
-    aiGateway && context.request
-      ? stripProxyAuthorizationHeaders(context.request.headers, {
-          preserveAiGatewayHeaders: true,
-        })
-      : undefined;
+  const sanitizedGatewayHeaders = aiGateway
+    ? stripProxyAuthorizationHeaders(context.request.headers, {
+        preserveAiGatewayHeaders: true,
+      })
+    : undefined;
   const clientGatewayHeaders: Record<string, string> = {};
   let hasClientGatewayTuning = false;
   sanitizedGatewayHeaders?.forEach((value, key) => {
@@ -314,7 +315,7 @@ async function aggregateModels(
   // entirely; `Cache-Control: no-cache` skips the read but refreshes the entry.
   const cacheTtlSeconds = Config.modelsCacheTtlSeconds();
   const requestCacheControl =
-    context.request?.headers.get("Cache-Control")?.toLowerCase() ?? "";
+    context.request.headers.get("Cache-Control")?.toLowerCase() ?? "";
   const cacheEnabled =
     cacheTtlSeconds > 0 &&
     !hasClientGatewayTuning &&
@@ -376,7 +377,15 @@ async function aggregateModels(
   const modelIds: string[] = [];
   let aggregatedBytes = 0;
   let truncated = false;
-  let providerFailed = false;
+  let providerFailed = providerEnumeration.failures.length > 0;
+  for (const { providerName, error } of providerEnumeration.failures) {
+    RequestLogger.error(
+      "provider.models.failed",
+      "Provider model discovery failed",
+      error,
+      { provider: providerName },
+    );
+  }
 
   // Operator-defined virtual models are advertised at the front of the list so
   // clients discover them ahead of provider models. They are bounded (at most
@@ -414,7 +423,10 @@ async function aggregateModels(
     ),
   );
 
-  for (const [index, settledRequest] of settledModelRequests.entries()) {
+  providerResults: for (const [
+    index,
+    settledRequest,
+  ] of settledModelRequests.entries()) {
     const providerName = providerEntries[index][0];
     if (settledRequest.status === "rejected") {
       if (!(settledRequest.reason instanceof ProviderNotSupportedError)) {
@@ -430,7 +442,22 @@ async function aggregateModels(
       }
       continue;
     }
-    if (!Array.isArray(settledRequest.value?.data)) {
+    const providerModels = settledRequest.value?.data;
+    const retainedModels = Array.isArray(providerModels)
+      ? providerModels.slice(0, MAX_MODELS_PER_PROVIDER)
+      : undefined;
+    // Validate the bounded batch before publishing any of this provider's
+    // entries. A malformed entry must not fail the complete aggregate or
+    // produce a synthetic ID such as "provider/undefined".
+    if (
+      !retainedModels ||
+      retainedModels.some(
+        (model) =>
+          !isJsonObject(model) ||
+          typeof model.id !== "string" ||
+          model.id.length === 0,
+      )
+    ) {
       providerFailed = true;
       RequestLogger.warn(
         "provider.models.invalid_response",
@@ -442,10 +469,8 @@ async function aggregateModels(
       continue;
     }
 
-    for (const { id, ...model } of settledRequest.value.data.slice(
-      0,
-      MAX_MODELS_PER_PROVIDER,
-    )) {
+    if (providerModels.length > MAX_MODELS_PER_PROVIDER) truncated = true;
+    for (const { id, ...model } of retainedModels) {
       const qualifiedModelId = `${providerName}/${id}`;
       const serializedModel = JSON.stringify({
         id: qualifiedModelId,
@@ -454,13 +479,12 @@ async function aggregateModels(
       const modelBytes = utf8ByteLength(serializedModel);
       if (aggregatedBytes + modelBytes > MAX_AGGREGATED_MODELS_BYTES) {
         truncated = true;
-        break;
+        break providerResults;
       }
       serializedModels.push(serializedModel);
       modelIds.push(qualifiedModelId);
       aggregatedBytes += modelBytes;
     }
-    if (truncated) break;
   }
 
   if (truncated) {
@@ -469,6 +493,7 @@ async function aggregateModels(
       "Aggregated model list was truncated",
       {
         maximum_bytes: MAX_AGGREGATED_MODELS_BYTES,
+        maximum_models_per_provider: MAX_MODELS_PER_PROVIDER,
       },
     );
   }
@@ -501,11 +526,7 @@ async function aggregateModels(
         },
       }),
     );
-    if (context.ctx !== undefined) {
-      context.ctx.waitUntil(cachePutPromise);
-    } else {
-      await cachePutPromise;
-    }
+    context.ctx.waitUntil(cachePutPromise);
   }
 
   return {

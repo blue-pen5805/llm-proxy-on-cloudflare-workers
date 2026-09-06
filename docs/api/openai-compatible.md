@@ -196,8 +196,8 @@ is joined before parsing.
 ### Streaming limits and failures
 
 The converter caps each SSE record at 1 MiB, retained text at 4 MiB, retained
-tool arguments at 4 MiB, tool metadata at 64 KiB, tool calls at 64, and output
-items at 64. These independent limits leave headroom beneath the Workers
+tool arguments at 4 MiB, retained logprobs at 4 MiB, tool metadata at 64 KiB,
+tool calls at 64, and output items at 64. These independent limits leave headroom beneath the Workers
 128 MiB isolate limit while the converter retains the content required to
 construct the final Responses event.
 
@@ -207,9 +207,11 @@ requires the `[DONE]` sentinel. A stream that ends without it emits a terminal
 `error` event and no success event. Backpressure and downstream cancellation
 otherwise propagate through the Chat request path.
 
-The final event retains at most 8 MiB of generated content: up to 4 MiB of text
-plus up to 4 MiB of tool arguments, with item and metadata overhead bounded
-separately.
+The logprob budget counts serialized nonempty converted batches for both
+text events and output items, including token byte arrays and alternatives.
+The final event retains at most 12 MiB of generated content: up to 4 MiB of text,
+4 MiB of tool arguments, and 4 MiB of logprobs, with item and metadata overhead
+bounded separately.
 
 ### Ignored and unsupported conversion features
 
@@ -251,8 +253,11 @@ with a 60-second timeout and 1 MiB response limit. At most 1,000 models per
 provider and 4 MiB of serialized model entries are retained. A bounded
 aggregate includes `X-Proxy-Models-Truncated: true` when it is truncated.
 Non-successful upstream responses are discarded before provider-specific model
-conversion. Failures are logged and omitted, so a successful response may be
-partial.
+conversion. Provider enumeration and fetch failures are logged and omitted, so a
+successful response may be partial. A provider's retained batch is also omitted
+if any entry is not an object with a non-empty string ID. Exceeding either
+retention limit marks the aggregate as truncated; a provider's count limit
+does not suppress later providers.
 
 `?provider=openai,anthropic` restricts aggregation to the named registered
 providers. After trimming and de-duplication, at most 32 names are accepted.

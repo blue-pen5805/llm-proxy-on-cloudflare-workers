@@ -31,6 +31,66 @@ describe("parseJsonOrReturnText", () => {
 });
 
 describe("bounded body parsing", () => {
+  it("rejects an invalid length even when there is no body to release", async () => {
+    const request = new Request("https://example.com", {
+      headers: { "content-length": "invalid" },
+    });
+    await expect(readRequestText(request)).rejects.toBeInstanceOf(
+      BadRequestError,
+    );
+  });
+
+  it.each([
+    ["invalid", BadRequestError],
+    ["-1", BadRequestError],
+    ["11", PayloadTooLargeError],
+  ] as const)(
+    "releases an upstream body rejected by declared Content-Length %s",
+    async (contentLength, ErrorClass) => {
+      const cancel = vi.fn();
+      const response = new Response(new ReadableStream({ cancel }), {
+        headers: { "content-length": contentLength },
+      });
+      await expect(readResponseJson(response, 10)).rejects.toBeInstanceOf(
+        ErrorClass,
+      );
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(response.body!.locked).toBe(false);
+    },
+  );
+
+  it("preserves a declared size error when cancelling the body fails", async () => {
+    const response = new Response(
+      new ReadableStream({
+        cancel() {
+          throw new Error("stream cleanup failed");
+        },
+      }),
+      { headers: { "content-length": "11" } },
+    );
+    await expect(readResponseJson(response, 10)).rejects.toBeInstanceOf(
+      PayloadTooLargeError,
+    );
+  });
+
+  it("preserves the streamed size error when cancelling the reader fails", async () => {
+    const request = new Request("https://example.com", {
+      method: "POST",
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("too large"));
+        },
+        cancel() {
+          throw new Error("stream cleanup failed");
+        },
+      }),
+    });
+    await expect(readRequestText(request, 4)).rejects.toBeInstanceOf(
+      PayloadTooLargeError,
+    );
+    expect(request.body!.locked).toBe(false);
+  });
+
   it("returns an empty string when the request has no body", async () => {
     await expect(
       readRequestText(new Request("https://example.com")),

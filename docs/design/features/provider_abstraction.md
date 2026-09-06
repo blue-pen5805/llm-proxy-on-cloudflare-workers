@@ -68,7 +68,8 @@ require own properties. This prevents inherited names such as `constructor`
 from becoming routes or causing adapter construction failures.
 
 Universal Endpoint steps must pass both Cloudflare's supported-provider check
-and lookup in the request-scoped registry. A provider advertised by Gateway but
+and lookup in the registry attached to the request. A provider advertised by
+Gateway but
 without a local adapter is therefore a client error rather than an undefined
 constructor failure.
 
@@ -108,9 +109,12 @@ capabilities independently:
 
 A client selector that does not resolve to a registered provider or credential
 profile is a request error and returns HTTP 400 on compatibility routes. A
-registered provider that cannot serve because its operator credentials,
-provider-specific settings, required Gateway, or Gateway token are absent
-returns HTTP 503. Provider pass-through retains HTTP 404 for an unknown route.
+registered provider that cannot serve because declared required local
+credentials, provider-specific settings, a required Gateway, or a Gateway token
+are absent returns HTTP 503. Operations that do not require local credentials
+can use upstream-managed authentication; the upstream determines the response
+when its authentication requirements are not satisfied. Provider pass-through
+retains HTTP 404 for an unknown route.
 
 Pass-through usually needs only a base URL and authentication. Chat and model
 listing require format-specific implementation and tests.
@@ -130,7 +134,7 @@ Deployment configuration can register OpenAI-compatible upstreams without a
 provider class. This covers self-hosted inference and vendor endpoints whose
 authentication and response formats already follow the OpenAI contract.
 
-Validated `CUSTOM_OPENAI_ENDPOINTS` entries join the same request-scoped
+Validated `CUSTOM_OPENAI_ENDPOINTS` entries join the same configuration-specific
 registry as built-in adapters. Invalid configuration prevents registry creation
 and produces a non-disclosing HTTP 503 after authentication. The complete input
 schema is in [Configuration](../../configuration.md#custom-openai-compatible-endpoints).
@@ -273,11 +277,17 @@ response streams. Matching capabilities and model overrides are defined in
 
 Without a matching capability, the protocol-specific request is converted
 lazily to Chat Completions. This fallback derives compatibility from the
-provider's Chat conversion capability.
+provider's Chat conversion capability. Message and nested system blocks retain
+their order within the request byte limit; array length does not become a
+JavaScript function argument count.
 
 On conversion paths, successful JSON and SSE responses are converted back to the selected public
 protocol. Both streaming converters share the bounded Chat Completions SSE
 decoder and implement only their protocol-specific state and event output.
+Responses separately bounds cumulative logprobs to 4 MiB of serialized converted
+batches, counting both the text-event and output-item representations, including
+byte arrays and alternative tokens. Empty logprob batches consume no budget.
+Exceeding this budget emits a terminal error and cancels the upstream stream.
 Upstream errors pass through. The complete mappings, limits, and explicit
 exclusions live in the [OpenAI-compatible API](../../api/openai-compatible.md#responses)
 and [Anthropic-compatible API](../../api/anthropic-compatible.md#messages)
@@ -292,8 +302,14 @@ receive a model-list request with a 60-second timeout. Automatic discovery
 starts at the first key. HTTP 429 retries sequential later keys, up to three
 attempts or the configured key count, without advancing striped rotation.
 Other failures and explicit key selections do not rotate. Fulfilled results are
-converted to OpenAI model objects and prefixed with their route name. Rejected or
-malformed responses are logged and omitted.
+converted to OpenAI model objects and prefixed with their route name. Registry
+enumeration failures, rejected requests, and malformed responses are logged
+and omitted independently. Each provider's retained batch is validated before
+any entries are added: every entry must be an object with a non-empty string ID.
+An invalid batch does not remove models from healthy providers or enter the
+aggregate cache. Exceeding the per-provider count limit marks the response as
+truncated while still allowing models from subsequent providers within the
+aggregate byte limit.
 The optional `provider` query restricts fan-out before requests start and forms
 part of the aggregate cache key. Model retrieval resolves an exact ID from this
 bounded aggregate rather than introducing a separate provider capability.

@@ -168,16 +168,12 @@ export async function selectApiKeyIndex(
   if (!providerName) return selectedIndex;
   const eligibleIndexes = getEligibleApiKeyIndexes(providerName, keyCount);
   if (!eligibleIndexes) return selectedIndex;
-  const eligibleIndexSet = new Set(eligibleIndexes);
-  if (eligibleIndexSet.has(selectedIndex)) return selectedIndex;
 
-  // Preserve the selected rotation phase and move forward to the next healthy
-  // slot. If every key is cooling, getEligibleApiKeyIndexes returns undefined
-  // and the original selection is accepted above.
-  for (let offset = 1; offset < keyCount; offset++) {
-    const candidateIndex = (selectedIndex + offset) % keyCount;
-    if (eligibleIndexSet.has(candidateIndex)) return candidateIndex;
+  // Eligibility is a non-empty ascending list. Find the first healthy slot at
+  // or after the selected rotation phase, wrapping to the first when needed.
+  // This avoids building a Set and scanning cooled slots a second time.
+  for (const eligibleIndex of eligibleIndexes) {
+    if (eligibleIndex >= selectedIndex) return eligibleIndex;
   }
-  /* istanbul ignore next -- eligible indexes come from the same complete [0, keyCount) range, so the loop must find one */
-  return selectedIndex;
+  return eligibleIndexes[0];
 }

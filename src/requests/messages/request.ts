@@ -125,7 +125,9 @@ function convertMessage(message: unknown): JsonObject[] {
         continue;
       }
       if (block.type === "mid_conv_system") {
-        content.push(...convertMidConversationSystem(block).content);
+        for (const part of convertMidConversationSystem(block).content) {
+          content.push(part);
+        }
         continue;
       }
       if (block.type !== "text" || typeof block.text !== "string") {
@@ -353,7 +355,9 @@ export function convertMessagesRequest(rawBody: unknown): {
   const messages: JsonObject[] = [];
   if (system) messages.push(system);
   for (const message of body.messages) {
-    messages.push(...convertMessage(message));
+    for (const converted of convertMessage(message)) {
+      messages.push(converted);
+    }
   }
   return {
     request: body as MessagesRequest,

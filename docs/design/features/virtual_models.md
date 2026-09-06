@@ -22,7 +22,9 @@ The graph must be acyclic. At most 100 virtual models are accepted, retries are
 limited to five per candidate, and an expanded model is limited to 96 concrete
 attempts. Deployment and runtime validation both enforce these bounds. Invalid
 configuration fails closed after proxy authentication without echoing the
-rejected value.
+rejected value. Runtime graph validation is memoized by both the virtual-model
+configuration and custom-endpoint configuration because real-provider shadowing
+changes which references participate in cycles and expanded attempt counts.
 
 Lookups use only configured own properties. Names such as `__proto__` are
 ordinary entries and cannot alter the map's prototype.
@@ -37,7 +39,7 @@ An attempt advances after:
 
 - HTTP 401, 403, 429, or any 5xx response;
 - provider resolution or configuration failure; or
-- a network error, client abort, or configured timeout.
+- a network error or configured timeout.
 
 Other HTTP responses return immediately. In particular, retrying an unchanged
 request after an ordinary client error would not correct the request and could
@@ -50,7 +52,8 @@ is never retried after streaming begins.
 `timeout` covers the wait for response headers, not consumption of a valid
 stream. A timeout on a virtual-model reference becomes the default for concrete
 candidates below it; a more specific nested timeout overrides it. Client
-cancellation continues to propagate to the active upstream request.
+cancellation propagates to the active upstream request and stops the complete
+nested retry chain before another credential or candidate is selected.
 
 Each concrete attempt uses its provider's normal parameter filtering,
 credential profile, key selection, and direct or AI Gateway routing. An

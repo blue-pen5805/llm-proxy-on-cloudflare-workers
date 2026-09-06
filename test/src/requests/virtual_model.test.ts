@@ -25,6 +25,20 @@ describe("isRetryableCandidateStatus", () => {
 });
 
 describe("fetchWithCandidateTimeout", () => {
+  it.each([undefined, 5000])(
+    "does not start an already cancelled fetch with timeout %s",
+    async (timeout) => {
+      const controller = new AbortController();
+      const reason = new Error("cancelled before dispatch");
+      controller.abort(reason);
+      const fetchAttempt = vi.fn();
+      await expect(
+        fetchWithCandidateTimeout(controller.signal, timeout, fetchAttempt),
+      ).rejects.toBe(reason);
+      expect(fetchAttempt).not.toHaveBeenCalled();
+    },
+  );
+
   it("passes through the request signal when timeout is not configured", async () => {
     const requestController = new AbortController();
     const fetchAttempt = vi.fn().mockResolvedValue(new Response("ok"));

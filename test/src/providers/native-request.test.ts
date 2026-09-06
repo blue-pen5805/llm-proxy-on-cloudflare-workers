@@ -14,6 +14,35 @@ const base = {
 const schema = { type: "object", properties: { city: { type: "string" } } };
 
 describe("native inference request conversion", () => {
+  it.each(protocols)(
+    "preserves large system block arrays for %s",
+    (protocol) => {
+      const content = Array.from({ length: 130_000 }, (_, index) => ({
+        type: "text",
+        text: String(index),
+      }));
+      const input = {
+        ...base,
+        messages: [{ role: "system", content }, ...base.messages],
+      };
+      expect(
+        new TextEncoder().encode(JSON.stringify(input)).byteLength,
+      ).toBeLessThan(10 * 1024 * 1024);
+      const result = prepareNativeRequest(input, protocol);
+      const expected =
+        protocol === "messages"
+          ? content
+          : content.map(({ text }) => ({ text }));
+      expect(
+        protocol === "generateContent"
+          ? result.systemInstruction
+          : result.system,
+      ).toEqual(
+        protocol === "generateContent" ? { parts: expected } : expected,
+      );
+    },
+  );
+
   it("maps Messages instructions, tool history, images and sampling fields", () => {
     const result = prepareNativeRequest(
       {

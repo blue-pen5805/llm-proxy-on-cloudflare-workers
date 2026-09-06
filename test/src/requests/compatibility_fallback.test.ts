@@ -14,7 +14,7 @@ describe("fetchCompatibilityFallback", () => {
   ];
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it("returns the first successful response", async () => {
@@ -152,5 +152,133 @@ describe("fetchCompatibilityFallback", () => {
     await expect(fetchCompatibilityFallback([])).rejects.toThrow(
       "No AI Gateway compatibility requests were generated.",
     );
+  });
+
+  it.each([200, 400, 429])(
+    "keeps the new HTTP %s response when discarding an older body fails",
+    async (status) => {
+      const first = new Response("unauthorized", { status: 401 });
+      const cancel = vi
+        .spyOn(first.body!, "cancel")
+        .mockRejectedValue(new Error("closed stream"));
+      const second = new Response("latest response", { status });
+      vi.mocked(helpers.fetchWithLogging)
+        .mockResolvedValueOnce(first)
+        .mockResolvedValueOnce(second);
+
+      const result = await fetchCompatibilityFallback(requests);
+      expect(result).toBe(second);
+      expect(await result.text()).toBe("latest response");
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(helpers.fetchWithLogging).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("does not send another request after successful fetch and failed cleanup", async () => {
+    const first = new Response("unauthorized", { status: 401 });
+    vi.spyOn(first.body!, "cancel").mockRejectedValue(
+      new Error("closed stream"),
+    );
+    const success = new Response("success");
+    vi.mocked(helpers.fetchWithLogging)
+      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce(success)
+      .mockResolvedValueOnce(new Response("unexpected extra request"));
+
+    await expect(
+      fetchCompatibilityFallback([...requests, requests[0]]),
+    ).resolves.toBe(success);
+    expect(helpers.fetchWithLogging).toHaveBeenCalledTimes(2);
+  });
+
+  it("releases the retained response when the next credential cannot be prepared", async () => {
+    const first = new Response("unauthorized", { status: 401 });
+    const cancel = vi.spyOn(first.body!, "cancel");
+    const failure = new Error("invalid provider configuration");
+    const prepare = vi.fn().mockRejectedValue(failure);
+    vi.mocked(helpers.fetchWithLogging).mockResolvedValue(first);
+
+    await expect(
+      fetchCompatibilityFallback([requests[0], prepare, requests[0]]),
+    ).rejects.toBe(failure);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(prepare).toHaveBeenCalledOnce();
+    expect(helpers.fetchWithLogging).toHaveBeenCalledOnce();
+  });
+
+  it("preserves preparation errors even when releasing the retained body fails", async () => {
+    const first = new Response("unauthorized", { status: 401 });
+    vi.spyOn(first.body!, "cancel").mockRejectedValue(
+      new Error("closed stream"),
+    );
+    const failure = new Error("invalid provider configuration");
+    vi.mocked(helpers.fetchWithLogging).mockResolvedValue(first);
+
+    await expect(
+      fetchCompatibilityFallback([
+        requests[0],
+        async () => {
+          throw failure;
+        },
+      ]),
+    ).rejects.toBe(failure);
+  });
+
+  it("releases the retained response when cancellation stops the next attempt", async () => {
+    const controller = new AbortController();
+    const first = new Response("unauthorized", { status: 401 });
+    const cancel = vi.spyOn(first.body!, "cancel");
+    const reason = new Error("client disconnected");
+    vi.mocked(helpers.fetchWithLogging).mockResolvedValue(first);
+
+    await expect(
+      fetchCompatibilityFallback(requests, controller.signal, undefined, () =>
+        controller.abort(reason),
+      ),
+    ).rejects.toBe(reason);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(helpers.fetchWithLogging).toHaveBeenCalledOnce();
+  });
+
+  it("does not fetch when cancellation occurs during lazy request preparation", async () => {
+    const controller = new AbortController();
+    const reason = new Error("client disconnected");
+    await expect(
+      fetchCompatibilityFallback(
+        [
+          async () => {
+            controller.abort(reason);
+            return requests[0];
+          },
+        ],
+        controller.signal,
+      ),
+    ).rejects.toBe(reason);
+    expect(helpers.fetchWithLogging).not.toHaveBeenCalled();
+  });
+
+  it("does not retry an outcome callback failure and releases its response", async () => {
+    const response = new Response("success");
+    const cancel = vi.spyOn(response.body!, "cancel");
+    const failure = new Error("outcome callback failed");
+    vi.mocked(helpers.fetchWithLogging).mockResolvedValue(response);
+
+    await expect(
+      fetchCompatibilityFallback(requests, undefined, undefined, () => {
+        throw failure;
+      }),
+    ).rejects.toBe(failure);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(helpers.fetchWithLogging).toHaveBeenCalledOnce();
+  });
+
+  it("returns the retained HTTP response if subsequent attempts only have network errors", async () => {
+    const response = new Response("limited", { status: 429 });
+    vi.mocked(helpers.fetchWithLogging)
+      .mockResolvedValueOnce(response)
+      .mockRejectedValueOnce(new Error("network failure"));
+    const result = await fetchCompatibilityFallback(requests);
+    expect(result).toBe(response);
+    expect(await result.text()).toBe("limited");
   });
 });

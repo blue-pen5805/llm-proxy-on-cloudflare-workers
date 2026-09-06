@@ -273,6 +273,7 @@ async function attemptResolvedChatCompletion(
         timeout ?? inheritedTimeout,
         conversion,
       ),
+    context.request.signal,
   );
 }
 
@@ -490,19 +491,23 @@ async function attemptChatCompletion(
         signal,
         /* istanbul ignore next -- Gateway requests and credential indexes are built one-to-one */
         (attemptIndex) => {
-          selectedApiKeyIndex = gatewayApiKeyIndexes[attemptIndex] ?? 0;
           return {
-            ...recordSelection(selectedApiKeyIndex),
+            ...recordSelection(gatewayApiKeyIndexes[attemptIndex] ?? 0),
             model: loggedModel,
           };
         },
-        (attemptIndex, attemptResponse) =>
+        (attemptIndex, attemptResponse) => {
+          // Fallback may return this response after later network errors.
+          // Response metadata must identify the last received HTTP response,
+          // while beforeAttempt continues to log every attempted credential.
+          selectedApiKeyIndex = gatewayApiKeyIndexes[attemptIndex] ?? 0;
           recordApiKeyOutcome(
             providerSelector,
-            gatewayApiKeyIndexes[attemptIndex] ?? 0,
+            selectedApiKeyIndex,
             configuredApiKeys.length,
             attemptResponse.status,
-          ),
+          );
+        },
       ),
     );
     const response = await transformResponse(upstreamResponse);

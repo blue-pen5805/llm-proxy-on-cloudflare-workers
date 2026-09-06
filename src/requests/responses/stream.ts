@@ -232,8 +232,20 @@ export function convertStreamingResponse(
         if (finished) return;
         text += choice.delta.content;
         const deltaLogprobs = convertTokenLogprobs(choice.logprobs, false);
-        textEventLogprobs.push(...deltaLogprobs);
-        textLogprobs.push(...convertTokenLogprobs(choice.logprobs, true));
+        const itemLogprobs = convertTokenLogprobs(choice.logprobs, true);
+        if (deltaLogprobs.length > 0) {
+          // Both representations survive until their terminal events. Account
+          // for token bytes and alternatives as well as the emitted token text.
+          const limitError = budget.addLogprobs(
+            JSON.stringify([deltaLogprobs, itemLogprobs]),
+          );
+          if (limitError) {
+            fail(controller, limitError);
+            return;
+          }
+        }
+        for (const logprob of deltaLogprobs) textEventLogprobs.push(logprob);
+        for (const logprob of itemLogprobs) textLogprobs.push(logprob);
         event(controller, "response.output_text.delta", {
           item_id: messageId,
           output_index: messageOutputIndex,

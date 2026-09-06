@@ -949,6 +949,48 @@ describe("handleResponsesRequest", () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
 
+  it("bounds cumulative logprobs even when text deltas are empty", async () => {
+    const record = `data: ${JSON.stringify({
+      choices: [
+        {
+          delta: { content: "" },
+          logprobs: {
+            content: [
+              { token: "x".repeat(300 * 1024), bytes: [], logprob: -1 },
+            ],
+          },
+        },
+      ],
+    })}\n\n`;
+    expect(new TextEncoder().encode(record).byteLength).toBeLessThan(
+      MAX_SSE_RECORD_BYTES,
+    );
+    const cancel = vi.fn();
+    let index = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(index++ < 8 ? record : "data: [DONE]\n\n"),
+        );
+      },
+      cancel,
+    });
+    chatCompletionResponse.mockResolvedValue(
+      new Response(stream, {
+        headers: { "content-type": "text/event-stream" },
+      }),
+    );
+    const response = await handleResponsesRequest({
+      request: request({ model: "openai/model", input: "Hello", stream: true }),
+    } as never);
+    const body = await response.text();
+    expect(body).toContain("Streaming logprobs exceed the proxy limit.");
+    expect(body).not.toContain("event: response.completed");
+    expect(body).not.toContain("event: response.incomplete");
+    expect(body).not.toContain("event: response.output_text.done");
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
   it("terminates a stream when cumulative text exceeds its byte budget", async () => {
     const delta = "x".repeat(900 * 1024);
     const sse = Array.from(

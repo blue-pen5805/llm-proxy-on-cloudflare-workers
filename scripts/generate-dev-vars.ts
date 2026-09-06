@@ -73,10 +73,10 @@ Options:
   --help, -h      Show this help message
 
 Examples:
-  npm run generate-dev-vars                    # Generate .dev.vars from config.jsonc
-  npm run generate-dev-vars -- --env example   # Generate .dev.vars.example from config.example.jsonc
-  npm run generate-dev-vars -- --env staging   # Generate .dev.vars.staging from config.staging.jsonc
-  npm run generate-dev-vars -- --env prod      # Generate .dev.vars.prod from config.prod.jsonc
+  npx tsx scripts/generate-dev-vars.ts                    # Generate .dev.vars from config.jsonc
+  npx tsx scripts/generate-dev-vars.ts -- --env example   # Generate .dev.vars.example from config.example.jsonc
+  npx tsx scripts/generate-dev-vars.ts -- --env staging   # Generate .dev.vars.staging from config.staging.jsonc
+  npx tsx scripts/generate-dev-vars.ts -- --env prod      # Generate .dev.vars.prod from config.prod.jsonc
 
 Note: .dev.vars files contain sensitive authentication credentials for development environments.
 `;

@@ -223,7 +223,7 @@ export function prepareNativeRequest(
     }
     const parts = contentParts(message.content, protocol);
     if (message.role === "system" || message.role === "developer") {
-      system.push(...parts);
+      for (const part of parts) system.push(part);
       continue;
     }
     if (message.role !== "user" && message.role !== "assistant")

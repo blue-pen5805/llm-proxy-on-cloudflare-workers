@@ -35,8 +35,8 @@ client responses remain `no-store` regardless of the internal TTL.
 
 The status handler shares the model-list Gateway capability decision with the
 normal model aggregation route. A provider that sets
-`supportsAiGatewayModels=false` is checked directly even when a Gateway is
-active. If its adapter also declares direct model listing unsupported, the
+`endpoints.models.supportsAiGateway=false` is checked directly even when a
+Gateway is active. If its adapter also declares direct model listing unsupported, the
 credential remains `unknown`; diagnostics do not attempt a known-unsupported
 Gateway route.
 
@@ -76,9 +76,10 @@ Application records contain a human-readable `message`, stable `event`, and
 `request_id`, plus safe routing and outcome fields when applicable. The request
 ID uses Cloudflare's `cf-ray` value when available and otherwise a generated
 UUID.
-The edge supplies `cf-ray` for deployed traffic, and the value is used only for
-correlation, never authorization, integrity, or routing. A spoofed local value
-can therefore affect only that caller's log correlation.
+The `cf-ray` value provides correlation and is not a client credential or
+integrity proof. The authentication middleware also checks whether the header
+is present before allowing the local `DEV` bypass. Supplying it locally disables
+that bypass and requires normal proxy authentication.
 Provider names observed in request-scoped events are carried into
 `request.completed` as `provider` for one destination or a comma-separated
 `providers` summary for multiple destinations.
@@ -95,7 +96,7 @@ The following events support operational queries:
 | `subrequest.failed`                   | Provider request failed before a response           |
 | `provider.models.failed`              | A provider model-list operation failed              |
 | `provider.models.invalid_response`    | A model-list response could not be used             |
-| `provider.models.aggregate_truncated` | The aggregated model list hit its size bound        |
+| `provider.models.aggregate_truncated` | The model list hit its count or byte bound        |
 | `provider.models.key_retry`           | Model discovery will retry the next key after 429   |
 | `models.cache.unavailable`            | An optional model cache operation failed            |
 | `status.cache.unavailable`            | An optional status cache operation failed           |
