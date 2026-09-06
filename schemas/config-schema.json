@@ -163,6 +163,23 @@
         }
       ]
     },
+    "OPENCODE_API_KEY": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        { "$ref": "#/definitions/providerCredentialProfiles" },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "CLINE_API_KEY": {
       "oneOf": [
         {

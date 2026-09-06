@@ -324,7 +324,11 @@ async function attemptChatCompletion(
   if (providerError) {
     return { response: providerError, retryable: true };
   }
-  const resolved = providerInstance.resolveInference(model, endpoint);
+  const resolved = await fetchWithCandidateTimeout(
+    request.signal,
+    timeout,
+    (signal) => providerInstance.resolveInference(model, endpoint, signal),
+  );
   if (!resolved) {
     return {
       response: invalidRequestResponse(

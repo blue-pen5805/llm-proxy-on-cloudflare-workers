@@ -378,9 +378,9 @@ describe("native Gateway inference routing", () => {
           : undefined;
       },
     });
-    expect(provider.resolveInference("other", "chat_completions")?.native).toBe(
-      false,
-    );
+    expect(
+      (await provider.resolveInference("other", "chat_completions"))?.native,
+    ).toBe(false);
     const state = context("openai/responses-only");
     vi.spyOn(state.providers, "get").mockReturnValue(provider);
     const fetch = vi
@@ -410,7 +410,8 @@ describe("native Gateway inference routing", () => {
       endpoints: { chat_completions: operation },
     });
     expect(
-      provider.resolveInference("any-model", "chat_completions")?.endpoint,
+      (await provider.resolveInference("any-model", "chat_completions"))
+        ?.endpoint,
     ).toBe(operation);
     const [url, init] = await operation.buildRequest.call(provider, {
       data: { model: "any-model" },
@@ -430,8 +431,12 @@ describe("native Gateway inference routing", () => {
       ).text(),
     ).toBe("transformed");
     expect(
-      new AwsBedrock().resolveInference("amazon.nova", "chat_completions")
-        ?.native,
+      (
+        await new AwsBedrock().resolveInference(
+          "amazon.nova",
+          "chat_completions",
+        )
+      )?.native,
     ).toBe(false);
   });
 

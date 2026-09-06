@@ -26,52 +26,60 @@ describe("explicit native Chat declarations", () => {
     "huggingface",
   ])(
     "declares Chat support for %s independently of conversion defaults",
-    (name) => {
+    async (name) => {
       const provider = new BUILT_IN_PROVIDER_CONSTRUCTORS[name]!();
       expect(
-        provider.resolveInference("model", "chat_completions")?.native,
+        (await provider.resolveInference("model", "chat_completions"))?.native,
       ).toBe(true);
     },
   );
 
-  it.each(["replicate"])("does not invent Chat support for %s", (name) => {
-    const provider = new BUILT_IN_PROVIDER_CONSTRUCTORS[name]!();
-    expect(
-      provider.resolveInference("model", "chat_completions")?.native,
-    ).not.toBe(true);
-  });
+  it.each(["replicate"])(
+    "does not invent Chat support for %s",
+    async (name) => {
+      const provider = new BUILT_IN_PROVIDER_CONSTRUCTORS[name]!();
+      expect(
+        (await provider.resolveInference("model", "chat_completions"))?.native,
+      ).not.toBe(true);
+    },
+  );
 
-  it("keeps Bedrock native Chat model-specific", () => {
+  it("keeps Bedrock native Chat model-specific", async () => {
     const provider = new BUILT_IN_PROVIDER_CONSTRUCTORS["aws-bedrock"]!();
     for (const model of [
       "openai.gpt-oss-20b-1:0",
       "us.openai.gpt-oss-120b-1:0",
     ]) {
-      expect(provider.resolveInference(model, "chat_completions")?.native).toBe(
-        true,
-      );
-      expect(provider.resolveInference(model, "responses")?.native).toBe(true);
+      expect(
+        (await provider.resolveInference(model, "chat_completions"))?.native,
+      ).toBe(true);
+      expect(
+        (await provider.resolveInference(model, "responses"))?.native,
+      ).toBe(true);
     }
     expect(
-      provider.resolveInference("amazon.nova", "chat_completions")?.native,
+      (await provider.resolveInference("amazon.nova", "chat_completions"))
+        ?.native,
     ).toBe(false);
   });
 
-  it("declares custom OpenAI Chat without implying Responses support", () => {
+  it("declares custom OpenAI Chat without implying Responses support", async () => {
     const provider = new CustomOpenAI({
       name: "example",
       baseUrl: "https://example.test",
       apiKeys: ["example-key"],
     });
-    expect(provider.resolveInference("model", "chat_completions")?.native).toBe(
-      true,
-    );
-    expect(provider.resolveInference("model", "responses")?.native).toBe(false);
+    expect(
+      (await provider.resolveInference("model", "chat_completions"))?.native,
+    ).toBe(true);
+    expect(
+      (await provider.resolveInference("model", "responses"))?.native,
+    ).toBe(false);
   });
 
   it.each(["chat_completions", "responses", "messages"] as const)(
     "selects a matching %s operation without resolving a conversion fallback",
-    (protocol) => {
+    async (protocol) => {
       const endpoint = chatCompletionsEndpoint("/matching");
       const fallback = chatCompletionsEndpoint("/fallback");
       const resolveChatFallback = vi.fn(() => fallback);
@@ -80,7 +88,7 @@ describe("explicit native Chat declarations", () => {
         chatFallback: fallback,
         resolveChatFallback,
       });
-      expect(provider.resolveInference("model", protocol)).toEqual({
+      expect(await provider.resolveInference("model", protocol)).toEqual({
         endpoint,
         native: true,
       });

@@ -19,11 +19,13 @@ public protocol. `resolveEndpoint(model, protocol)` can override it: `undefined`
 retains the declaration and `null` disables same-protocol support for that model.
 An undeclared operation does not acquire a default path.
 
-`resolveInference(model, protocol)` resolves each concrete virtual-model
-candidate once. It selects the matching public operation first. Otherwise it
+`resolveInference(model, protocol, signal)` asynchronously resolves each concrete
+virtual-model candidate once. OpenCode supplies a request-scoped resolver using
+a [live protocol catalog](opencode.md); other providers use the static hooks. It selects the matching public operation first. Otherwise it
 uses `resolveChatFallback(model)`, then `chatFallback`, then the declared Chat
 operation. It returns the selected operation and whether request conversion is
-needed. With no supported route, inference returns HTTP 400 without a fetch.
+needed. With no supported route, inference returns HTTP 400 without an inference
+fetch. OpenCode catalog failures have their own bounded error contract.
 
 Same-protocol routing preserves request fields, with only model-selector,
 declared Chat filtering, and provider-envelope adjustments. Successful and error
@@ -62,6 +64,12 @@ Interactions codec.
 | Chat Completions | Anthropic, OpenAI, Azure OpenAI, Cerebras, Cline, Cohere, DeepSeek, Google AI Studio, Google Vertex AI (Google models), Hugging Face Inference Providers, Groq, xAI (`grok`), Mistral, NVIDIA NIM, OpenRouter, Ollama, Perplexity, Workers AI, custom OpenAI endpoints; Bedrock for `openai.*` and `anthropic.*` model families |
 | Responses        | Azure OpenAI, DeepSeek, Hugging Face Inference Providers, Bedrock OpenAI models, Perplexity Agent models, OpenAI, Groq, xAI (`grok`), OpenRouter, Ollama, Workers AI, custom endpoints with `responsesPath`                                                                                                                     |
 | Messages         | Anthropic, DeepSeek, Hugging Face Inference Providers, Bedrock Anthropic models, OpenRouter, Vertex AI models selected as `anthropic/<model>`, custom endpoints with `messagesPath`                                                                                                                                             |
+
+OpenCode Zen and Go select Chat Completions, Responses, or Messages as the
+matching capability when the selected model's resolved catalog SDK declares
+that API. Google SDK models use GenerateContent conversion. This selection
+applies to all public protocols in direct and Gateway modes; see
+[OpenCode routing](opencode.md).
 
 Responses paths are declared per provider. OpenRouter
 Messages uses `/v1/messages` relative to `https://openrouter.ai/api`.

@@ -14,6 +14,7 @@ import { Mistral } from "./providers/mistral";
 import { NvidiaNim } from "./providers/nvidia-nim";
 import { Ollama } from "./providers/ollama";
 import { OpenAI } from "./providers/openai";
+import { OpenCodeGo, OpenCodeZen } from "./providers/opencode";
 import { OpenRouter } from "./providers/openrouter";
 import { PerplexityAi } from "./providers/perplexity-ai";
 import { ProviderBase } from "./providers/provider";
@@ -49,6 +50,8 @@ export const BUILT_IN_PROVIDER_CONSTRUCTORS: {
   ollama: Ollama,
   // --- Other providers
   cline: Cline,
+  "opencode-zen": OpenCodeZen,
+  "opencode-go": OpenCodeGo,
 };
 
 export function getProviderByName(

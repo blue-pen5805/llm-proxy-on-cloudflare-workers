@@ -62,12 +62,18 @@ fields return HTTP 400. Messages conversion requires `max_tokens` or
 data URLs only. See [Native inference](../design/features/native_inference.md)
 for defaults, credentials, and conversion limits.
 
+OpenCode Zen (`opencode-zen`) and Go (`opencode-go`) resolve their model-specific
+SDK from the public catalog through a shared five-minute Cache API cache. Chat requests may use
+Chat Completions, Responses, Messages, or GenerateContent with the corresponding
+JSON/SSE conversion. See [OpenCode routing](../design/features/opencode.md).
+
 ## Responses
 
 `POST /v1/responses` and `/responses` use the upstream Responses API for
 Azure OpenAI, DeepSeek, Hugging Face Inference Providers, Bedrock OpenAI models,
 Perplexity Agent models, OpenAI, Groq, xAI (`grok`), OpenRouter, Ollama, Workers AI, and custom OpenAI
-endpoints with `responsesPath` configured. Request fields
+endpoints with `responsesPath` configured. OpenCode Zen and Go also use native
+Responses for models whose catalog SDK is `@ai-sdk/openai`. Request fields
 such as `previous_response_id`, built-in tools, and encrypted reasoning are
 preserved; support for each field or model is validated upstream. Successful
 JSON, SSE events, and upstream errors pass through without conversion. Only

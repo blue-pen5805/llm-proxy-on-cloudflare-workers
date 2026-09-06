@@ -40,6 +40,8 @@
   "CEREBRAS_API_KEY": null,
   // Cohere: https://dashboard.cohere.com
   "COHERE_API_KEY": null,
+  // OpenCode Zen and Go: https://opencode.ai/zen
+  "OPENCODE_API_KEY": null,
   // Cline: https://app.cline.bot/dashboard
   "CLINE_API_KEY": null,
   // DeepSeek: https://platform.deepseek.com/

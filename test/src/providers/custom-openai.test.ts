@@ -4,7 +4,7 @@ import { buildModelsRequest } from "~/src/providers/models";
 import { buildInferenceRequest } from "../../helpers/provider";
 
 describe("CustomOpenAI Provider (Paths)", () => {
-  it("should use default paths when not provided in config", () => {
+  it("should use default paths when not provided in config", async () => {
     const config = {
       name: "test-default",
       baseUrl: "https://example.com",
@@ -14,7 +14,7 @@ describe("CustomOpenAI Provider (Paths)", () => {
     expect(provider.endpoints.models?.path).toBe("/models");
     for (const protocol of ["responses", "messages"] as const) {
       expect(provider.endpoints[protocol]).toBeUndefined();
-      expect(provider.resolveInference("model", protocol)).toEqual({
+      expect(await provider.resolveInference("model", protocol)).toEqual({
         endpoint: provider.endpoints.chat_completions,
         native: false,
       });

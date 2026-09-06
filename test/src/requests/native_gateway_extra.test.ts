@@ -231,6 +231,7 @@ describe("direct endpoint execution", () => {
         expect(resolve).toHaveBeenCalledExactlyOnceWith(
           "claude-example",
           "chat_completions",
+          state.request.signal,
         );
         expect(headers).toHaveBeenCalledExactlyOnceWith(0);
       },

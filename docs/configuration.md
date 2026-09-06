@@ -100,6 +100,8 @@ deletion described above.
 
 | Route name         | Setting                                           |
 | ------------------ | ------------------------------------------------- |
+| `opencode-go`      | `OPENCODE_API_KEY`                                |
+| `opencode-zen`     | `OPENCODE_API_KEY`                                |
 | `openai`           | `OPENAI_API_KEY`                                  |
 | `google-ai-studio` | `GEMINI_API_KEY`                                  |
 | `anthropic`        | `ANTHROPIC_API_KEY`                               |
@@ -120,6 +122,19 @@ deletion described above.
 | `azure-openai`     | `AZURE_OPENAI_API_KEY`                            |
 | `google-vertex-ai` | `GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON`           |
 | `aws-bedrock`      | `AWS_BEARER_TOKEN_BEDROCK`                        |
+
+OpenCode Zen and Go share the same `OPENCODE_API_KEY` setting, including
+arrays and named credential profiles. Select models with
+`opencode-zen/<model-id>` or `opencode-go/<model-id>`. Their model lists come
+from [Zen](https://opencode.ai/zen/v1/models) and
+[Go](https://opencode.ai/zen/go/v1/models). Inference checks the public protocol
+catalog through a shared five-minute Cache API cache to select Chat Completions,
+Responses, Messages, or GenerateContent. This fixed TTL is independent of
+`MODELS_CACHE_TTL_SECONDS`; storage is subject to Cloudflare Cache API
+availability. See [OpenCode routing](design/features/opencode.md) for
+conversion limits and failure behavior. Go clients should supply their agent's
+user-agent and `x-opencode-session` headers as described by
+[OpenCode Go](https://opencode.ai/docs/go/#where-can-i-use-it).
 
 The cloud-platform adapters also require endpoint metadata:
 

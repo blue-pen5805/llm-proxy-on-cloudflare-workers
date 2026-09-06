@@ -66,8 +66,9 @@ to identify the endpoint, provider, and model, but before credential selection
 and upstream I/O. The outer logging middleware supplies a method/path-only
 fallback for requests that return before route metadata becomes available.
 
-Inference dispatch resolves the provider's operation before protocol conversion
-or network I/O. The selected operation supplies both request construction and
+Inference dispatch awaits the provider's operation before protocol conversion
+or inference I/O. OpenCode resolution performs a bounded, credential-free
+catalog lookup; static providers resolve without network access. The selected operation supplies both request construction and
 response handling for direct and Gateway transport. Missing operations without a
 conversion fallback return HTTP 400. Model discovery and diagnostics skip
 providers without a declared model-list operation.

@@ -83,6 +83,8 @@ export const BUILT_IN_LIVE_CHAT_CONTRACTS = {
   openai: {
     supportsMaxCompletionTokens: true,
   },
+  "opencode-go": { supportsMaxCompletionTokens: true },
+  "opencode-zen": { supportsMaxCompletionTokens: true },
   openrouter: {
     supportsMaxCompletionTokens: true,
   },

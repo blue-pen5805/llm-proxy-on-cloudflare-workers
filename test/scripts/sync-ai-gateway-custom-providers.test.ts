@@ -8,17 +8,23 @@ import {
 
 const logoSources = vi.hoisted(() => ({
   cline: '<svg id="cline"/>',
+  "opencode-zen": '<svg id="opencode-zen"/>',
+  "opencode-go": '<svg id="opencode-go"/>',
   "nvidia-nim": '<svg id="nvidia-nim"/>',
   ollama: '<svg id="ollama"/>',
 }));
 
 vi.mock("node:fs", () => ({
   readFileSync: vi.fn((path: string | URL, encoding: BufferEncoding) => {
-    const providerName = String(path).includes("nvidia-nim")
-      ? "nvidia-nim"
-      : String(path).includes("cline")
-        ? "cline"
-        : "ollama";
+    const providerName = String(path).includes("opencode/zen-logo")
+      ? "opencode-zen"
+      : String(path).includes("opencode/go-logo")
+        ? "opencode-go"
+        : String(path).includes("nvidia-nim")
+          ? "nvidia-nim"
+          : String(path).includes("cline")
+            ? "cline"
+            : "ollama";
     const source = logoSources[providerName];
     return encoding === "base64"
       ? Buffer.from(source, "utf8").toString("base64")
@@ -75,6 +81,28 @@ describe("AI Gateway Custom Provider synchronization", () => {
         },
       ]),
     );
+  });
+
+  it("registers OpenCode Zen and Go separately with distinct provisional logos", () => {
+    const targets = buildCustomProviderTargets({
+      ...strictConfig,
+      OPENCODE_API_KEY: { default: "example-key", paid: "example-paid" },
+    });
+    for (const variant of ["zen", "go"] as const) {
+      const providerName = `opencode-${variant}` as const;
+      expect(
+        targets.filter(({ name }) => name === `LLM Proxy / ${providerName}`),
+      ).toEqual([
+        {
+          name: `LLM Proxy / ${providerName}`,
+          slug: `llm-proxy-${providerName}`,
+          baseUrl: `https://opencode.ai/zen/${variant === "go" ? "go/" : ""}v1`,
+          logo: Buffer.from(logoSources[providerName], "utf8").toString(
+            "base64",
+          ),
+        },
+      ]);
+    }
   });
 
   it("registers one Hugging Face inference origin shared by all protocols and profiles", () => {
@@ -210,6 +238,8 @@ describe("AI Gateway Custom Provider synchronization", () => {
       "LLM Proxy / cline",
       "LLM Proxy / nvidia-nim",
       "LLM Proxy / ollama",
+      "LLM Proxy / opencode-go",
+      "LLM Proxy / opencode-zen",
     ]);
     expect(
       Buffer.from(

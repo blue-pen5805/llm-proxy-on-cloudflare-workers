@@ -26,12 +26,12 @@ export function isRetryableCandidateStatus(status: number): boolean {
   return RETRYABLE_STATUSES.has(status) || status >= 500;
 }
 
-/** Run one upstream fetch with an optional response-header timeout. */
-export async function fetchWithCandidateTimeout(
+/** Bound one upstream operation; inference callers return at response headers. */
+export async function fetchWithCandidateTimeout<T>(
   requestSignal: AbortSignal,
   timeout: number | undefined,
-  fetchAttempt: (signal: AbortSignal) => Promise<Response>,
-): Promise<Response> {
+  fetchAttempt: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
   requestSignal.throwIfAborted();
   if (timeout === undefined) return fetchAttempt(requestSignal);
   const timeoutController = new AbortController();
@@ -46,8 +46,8 @@ export async function fetchWithCandidateTimeout(
   try {
     return await fetchAttempt(signal);
   } finally {
-    // Clear the timer as soon as fetch returns response headers so it cannot
-    // abort a streaming response body while the caller consumes it.
+    // Inference operations finish at response headers, so clearing here keeps
+    // the timer from aborting a valid stream while the caller consumes it.
     clearTimeout(timeoutId);
   }
 }

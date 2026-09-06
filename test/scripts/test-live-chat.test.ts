@@ -111,6 +111,8 @@ describe("live Chat Completions test script", () => {
       "nvidia-nim",
       "ollama",
       "openai",
+      "opencode-go",
+      "opencode-zen",
       "openrouter",
       "perplexity-ai",
       "workers-ai",
@@ -122,7 +124,7 @@ describe("live Chat Completions test script", () => {
     });
 
     expect(Object.keys(BUILT_IN_LIVE_CHAT_CONTRACTS)).toEqual(exampleProviders);
-    expect(parseLiveChatConfig(configuredExample)).toHaveLength(19);
+    expect(parseLiveChatConfig(configuredExample)).toHaveLength(21);
 
     for (const providerName of exampleProviders) {
       expect(AI_GATEWAY_CHAT_PROVIDERS.has(providerName)).toBe(

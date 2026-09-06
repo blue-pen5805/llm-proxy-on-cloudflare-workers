@@ -41,7 +41,9 @@ describe("fetchWithCandidateTimeout", () => {
 
   it("passes through the request signal when timeout is not configured", async () => {
     const requestController = new AbortController();
-    const fetchAttempt = vi.fn().mockResolvedValue(new Response("ok"));
+    const fetchAttempt = vi.fn(
+      async (_signal: AbortSignal) => new Response("ok"),
+    );
 
     const response = await fetchWithCandidateTimeout(
       requestController.signal,

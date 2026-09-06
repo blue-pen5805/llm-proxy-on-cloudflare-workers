@@ -127,8 +127,9 @@ when their cache keys include every dependency.
 
 Documented per-isolate rotation counters and credential cooldowns are
 best-effort operational state. Model and status caches use the configured Cache
-API TTLs. None of these mechanisms provides durable or cross-isolate
-coordination, and correctness must not depend on their survival. The proxy
+API TTLs; public provider protocol metadata uses its documented bounded cache
+TTL. None of these mechanisms provides durable or cross-isolate coordination,
+and correctness must not depend on their survival. The proxy
 stores no conversation state or request/response bodies beyond the documented
 aggregate caches.
 

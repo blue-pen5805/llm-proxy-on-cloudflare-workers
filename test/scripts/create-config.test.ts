@@ -960,6 +960,36 @@ describe("configuration parsing and validation", () => {
     expect(TUI_EXCLUDED_FIELDS).toEqual(new Set(["DEV"]));
   });
 
+  it("accepts OpenCode scalar, array and profile credentials and rejects invalid forms", () => {
+    for (const value of [
+      null,
+      "example-key",
+      ["example-a", "example-b"],
+      { default: "example-default", paid: ["example-paid"] },
+    ]) {
+      expect(
+        validateConfig({
+          $schema: "schemas/config-schema.json",
+          PROXY_API_KEY: "example-proxy",
+          OPENCODE_API_KEY: value,
+        }),
+      ).toEqual([]);
+    }
+    for (const value of [42, false, [42], { paid: 42 }]) {
+      expect(
+        validateConfig({
+          $schema: "schemas/config-schema.json",
+          PROXY_API_KEY: "example-proxy",
+          OPENCODE_API_KEY: value,
+        }).length,
+      ).toBeGreaterThan(0);
+    }
+    expect(PROVIDER_GROUPS.find(({ id }) => id === "opencode")).toMatchObject({
+      label: "OpenCode Zen / Go",
+      fields: [{ key: "OPENCODE_API_KEY", label: "apiKey" }],
+    });
+  });
+
   it("parses JSONC and rejects malformed or non-object input", () => {
     expect(parseConfigSource('{ /* comment */ "value": 1, }')).toEqual({
       value: 1,

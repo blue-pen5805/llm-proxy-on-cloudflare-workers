@@ -50,7 +50,9 @@ sent to the client. Losing response bodies are cancelled. A streamed response
 is never retried after streaming begins.
 
 `timeout` covers the wait for response headers, not consumption of a valid
-stream. A timeout on a virtual-model reference becomes the default for concrete
+stream. For providers with a live protocol catalog, the timeout also bounds
+catalog resolution as a separate operation before inference. A timeout on a
+virtual-model reference becomes the default for concrete
 candidates below it; a more specific nested timeout overrides it. Client
 cancellation propagates to the active upstream request and stops the complete
 nested retry chain before another credential or candidate is selected.

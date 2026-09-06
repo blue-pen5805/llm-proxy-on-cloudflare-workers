@@ -441,27 +441,36 @@ describe("built-in matching API declarations", () => {
     ]);
   });
 
-  it("retains model-specific conversion defaults for other APIs", () => {
+  it("retains model-specific conversion defaults for other APIs", async () => {
     const bedrock = new AwsBedrock();
     for (const model of [
       "openai.gpt-oss-120b-1:0",
       "us-gov.openai.gpt-oss-120b-1:0",
     ]) {
-      expect(bedrock.resolveInference(model, "responses")?.native).toBe(true);
-      expect(bedrock.resolveInference(model, "messages")?.native).toBe(false);
+      expect((await bedrock.resolveInference(model, "responses"))?.native).toBe(
+        true,
+      );
+      expect((await bedrock.resolveInference(model, "messages"))?.native).toBe(
+        false,
+      );
     }
     expect(
-      bedrock.resolveInference("anthropic.claude", "responses")?.native,
+      (await bedrock.resolveInference("anthropic.claude", "responses"))?.native,
     ).toBe(false);
     expect(
-      bedrock.resolveInference("amazon.nova", "chat_completions")?.native,
-    ).toBe(false);
-    expect(
-      new PerplexityAi().resolveInference("sonar", "responses")?.native,
-    ).toBe(false);
-    expect(
-      new GoogleVertexAi().resolveInference("google/gemini", "responses")
+      (await bedrock.resolveInference("amazon.nova", "chat_completions"))
         ?.native,
+    ).toBe(false);
+    expect(
+      (await new PerplexityAi().resolveInference("sonar", "responses"))?.native,
+    ).toBe(false);
+    expect(
+      (
+        await new GoogleVertexAi().resolveInference(
+          "google/gemini",
+          "responses",
+        )
+      )?.native,
     ).toBe(false);
   });
 

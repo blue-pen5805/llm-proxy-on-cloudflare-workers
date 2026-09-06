@@ -12,6 +12,14 @@ update is explicitly approved.
 
 ### 2026-09-06
 
+- Added OpenCode Zen and Go with shared `OPENCODE_API_KEY` credentials,
+  independent model discovery, and Custom Provider routing. Public inference
+  resolves each model's SDK from a shared five-minute OpenCode catalog cache
+  and selects Chat Completions, Responses, Messages, or GenerateContent, including
+  bounded JSON/SSE conversion when the public API differs. Cache misses and
+  unresolved models trigger fresh lookups; unavailable cache storage falls back
+  to origin-based resolution.
+
 - Added a 4 MiB budget for retained Responses streaming logprobs; exceeding it
   emits a terminal error and cancels the upstream stream.
 - Preserved large supported message and system-block arrays within the request

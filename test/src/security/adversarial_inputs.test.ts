@@ -1,5 +1,6 @@
-import { describe, it, expect, vi } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
+import worker from "~/src/index";
 import { corsMiddleware } from "~/src/middlewares/cors";
 import { handleRouting } from "~/src/middlewares/router";
 import {
@@ -14,6 +15,7 @@ import { resolveRoute } from "~/src/routing";
 import { Config } from "~/src/utils/config";
 import { Environments } from "~/src/utils/environments";
 import { parseVirtualModels } from "~/src/utils/virtual_models";
+import { opencodeCatalog, opencodeCatalogUrl } from "../../helpers/opencode";
 import { createTestRoutedContext } from "../../helpers/request_context";
 
 // Names that exist on Object.prototype. A plain object used as a lookup table
@@ -593,4 +595,120 @@ describe("matching API model boundaries", () => {
       fetch.mockRestore();
     }
   });
+});
+
+describe("OpenCode catalog security boundary", () => {
+  beforeEach(async () => {
+    const cache = await caches.open("llm-proxy-opencode-protocol-v1");
+    await cache.delete(opencodeCatalogUrl);
+  });
+
+  it.each([
+    "constructor",
+    "__proto__",
+    "toString",
+    "../responses?api_key=untrusted",
+    "https://untrusted.example/model",
+  ])("rejects unregistered model %s before inference", async (model) => {
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json(opencodeCatalog()));
+    try {
+      const context = createTestRoutedContext({
+        request: new Request("https://proxy.example/v1/chat/completions", {
+          method: "POST",
+          headers: { authorization: "Bearer example-proxy-key" },
+          body: JSON.stringify({
+            model: `opencode-zen/${model}`,
+            messages: [{ role: "user", content: "hello" }],
+          }),
+        }),
+      });
+      const response = await worker.fetch(
+        new Request<unknown, IncomingRequestCfProperties>(context.request),
+        {
+          ...context.env,
+          PROXY_API_KEY: "example-proxy-key",
+          OPENCODE_API_KEY: "example-provider-key",
+        },
+        context.ctx,
+      );
+      expect(response.status).toBe(400);
+      expect(await response.text()).toContain("Unknown OpenCode model");
+      expect(fetch).toHaveBeenCalledOnce();
+      expect(fetch.mock.calls[0][0]).toBe(opencodeCatalogUrl);
+      expect(new Headers(fetch.mock.calls[0][1]?.headers)).toEqual(
+        new Headers({ accept: "application/json" }),
+      );
+    } finally {
+      fetch.mockRestore();
+    }
+  });
+
+  it("rejects unsupported Responses conversion fields without sending an inference body", async () => {
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json(opencodeCatalog()));
+    try {
+      const context = createTestRoutedContext({
+        request: new Request("https://proxy.example/v1/chat/completions", {
+          method: "POST",
+          headers: { authorization: "Bearer example-proxy-key" },
+          body: JSON.stringify({
+            model: "opencode-zen/responses",
+            messages: [{ role: "user", content: "hello" }],
+            unrecognized: true,
+          }),
+        }),
+      });
+      const response = await worker.fetch(
+        new Request<unknown, IncomingRequestCfProperties>(context.request),
+        {
+          ...context.env,
+          PROXY_API_KEY: "example-proxy-key",
+          OPENCODE_API_KEY: "example-provider-key",
+        },
+        context.ctx,
+      );
+      expect(response.status).toBe(400);
+      expect(fetch).toHaveBeenCalledOnce();
+      expect(fetch.mock.calls[0][1]?.body).toBeUndefined();
+    } finally {
+      fetch.mockRestore();
+    }
+  });
+
+  it.each(["constructor", "@ai-sdk/unknown"])(
+    "fails closed for unrecognized catalog SDK %s",
+    async (npm) => {
+      const catalog = opencodeCatalog();
+      catalog.opencode.npm = npm;
+      const fetch = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(Response.json(catalog));
+      try {
+        const context = createTestRoutedContext({
+          request: new Request("https://proxy.example/v1/chat/completions", {
+            method: "POST",
+            headers: { authorization: "Bearer example-proxy-key" },
+            body: JSON.stringify({ model: "opencode-zen/chat", messages: [] }),
+          }),
+        });
+        const response = await worker.fetch(
+          new Request<unknown, IncomingRequestCfProperties>(context.request),
+          {
+            ...context.env,
+            PROXY_API_KEY: "example-proxy-key",
+            OPENCODE_API_KEY: "example-provider-key",
+          },
+          context.ctx,
+        );
+        expect(response.status).toBe(502);
+        expect(await response.text()).not.toContain(npm);
+        expect(fetch).toHaveBeenCalledOnce();
+      } finally {
+        fetch.mockRestore();
+      }
+    },
+  );
 });

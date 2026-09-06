@@ -51,3 +51,10 @@ Bedrock paths beginning with `/v1` are automatically prefixed with
 Gateway's `<resource>/<deployment>/...` form. Vertex pass-through is available
 only with AI Gateway, and its provider-native path already matches the Gateway
 suffix.
+
+For OpenCode, use `/opencode-zen/<path>` or `/opencode-go/<path>`. Their base
+URLs already include `/zen/v1` and `/zen/go/v1`: for example,
+`/opencode-zen/messages` reaches `https://opencode.ai/zen/v1/messages`.
+Explicit pass-through paths do not trigger model-catalog lookup or conversion.
+Use the public inference routes with provider-qualified model IDs for
+[automatic protocol selection](../design/features/opencode.md).

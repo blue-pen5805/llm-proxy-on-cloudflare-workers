@@ -13,6 +13,14 @@ import { DEFAULT_PROVIDER_PROFILE } from "../src/utils/secrets.ts";
 
 const CLOUDFLARE_API_ORIGIN = "https://api.cloudflare.com/client/v4";
 const CUSTOM_PROVIDER_LOGOS: Readonly<Record<string, string>> = {
+  "opencode-zen": readFileSync(
+    new URL("../src/providers/opencode/zen-logo.svg", import.meta.url),
+    "base64",
+  ),
+  "opencode-go": readFileSync(
+    new URL("../src/providers/opencode/go-logo.svg", import.meta.url),
+    "base64",
+  ),
   cline: readFileSync(
     fileURLToPath(
       new URL("../src/providers/cline/logo.svg", import.meta.url).href,

@@ -16,7 +16,9 @@ pairs Chat-to-provider preparation with the reverse JSON/SSE conversion.
 These operations share serialization and authentication, while retaining native
 Gateway path differences such as Azure deployment routing.
 
-`resolveInference(model, protocol)` selects one operation per concrete candidate.
+`resolveInference(model, protocol, signal)` asynchronously selects one operation
+per concrete candidate. A definition can supply a request-scoped resolver for
+a live protocol catalog; [OpenCode](opencode.md) uses this hook.
 An explicit operation matching the requested public protocol takes priority,
 including a provider-hosted compatibility API. The provider's proprietary API
 and conversion fallback do not override a match. Without a match it selects the declared Chat
@@ -43,7 +45,7 @@ endpoints: {
 
 An absent operation is unsupported. No Chat or model path is inferred from a
 provider's base URL or authentication scheme. Inference without a matching
-operation or conversion fallback returns HTTP 400 before network I/O. An absent
+operation or conversion fallback returns HTTP 400 before inference I/O. An absent
 `models` operation is omitted from discovery and leaves connectivity status
 `unknown`, including through Gateway. Universal Endpoint steps without an
 explicit `endpoint` require a declared, fixed Chat path.
@@ -191,7 +193,8 @@ Last accessed for this compatibility contract: 2026-08-14.
 
 1. Parse and validate the JSON body.
 2. Resolve `default` or split `<provider>/<model>` at the first slash.
-3. Resolve an API key index.
+3. Resolve the model-specific operation, including any declared catalog lookup,
+   then resolve an API key index.
 4. Let the adapter remove explicitly unsupported fields or translate provider
    differences, then remove the provider prefix from the model.
 5. Send directly or construct an AI Gateway request.

@@ -66,7 +66,7 @@ describe("provider contracts", () => {
       expect(provider.aiGatewayPath("/models")).toBe("/models");
       expect(provider.endpoints).toEqual({});
       expect(
-        provider.resolveInference("model-id", "chat_completions"),
+        await provider.resolveInference("model-id", "chat_completions"),
       ).toBeUndefined();
     });
 
@@ -821,9 +821,9 @@ describe("provider contracts", () => {
 
     it.each([new Replicate()])(
       "does not declare unsupported inference or models for %s",
-      (provider) => {
+      async (provider) => {
         expect(
-          provider.resolveInference("model", "chat_completions"),
+          await provider.resolveInference("model", "chat_completions"),
         ).toBeUndefined();
         expect(provider.endpoints.models).toBeUndefined();
       },

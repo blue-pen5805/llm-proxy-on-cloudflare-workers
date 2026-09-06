@@ -281,6 +281,11 @@ export const PROVIDER_GROUPS: readonly ProviderGroup[] = [
     fields: [{ key: "COHERE_API_KEY", label: "apiKey" }],
   },
   {
+    id: "opencode",
+    label: "OpenCode Zen / Go",
+    fields: [{ key: "OPENCODE_API_KEY", label: "apiKey" }],
+  },
+  {
     id: "cline",
     label: "Cline",
     fields: [{ key: "CLINE_API_KEY", label: "apiKey" }],
@@ -397,6 +402,7 @@ const SENSITIVE_FIELDS = new Set<FieldKey>([
   "CEREBRAS_API_KEY",
   "COHERE_API_KEY",
   "CLINE_API_KEY",
+  "OPENCODE_API_KEY",
   "DEEPSEEK_API_KEY",
   "GROK_API_KEY",
   "GROQ_API_KEY",

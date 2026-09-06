@@ -240,3 +240,10 @@ Azure Responses and Hugging Face Router operations use direct connections in
 non-strict mode and synchronized Custom Providers in strict mode. Hugging Face
 uses an independent inference origin; its native pass-through integration is
 unchanged. See [provider API boundaries](native_inference.md#provider-api-boundaries).
+
+OpenCode Zen and Go use separate Custom Providers in strict mode, with distinct
+provisional SVG logos supplied during synchronization. Their inference and
+model-list operations use direct connections in non-strict mode. The public
+protocol catalog is fetched without credentials directly from its fixed origin;
+it is metadata lookup rather than inference traffic. See
+[OpenCode providers](opencode.md).

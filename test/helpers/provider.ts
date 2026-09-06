@@ -8,7 +8,7 @@ export async function buildInferenceRequest(
     data: Record<string, unknown>;
   },
 ): Promise<[string, RequestInit]> {
-  const resolved = provider.resolveInference(
+  const resolved = await provider.resolveInference(
     String(args.data.model),
     "chat_completions",
   );

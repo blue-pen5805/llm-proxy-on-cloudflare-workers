@@ -3,7 +3,9 @@
 The Anthropic-compatible API routes Messages directly to Anthropic, OpenRouter,
 DeepSeek, Hugging Face Inference Providers, Bedrock Anthropic models,
 Vertex AI models selected as `anthropic/<model>`, and custom OpenAI endpoints
-with `messagesPath` configured. These paths preserve
+with `messagesPath` configured. OpenCode Zen and Go also use native Messages
+when the model catalog resolves to `@ai-sdk/anthropic`; see
+[OpenCode routing](../design/features/opencode.md). These paths preserve
 native content blocks, thinking, cache controls, tool definitions, beta headers,
 and JSON/SSE responses. Model selectors and Vertex's required request envelope
 are adjusted for routing; other semantic validation belongs to the upstream.

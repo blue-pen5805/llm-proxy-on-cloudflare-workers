@@ -18,7 +18,8 @@ export interface Provider {
   resolveInference(
     model: string,
     protocol: PublicInferenceProtocol,
-  ): ResolvedInference | undefined;
+    signal?: AbortSignal,
+  ): Promise<ResolvedInference | undefined>;
   readonly credentialProfile: string;
   readonly apiKeyName: keyof Env | undefined;
   readonly baseUrlProp: string;
@@ -63,6 +64,13 @@ export interface Provider {
  * `this`, so one hook can reuse another without a base-class dependency.
  */
 export interface ProviderDefinition {
+  /** Request-scoped resolution for providers with a live protocol catalog. */
+  resolveInference?(
+    this: Provider,
+    model: string,
+    protocol: PublicInferenceProtocol,
+    signal?: AbortSignal,
+  ): Promise<ResolvedInference | undefined>;
   endpoints?: ProviderEndpoints;
   /** Null disables the declared operation for one concrete model. */
   resolveEndpoint?(
@@ -277,7 +285,10 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
         : pathname;
     },
 
-    resolveInference(model, protocol) {
+    async resolveInference(model, protocol, signal) {
+      if (definition.resolveInference) {
+        return definition.resolveInference.call(this, model, protocol, signal);
+      }
       const override = definition.resolveEndpoint?.call(this, model, protocol);
       const endpoint =
         override === null ? undefined : (override ?? this.endpoints[protocol]);

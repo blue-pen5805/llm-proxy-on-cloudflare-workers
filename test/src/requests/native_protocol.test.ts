@@ -623,10 +623,12 @@ describe("public protocol native routing", () => {
         return model === "legacy" ? null : undefined;
       },
     });
-    expect(provider.resolveInference("current", "responses")).toBeDefined();
-    expect(provider.resolveInference("legacy", "responses")?.native).toBe(
-      false,
-    );
+    expect(
+      await provider.resolveInference("current", "responses"),
+    ).toBeDefined();
+    expect(
+      (await provider.resolveInference("legacy", "responses"))?.native,
+    ).toBe(false);
     const fetch = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(Response.json(chatBody));
@@ -748,10 +750,10 @@ describe("public protocol native routing", () => {
             thinking: { type: "adaptive" },
           });
           const provider = state.providers.get("google-vertex-ai")!;
-          const operation = provider.resolveInference(
+          const operation = (await provider.resolveInference(
             "anthropic/claude",
             "messages",
-          )!.endpoint;
+          ))!.endpoint;
           const [path] = await operation.buildRequest.call(provider, {
             data: { model: "anthropic/claude", messages: [], max_tokens: 64 },
             headers: {},
@@ -762,14 +764,18 @@ describe("public protocol native routing", () => {
             200,
           );
           expect(
-            state.providers
-              .get("google-vertex-ai")!
-              .resolveInference("google/gemini", "messages")?.native,
+            (
+              await state.providers
+                .get("google-vertex-ai")!
+                .resolveInference("google/gemini", "messages")
+            )?.native,
           ).toBe(false);
           expect(
-            state.providers
-              .get("google-vertex-ai")!
-              .resolveInference("anthropic/claude", "responses")?.native,
+            (
+              await state.providers
+                .get("google-vertex-ai")!
+                .resolveInference("anthropic/claude", "responses")
+            )?.native,
           ).toBe(false);
         },
       );
