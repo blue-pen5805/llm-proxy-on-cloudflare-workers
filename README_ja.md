@@ -9,52 +9,25 @@
 
 ## 主な機能
 
-- OpenAI 互換の `POST /v1/chat/completions` と `GET /v1/models`
-- 実験的な `POST /v1/responses`（内部で Chat Completions に変換）
-- 実験的な Anthropic 互換 `POST /v1/messages`（内部で Chat Completions に変換）
-- `/openai/responses` などのプロバイダー別パススルールート
-- Cloudflare AI Gateway のプロバイダールートとアカウントレベル REST API
-- 複数のプロバイダーキーからストライプ方式のアイソレート単位ラウンドロビン選択
-- `provider:profile` で選択できる名前付きプロバイダー認証情報プロファイル
-- `/key/<index-or-range>` によるリクエスト単位のキー指定
-- 設定ファイルで追加できるカスタム OpenAI 互換エンドポイント
-- `/status` による認証済みの設定・プロバイダーキー診断
+- OpenAI 互換の Chat Completions・Responses と Anthropic 互換の Messages
+- プロバイダー固有 API のパススルーとモデル一覧の集約
+- 複数 API キーの自動切り替え、認証情報のグループ管理、リクエスト単位のキー指定
+- 複数プロバイダーへの順次フォールバックを設定できる仮想モデル
+- カスタム OpenAI 互換エンドポイントの追加
+- Cloudflare AI Gateway との連携
+- 認証付きのプロバイダー認証情報の診断
+
+API の対応範囲はプロバイダーごとに異なります。Responses と Messages は対応する
+ネイティブ API を優先し、非対応時の変換機能は実験的です。対応項目と制限は
+[API ガイド](docs/user/api/overview.md) を参照してください。
 
 ## 対応プロバイダー
 
-ルート名は `openai/gpt-5.6-sol` のようにモデル ID の接頭辞にも使います。チャット変換、
-モデル一覧、直接接続、AI Gateway の対応範囲はプロバイダーごとに異なります。利用する
-組み合わせの詳細は [HTTP API and routing](docs/api.md) を参照してください。
-
-| プロバイダー     | ルート名                 | 主な認証設定                            |
-| ---------------- | ------------------------ | --------------------------------------- |
-| Anthropic        | `anthropic`              | `ANTHROPIC_API_KEY`                     |
-| Amazon Bedrock   | `aws-bedrock`            | `AWS_BEARER_TOKEN_BEDROCK`              |
-| Azure OpenAI     | `azure-openai`           | `AZURE_OPENAI_API_KEY`                  |
-| Cerebras         | `cerebras`               | `CEREBRAS_API_KEY`                      |
-| Cline            | `cline`                  | `CLINE_API_KEY`                         |
-| Cohere           | `cohere`                 | `COHERE_API_KEY`                        |
-| DeepSeek         | `deepseek`               | `DEEPSEEK_API_KEY`                      |
-| Google AI Studio | `google-ai-studio`       | `GEMINI_API_KEY`                        |
-| Google Vertex AI | `google-vertex-ai`       | `GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON` |
-| Grok (xAI)       | `grok`                   | `GROK_API_KEY`                          |
-| Groq             | `groq`                   | `GROQ_API_KEY`                          |
-| Hugging Face     | `huggingface`            | `HUGGINGFACE_API_KEY`                   |
-| Mistral          | `mistral`                | `MISTRAL_API_KEY`                       |
-| NVIDIA NIM       | `nvidia-nim`             | `NVIDIA_NIM_API_KEY`                    |
-| Ollama           | `ollama`                 | `OLLAMA_API_KEY`                        |
-| OpenCode Go      | `opencode-go`            | `OPENCODE_API_KEY`                      |
-| OpenCode Zen     | `opencode-zen`           | `OPENCODE_API_KEY`                      |
-| OpenAI           | `openai`                 | `OPENAI_API_KEY`                        |
-| OpenRouter       | `openrouter`             | `OPENROUTER_API_KEY`                    |
-| Perplexity       | `perplexity-ai`          | `PERPLEXITYAI_API_KEY`                  |
-| Replicate        | `replicate`              | `REPLICATE_API_KEY`                     |
-| Workers AI       | `workers-ai`             | `CLOUDFLARE_API_KEY` とアカウント ID    |
-| カスタム         | 設定したエンドポイント名 | 設定した `apiKeys`                      |
-
-クラウドプラットフォーム系のプロバイダーには追加設定が必要です。Vertex AI は認証済みの
-AI Gateway 経由でのみ利用できます。要件と設定値の形式は
-[Configuration reference](docs/configuration.md) を参照してください。
+OpenAI、Anthropic、Google AI Studio、Vertex AI、Amazon Bedrock、Azure OpenAI、
+Workers AI、OpenRouter、OpenCode Zen/Go、DeepSeek、Groq、xAI、Cerebras、Cline、
+Cohere、Hugging Face、Mistral、NVIDIA NIM、Ollama、Perplexity、Replicate。
+ルート名、認証情報、追加要件は
+[プロバイダー設定](docs/user/configuration.md#provider-credentials) に記載しています。
 
 ## クイックスタート
 
@@ -70,18 +43,13 @@ npm run deploy
 npm run secrets:deploy
 ```
 
-`npm run secrets` はターミナル UI を開き、Git 対象外の `config.jsonc` を作成または
-編集します。認証情報の値は UI 上で伏せられます。Cloudflare アカウント ID の初期値は
-`wrangler whoami --json` から取得され、別のアカウントの選択や手動上書きもできます。
-デプロイ前に、十分に長く一意な `PROXY_API_KEY` と、1つ以上のプロバイダー認証情報を
-設定してください。`config.example.jsonc` をコピーして手動で編集することもできます。
-
-検証手順、名前付き環境、セキュリティ上の注意点は
-[初期セットアップ](docs/initial-setup_ja.md) に記載しています。
+`npm run secrets` で、十分に長く一意な `PROXY_API_KEY` とプロバイダー認証情報を
+設定します。設定方法、名前付き環境、デプロイ後の確認は
+[初期セットアップ](docs/user/initial-setup_ja.md) を参照してください。
 
 ## 使用例
 
-OpenAI 互換エンドポイントでは、プロバイダー名を含むモデル ID を指定します。
+プロキシのキーと、プロバイダー名を含むモデル ID を指定します。
 
 ```bash
 curl https://your-worker.example/v1/chat/completions \
@@ -93,60 +61,13 @@ curl https://your-worker.example/v1/chat/completions \
   }'
 ```
 
-`POST /v1/responses` は実験的な互換機能です。Responses リクエストを内部で Chat
-Completions 形式に変換し、プロバイダーからの JSON または SSE を Responses 形式へ
-戻します。プロバイダー固有の Responses API へのパススルーではなく、対応する入力、
-ツール、ストリーミング機能には制限があります。詳細は
-[OpenAI 互換 API](docs/api/openai-compatible.md#responses) を参照してください。
-
-`POST /v1/messages` も実験的な互換機能です。Anthropic Messages の対応範囲を Chat
-Completions に変換し、プロバイダーの JSON または SSE を Anthropic 形式へ戻します。
-プロバイダー、virtual model、認証情報、AI Gateway の経路は Chat Completions と共通です。
-Anthropic 固有機能をそのまま使う場合は `/anthropic/v1/messages` を使用してください。
-詳細は [Anthropic 互換 API](docs/api/anthropic-compatible.md#messages) を参照してください。
-
-プロバイダー固有のリクエストは、パススルールートへそのまま送信できます。
-
-```bash
-curl https://your-worker.example/google-ai-studio/v1beta/models/gemini-3.5-flash:generateContent \
-  --header "Authorization: Bearer $PROXY_API_KEY" \
-  --header "Content-Type: application/json" \
-  --data '{
-    "contents": [{"role": "user", "parts": [{"text": "Hello"}]}]
-  }'
-```
-
-`CLOUDFLARE_ACCOUNT_ID` と `CLOUDFLARE_API_TOKEN` を設定すると、AI Gateway の
-4つのアカウントレベル REST ルートを `/ai` 以下で利用できます。設定済みまたは暗黙の
-`default` 以外の Gateway を選ぶ場合は `/g/<gateway>` を先頭に付けます。
-
-`GET /v1/models` は、設定済みプロバイダーのモデル一覧をベストエフォートで集約します。
-`GET /status` は認証情報を検査しますが、設定メタデータと認証情報スロット数を含むため、
-出力を公開しないでください。
-
-Workers Free plan では 1 invocation あたりの subrequest が 50 件に制限されるため、
-多数の provider を登録すると `/v1/models` や `/status` が失敗する可能性があります。
-その場合は Workers Paid plan を検討してください。詳細は
-[Workers limits](https://developers.cloudflare.com/workers/platform/limits/#subrequests)
-を参照してください。
-
-プロバイダー認証情報の設定では、プロファイル名ごとのキー配列も指定できます。指定を
-省略したルートは `default` を使います。たとえば OpenAI の `second` プロファイルは
-`openai:second/gpt-5.6-sol` で選択できます。詳細は
-[Configuration reference](docs/configuration.md#provider-credential-profiles) を参照してください。
+設定済みモデルは `GET /v1/models` で取得できます。プロバイダー固有の機能には
+[パススルールート](docs/user/api/provider-pass-through.md) を使用します。
 
 ## ドキュメント
 
-- [初期セットアップ](docs/initial-setup_ja.md) ([English](docs/initial-setup.md))
-- [Configuration reference](docs/configuration.md)
-- [HTTP API and routing](docs/api.md)
-  - [OpenAI-compatible API](docs/api/openai-compatible.md)
-  - [Anthropic-compatible API](docs/api/anthropic-compatible.md)
-  - [Provider pass-through API](docs/api/provider-pass-through.md)
-  - [AI Gateway API](docs/api/ai-gateway.md)
-  - [Proxy management API](docs/api/proxy-management.md)
-- [Operations and troubleshooting](docs/operations.md)
-- [Live provider Chat Completions testing](docs/live-provider-testing.md)
-- [Development and verification](docs/development.md)
-- [Architecture and design](docs/design/overview.md)
-- [Project principles](docs/project-principles.md)
+- [初期セットアップ](docs/user/initial-setup_ja.md) ([English](docs/user/initial-setup.md))
+- [設定リファレンス](docs/user/configuration.md)
+- [HTTP API とルーティング](docs/user/api/overview.md)
+- [運用・トラブルシューティング](docs/user/operations.md)
+- [全ガイド・設計資料](docs/index.md)

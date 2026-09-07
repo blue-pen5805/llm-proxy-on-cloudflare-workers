@@ -5,7 +5,7 @@ DeepSeek, Hugging Face Inference Providers, Bedrock Anthropic models,
 Vertex AI models selected as `anthropic/<model>`, and custom OpenAI endpoints
 with `messagesPath` configured. OpenCode Zen and Go also use native Messages
 when the model catalog resolves to `@ai-sdk/anthropic`; see
-[OpenCode routing](../design/features/opencode.md). These paths preserve
+[OpenCode routing](../../developer/design/features/opencode.md). These paths preserve
 native content blocks, thinking, cache controls, tool definitions, beta headers,
 and JSON/SSE responses. Model selectors and Vertex's required request envelope
 are adjusted for routing; other semantic validation belongs to the upstream.
@@ -15,7 +15,7 @@ conversion described below. All paths share provider selection, virtual-model
 fallback, credential profiles, key rotation and cooldown, Gateway routing,
 and cancellation. The selected capability is checked for each concrete model.
 Native responses do not inject optional `llm_proxy` response metadata; Gateway
-metadata and logs still apply. See [Native inference](../design/features/native_inference.md).
+metadata and logs still apply. See [Native inference](../../developer/design/features/native_inference.md).
 
 The compatibility contract follows the
 [Anthropic Messages API](https://platform.claude.com/docs/en/api/messages/create),
@@ -45,9 +45,8 @@ curl https://your-worker.example/v1/messages \
 This section applies only when the selected provider lacks a native Messages
 capability.
 
-The handler reads at most 10 MiB and validates the JSON object and `model`.
-The conversion fallback additionally requires `max_tokens` and `messages`. The model retains its provider-qualified, named-profile, `default`,
-or virtual-model selector until the Chat handler resolves it.
+The handler reads at most 10 MiB and validates the JSON object and `model`. The
+conversion fallback additionally requires `max_tokens` and `messages`.
 
 User and assistant text map to Chat messages. Anthropic base64 and URL image
 sources become Chat image URLs. Assistant `tool_use` blocks become function
@@ -66,12 +65,8 @@ also retained. `output_config.effort` maps to `reasoning_effort`, and
 Prompt-cache annotations on otherwise supported system, text, image, tool-use,
 tool-result, and tool-definition objects are removed.
 
-The converted object and sanitized headers are passed directly to the Chat
-Completions handler without serializing an intermediate request or parsing the
-converted JSON a second time. Consequently, Messages accepts the same real
-providers, named credential profiles, `default`, virtual models, explicit key
-selection, and Gateway selection as Chat Completions. Each provider filters
-Chat fields according to its declared capability.
+Each provider filters the converted Chat fields according to its declared
+capability.
 
 ### Response conversion
 
@@ -84,7 +79,7 @@ cache creation, inference geography, output-token details, server-tool usage,
 and service tier. Text blocks contain `citations: null`. Non-successful upstream
 responses retain their status and body.
 
-For `text/event-stream`, a `TransformStream` converts Chat chunks incrementally
+For `text/event-stream`, the proxy converts Chat chunks incrementally
 into `message_start`, `content_block_start`, `content_block_delta`,
 `content_block_stop`, `message_delta`, and `message_stop` events. Multiline SSE
 data is joined before parsing. Message start and delta events use the current
@@ -133,9 +128,3 @@ preserve semantics and require no proxy state or tool execution.
 `POST /v1/messages/count_tokens` returns an Anthropic-shaped HTTP 400 error.
 Token counting is not approximated because Chat Completions has no equivalent
 operation that preserves Anthropic tokenization.
-
-## References
-
-- [Anthropic Messages API](https://platform.claude.com/docs/en/api/messages/create)
-- [Anthropic API getting started](https://platform.claude.com/docs/en/get-started)
-- [Cloudflare Workers streaming best practices](https://developers.cloudflare.com/workers/best-practices/workers-best-practices/#stream-request-and-response-bodies)

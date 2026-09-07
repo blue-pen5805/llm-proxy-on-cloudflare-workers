@@ -13,18 +13,11 @@ a registered provider selector.
 
 ## Configuration model
 
-`VIRTUAL_MODELS` maps a validated name to 1–16 candidates. A candidate is either
-a provider-qualified model string or an object containing `model`, optional
-`retries`, and optional response-header `timeout`. A candidate may reference
-another virtual model.
-
-The graph must be acyclic. At most 100 virtual models are accepted, retries are
-limited to five per candidate, and an expanded model is limited to 96 concrete
-attempts. Deployment and runtime validation both enforce these bounds. Invalid
-configuration fails closed after proxy authentication without echoing the
-rejected value. Runtime graph validation is memoized by both the virtual-model
-configuration and custom-endpoint configuration because real-provider shadowing
-changes which references participate in cycles and expanded attempt counts.
+The [configuration contract](../../../user/configuration.md#virtual-models) defines
+names, candidates, retry and timeout bounds, and the acyclic graph limit.
+Deployment and runtime validation enforce these bounds without echoing invalid
+values. Runtime validation is memoized by both virtual-model and custom-endpoint
+configuration because provider shadowing changes cycles and expanded attempts.
 
 Lookups use only configured own properties. Names such as `__proto__` are
 ordinary entries and cannot alter the map's prototype.
@@ -77,14 +70,9 @@ risk.
 
 ## Discovery and diagnostics
 
-`GET /v1/models` lists virtual models before provider-discovered models with
-`owned_by: "virtual"`. `GET /virtual-models` exposes the normalized candidate
-order, retry count, attempt count, timeout, and recursively expanded references
-without making provider subrequests. Both routes use the same validated
-configuration as chat routing.
-
-`/virtual-models` is authenticated, rejects explicit key selection, returns an
-empty list when unconfigured, and is unaffected by a Gateway prefix.
+Model discovery and virtual-model inspection share the validated routing graph.
+Inspection expands references without provider I/O; see the [management
+API](../../../user/api/proxy-management.md#virtual-models) for its response.
 
 ## Observability
 
@@ -99,7 +87,7 @@ boundary. Failed history remains log-only.
 
 ## References
 
-- [Configuration](../../configuration.md#virtual-models)
-- [Proxy management API](../../api/proxy-management.md#virtual-models)
+- [Configuration](../../../user/configuration.md#virtual-models)
+- [Proxy management API](../../../user/api/proxy-management.md#virtual-models)
 - [Compatibility response metadata](provider_abstraction.md#compatibility-response-metadata)
 - [Project principles](../../project-principles.md)

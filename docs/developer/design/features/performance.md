@@ -60,28 +60,19 @@ membership set or scan across cooling slots.
 
 ## Bounded model aggregation
 
-Model discovery reads at most 1 MiB from one provider, queries every configured
-provider concurrently, retains at most 1,000 models per provider, and caps the
-serialized aggregate model entries at 4 MiB. Exceeding either the per-provider
-count or aggregate byte limit includes
-`X-Proxy-Models-Truncated: true` and prevents cache storage. Reaching one
-provider's count limit does not skip later providers. The provider set is
-bounded by the fixed
-built-in registry and validated configuration limits; the response limits
-prevent individually bounded provider responses from accumulating beyond the
-Worker's isolate memory limit. Non-successful upstream responses are not parsed
-as provider model payloads. Automatic HTTP 429 retries are bounded to three
-sequential keys per provider and share that provider's 60-second timeout.
+Per-provider byte and count bounds plus an aggregate byte bound prevent
+concurrent discovery from accumulating unbounded responses. Non-successful
+responses are discarded before conversion; reaching one provider's count limit
+does not skip later providers. Retries share a provider deadline. Exact limits
+and truncation behavior are defined in the [Models
+API](../../../user/api/openai-compatible.md#models).
 
 ## Model aggregate caching
 
-`GET /v1/models` fans out to every configured provider, which makes it the
-most expensive read-only route. Successful complete aggregates are stored in
-the Workers Cache API (a dedicated cache named `llm-proxy-models`) for
-`MODELS_CACHE_TTL_SECONDS` (default 300 seconds, `0` disables), so repeated
-listings within the TTL cost one cache read instead of a provider fan-out.
-Served responses carry `X-Proxy-Models-Cache: HIT` or `MISS` for
-observability; bypassed responses carry no cache header.
+Complete model aggregates use the dedicated `llm-proxy-models` Cache API cache
+to replace repeated provider fan-out with one cache read. TTLs, request
+controls, and response headers follow the [Models
+API](../../../user/api/openai-compatible.md#models).
 
 The cache key is built exclusively from operator-validated values — AI Gateway
 account and gateway ids (charset-checked at construction), the `alwaysUse`
@@ -103,9 +94,6 @@ logs the failed cache operation and continues with an uncached provider
 fan-out. This includes environments where Cloudflare Access makes the Cache API
 unavailable.
 
-Cache API operations are inert on `*.workers.dev`, so
-`MODELS_CACHE_TTL_SECONDS` requires a custom domain to reduce `/models` fan-out.
-
 The Cache API is per-datacenter: each Cloudflare location warms its own entry,
 and a configuration change (for example adding a provider key) can serve a
 stale list from an already-primed datacenter for up to the TTL. The short
@@ -124,21 +112,11 @@ or scan custom endpoint configuration for each lookup.
 
 ## Benchmarking
 
-Run `npm run bench` to exercise the CPU-only request-building, routing, and
-Responses, Messages, and metadata SSE transformation hot paths.
-
-Benchmarks are diagnostic rather than correctness gates because absolute
-results vary by machine. Record the command, Node version, machine, benchmark
-name, mean, and variance when using a result for a performance decision.
-Compare only the same input and environment. Benchmarks diagnose performance;
-Worker-runtime tests and coverage enforce correctness.
-
-Production evaluation uses Workers CPU time rather than handler latency alone:
-handler latency includes upstream wait time and can move independently of local
-CPU consumption.
-`wrangler.jsonc` sets `limits.cpu_ms` to 1,000 ms as an invocation guardrail;
-network wait time does not consume that CPU budget. Sustained limit errors must
-be investigated with Workers CPU metrics and profiling before raising it.
+[Development and verification](../../development.md#performance-measurement)
+defines benchmark commands and comparison requirements. Production evaluation
+uses Workers CPU time; handler latency also includes upstream wait.
+`wrangler.jsonc` sets `limits.cpu_ms` to 1,000 ms as an invocation guardrail.
+Investigate sustained limit errors with CPU metrics before raising it.
 
 ## References
 

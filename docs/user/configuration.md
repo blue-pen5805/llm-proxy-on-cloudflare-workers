@@ -78,10 +78,6 @@ Possession of a proxy credential therefore includes permission to change AI
 Gateway cache, retry, logging, cost, and metadata behavior per request. Restrict
 proxy credentials accordingly.
 
-> `DEV=true` bypasses client authentication only for a locally running Worker.
-> A deployed Worker ignores it, logs `auth.development_mode_ignored`, and
-> continues to require `PROXY_API_KEY`. A missing key returns HTTP 503.
-
 ## Provider credentials
 
 Each provider key accepts a string, an array of strings, a profile object, or
@@ -89,14 +85,10 @@ Each provider key accepts a string, an array of strings, a profile object, or
 `null` deletes the corresponding deployed secret on the next secrets
 deployment.
 
-Multiple credentials are always expressed as a JSON array and profiles as a
-JSON object. Only those two forms carry structure: every other value is one
-opaque credential, is never split on a separator, and is never converted to
-another type. A key that contains a comma stays intact, and a quoted string
-such as `"12345"`, `"true"`, or `"null"` reaches the provider as exactly that
-text rather than being read as a number, a boolean, or an absent value and
-discarded. Only the bare literal `null`, which is not a string, means the
-deletion described above.
+Use JSON arrays for multiple credentials and objects for profiles. Scalar
+strings remain exact text: commas are not separators, and `"12345"`, `"true"`,
+and `"null"` are credentials, not typed values. Only bare `null` requests
+deletion.
 
 | Route name         | Setting                                           |
 | ------------------ | ------------------------------------------------- |
@@ -123,17 +115,9 @@ deletion described above.
 | `google-vertex-ai` | `GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON`           |
 | `aws-bedrock`      | `AWS_BEARER_TOKEN_BEDROCK`                        |
 
-OpenCode Zen and Go share the same `OPENCODE_API_KEY` setting, including
-arrays and named credential profiles. Select models with
-`opencode-zen/<model-id>` or `opencode-go/<model-id>`. Their model lists come
-from [Zen](https://opencode.ai/zen/v1/models) and
-[Go](https://opencode.ai/zen/go/v1/models). Inference checks the public protocol
-catalog through a shared five-minute Cache API cache to select Chat Completions,
-Responses, Messages, or GenerateContent. This fixed TTL is independent of
-`MODELS_CACHE_TTL_SECONDS`; storage is subject to Cloudflare Cache API
-availability. See [OpenCode routing](design/features/opencode.md) for
-conversion limits and failure behavior. Go clients should supply their agent's
-user-agent and `x-opencode-session` headers as described by
+OpenCode Zen and Go share `OPENCODE_API_KEY`. Their model-specific API selection
+is described in [OpenCode routing](../developer/design/features/opencode.md). Go clients
+should supply their agent's user-agent and `x-opencode-session` headers; see
 [OpenCode Go](https://opencode.ai/docs/go/#where-can-i-use-it).
 
 The cloud-platform adapters also require endpoint metadata:
@@ -187,9 +171,7 @@ Use a profile map when separate key pools are needed:
 }
 ```
 
-A string or array selects `default`, while a profile map provides `default` and
-any additional named pools. All three forms are supported configuration
-choices. Select another profile with `openai:second/gpt-5.6-sol` in Chat Completions,
+Select another profile with `openai:second/gpt-5.6-sol` in Chat Completions,
 `/openai:second/<path>` for pass-through, or `"provider": "openai:second"` in a
 Universal Endpoint step. Explicit `/key/...` selection applies within the
 selected profile. Rotation and cooldown state are independent between profiles.
@@ -206,7 +188,7 @@ An unconfigured static provider is reported as unavailable and omitted from
 model aggregation. Route resolution is independent of availability, so a
 request normally fails at the upstream rather than at route lookup. Some
 providers support pass-through requests but cannot translate chat completions
-or list models; consult [HTTP API and routing](api.md) for endpoint behavior.
+or list models; consult [HTTP API and routing](api/overview.md) for endpoint behavior.
 
 ## AI Gateway
 
@@ -244,26 +226,26 @@ the command creates or updates the required account-level Custom Providers. It
 preserves configured upstream paths, does not delete stale providers, and does
 not overwrite an unrelated provider that owns the generated slug. `--dry-run`
 validates prerequisites without contacting Cloudflare or exposing Base URLs and
-credentials. See the [AI Gateway design](design/features/ai_gateway.md#custom-provider-path-behavior)
+credentials. See the [AI Gateway design](../developer/design/features/ai_gateway.md#custom-provider-path-behavior)
 for path construction and synchronization details.
 
 ## Routing and key selection
 
-| Setting                          | Type            | Default | Meaning                                                                                                                                                                                                                          |
-| -------------------------------- | --------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DEFAULT_MODEL`                  | string or null  | none    | Provider-qualified model used when a chat request specifies `"model": "default"`.                                                                                                                                                |
-| `CHAT_RESPONSE_METADATA_ENABLED` | boolean or null | `false` | Adds `llm_proxy` routing and timing metadata to routed Chat Completions and converted Responses or Messages JSON and streaming responses. Disabled by default for strict client compatibility.                                   |
-| `API_KEY_COOLDOWN_SECONDS`       | integer or null | `60`    | Seconds to avoid a multi-key credential slot after HTTP 401, 403, 429, or 5xx. `0` disables cooldowns; values above `86400` are clamped.                                                                                         |
-| `MODELS_CACHE_TTL_SECONDS`       | integer or null | `300`   | TTL of the aggregated `/v1/models` response cache. `0` disables caching; values above `86400` are clamped. Invalid values fall back to the default. Has no effect on a `*.workers.dev` deployment, where the Cache API is inert. |
-| `STATUS_CACHE_TTL_SECONDS`       | integer or null | `0`     | Opt-in TTL for the authenticated `/status` diagnostic cache. `0` runs live checks on every request; values above `86400` are clamped.                                                                                            |
-| `VIRTUAL_MODELS`                 | object or null  | none    | Operator-defined model names (`"virtual/<name>"` by convention, any key allowed), each mapped to an ordered list of `"<provider>/<model>"` candidates. Real providers take precedence. See below.                                |
+| Setting                          | Type            | Default | Meaning                                                                                                                                                                                                        |
+| -------------------------------- | --------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DEFAULT_MODEL`                  | string or null  | none    | Provider-qualified model used when a chat request specifies `"model": "default"`.                                                                                                                              |
+| `CHAT_RESPONSE_METADATA_ENABLED` | boolean or null | `false` | Adds `llm_proxy` routing and timing metadata to routed Chat Completions and converted Responses or Messages JSON and streaming responses. Disabled by default for strict client compatibility.                 |
+| `API_KEY_COOLDOWN_SECONDS`       | integer or null | `60`    | Seconds to avoid a multi-key credential slot after HTTP 401, 403, 429, or 5xx. `0` disables cooldowns; values above `86400` are clamped.                                                                       |
+| `MODELS_CACHE_TTL_SECONDS`       | integer or null | `300`   | TTL of the aggregated `/v1/models` response cache. `0` disables caching; values above `86400` are clamped. Invalid values fall back to the default. See [cache availability](api/openai-compatible.md#models). |
+| `STATUS_CACHE_TTL_SECONDS`       | integer or null | `0`     | Opt-in TTL for the authenticated `/status` diagnostic cache. `0` runs live checks on every request; values above `86400` are clamped.                                                                          |
+| `VIRTUAL_MODELS`                 | object or null  | none    | Named, ordered candidate lists for fallback. See [virtual models](#virtual-models) for names, bounds, and precedence.                                                                                          |
 
 Multiple keys rotate independently in each Worker isolate. `/key/<selection>/`
 overrides rotation for supported routes. Automatic chat and pass-through
 selection skips slots cooling after an attributable upstream failure, unless
 every slot is cooling. Explicit selection always takes precedence. See
-[Explicit key selection](api.md#explicit-key-selection) for route syntax and
-[API key rotation](design/features/key_rotation.md) for the selection contract.
+[Explicit key selection](api/overview.md#explicit-key-selection) for route syntax and
+[API key rotation](../developer/design/features/key_rotation.md) for the selection contract.
 
 ## Custom OpenAI-compatible endpoints
 
@@ -324,11 +306,10 @@ custom endpoints are configured.
 
 ## Virtual models
 
-`VIRTUAL_MODELS` maps a virtual model name to an ordered candidate array.
-`"virtual/<name>"` is the recommended convention, but any key works — the name
-is matched verbatim against the requested `model`. A bare `"<provider>/<model>"`
-string is attempted once. To configure retries or a response-header timeout, use
-an object:
+`VIRTUAL_MODELS` maps a virtual model name to an ordered candidate array. Names
+match the requested `model` verbatim; `"virtual/<name>"` is the convention. A
+bare `"<provider>/<model>"` string is attempted once. To configure retries or a
+response-header timeout, use an object:
 
 ```jsonc
 {
@@ -359,19 +340,18 @@ overrides the value. Every concrete attempt uses the candidate provider's
 normal routing and key policy; the selected upstream response is not relabeled.
 
 At most 100 virtual models are accepted, each with 1 to 16 candidates. A name
-must match `[A-Za-z0-9._~/-]{1,128}` — `"virtual/<name>"` is only a convention,
-not a requirement. Real providers and Custom OpenAI endpoints take precedence
-over colliding virtual names. The reference graph must be acyclic, and each
-model may expand to at most 96 concrete attempts. Deployment and runtime
-validation enforce these limits. Configured virtual models appear first in
-`GET /v1/models` with `owned_by: "virtual"`.
+must match `[A-Za-z0-9._~/-]{1,128}`. Real providers and Custom OpenAI endpoints
+take precedence over colliding virtual names. The reference graph must be
+acyclic, and each model may expand to at most 96 concrete attempts. Deployment
+and runtime validation enforce these limits. Configured virtual models appear
+first in `GET /v1/models` with `owned_by: "virtual"`.
 
 Malformed configuration fails authenticated requests with HTTP 503, the same as
 `CUSTOM_OPENAI_ENDPOINTS`. Missing or explicit `null` configuration means no
 virtual models exist; requesting an undefined name returns the same HTTP 400
 `"Invalid provider."` as an unknown provider. See
 [Virtual models](api/proxy-management.md#virtual-models) for the diagnostic
-response and [Virtual models design](design/features/virtual_models.md) for
+response and [Virtual models design](../developer/design/features/virtual_models.md) for
 rationale.
 
 ## Applying changes
@@ -387,9 +367,6 @@ Deploy the default configuration:
 ```bash
 npm run secrets:deploy
 ```
-
-The helper lists setting names but never values, prefixes, or lengths. Dry-run
-output is redacted as well.
 
 Deploy `config.production.jsonc` to the Wrangler `production` environment:
 

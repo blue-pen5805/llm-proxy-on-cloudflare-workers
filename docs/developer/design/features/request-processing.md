@@ -75,35 +75,14 @@ providers without a declared model-list operation.
 
 ## Key prefix and route matching
 
-The leading forms `/key/N`, `/key/N-M`, `/key/N-`, and `/key/-M` are supported.
-Indices are zero-based non-negative safe integers, and a range start cannot
-exceed its end. Malformed values in the reserved `/key/` namespace return HTTP 400. Parsing occurs only at the beginning of the path. The provider handler
-resolves the recorded selection after it knows the configured key count.
-
-Explicit selection is supported only by OpenAI-compatible Chat Completions,
-Responses, Anthropic-compatible Messages, model aggregation, and registered
-provider pass-through routes. `/ping`, `/status`, AI Gateway REST and
-compatibility pass-through routes, the Universal Endpoint, and unknown routes
-reject a leading key-selection prefix with HTTP 400.
-
-The router recognizes the documented versioned and unversioned compatibility
-aliases. Provider pass-through requires `/<provider>/` with a trailing slash
-after the provider name and accepts only `GET`, `HEAD`, `POST`, `PUT`, `PATCH`,
-or `DELETE`; other methods fail with HTTP 405 before provider request
-construction. Gateway Compatibility matches only
-`POST /compat/chat/completions`, and the Universal Endpoint matches only
-`POST /`, when a Gateway context exists. Compatibility POST routes match the
-URL path independently of the query string, as the GET and HEAD routes do.
-
-The account-level AI Gateway REST API matches only `POST /ai/run`,
-`POST /ai/v1/chat/completions`, `POST /ai/v1/responses`, and
-`POST /ai/v1/messages` when a Gateway context exists. Other methods, suffixes,
-and query-bearing variants in the reserved `/ai` namespace return HTTP 404.
+The router resolves a typed route before invoking its handler. It rejects a key
+prefix when that route cannot consume a provider credential. Prefix syntax,
+methods, aliases, and reserved namespaces are defined in [HTTP API and
+routing](../../../user/api/overview.md).
 
 Path normalization is routing logic, not a general defense against malicious
 upstream paths. Provider base URLs remain fixed by code or trusted deployment
-configuration. The complete public route contract is in
-[HTTP API and routing](../../api.md).
+configuration.
 
 ## Request-scoped environment and failures
 

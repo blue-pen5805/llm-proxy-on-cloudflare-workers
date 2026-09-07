@@ -1,5 +1,9 @@
 # Development and Verification
 
+For contributors changing proxy code, configuration definitions, or dependencies.
+Deployment and operator-owned settings follow [initial setup](../user/initial-setup.md)
+and [operations](../user/operations.md).
+
 ## Local setup
 
 ```bash
@@ -15,6 +19,13 @@ npm run dev
 
 The command generates `.dev.vars.develop` for the lifetime of Wrangler and
 removes it on normal exit. Both files are ignored by Git.
+
+### Local development does not start
+
+Confirm `config.develop.jsonc` exists and contains valid JSONC. If Wrangler was
+terminated abruptly, remove the generated `.dev.vars.develop` and retry
+`npm run dev`. Keep both files out of Git. Top-level `null` values are omitted
+locally; they request secret deletion only during deployment.
 
 ## Project map
 
@@ -47,7 +58,7 @@ Keep the following artifacts synchronized:
 4. scripts that enumerate fields, especially `scripts/create-config.ts`
 5. tests for schema parsing, defaults, invalid input, script behavior, and
    runtime access as applicable
-6. [Configuration reference](configuration.md) and the relevant design document
+6. [Configuration reference](../user/configuration.md) and the relevant design document
    when behavior or architecture changes
 
 After changing the schema, run `npm run cf-typegen`; do not edit
@@ -105,8 +116,8 @@ leave unrelated worktree changes untouched.
 
 ## Required verification
 
-For code, configuration, or dependency changes, run all repository checks from
-the root:
+For changes to code, configuration schemas/examples or tooling, or dependencies,
+run all repository checks from the root:
 
 ```bash
 npm run verify
@@ -134,22 +145,15 @@ unreachable implementation branch solely to satisfy coverage, and do not
 invent a partial provider shape to enter such a branch; remove structurally
 unreachable code instead.
 
-`npm run tsc` type-checks three projects: `src` and `scripts` from the root
-`tsconfig.json`, Worker-runtime tests from `test/tsconfig.json`, and Node-based
-deployment-tooling tests from `test/scripts/tsconfig.json`. The last is separate
-because the Workers and Node global declarations for shared names such as `URL`
-are not assignable to each other in one program.
-
-Oxlint covers `src`, `scripts`, and `test`. Type-aware linting is enabled for
-`src` and `scripts` so Promise-returning expressions are checked by
-`typescript/no-floating-promises`. Await a Promise when its result is part of
-control flow; otherwise mark intentional fire-and-forget work with `void` and
-handle rejection where applicable.
+`npm run tsc` checks source/scripts, Worker tests, and Node tooling tests as
+separate projects because Workers and Node global types conflict. Oxlint covers
+`src`, `scripts`, and `test`; source and scripts also use type-aware
+`typescript/no-floating-promises`. Await Promises used in control flow; mark
+intentional background work with `void` and handle rejection.
 
 If the formatting check fails, run `npm run format`, review every resulting
-change, and repeat the checks. Run `npm run bench` for performance-sensitive
-changes; benchmarks are diagnostic and must be compared under the same runtime
-and machine.
+change, and repeat the checks. Performance-sensitive changes also require the
+[measurement workflow](#performance-measurement).
 
 For documentation-only changes, at minimum:
 
@@ -170,25 +174,40 @@ required test suite because they require operator credentials and incur cost.
 Use the separate [live provider testing guide](live-provider-testing.md) when
 validating the local development server against current provider models.
 
+## Performance measurement
+
+Run `npm run bench` for performance-sensitive changes. It exercises request
+building, routing, and Responses, Messages, and metadata SSE transformations.
+Record the command, Node version, machine, input, benchmark name, mean, and
+variance; compare only matching environments and inputs. Benchmarks are
+diagnostic, while tests and coverage enforce correctness. Use Workers CPU
+metrics to assess production cost independently of upstream latency.
+
 ## Package version
 
-After completing the change, assess its semantic-versioning impact:
-
-- `patch` for backward-compatible fixes and maintenance changes
-- `minor` for backward-compatible functionality
-- `major` for incompatible API or behavior changes
-
-Propose the resulting `package.json` version to the operator. Do not change the
-version number without their explicit confirmation. When a version change is
-approved, keep `package.json` and `package-lock.json` synchronized.
+Propose a semantic version after each change: patch for compatible fixes or
+maintenance, minor for compatible functionality, major for incompatible API or
+behavior. Update `package.json` and `package-lock.json` together only after
+explicit operator confirmation.
 
 ## Documentation maintenance
 
+- Place user and operator guides under `docs/user/`, API references under
+  `docs/user/api/`, and contributor guides under `docs/developer/`. Keep design
+  documents under `docs/developer/design/`.
+
+- User guides describe configuration, deployment, API usage, and troubleshooting
+  through observable behavior. Require only checks needed to use or operate the
+  application, such as configuration preview and authenticated requests.
+- Contributor guides describe source changes, tests, coverage, linting, type
+  checking, and benchmarks. Keep these checks out of routine user setup and
+  deployment instructions.
+
 - The Japanese README and initial setup guide are maintained separately. Other
   documentation is English-only.
-- All files under `docs/design/` are English and focus on rationale and
+- All files under `docs/developer/design/` are English and focus on rationale and
   structure rather than step-by-step usage.
-- Link new design documents from `docs/design/overview.md` and new user guides
+- Link new design documents from `docs/developer/design/overview.md` and new user guides
   from `docs/index.md`.
 - Prefer repository-relative examples and placeholders over personal URLs,
   accounts, provider keys, or environment names.

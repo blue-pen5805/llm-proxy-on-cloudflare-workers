@@ -2,34 +2,26 @@
 
 ## Deployment checklist
 
-1. Run `npm ci` on a clean checkout.
-2. Create or update the target `config[.<env>].jsonc` outside version control
-   with `npm run secrets -- [--env <env>]`. For a named environment,
-   first declare the matching environment in `wrangler.jsonc`.
-3. Preview settings with `npm run secrets:deploy -- --dry-run [--env <env>]`.
-   Values, prefixes, and lengths are redacted; each operation is shown as
-   `[set]` or `[delete]`. The preview also rejects circular virtual-model
-   references and expansions above the bounded attempt limit.
-4. Run `npm run tsc`, `npm run lint`, and `npm test`.
-5. Deploy code with `npm run deploy` (or `npm run deploy -- --env <env>` for a
-   declared Wrangler environment).
-6. Deploy settings with `npm run secrets:deploy -- [--env <env>]`.
-7. Verify `/ping`, then authenticated `/status`, `/v1/models`, and one real
-   request for each critical provider.
+Follow [initial setup](initial-setup.md) for installation and deployment. For
+updates:
 
-The code deployment and secret deployment are separate. A successful Worker
-deployment does not prove that the expected secrets exist in the same Wrangler
-environment.
+1. Edit the target configuration and preview it with
+   `npm run secrets:deploy -- --dry-run [--env <env>]`.
+2. Deploy code with `npm run deploy -- [--env <env>]` and settings with
+   `npm run secrets:deploy -- [--env <env>]` to the same Wrangler environment.
+3. Check `/ping`, `/status`, `/v1/models`, and a real request for each critical
+   provider. Review diagnostic output privately.
+
+Bracketed arguments are optional; declare named environments in
+`wrangler.jsonc`. Code and secret deployments are separate operations.
 
 ## Safe configuration changes
 
 - Keep `config.jsonc`, environment-specific variants, `.dev.vars*`, and
   `.secrets-temp*.json` out of version control.
 - Use distinct `PROXY_API_KEY` values per environment.
-- Set a setting to `null` and deploy secrets to delete it from the Worker.
-  Omitting a setting preserves its current deployed value.
-- Keep every serialized setting within the enforced 5,120-byte limit.
-  The deployment command validates this before contacting Wrangler.
+- Follow [configuration update rules](configuration.md#configuration-files) for
+  deletions, dependent settings, and size limits.
 - Replace a provider key in the configuration, deploy secrets, verify it, and
   only then revoke the old key at the provider.
 - When changing an array's order with round-robin enabled, expect each
@@ -55,7 +47,7 @@ event; the final HTTP result or final error emits `virtual_model.completed`.
 does not measure completion of a streamed response body. Logs exclude query
 strings, headers, payloads, stack traces, and credential material, but access
 and retention must still be restricted. The full event and disclosure contract
-is in [Monitoring and diagnostics](design/features/monitoring_diagnostics.md#platform-observability).
+is in [Monitoring and diagnostics](../developer/design/features/monitoring_diagnostics.md#platform-observability).
 
 Filter on `provider.key.selected` to audit credential-slot usage. `key_index`
 is zero based, `provider_request_id` correlates one-to-one requests with their
@@ -69,6 +61,11 @@ Use health endpoints deliberately:
   concurrently. Large credential sets can exhaust the per-request subrequest
   budget, consume provider quota, and expose limited configuration metadata.
 - `/v1/models` is best-effort. Check Worker logs when a provider is absent.
+
+Workers Free permits 50 subrequests per invocation. Large model or credential
+sets can exceed this budget; check the [Workers subrequest
+limits](https://developers.cloudflare.com/workers/platform/limits/#subrequests)
+when sizing a deployment.
 
 ## Common failures
 
@@ -105,7 +102,7 @@ The dynamic Gateway prefix requires `CLOUDFLARE_ACCOUNT_ID`. Unprefixed
 Gateway routing uses `AI_GATEWAY_NAME` when set, and otherwise `default` when
 `ALWAYS_USE_AI_GATEWAY=true` or an `/ai` REST path is requested. Confirm that
 the provider is in the supported AI Gateway set and that the path follows the
-patterns in [HTTP API and routing](api.md).
+patterns in [HTTP API and routing](api/overview.md).
 When the account ID is absent, the proxy returns HTTP 400 with an explicit
 configuration message before provider routing.
 
@@ -141,29 +138,12 @@ providers blindly.
 - Workers AI model IDs must begin with `@cf/`; third-party model IDs use
   `<provider>/<model>`.
 
-### Local development does not start
-
-`npm run dev` reads `config.develop.jsonc`, generates `.dev.vars.develop`, starts
-Wrangler, and removes the generated file on exit. Confirm that the source file
-exists and contains valid JSONC. If a previous process was terminated abruptly,
-delete the generated `.dev.vars.develop` file and retry; do not commit it.
-Top-level `null` values are omitted from the local dotenv file; they remain
-deployment deletion instructions only.
-
 ### Key selection behaves unexpectedly
 
-- Indices are zero-based.
-- A single index wraps modulo the number of configured keys.
-- Ranges choose randomly and are inclusive.
-- With no explicit prefix, multiple keys use striped per-isolate round-robin.
-- `/v1/models` uses the first key unless a prefix is present. HTTP 429 retries
-  sequential later keys, up to three attempts; other statuses and explicit
-  selections do not rotate.
-- A `provider:profile` selector limits rotation, cooldowns, and explicit key
-  indices to that profile; omitting the suffix selects `default`.
-- Only chat, Responses, Messages, models, and registered provider pass-through
-  accept the prefix; health, Gateway REST, compatibility pass-through,
-  Universal, and unknown routes return HTTP 400.
+Check the selected `provider:profile` and the zero-based index within that pool.
+See [explicit selection](api/overview.md#explicit-key-selection) for index/range rules
+and supported routes, and [key rotation](../developer/design/features/key_rotation.md) for
+automatic selection, cooldowns, and model-discovery retries.
 
 ## Rollback
 

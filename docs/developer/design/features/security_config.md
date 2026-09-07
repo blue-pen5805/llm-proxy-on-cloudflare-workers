@@ -66,19 +66,16 @@ order, repetition, and empty fields. Path traversal is rejected before
 forwarding, including when the path carries a query string. `True-Client-IP` is
 included in the client network metadata that is removed.
 
-Connection-specific fields include `Proxy-Connection` and every header named
-by a case-insensitive `Connection` option, as required by
-[RFC 9110, section 7.6.1](https://www.rfc-editor.org/rfc/rfc9110.html#section-7.6.1).
-Those fields are removed before retaining Gateway tuning controls or injecting
-operator credentials. Universal Endpoint step paths share pass-through's
-percent-encoded dot-segment validation, including when a path carries a query. The
-query in each JSON `step.endpoint` is provider-native payload and is preserved,
-including credential-like parameter names. This is an allowed part of the
-Universal Endpoint contract, not a proxy authentication or sanitization failure:
-step queries cannot authenticate the incoming request, and the proxy never
-copies its authentication headers or configured credentials into them. Any
-values supplied there are caller-owned data intentionally sent to Gateway;
-upstream interpretation remains the caller's responsibility.
+Connection-specific fields include `Proxy-Connection` and every header named by
+a case-insensitive `Connection` option, as required by [RFC 9110, section
+7.6.1](https://www.rfc-editor.org/rfc/rfc9110.html#section-7.6.1). Those fields
+are removed before retaining Gateway tuning controls or injecting operator
+credentials. Universal Endpoint step paths share pass-through's percent-encoded
+dot-segment validation, including when a path carries a query. Queries inside
+JSON `step.endpoint` fields are provider payload, so they are preserved
+independently of incoming URL sanitization. They cannot authenticate the proxy,
+and the Worker never copies configured credentials into them. See the [Universal
+Endpoint contract](../../../user/api/ai-gateway.md#universal-endpoint).
 
 Every outbound provider, AI Gateway, model-list, and connectivity-check request
 uses manual redirect handling. The Worker never follows an upstream redirect,
@@ -98,8 +95,8 @@ providers.
 Local JSONC files are operator inputs; the Worker receives their non-empty
 top-level values as environment bindings. Arrays and objects are serialized as
 JSON. Other values remain exact text so credential-like strings are never
-coerced. A bare `null` requests deletion, while missing and empty values leave
-deployed state unchanged. Each serialized secret is limited to 5,120 bytes.
+coerced. Deployment update semantics and serialized-size limits are defined in
+[configuration files](../../../user/configuration.md#configuration-files).
 
 The editor and deployment helper use a JSONC parser, validate against the
 tracked schema, and preserve comments when editing. Credential input and stored

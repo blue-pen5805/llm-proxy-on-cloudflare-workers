@@ -50,15 +50,11 @@ Wrangler から Cloudflare アカウントを取得することもできます�
 }
 ```
 
-実値を含む設定ファイルは Git の対象外です。コミット前に `git status --short` で確認して
-ください。
+実値を含む設定ファイルは非公開で保管してください。
 
-## 4. デプロイ前の確認
+## 4. デプロイする設定の確認
 
 ```bash
-npm run tsc
-npm run lint
-npm test
 npm run secrets:deploy -- --dry-run
 ```
 
@@ -93,10 +89,10 @@ curl https://your-worker.example/v1/models \
 含まれるため、出力は非公開で確認してください。`/v1/models` はベストエフォートであり、
 タイムアウトや一覧取得非対応のプロバイダーは省略されます。
 
-Wrangler 既定の `*.workers.dev` URL では Cache API が使われません。
-`MODELS_CACHE_TTL_SECONDS` を有効にするにはカスタムドメインを追加してください。
+モデル一覧のキャッシュを使う場合は、
+[Cache API の利用条件](api/openai-compatible.md#models) を確認してください。
 
-次は英語版の [HTTP API and routing](api.md) を参照してください。名前付き環境、
+次は英語版の [HTTP API and routing](api/overview.md) を参照してください。名前付き環境、
 キーローテーション、AI Gateway、カスタムエンドポイントは
 [Configuration reference](configuration.md) と
 [Operations and troubleshooting](operations.md) に記載しています。

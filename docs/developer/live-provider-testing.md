@@ -1,7 +1,7 @@
 # Live Provider Chat Completions Testing
 
-The live test script verifies real provider credentials and model access through
-a Wrangler development server running on the local machine. It is intentionally
+This contributor guide tests provider integration through a local Wrangler
+development server with real credentials and models. It is intentionally
 separate from `npm run test`: every configured provider makes billable network
 requests.
 
@@ -36,9 +36,7 @@ Gateway check. Restart the local Worker after changing its configuration.
 Provider pass-through and the `/chat/completions` alias are covered by automated
 tests rather than additional live requests.
 
-All routes use `/key/0` by default. Besides making the credential choice
-repeatable, explicit key selection disables the proxy's credential fallback
-to additional credentials, keeping each check to one upstream attempt. Set
+All routes use `/key/0` by default to disable credential fallback. Set
 `LLM_PROXY_KEY_SELECTION` to another supported index or range when testing a
 different configured slot.
 
@@ -64,9 +62,8 @@ provider, without the proxy's provider prefix:
 }
 ```
 
-The local model file is ignored because deployment and custom model names can
-be operationally sensitive. It must not contain API keys. Replicate is absent from the example because this proxy does not
-implement Chat Completions for it.
+The ignored model file must not contain API keys. Replicate is absent because
+the proxy does not implement Chat Completions for it.
 
 Custom OpenAI-compatible endpoints use the same model-only selection:
 
@@ -80,19 +77,8 @@ paths come from the Worker's provider configuration.
 
 ## Run the live checks
 
-Put the real provider credentials and `PROXY_API_KEY` in the ignored
-`config.develop.jsonc`. The first terminal starts the local Worker and loads that
-configuration through the repository's temporary `.dev.vars.develop` flow:
-
-If the file does not exist yet, initialize it before adding real values:
-
-```bash
-cp config.example.jsonc config.develop.jsonc
-```
-
-```bash
-npm run dev
-```
+Follow [local setup](development.md#local-setup) to configure and start the
+Worker with provider credentials and `PROXY_API_KEY` in `config.develop.jsonc`.
 
 Leave the development server running. In a second terminal, run:
 
@@ -126,9 +112,8 @@ To select a non-default AI Gateway, set its name before running:
 export LLM_PROXY_GATEWAY_NAME="production"
 ```
 
-Pass one or more provider names after `--` for a smaller run. The explicit
-`--provider` option remains available when preferred. Use `--config` for another
-model file:
+Select providers with positional names or repeated `--provider` options; use
+`--config` for another model file:
 
 ```bash
 npm run test:live-chat -- openai

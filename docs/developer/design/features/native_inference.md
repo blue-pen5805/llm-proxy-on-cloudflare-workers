@@ -6,9 +6,7 @@ Public inference routes prefer the corresponding upstream API when the provider
 declares it for the selected model. Provider-hosted compatibility APIs count as
 a match: `/v1/chat/completions` and `/chat/completions` select the provider's
 Chat Completions operation even when it also has a proprietary API. Conversion
-defaults are considered only when no matching operation exists.
-OpenAI Chat requests use Chat Completions, OpenAI Responses requests
-use Responses, and Anthropic Messages requests use Messages. Automatic AI
+defaults are considered only when no matching operation exists. Automatic AI
 Gateway routing uses provider endpoints, not Unified `/compat/chat/completions`.
 Explicit provider pass-through, `/compat/chat/completions`, and `/ai/...` routes
 retain their own contracts.
@@ -71,16 +69,14 @@ that API. Google SDK models use GenerateContent conversion. This selection
 applies to all public protocols in direct and Gateway modes; see
 [OpenCode routing](opencode.md).
 
-Responses paths are declared per provider. OpenRouter
-Messages uses `/v1/messages` relative to `https://openrouter.ai/api`.
-Ollama's native Responses route uses its Custom Provider in strict Gateway
-mode. Workers AI Responses uses account REST `/ai/v1/responses`, requires an
-`@cf/` model ID and a Gateway context, and remains subject to the model's
-Responses support. Without a selected Gateway it returns HTTP 503 before a
-fetch, because this account REST transport requires `cf-aig-gateway-id`. Workers
-AI has no native Messages capability. Other adapters use conversion unless
-they explicitly declare a matching endpoint; registering a provider does not
-imply support for every API.
+Responses paths are declared per provider. OpenRouter Messages uses
+`/v1/messages` relative to `https://openrouter.ai/api`. Ollama's native
+Responses route uses its Custom Provider in strict Gateway mode. Workers AI
+Responses uses account REST `/ai/v1/responses`, requires an `@cf/` model ID and
+a Gateway context, and remains subject to the model's Responses support. Without
+a selected Gateway it returns HTTP 503 before a fetch, because this account REST
+transport requires `cf-aig-gateway-id`. Workers AI has no native Messages
+capability. Other adapters use the conversion defaults below.
 
 Anthropic Chat uses its OpenAI SDK compatibility endpoint `/v1/chat/completions`
 with Bearer authentication. Anthropic Messages uses `/v1/messages` with

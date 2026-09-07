@@ -21,14 +21,11 @@ credentials. A custom step `endpoint` is normalized to a relative path, limited
 to 2,048 characters, and cannot contain a URL scheme, backslash, control
 character, or `.` or `..` path segment.
 
-A query string inside a step's `endpoint` is forwarded unchanged, including
-credential-like names such as `api_key` or `token`. These are caller-supplied
-provider parameters in the JSON payload, not proxy authentication. Their
-preservation is permitted and does not constitute a credential-stripping
-failure. Incoming request URL credentials are still removed, and authentication
-requires a supported header. The proxy never inserts its authentication key or
-configured provider keys into step URLs. Callers own the values they place in
-these parameters and their upstream meaning.
+A step's `endpoint` query is provider-native payload and passes through
+unchanged, including credential-like names. These values cannot authenticate the
+proxy; the caller owns their upstream meaning. The proxy never inserts
+configured credentials into step URLs. Incoming URL credentials follow the
+[authentication contract](../configuration.md#authentication).
 
 ## REST API
 
@@ -65,11 +62,6 @@ Client `cf-aig-authorization`, `cf-aig-byok-alias`, and `cf-aig-cache-key` are
 always removed. A configured `CF_AIG_TOKEN`, REST API authorization, and the
 route-selected Gateway ID are applied by the Worker after client header
 processing and therefore take precedence where applicable.
-
-Automatic `/v1/chat/completions` routing selects a provider-native inference
-endpoint, including the account REST endpoint for Workers AI. The selection
-and supported conversions are defined in
-[Native inference](../design/features/native_inference.md).
 
 ## Compatibility pass-through
 

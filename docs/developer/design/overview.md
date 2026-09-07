@@ -8,7 +8,7 @@ Messages, model aggregation, provider-specific pass-through, and Cloudflare AI
 Gateway routes.
 
 User-facing commands and endpoint examples live in the
-[documentation index](../index.md). Architecture and scope follow the
+[documentation index](../../index.md). Architecture and scope follow the
 [project principles](../project-principles.md).
 
 ## Request flow
@@ -35,28 +35,9 @@ flowchart LR
   AIG --> Upstream
 ```
 
-The Worker stores the active `Env` in request-scoped `AsyncLocalStorage` so
-configuration helpers do not depend on mutable module-level request state.
-Provider registries and immutable configuration-derived values can be reused
-across requests; their methods read the active request environment. Multi-key
-rotation and cooldowns retain best-effort per-isolate state, while optional
-model and status caching uses the Cache API. These mechanisms provide no durable
-coordination.
-Provider and proxy credentials are kept separate when requests are
-forwarded.
-
-## Design boundaries
-
-- The proxy is an adapter and router, not a complete normalization layer for
-  every provider feature.
-- Pass-through routes deliberately preserve provider-specific contracts.
-- Model aggregation and status checks are best-effort diagnostics, not
-  transactional health guarantees.
-- AI Gateway supplies gateway concerns such as analytics and caching; this
-  Worker constructs and authenticates Gateway requests but does not reproduce
-  those features.
-- JSONC files are local inputs. Production configuration reaches the Worker as
-  secret environment bindings.
+State and credential isolation are defined in [request
+processing](features/request-processing.md#request-scoped-environment-and-failures)
+and [security](features/security_config.md).
 
 ## Detailed design
 
@@ -68,7 +49,6 @@ forwarded.
 ### Provider behavior and reliability
 
 - [Native inference endpoint selection](features/native_inference.md)
-
 - [OpenCode providers and live protocol selection](features/opencode.md)
 - [Provider abstraction](features/provider_abstraction.md)
 - [Key rotation](features/key_rotation.md)

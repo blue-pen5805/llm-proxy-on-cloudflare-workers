@@ -53,15 +53,11 @@ For a named environment, run
 }
 ```
 
-Both files containing real values are ignored by Git. Confirm with
-`git status --short` before committing any work.
+Keep configuration files containing credentials private.
 
-## 4. Verify before deployment
+## 4. Preview configuration
 
 ```bash
-npm run tsc
-npm run lint
-npm test
 npm run secrets:deploy -- --dry-run
 ```
 
@@ -98,9 +94,9 @@ curl https://your-worker.example/v1/models \
 credential slot counts and configuration metadata. `/v1/models` is best-effort and
 may omit a provider that times out or does not support model listing.
 
-Wrangler's default `*.workers.dev` URL does not use the Cache API. Add a custom
-domain for `MODELS_CACHE_TTL_SECONDS` to take effect.
+For model-list caching, check the [Cache API deployment
+requirements](api/openai-compatible.md#models).
 
-Next, read [HTTP API and routing](api.md). For named environments, key rotation,
+Next, read [HTTP API and routing](api/overview.md). For named environments, key rotation,
 AI Gateway, and custom endpoints, continue with [Configuration](configuration.md)
 and [Operations](operations.md).

@@ -28,7 +28,7 @@ provider, or a missing default returns HTTP 400.
 A model that does not name a real provider can select an operator-defined
 virtual model. Its candidates run in order under their normal provider routing
 and key policies. See [Configuration](../configuration.md#virtual-models) for
-the declaration format and [Virtual models design](../design/features/virtual_models.md)
+the declaration format and [Virtual models design](../../developer/design/features/virtual_models.md)
 for retry semantics.
 
 Adapters retain only parameters supported by each upstream API. Translation is
@@ -42,7 +42,7 @@ endpoint. Anthropic's compatibility API uses Bearer authentication and preserves
 Chat payloads; its [upstream compatibility limitations](https://platform.claude.com/docs/en/cli-sdks-libraries/libraries/openai-sdk)
 apply. Vertex Google models and Bedrock OpenAI/Anthropic models also use matching Chat APIs; other Bedrock families use Converse.
 Conversion paths have the
-[bounded native conversion contract](../design/features/native_inference.md#conversion-contract).
+[bounded native conversion contract](../../developer/design/features/native_inference.md#conversion-contract).
 A provider with no applicable operation or conversion returns HTTP 400 before
 an upstream request.
 
@@ -51,21 +51,15 @@ a concrete route is selected. It reports routing, credential slot, Gateway,
 request ID, and timing metadata without credential material. Streaming output
 adds one empty-choice metadata chunk before `[DONE]`. The feature defaults to
 `false`; bodies that cannot be safely transformed remain unchanged. See the
-[metadata contract](../design/features/provider_abstraction.md#compatibility-response-metadata).
+[metadata contract](../../developer/design/features/provider_abstraction.md#compatibility-response-metadata).
 
-When AI Gateway is selected, automatic routing uses provider-specific upstream
-APIs: the provider's Chat Completions endpoint when selected, or a conversion
-endpoint such as Vertex Messages/GenerateContent or Bedrock Converse. Vertex and Bedrock can select a different
-protocol by model. These conversions support a defined subset; unsupported
-fields return HTTP 400. Messages conversion requires `max_tokens` or
-`max_completion_tokens`. Gemini and Converse image conversion accepts base64
-data URLs only. See [Native inference](../design/features/native_inference.md)
-for defaults, credentials, and conversion limits.
+For native conversion requirements and Gateway transport, see [Native
+inference](../../developer/design/features/native_inference.md).
 
 OpenCode Zen (`opencode-zen`) and Go (`opencode-go`) resolve their model-specific
 SDK from the public catalog through a shared five-minute Cache API cache. Chat requests may use
 Chat Completions, Responses, Messages, or GenerateContent with the corresponding
-JSON/SSE conversion. See [OpenCode routing](../design/features/opencode.md).
+JSON/SSE conversion. See [OpenCode routing](../../developer/design/features/opencode.md).
 
 ## Responses
 
@@ -88,7 +82,7 @@ supports Responses.
 
 Other providers use the experimental Chat conversion described below. Native
 capability is selected per concrete model, including each virtual-model
-candidate. See [Native inference](../design/features/native_inference.md).
+candidate. See [Native inference](../../developer/design/features/native_inference.md).
 
 Native Responses does not inject `llm_proxy` response metadata. The optional
 metadata setting applies to Chat and converted responses. Gateway metadata and
@@ -148,23 +142,15 @@ service-tier, moderation, prompt-cache, safety-identifier, log-probability, and
 parallel-tool fields retain their values. Prompt-cache breakpoints on supported
 text, image, and file parts are retained.
 
-Responses `stream_options` are merged with the forced Chat `include_usage`
-option. An `include` entry for `message.output_text.logprobs` enables Chat
-`logprobs`; other inclusion entries remain ignored. If filtering unsupported
-tools leaves an `allowed_tools` choice empty, both the empty tool list and
-choice are omitted. Other members of the `reasoning` object, including
+Streaming forces Chat `stream_options.include_usage` to obtain final usage when
+supported by the provider. An `include` entry for `message.output_text.logprobs`
+enables Chat `logprobs`; other inclusion entries remain ignored. If filtering
+unsupported tools leaves an `allowed_tools` choice empty, both the empty tool
+list and choice are omitted. Other members of the `reasoning` object, including
 `summary` and `context`, are ignored because Chat Completions has no equivalent.
-This lets clients send future reasoning options without breaking the bounded
-conversion; the response still reports only the behavior that actually ran.
-Streaming requests force `stream_options.include_usage` so the final Responses
-event can carry usage when the selected provider supports it.
 
-The converted object and sanitized headers are passed directly to the Chat
-Completions handler without serializing an intermediate request or parsing the
-converted JSON a second time. Consequently, Responses accepts the same real
-providers, named credential profiles, `default`, virtual models, explicit key
-selection, and Gateway selection as Chat Completions. Each provider filters
-the resulting Chat fields according to its declared capability.
+Each provider filters the converted Chat fields according to its declared
+capability.
 
 ### Response conversion
 
@@ -184,7 +170,7 @@ event's `response`, preserving the concrete provider, model, credential slot,
 Gateway route, request ID, and timing metadata without adding a Chat chunk to
 the client-visible Responses stream.
 
-For `text/event-stream`, a `TransformStream` incrementally converts Chat chunks
+For `text/event-stream`, the proxy incrementally converts Chat chunks
 to typed Responses events. It emits response lifecycle events, message and
 content item creation, `response.output_text.delta`, function-call item
 creation, `response.function_call_arguments.delta`, matching done events, and
@@ -237,13 +223,6 @@ stays with the client, matching Chat Completions semantics. Callers that require
 ignored state, built-in-tool, or provider-native semantics must use a native
 Responses endpoint or a separate stateful service.
 
-### References
-
-- [OpenAI Responses API](https://developers.openai.com/api/reference/resources/responses/methods/create)
-- [Migrating to Responses](https://developers.openai.com/api/docs/guides/migrate-to-responses)
-- [Responses streaming events](https://developers.openai.com/api/reference/resources/responses/streaming-events)
-- [Cloudflare Workers streaming best practices](https://developers.cloudflare.com/workers/best-practices/workers-best-practices/#stream-request-and-response-bodies)
-
 ## Models
 
 `GET /v1/models` and its `/models` alias query configured providers and prefix
@@ -282,10 +261,12 @@ the cache entirely, and bypassed responses carry no cache header.
 The cache is per Cloudflare datacenter, so a configuration change can serve a
 stale list from an already-primed datacenter for up to the TTL. Cache API
 `open`, `match`, and `put` are optional optimizations: if an operation fails,
-the request continues with an uncached provider fan-out. The cache is
-ineffective on a `*.workers.dev` deployment; use a custom domain to enable it.
-Client-facing model responses always carry `Cache-Control: private, no-store`;
-the public max-age used by the internal Cache API is never exposed.
+the request continues with an uncached provider fan-out. Deployment availability
+follows the [Cloudflare Cache API
+contract](https://developers.cloudflare.com/workers/runtime-apis/cache/): custom
+domains support storage; dashboard/Playground previews and Cloudflare Access do
+not. Client-facing model responses always carry `Cache-Control: private,
+no-store`; the public max-age used by the internal Cache API is never exposed.
 
 Custom endpoints should use a static `models` list when reliable discovery
 matters. Model discovery uses the first provider key by default. If that

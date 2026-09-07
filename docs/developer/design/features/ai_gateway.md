@@ -22,12 +22,9 @@ and any of the following apply: `AI_GATEWAY_NAME` is configured,
 route. The selected Gateway is `AI_GATEWAY_NAME` when present and otherwise
 `default`.
 
-`ALWAYS_USE_AI_GATEWAY=true` enables strict Gateway routing. It requires an
-account ID, selects `AI_GATEWAY_NAME` when present, and otherwise selects the
-Gateway named `default`. The explicit `/g/<gateway>/` prefix overrides that
-selection for one request. Strict mode fails closed rather than
-falling back to a direct provider request. The API token is required by
-schema and Custom Provider synchronization, not by every inference request.
+Strict mode (`ALWAYS_USE_AI_GATEWAY=true`) forbids direct provider fallback. The
+API token is required by schema and Custom Provider synchronization, not by
+every inference request.
 
 If `CF_AIG_TOKEN` exists, requests add
 `cf-aig-authorization: Bearer <token>`. The token is never returned verbatim by
@@ -55,14 +52,10 @@ Gateway. `/g/<gateway>/ai/...` selects an explicit Gateway; otherwise
 `AI_GATEWAY_NAME` or the fallback ID `default` is used. No other `/ai` path is
 forwarded. Gateway/account path segments are validated and URL-encoded.
 
-Client-supplied `cf-aig-*` control headers are retained on AI Gateway routes
-because request-level Gateway settings intentionally take precedence over
-Gateway defaults. This allows callers to control logging, caching behavior,
-retries, cost, and metadata per request. Operator-policy headers are exceptions:
-`cf-aig-authorization`, `cf-aig-byok-alias`, and `cf-aig-cache-key` are always
-removed from client input. Gateway authentication, stored credential selection,
-and cache partitioning therefore remain operator-controlled. The Worker applies
-REST authorization and the route-selected Gateway ID after sanitization.
+Header sanitization preserves client Gateway tuning while reserving
+authentication, BYOK selection, and cache partitioning to the operator; see
+[credential isolation](security_config.md#credential-isolation). REST
+authorization and the selected Gateway ID are applied after sanitization.
 
 ### Provider endpoint
 
@@ -175,13 +168,9 @@ This follows the [Workers ReadableStream cancellation API](https://developers.cl
 
 ### Converted compatibility APIs
 
-The public Responses and Messages routes use the matching upstream protocol
-when the adapter declares it. Native payloads and responses retain their
-protocol fields and SSE events. Otherwise the request converts through Chat
-Completions and follows the provider's conversion default or strict Custom
-Provider path, then converts the successful response back. Protocol selection
-is repeated for each concrete virtual-model candidate. See
-[Native inference](native_inference.md) for capability declarations and limits.
+Responses and Messages share the selected provider transport and credential
+attempt loop. [Native inference](native_inference.md) defines when their lazy
+Chat conversion runs for each concrete virtual-model candidate.
 
 ### Universal Endpoint and compatibility pass-through
 
@@ -203,21 +192,13 @@ alongside automatic provider-native inference.
 `/compat/chat/completions` after stripping proxy credentials. No other path under
 `/compat` is exposed.
 
-Gateway-bound inference requests add bounded `cf-aig-metadata` tags for the
-resolved provider, requested concrete model when known, the client-requested
-virtual model when one was resolved, the public proxy endpoint, and the
-selected provider credential profile and key slot. The virtual-model tag
-retains the outer client-requested name when resolution passes through nested
-virtual models. `llm_proxy_credentials` is a scalar string in
-`<credential-profile>:<provider-key-index>` form; the index is `null` when AI
-Gateway BYOK supplies the credential. Universal Endpoint requests add the
-endpoint tag but omit credentials because their steps can select different
-providers, profiles, and key slots. Proxy fields are considered in
-virtual-model, endpoint, provider, concrete-model, and credentials order.
-Existing client metadata wins on collisions. Invalid client JSON is preserved,
-and proxy tags fill only unused entries within Cloudflare's five-entry metadata
-limit. No credential value, authenticated proxy-key slot, or derived
-fingerprint is included. See [Cloudflare custom metadata](https://developers.cloudflare.com/ai-gateway/observability/custom-metadata/).
+Gateway metadata is added after concrete routing and credential selection.
+Nested virtual models retain the outer requested name. Client entries take
+precedence, invalid JSON passes through, and additions stop at Cloudflare's
+five-entry limit. The [API metadata
+contract](../../../user/api/ai-gateway.md#request-metadata) defines field names,
+priority, and the Universal Endpoint credential omission. See [Cloudflare custom
+metadata](https://developers.cloudflare.com/ai-gateway/observability/custom-metadata/).
 
 ## Provider support contract
 
@@ -227,7 +208,11 @@ design documentation, and integration tests define provider support together.
 Operational contracts such as OpenRouter are documented and covered by
 integration tests. Strict routing marks configured custom endpoints explicitly
 so a name that matches a Cloudflare-native provider cannot escape its managed
-Custom Provider route.
+Custom Provider route. Operation-level exceptions and separate inference origins
+are defined in [provider API
+boundaries](native_inference.md#provider-api-boundaries).
+[OpenCode](opencode.md) uses separate Custom Providers; its credential-free
+protocol catalog lookup remains direct in both routing modes.
 
 ## References
 
@@ -238,16 +223,3 @@ Custom Provider route.
 - [AI Gateway provider endpoints](https://developers.cloudflare.com/ai-gateway/providers/)
 - [AI Gateway Custom Providers](https://developers.cloudflare.com/ai-gateway/configuration/custom-providers/)
 - [AI Gateway Custom Provider API](https://developers.cloudflare.com/api/resources/ai_gateway/subresources/custom_providers/)
-
-Native Gateway availability is checked for the selected inference operation.
-Azure Responses and Hugging Face Router operations use direct connections in
-non-strict mode and synchronized Custom Providers in strict mode. Hugging Face
-uses an independent inference origin; its native pass-through integration is
-unchanged. See [provider API boundaries](native_inference.md#provider-api-boundaries).
-
-OpenCode Zen and Go use separate Custom Providers in strict mode, with distinct
-provisional SVG logos supplied during synchronization. Their inference and
-model-list operations use direct connections in non-strict mode. The public
-protocol catalog is fetched without credentials directly from its fixed origin;
-it is metadata lookup rather than inference traffic. See
-[OpenCode providers](opencode.md).

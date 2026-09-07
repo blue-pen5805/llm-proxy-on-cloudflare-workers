@@ -35,8 +35,8 @@ one that cannot resolve the requested model also triggers a fresh lookup.
 Invalid origin responses and failed model resolution are not stored. Cache
 read/write failures emit a content-free warning and allow origin-based
 resolution to continue. There is no stale fallback after an origin failure.
-A selected operation remains request-scoped and is reused for inference and
-its response. Changed SDK declarations become visible on refresh.
+Selected operations remain request-scoped; refreshed SDK declarations affect
+subsequent resolution.
 
 The cache is best-effort, local to a Cloudflare datacenter, and subject to
 platform availability. Cloudflare documents functional storage on custom domains
@@ -71,8 +71,8 @@ A matching public API uses its native operation and preserves JSON/SSE,
 including provider-specific fields. Otherwise the public request converts
 through Chat and the selected SDK's codec. Messages and GenerateContent reuse
 the [native conversion contract](native_inference.md#conversion-contract).
-Messages conversion requires a token limit. A model's SDK declaration alone
-does not assert that another compatibility API is available for that model.
+Messages conversion requires a token limit. Only the catalog-declared API is
+treated as native.
 
 The Chat-to-Responses codec maps ordered system, developer, user, assistant, and
 function-tool history into input items. It supports text, HTTP(S) or base64

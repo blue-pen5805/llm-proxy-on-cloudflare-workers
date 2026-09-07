@@ -2,26 +2,24 @@
 
 The management routes expose liveness, bounded provider credential diagnostics,
 and the configured virtual-model routing graph. They use normal proxy
-authentication and do not accept explicit key selection.
+authentication and do not accept explicit key selection. All support `HEAD` with
+the corresponding `GET` status and headers and no body.
 
 ## Liveness
 
-`GET /ping` returns `Pong`; `HEAD /ping` returns the same status and headers
-without a body. This proves only that the Worker can route a request. It does
-not validate provider configuration or credentials.
+`GET /ping` returns `Pong`. This proves only that the Worker can route a
+request. It does not validate provider configuration or credentials.
 
 ## Status
 
 `GET /status` checks every configured credential against provider model-list
-endpoints concurrently, without an application-level concurrency cap, and
-returns `valid`, `invalid`, or `unknown`. `HEAD /status` returns the same status
-and headers without a body.
+endpoints concurrently, with a five-second timeout per check and no
+application-level concurrency cap, and returns `valid`, `invalid`, or `unknown`.
 
 No key value or suffix is returned, but the response reveals configured
 providers, credential slot counts, default model configuration, and AI Gateway
 identifiers. Keep it authenticated and do not publish its output in support
-tickets without review. The response body uses compact JSON without indentation
-or line breaks.
+tickets without review. The response uses compact JSON.
 
 All proxy-generated health and diagnostic responses carry `Cache-Control:
 no-store`. When `STATUS_CACHE_TTL_SECONDS` is positive, `/status` reuses an
@@ -29,14 +27,15 @@ internal per-datacenter result and reports `HIT` or `MISS` in
 `X-Proxy-Status-Cache`; request `no-cache` refreshes it and `no-store` bypasses
 it.
 
-Timeouts, unsupported model listing, and non-authentication HTTP failures are
-reported as `unknown`. Authentication failures and unexpected fetch errors are
-`invalid`; unexpected fetch errors are also logged.
+Successful HTTP responses are `valid`; HTTP 401/403 and unexpected fetch errors
+are `invalid`. Timeouts, unsupported model listing, and other non-success
+responses are `unknown`. Unexpected fetch errors are logged.
 
 The check count follows the deployed credential count and can exhaust the
-per-request subrequest budget. After authentication, provider and check
-failures remain isolated: unexamined slots stay `unknown`, and providers that
-cannot be described report `available: false` with no key slots.
+per-request subrequest budget. After authentication, provider and check failures
+remain isolated: unexamined slots and subrequest-limit exceptions stay
+`unknown`, and providers that cannot be described report `available: false` with
+no key slots.
 
 ## Virtual models
 
@@ -82,5 +81,4 @@ matching runtime provider precedence.
 An unconfigured deployment returns an empty `data` array. Invalid
 `VIRTUAL_MODELS` configuration fails with the same HTTP 503 as Chat Completions
 and model discovery. The route accepts `/g/<gateway>/virtual-models` without
-changing the response. `HEAD /virtual-models` returns the corresponding status
-and headers without a body.
+changing the response.

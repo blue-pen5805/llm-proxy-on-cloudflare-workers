@@ -1,25 +1,18 @@
 # Project Principles
 
-These principles define the proxy's architecture, scope, and implementation
-constraints.
+Architecture and implementation must satisfy these principles.
 
 ## Minimize Worker CPU time, then complexity
 
-For designs that satisfy the documented behavior and security contracts,
-minimizing Cloudflare Workers CPU time is the first implementation priority.
-Minimize active work across the complete request path: perform only work needed
-by the selected route, avoid repeated parsing, serialization, copying, and
-lookup construction, and preserve request and response streams whenever their
-contents do not need to change. Network wait time is not Worker CPU time and
-must not be confused with local processing cost.
+Among designs satisfying behavior and security contracts, minimize Worker CPU
+time across the full request path. Avoid unnecessary parsing, serialization,
+copying, and lookups; preserve streams that need no transformation. Network wait
+time is separate from CPU cost.
 
-When alternatives have equivalent expected CPU cost, choose the simplest
-implementation: the fewest transformations, states, branches, layers, and
-background tasks needed to express the contract. Additional abstraction,
-caching, or precomputation requires evidence that it reduces CPU across the
-expected workload or is necessary for correctness, security, or a documented
-operational limit. A local optimization is not a net improvement when its
-coordination, invalidation, or common-path overhead costs more than it saves.
+At equivalent CPU cost, choose the fewest transformations, states, branches,
+layers, and background tasks. Abstraction, caching, and precomputation require
+evidence of net CPU savings, including coordination and invalidation overhead,
+or a correctness, security, or documented resource requirement.
 
 Performance work remains measurable and reviewable. Use representative
 hot-path benchmarks and production Workers CPU metrics where available, while
@@ -53,14 +46,10 @@ provider-independent LLM abstraction. Each provider independently declares
 support for pass-through, chat translation, model discovery, and AI Gateway
 routing. One capability does not imply another.
 
-Public inference selects an upstream API matching the requested protocol whenever
-the selected provider and model support it. Chat Completions selects Chat
-Completions, Responses selects Responses, and Messages selects Messages. A
-provider-hosted compatibility API counts as a match. A provider's preferred
-API or a proxy conversion default must not override an available match. Use
-protocol conversion only when no matching operation is declared for that model;
-an upstream error does not cause a switch to another protocol. This rule applies
-to built-in and custom providers, direct connections, and Gateway routing.
+Public inference selects the requested protocol whenever the provider and model
+support it, including provider-hosted compatibility APIs. Convert only when no
+matching operation is declared; upstream errors never trigger a protocol switch.
+This applies to built-in and custom providers, direct and Gateway routing.
 
 Adapters filter known parameters or make the smallest structural conversion
 required by an upstream API. Provider-specific semantics and material
@@ -150,6 +139,3 @@ Provider capabilities, configuration names, route behavior, security
 properties, and limits are explicit contracts. Each capability is verified
 independently, and partial or best-effort behavior is documented without
 inferring parity from a shared adapter.
-
-Designs minimize transformations and state, assign policy to the appropriate
-platform layer, and are verifiable at the proxy boundary.

@@ -2,15 +2,9 @@
 
 ## Health surfaces
 
-The Worker exposes two authenticated health routes:
-
-- `/ping` returns `Pong` without provider subrequests. It is a liveness check
-  for routing and Worker execution only.
-- `/status` returns sanitized configuration and runs credential connectivity
-  checks. It is an operator diagnostic, not a low-cost liveness probe.
-
-All three proxy-generated health surfaces (`/ping`, `/status`, and
-`/virtual-models`) use `Cache-Control: no-store`.
+Use `/ping` for liveness and `/status` for provider credential diagnostics.
+Health and virtual-model inspection responses disable HTTP caching. Public
+response contracts are in the [management API](../../../user/api/proxy-management.md).
 
 ## Status algorithm
 
@@ -40,16 +34,8 @@ Gateway is active. If its adapter also declares direct model listing unsupported
 credential remains `unknown`; diagnostics do not attempt a known-unsupported
 Gateway route.
 
-Responses are classified as follows:
-
-| Result                               | Status                  |
-| ------------------------------------ | ----------------------- |
-| Successful HTTP response             | `valid`                 |
-| HTTP 401 or 403                      | `invalid`               |
-| Other non-success HTTP response      | `unknown`               |
-| Unsupported model listing or timeout | `unknown`               |
-| Unexpected exception                 | `invalid` after logging |
-| Check that could not be started      | `unknown`               |
+Status classification follows the [management
+API](../../../user/api/proxy-management.md#status).
 
 This is connectivity evidence, not proof that every model, quota, permission,
 or API operation works. Conversely, a transient failure can make a usable key
@@ -64,10 +50,8 @@ strict AI Gateway mode, development mode, API-key cooldown duration, provider
 names, key counts, and whether OpenAI-compatible response metadata is enabled are
 also exposed.
 
-The route passes through normal authentication. Authentication is disabled only
-for a locally running Worker with `DEV` set, so a deployed `/status` is always
-authenticated. Operators should not expose it publicly or use its output as an
-unaudited monitoring payload.
+The [authentication boundary](security_config.md#client-authentication) applies
+to diagnostics. Their output is operator metadata and requires private handling.
 
 ## Platform observability
 

@@ -11,8 +11,8 @@ curl https://your-worker.example/openai/responses \
   --data '{"model":"gpt-4o-mini","input":"Hello"}'
 ```
 
-Routes are the keys registered in `src/providers.ts`; configured custom
-endpoint names are added dynamically. Append `:<profile>` to a provider name to
+Use a [configured provider route](../configuration.md#provider-credentials) or
+a custom endpoint name. Append `:<profile>` to a provider name to
 select a named credential pool. Provider-specific request and response formats
 remain the caller's responsibility.
 
@@ -49,7 +49,7 @@ partitioning remain operator-controlled.
 In strict Gateway mode, pass-through paths for a managed Custom Provider retain
 the configured upstream path semantics. Direct pass-through keeps the
 configured Base URL unchanged. See
-[Custom Provider path behavior](../design/features/ai_gateway.md#custom-provider-path-behavior).
+[Custom Provider path behavior](../../developer/design/features/ai_gateway.md#custom-provider-path-behavior).
 
 For cloud-platform pass-through, direct routes use the upstream provider path.
 Bedrock paths beginning with `/v1` are automatically prefixed with
@@ -59,9 +59,8 @@ Gateway's `<resource>/<deployment>/...` form. Vertex pass-through is available
 only with AI Gateway, and its provider-native path already matches the Gateway
 suffix.
 
-For OpenCode, use `/opencode-zen/<path>` or `/opencode-go/<path>`. Their base
-URLs already include `/zen/v1` and `/zen/go/v1`: for example,
-`/opencode-zen/messages` reaches `https://opencode.ai/zen/v1/messages`.
-Explicit pass-through paths do not trigger model-catalog lookup or conversion.
-Use the public inference routes with provider-qualified model IDs for
-[automatic protocol selection](../design/features/opencode.md).
+OpenCode base URLs include `/zen/v1` and `/zen/go/v1`; for example,
+`/opencode-zen/messages` reaches `https://opencode.ai/zen/v1/messages`. Explicit
+pass-through paths do not trigger model-catalog lookup or conversion. Use the
+public inference routes with provider-qualified model IDs for [automatic
+protocol selection](../../developer/design/features/opencode.md).

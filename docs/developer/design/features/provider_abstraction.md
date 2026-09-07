@@ -8,24 +8,11 @@ from a `ProviderDefinition`; `defineProvider` provides the constructor interface
 used by the registry. Inference and model discovery are explicit operations in
 `endpoints`, not methods inherited from a generic Chat implementation.
 
-Each inference operation owns request construction and its optional response
-transformation. `chatCompletionsEndpoint(path, options)` filters declared Chat
-parameters; `jsonEndpoint(pathOrPrepare, options)` preserves a native JSON
-payload or applies a provider-specific envelope. `convertedChatEndpoint(codec)`
-pairs Chat-to-provider preparation with the reverse JSON/SSE conversion.
-These operations share serialization and authentication, while retaining native
-Gateway path differences such as Azure deployment routing.
-
-`resolveInference(model, protocol, signal)` asynchronously selects one operation
-per concrete candidate. A definition can supply a request-scoped resolver for
-a live protocol catalog; [OpenCode](opencode.md) uses this hook.
-An explicit operation matching the requested public protocol takes priority,
-including a provider-hosted compatibility API. The provider's proprietary API
-and conversion fallback do not override a match. Without a match it selects the declared Chat
-fallback or Chat endpoint. Selection happens before request conversion; every
-credential attempt and the resulting response use that same operation. Provider
-hooks receive the selected credential-profile view as `this`. See
-[Native inference](native_inference.md) for resolution and transport details.
+Inference operations own request construction and optional response conversion.
+[Native inference](native_inference.md#boundary-and-selection) defines operation
+constructors, resolution precedence, and transport hooks. Selection happens once
+per concrete candidate and is reused across credential attempts. Provider hooks
+receive the selected credential-profile view as `this`.
 
 The `models` operation declares its path, optional prerequisite validation,
 response conversion, static list, and Gateway credential/capability settings.
@@ -56,6 +43,15 @@ the operation declarations. Their configuration defaults remain
 declare the corresponding native JSON operations. Absent native paths use the
 shared Chat conversion fallback. Custom operations share Bearer authentication
 and credential profiles; a path declaration does not change the auth scheme.
+
+Inference operations can independently disable native Gateway routing with
+`supportsAiGateway: false`, using direct connections in non-strict mode and
+Custom Providers in strict mode. An operation's optional `upstream` supplies a
+separate inference origin and internal Custom Provider name; it leaves the
+provider's pass-through origin intact. The deployment synchronizer registers
+these origins once across protocols and credential profiles. Operations with a
+separate origin do not supply a provider-relative Universal Endpoint default.
+See [Native inference boundaries](native_inference.md#provider-api-boundaries).
 
 ## Provider registry
 
@@ -102,12 +98,8 @@ then fail before any upstream request is attempted. Vertex AI uses this mode;
 its service-account JSON is converted to the Gateway credential header instead
 of being treated as a short-lived OAuth access token.
 
-Registration does not imply complete compatibility. Providers declare three
-capabilities independently:
-
-- OpenAI-compatible chat translation;
-- model-list translation;
-- provider-specific pass-through.
+Inference protocols, model discovery, pass-through, and Gateway support are
+independent capabilities.
 
 A client selector that does not resolve to a registered provider or credential
 profile is a request error and returns HTTP 400 on compatibility routes. A
@@ -141,7 +133,7 @@ authentication and response formats already follow the OpenAI contract.
 Validated `CUSTOM_OPENAI_ENDPOINTS` entries join the same configuration-specific
 registry as built-in adapters. Invalid configuration prevents registry creation
 and produces a non-disclosing HTTP 503 after authentication. The complete input
-schema is in [Configuration](../../configuration.md#custom-openai-compatible-endpoints).
+schema is in [Configuration](../../../user/configuration.md#custom-openai-compatible-endpoints).
 
 A registered endpoint supports pass-through at `/<name>/<path>`, chat through a
 `<name>/<model>` selector, model aggregation through a static list or configured
@@ -213,9 +205,6 @@ Chat parameters are not removed merely because the proxy has not classified
 them yet. Provider-specific known extensions such as Cerebras `suffix` remain
 explicitly declared.
 
-The metadata stage is disabled by default for strict client compatibility. Its
-complete contract follows below.
-
 The incoming abort signal is attached to the provider or Gateway subrequest so
 client cancellation can stop avoidable work. The Worker enables the
 `enable_request_signal` compatibility flag.
@@ -286,38 +275,25 @@ provider's Chat conversion capability. Message and nested system blocks retain
 their order within the request byte limit; array length does not become a
 JavaScript function argument count.
 
-On conversion paths, successful JSON and SSE responses are converted back to the selected public
-protocol. Both streaming converters share the bounded Chat Completions SSE
-decoder and implement only their protocol-specific state and event output.
-Responses separately bounds cumulative logprobs to 4 MiB of serialized converted
-batches, counting both the text-event and output-item representations, including
-byte arrays and alternative tokens. Empty logprob batches consume no budget.
-Exceeding this budget emits a terminal error and cancels the upstream stream.
-Upstream errors pass through. The complete mappings, limits, and explicit
-exclusions live in the [OpenAI-compatible API](../../api/openai-compatible.md#responses)
-and [Anthropic-compatible API](../../api/anthropic-compatible.md#messages)
-guides.
+On conversion paths, successful JSON and SSE responses are converted back to the
+selected public protocol. Both streaming converters share the bounded Chat
+Completions SSE decoder and implement only their protocol-specific state and
+event output. Upstream errors pass through. The complete mappings, limits, and
+explicit exclusions live in the [OpenAI-compatible
+API](../../../user/api/openai-compatible.md#responses) and [Anthropic-compatible
+API](../../../user/api/anthropic-compatible.md#messages) guides.
 
 ## Model aggregation flow
 
-Declared model-list operations are considered concurrently. Providers without
-that operation or the required availability return no models. Static lists avoid
-network access; other providers
-receive a model-list request with a 60-second timeout. Automatic discovery
-starts at the first key. HTTP 429 retries sequential later keys, up to three
-attempts or the configured key count, without advancing striped rotation.
-Other failures and explicit key selections do not rotate. Fulfilled results are
-converted to OpenAI model objects and prefixed with their route name. Registry
-enumeration failures, rejected requests, and malformed responses are logged
-and omitted independently. Each provider's retained batch is validated before
-any entries are added: every entry must be an object with a non-empty string ID.
-An invalid batch does not remove models from healthy providers or enter the
-aggregate cache. Exceeding the per-provider count limit marks the response as
-truncated while still allowing models from subsequent providers within the
-aggregate byte limit.
-The optional `provider` query restricts fan-out before requests start and forms
-part of the aggregate cache key. Model retrieval resolves an exact ID from this
-bounded aggregate rather than introducing a separate provider capability.
+The registry selects available model-list operations before concurrent fan-out.
+Static lists avoid network access; fetched results are converted and prefixed
+with their provider selector. Each batch is validated before insertion, so a
+malformed provider cannot invalidate healthy results or enter the cache.
+
+A normalized provider filter limits fan-out and partitions the cache. Exact
+model retrieval reads this aggregate rather than adding a provider capability.
+See the [Models API](../../../user/api/openai-compatible.md#models) for limits, retries,
+partial results, and cache controls.
 
 ## Extension requirements
 
@@ -334,12 +310,3 @@ routing, and AI Gateway behavior independently. See
 - [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/)
 - [Cloudflare AI Gateway providers](https://developers.cloudflare.com/ai-gateway/providers/)
 - [AI Gateway Custom Providers](https://developers.cloudflare.com/ai-gateway/configuration/custom-providers/)
-
-Inference operations can independently disable native Gateway routing with
-`supportsAiGateway: false`, using direct connections in non-strict mode and
-Custom Providers in strict mode. An operation's optional `upstream` supplies a
-separate inference origin and internal Custom Provider name; it leaves the
-provider's pass-through origin intact. The deployment synchronizer registers
-these origins once across protocols and credential profiles. Operations with a
-separate origin do not supply a provider-relative Universal Endpoint default.
-See [Native inference boundaries](native_inference.md#provider-api-boundaries).

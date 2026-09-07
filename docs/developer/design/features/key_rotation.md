@@ -73,14 +73,9 @@ to the final key and chooses randomly from the inclusive range. Open bounds mean
 the first or final key. Explicit selection is request-scoped and does not
 advance the rotation counter.
 
-The prefix is accepted only for OpenAI-compatible chat, Responses,
-Anthropic-compatible Messages, model aggregation, and registered provider
-pass-through. Routes that do not consume a selected
-provider credential reject it with HTTP 400 rather than silently ignoring it.
-
-Callers must not explicitly select keys for a provider with zero keys; modulo
-resolution requires a non-empty key set. Custom endpoints without authentication
-remain usable when no selection prefix is supplied.
+Supported routes and zero-based index/range syntax are defined in [explicit key
+selection](../../../user/api/overview.md#explicit-key-selection). Providers without keys remain
+usable only without a selection prefix.
 
 ## Operational implications
 
