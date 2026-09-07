@@ -97,7 +97,8 @@ semantics, cost, data handling, or failure behavior.
 Production authentication fails closed. Client-facing proxy credentials are
 removed before forwarding, and only credentials required by the selected
 provider or Gateway route are added. Cookies, hop-by-hop headers, client-network
-metadata, and credential-like query parameters do not cross the boundary.
+metadata, and credential-like parameters in incoming request URLs do not cross
+the boundary. Provider-native payload fields follow their explicit route contract.
 
 Configuration files and Worker bindings are operator-controlled inputs. Logs,
 errors, diagnostics, and deployment tooling do not disclose credential values

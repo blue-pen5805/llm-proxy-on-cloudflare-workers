@@ -65,9 +65,6 @@ export class CloudflareAIGateway {
    */
   buildHeaders(additionalHeaders: HeadersInit = {}): HeadersInit {
     const headers = new Headers(additionalHeaders);
-    if (!headers.has("content-type")) {
-      headers.set("content-type", "application/json");
-    }
     if (this.apiKey) {
       headers.set("cf-aig-authorization", `Bearer ${this.apiKey}`);
     }
@@ -86,11 +83,13 @@ export class CloudflareAIGateway {
     data: CloudflareAIGatewayUniversalEndpointData;
     headers?: CloudflareAIGatewayUniversalEndpointHeaders;
   }): [RequestInfo, RequestInit] {
+    const jsonHeaders = new Headers(headers);
+    jsonHeaders.set("content-type", "application/json");
     return [
       this.baseUrl(),
       {
         method: "POST",
-        headers: this.buildHeaders(headers),
+        headers: this.buildHeaders(jsonHeaders),
         body: JSON.stringify(data),
       },
     ];
@@ -264,6 +263,7 @@ export class CloudflareAIGateway {
     return credentials.map((apiKey, attemptIndex) => {
       const perAttemptHeaders = attemptHeaders?.[attemptIndex];
       const newHeaders = new Headers(perAttemptHeaders ?? headers);
+      newHeaders.set("content-type", "application/json");
       // Compatibility Endpoint auth is Authorization: Bearer. When a caller
       // supplies one shared header snapshot, also replace native credential
       // headers so later keys cannot keep the first slot's value.

@@ -45,6 +45,7 @@ export interface Provider {
   ): Promise<Response>;
   baseUrl(): string;
   pathnamePrefix(): string;
+  /** Credential and provider protocol headers; body format belongs to the operation. */
   headers(apiKeyIndex?: number): Promise<HeadersInit>;
   buildHeadersForPath(
     pathname: string,
@@ -248,7 +249,6 @@ export function createProvider(definition: ProviderDefinition = {}): Provider {
       const selectedApiKeyIndex =
         apiKeyIndex !== undefined ? apiKeyIndex % apiKeys.length : 0;
       return {
-        "Content-Type": "application/json",
         Authorization: `Bearer ${apiKeys[selectedApiKeyIndex]}`,
       };
     },

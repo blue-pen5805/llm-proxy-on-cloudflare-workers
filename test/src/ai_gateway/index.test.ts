@@ -93,10 +93,10 @@ describe("CloudflareAIGateway", () => {
       );
     });
 
-    it("should build headers with default content type and authorization", () => {
+    it("adds authorization without inventing a content type", () => {
       const headers = new Headers(gateway.buildHeaders());
 
-      expect(headers.get("content-type")).toBe("application/json");
+      expect(headers.has("content-type")).toBe(false);
       expect(headers.get("cf-aig-authorization")).toBe("Bearer test-key");
     });
 
@@ -108,13 +108,13 @@ describe("CloudflareAIGateway", () => {
         }),
       );
 
-      expect(headers.get("content-type")).toBe("application/json");
+      expect(headers.has("content-type")).toBe(false);
       expect(headers.get("cf-aig-authorization")).toBe("Bearer test-key");
       expect(headers.get("custom-header")).toBe("custom-value");
       expect(headers.get("another-header")).toBe("another-value");
     });
 
-    it("should override default headers with additional headers", () => {
+    it("preserves an explicit content type", () => {
       const headers = new Headers(
         gateway.buildHeaders({
           "Content-Type": "text/plain",
@@ -139,7 +139,7 @@ describe("CloudflareAIGateway", () => {
       const headers = new Headers(
         new CloudflareAIGateway("account", "gateway").buildHeaders(),
       );
-      expect(headers.get("content-type")).toBe("application/json");
+      expect(headers.has("content-type")).toBe(false);
       expect(headers.has("cf-aig-authorization")).toBe(false);
     });
 
@@ -231,9 +231,7 @@ describe("CloudflareAIGateway", () => {
       );
       expect(init.method).toBe("POST");
       expect(init.body).toBe(JSON.stringify({ model: "gpt-4", messages: [] }));
-      expect(new Headers(init.headers).get("content-type")).toBe(
-        "application/json",
-      );
+      expect(new Headers(init.headers).has("content-type")).toBe(false);
       expect(new Headers(init.headers).get("cf-aig-authorization")).toBe(
         "Bearer test-key",
       );
@@ -252,9 +250,7 @@ describe("CloudflareAIGateway", () => {
       );
       expect(init.method).toBe("GET");
       expect(init.body).toBeNull();
-      expect(new Headers(init.headers).get("content-type")).toBe(
-        "application/json",
-      );
+      expect(new Headers(init.headers).has("content-type")).toBe(false);
       expect(new Headers(init.headers).get("cf-aig-authorization")).toBe(
         "Bearer test-key",
       );
@@ -309,9 +305,7 @@ describe("CloudflareAIGateway", () => {
 
       expect(init.body).toBeUndefined();
       expect(init.signal).toBeUndefined();
-      expect(new Headers(init.headers).get("content-type")).toBe(
-        "application/json",
-      );
+      expect(new Headers(init.headers).has("content-type")).toBe(false);
     });
   });
 

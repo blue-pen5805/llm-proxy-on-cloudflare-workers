@@ -40,7 +40,6 @@ export const Anthropic = defineProvider({
       this.credentialProfile,
     );
     return {
-      "Content-Type": "application/json",
       ...(apiKey ? { "x-api-key": apiKey } : {}),
       "anthropic-version": "2023-06-01",
     };

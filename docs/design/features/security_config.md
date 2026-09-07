@@ -57,8 +57,9 @@ cache key is also reserved to prevent cross-caller cache reads or poisoning.
 For valid object-valued `cf-aig-metadata`, the proxy adds bounded routing
 metadata only to unused keys; client values win on collisions, and invalid
 metadata passes through unchanged. The provider adapter then adds the selected
-upstream key. Credential-like query parameters are removed during middleware
-processing using the same case-insensitive name set used for log redaction;
+upstream key. Credential-like query parameters in the incoming request URL are
+removed during middleware processing using the same case-insensitive name set
+used for log redaction;
 this includes API-key variants, `token`, `access_token`, `authorization`,
 `auth`, `password`, and `secret`. Other query parameters retain their encoding,
 order, repetition, and empty fields. Path traversal is rejected before
@@ -70,7 +71,14 @@ by a case-insensitive `Connection` option, as required by
 [RFC 9110, section 7.6.1](https://www.rfc-editor.org/rfc/rfc9110.html#section-7.6.1).
 Those fields are removed before retaining Gateway tuning controls or injecting
 operator credentials. Universal Endpoint step paths share pass-through's
-percent-encoded dot-segment validation, including when a path carries a query.
+percent-encoded dot-segment validation, including when a path carries a query. The
+query in each JSON `step.endpoint` is provider-native payload and is preserved,
+including credential-like parameter names. This is an allowed part of the
+Universal Endpoint contract, not a proxy authentication or sanitization failure:
+step queries cannot authenticate the incoming request, and the proxy never
+copies its authentication headers or configured credentials into them. Any
+values supplied there are caller-owned data intentionally sent to Gateway;
+upstream interpretation remains the caller's responsibility.
 
 Every outbound provider, AI Gateway, model-list, and connectivity-check request
 uses manual redirect handling. The Worker never follows an upstream redirect,

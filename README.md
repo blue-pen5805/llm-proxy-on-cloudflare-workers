@@ -12,7 +12,7 @@ APIs on [Cloudflare Workers](https://developers.cloudflare.com/workers/).
 - OpenAI-compatible `POST /v1/chat/completions` and `GET /v1/models`
 - Experimental `POST /v1/responses`, converted internally through Chat Completions
 - Experimental Anthropic-compatible `POST /v1/messages`, converted through Chat Completions
-- Provider pass-through routes such as `/openai/v1/responses`
+- Provider pass-through routes such as `/openai/responses`
 - Cloudflare AI Gateway provider routes and account-level REST API
 - Multiple provider keys with striped per-isolate round-robin selection
 - Named provider credential profiles selected as `provider:profile`

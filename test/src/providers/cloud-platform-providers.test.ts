@@ -60,7 +60,6 @@ describe("cloud platform providers", () => {
     );
     expect(provider.pathnamePrefix()).toBe("/openai/v1");
     await expect(provider.headers()).resolves.toEqual({
-      "Content-Type": "application/json",
       "api-key": "azure-key",
     });
     await expect(
@@ -70,7 +69,6 @@ describe("cloud platform providers", () => {
       {
         method: "GET",
         headers: new Headers({
-          "Content-Type": "application/json",
           "api-key": "azure-key",
         }),
       },
@@ -108,9 +106,7 @@ describe("cloud platform providers", () => {
     const provider = new AzureOpenAI();
 
     expect(provider.available()).toBe(false);
-    await expect(provider.headers()).resolves.toEqual({
-      "Content-Type": "application/json",
-    });
+    await expect(provider.headers()).resolves.toEqual({});
     expect(provider.aiGatewayPath("/openai/v1/models")).toBe(
       "/openai/v1/models",
     );
@@ -148,7 +144,6 @@ describe("cloud platform providers", () => {
       JSON.parse(values.GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON!),
     );
     await expect(provider.headers()).resolves.toEqual({
-      "Content-Type": "application/json",
       Authorization: `Bearer ${credential}`,
     });
     expect(provider.configurationError()).toBeUndefined();
@@ -278,7 +273,6 @@ describe("cloud platform providers", () => {
     );
     expect(provider.pathnamePrefix()).toBe("/v1");
     await expect(provider.headers()).resolves.toEqual({
-      "Content-Type": "application/json",
       Authorization: "Bearer bedrock-key",
     });
     expect(provider.aiGatewayPath("/v1/models")).toBe(
@@ -309,7 +303,6 @@ describe("cloud platform providers", () => {
       {
         method: "GET",
         headers: new Headers({
-          "Content-Type": "application/json",
           Authorization: "Bearer bedrock-key",
         }),
       },

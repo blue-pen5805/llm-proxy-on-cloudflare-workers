@@ -12,7 +12,7 @@
 - OpenAI 互換の `POST /v1/chat/completions` と `GET /v1/models`
 - 実験的な `POST /v1/responses`（内部で Chat Completions に変換）
 - 実験的な Anthropic 互換 `POST /v1/messages`（内部で Chat Completions に変換）
-- `/openai/v1/responses` などのプロバイダー別パススルールート
+- `/openai/responses` などのプロバイダー別パススルールート
 - Cloudflare AI Gateway のプロバイダールートとアカウントレベル REST API
 - 複数のプロバイダーキーからストライプ方式のアイソレート単位ラウンドロビン選択
 - `provider:profile` で選択できる名前付きプロバイダー認証情報プロファイル

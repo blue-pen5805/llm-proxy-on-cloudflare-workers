@@ -79,7 +79,6 @@ export const WorkersAi = defineProvider({
       this.credentialProfile,
     );
     return {
-      "Content-Type": "application/json",
       ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
     };
   },

@@ -122,10 +122,12 @@ Pass-through usually needs only a base URL and authentication. Chat and model
 listing require format-specific implementation and tests.
 
 Provider and client headers are merged with the Fetch API `Headers` abstraction
-so field names remain case-insensitive. Provider-controlled authentication and
-content-type values replace matching client values instead of producing multiple
-wire values with different casing. Adapters can select authentication headers by
-request path when one provider exposes endpoints with different credential
+so field names remain case-insensitive. Provider-controlled authentication
+replaces matching client values. Credential builders do not set `Content-Type`:
+pass-through preserves the caller's media type, including multipart boundaries,
+or its absence. Operations that serialize JSON set `application/json` themselves,
+including inference and Universal Endpoint requests. Adapters can select
+authentication headers by request path when one provider exposes endpoints with different credential
 contracts. Google AI Studio uses `Authorization: Bearer` for its OpenAI-compatible
 paths and `x-goog-api-key` for its native Gemini paths, including when the request
 uses an AI Gateway provider endpoint.

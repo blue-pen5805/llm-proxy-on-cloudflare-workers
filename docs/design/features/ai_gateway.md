@@ -193,7 +193,11 @@ forwards the mapped steps to Gateway's Universal Endpoint. Gateway providers
 without a local adapter fail with HTTP 400. This also normalizes each optional
 endpoint to a bounded, safe relative path. Dot-segment traversal is rejected
 before dispatch, including percent-encoded dot segments and paths with query
-strings. This explicit route is available
+strings. Step endpoint queries, including credential-like names, are retained
+as provider-native payload. Incoming-URL credential removal does not apply to
+these nested fields; their preservation is an intentional contract and does not
+bypass proxy authentication. No proxy or configured provider credentials are
+automatically copied into step URLs. This explicit route is available
 alongside automatic provider-native inference.
 `POST /g/<gateway>/compat/chat/completions` forwards directly to Gateway
 `/compat/chat/completions` after stripping proxy credentials. No other path under

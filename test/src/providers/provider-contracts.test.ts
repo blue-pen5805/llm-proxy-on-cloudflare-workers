@@ -250,11 +250,9 @@ describe("provider contracts", () => {
       vi.spyOn(provider, "getApiKeys").mockReturnValue(["first", "second"]);
 
       await expect(provider.headers()).resolves.toEqual({
-        "Content-Type": "application/json",
         Authorization: "Bearer first",
       });
       await expect(provider.headers(3)).resolves.toEqual({
-        "Content-Type": "application/json",
         Authorization: "Bearer second",
       });
     });
@@ -496,7 +494,6 @@ describe("provider contracts", () => {
     it("builds Anthropic headers and converts model timestamps", async () => {
       const provider = new Anthropic();
       await expect(provider.headers(1)).resolves.toEqual({
-        "Content-Type": "application/json",
         "x-api-key": "key-1",
         "anthropic-version": "2023-06-01",
       });
@@ -654,11 +651,9 @@ describe("provider contracts", () => {
       const provider = new GoogleAiStudio();
 
       await expect(provider.headers()).resolves.toEqual({
-        "Content-Type": "application/json",
         "x-goog-api-key": "key-0",
       });
       await expect(provider.headers(1)).resolves.toEqual({
-        "Content-Type": "application/json",
         "x-goog-api-key": "key-1",
       });
       expect(
@@ -672,7 +667,6 @@ describe("provider contracts", () => {
       ).toEqual(
         new Headers({
           authorization: "Bearer key-1",
-          "content-type": "application/json",
         }),
       );
       expect(
@@ -681,14 +675,11 @@ describe("provider contracts", () => {
         ),
       ).toEqual(
         new Headers({
-          "content-type": "application/json",
           "x-goog-api-key": "key-1",
         }),
       );
       vi.mocked(Secrets.getAll).mockReturnValue([]);
-      await expect(provider.headers()).resolves.toEqual({
-        "Content-Type": "application/json",
-      });
+      await expect(provider.headers()).resolves.toEqual({});
       expect(
         new Headers(
           await provider.buildHeadersForPath(
@@ -697,11 +688,7 @@ describe("provider contracts", () => {
             0,
           ),
         ),
-      ).toEqual(
-        new Headers({
-          "content-type": "application/json",
-        }),
-      );
+      ).toEqual(new Headers({}));
       vi.mocked(Secrets.getAll).mockReturnValue(["key-0", "key-1"]);
       const [builtChatPath, builtChatInit] = await buildInferenceRequest(
         provider,
@@ -739,7 +726,6 @@ describe("provider contracts", () => {
       expect(new Headers(chatInit?.headers)).toEqual(
         new Headers({
           Authorization: "Bearer key-1",
-          "Content-Type": "application/json",
           "X-Custom": "value",
         }),
       );
@@ -751,7 +737,6 @@ describe("provider contracts", () => {
       );
       expect(new Headers(modelsInit?.headers)).toEqual(
         new Headers({
-          "Content-Type": "application/json",
           "x-goog-api-key": "key-0",
         }),
       );
@@ -764,7 +749,6 @@ describe("provider contracts", () => {
         "https://api.cloudflare.com/client/v4/accounts/account-id/ai",
       );
       await expect(provider.headers(1)).resolves.toEqual({
-        "Content-Type": "application/json",
         Authorization: "Bearer key-1",
       });
       const [modelsUrl] = await provider.buildRequest(
@@ -849,11 +833,9 @@ describe("provider contracts", () => {
       expect(await provider.getNextApiKeyIndex()).toBe(1);
       expect(Secrets.getNextIndex).toHaveBeenCalledWith("custom", 2);
       await expect(provider.headers(3)).resolves.toEqual({
-        "Content-Type": "application/json",
         Authorization: "Bearer second",
       });
       await expect(provider.headers()).resolves.toEqual({
-        "Content-Type": "application/json",
         Authorization: "Bearer first",
       });
       expect(
@@ -873,9 +855,7 @@ describe("provider contracts", () => {
         baseUrl: "https://none.example",
       });
       expect(withoutKeys.getApiKeys()).toEqual([]);
-      await expect(withoutKeys.headers()).resolves.toEqual({
-        "Content-Type": "application/json",
-      });
+      await expect(withoutKeys.headers()).resolves.toEqual({});
       expect(
         withoutKeys.endpoints.models?.getStaticModels?.call(withoutKeys),
       ).toBeUndefined();

@@ -132,6 +132,12 @@ fields. Error events contain only a redacted, length-limited error name and
 message. Request bodies, response bodies, headers, stack traces, query strings,
 fragments, and arbitrary thrown objects are not logged.
 
+Bounded upstream JSON parsing replaces syntax errors with a fixed message and
+does not retain the original exception or cause. Model-list adapter conversion
+errors likewise become content-free exceptions before reaching diagnostics.
+These boundaries prevent parser and adapter messages from copying upstream
+payload fragments into logs; regex redaction is only an additional safeguard.
+
 `provider.key.selected` reports `provider`, `operation`, zero-based
 `key_index`, `key_count`, `credential_configured`, `selection_policy`, and
 `via_ai_gateway`. Named profiles also report `credential_profile`; the default

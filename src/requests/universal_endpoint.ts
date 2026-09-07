@@ -182,10 +182,16 @@ export async function handleUniversalEndpointRequest(
             viaAiGateway: true,
             step: stepIndex,
           });
+          const jsonHeaders = stripProxyAuthorizationHeaders(
+            endpointRequest.headers ?? {},
+          );
+          // Gateway serializes each query object as JSON. Format belongs to
+          // this operation, independently of the provider credential headers.
+          jsonHeaders.set("content-type", "application/json");
           const requestHeaders = new Headers(
             await providerInstance.buildHeadersForPath(
               `/${endpointPath}`,
-              stripProxyAuthorizationHeaders(endpointRequest.headers ?? {}),
+              jsonHeaders,
               apiKeyIndex,
             ),
           );

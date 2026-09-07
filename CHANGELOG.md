@@ -10,6 +10,15 @@ dated section; when multiple changes share a date, put the newest change first.
 Planned version: `1.0.0`. The package remains at `0.2.1` until the version
 update is explicitly approved.
 
+### 2026-09-07
+
+- Accepted LF, CRLF, and CR SSE line endings across arbitrary network chunk
+  boundaries, preserving record separators and consistent record byte limits.
+- Preserved caller Content-Type and multipart boundaries on direct and Gateway
+  provider pass-through; JSON-producing operations own their media type.
+- Prevented upstream JSON parsing and model-list conversion errors from
+  including response fragments in diagnostic logs.
+
 ### 2026-09-06
 
 - Added OpenCode Zen and Go with shared `OPENCODE_API_KEY` credentials,

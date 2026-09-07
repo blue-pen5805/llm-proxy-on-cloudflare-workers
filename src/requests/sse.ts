@@ -26,11 +26,10 @@ interface SseRecordTransformOptions {
 }
 
 /**
- * Incrementally splits a UTF-8 SSE byte stream into records.
- *
- * The retained search offset prevents rescanning an incomplete record from its
- * beginning for every network chunk. At most the final three characters are
- * revisited because an SSE separator is at most four characters long.
+ * Split SSE records with line state for LF, CRLF, and CR. A trailing CR is
+ * held until the next chunk (or EOF) so split CRLF stays one line ending.
+ * Scan each decoded character once and retain the original line endings for
+ * callers that enrich otherwise unchanged SSE records.
  */
 export function createSseRecordTransform({
   budget,
@@ -43,74 +42,103 @@ export function createSseRecordTransform({
     fatal: true,
     ignoreBOM: false,
   });
-  const separatorPattern = /\r?\n\r?\n/g;
+  const lineEnding = /[\r\n]/g;
   let pending = "";
   let pendingBytes = 0;
-  let searchFrom = 0;
+  let scanFrom = 0;
+  let lineStart = 0;
+  let lastLineEnd = 0;
 
-  const fail = (
+  const append = (decoded: string) => {
+    pending += decoded;
+    // Count decoded bytes: a stripped BOM is not record data, and a partial
+    // UTF-8 character occupies at most three bytes inside TextDecoder.
+    pendingBytes += utf8ByteLength(decoded);
+  };
+
+  const processLines = (
     controller: TransformStreamDefaultController<Uint8Array>,
-    error: Error,
-  ): void => {
-    onError(error, controller);
+    endOfStream: boolean,
+  ): boolean => {
+    while (scanFrom < pending.length) {
+      lineEnding.lastIndex = scanFrom;
+      const match = lineEnding.exec(pending);
+      if (!match) {
+        scanFrom = pending.length;
+        break;
+      }
+      const position = match.index;
+      const isCr = pending[position] === "\r";
+      scanFrom = position;
+      if (isCr && position + 1 === pending.length && !endOfStream) break;
+      const end = position + (isCr && pending[position + 1] === "\n" ? 2 : 1);
+      if (position === lineStart) {
+        const block = pending.slice(0, lastLineEnd);
+        const separator = pending.slice(lastLineEnd, end);
+        const blockBytes = utf8ByteLength(block);
+        pendingBytes -= blockBytes + separator.length;
+        pending = pending.slice(end);
+        scanFrom = lineStart = lastLineEnd = 0;
+        const limitError = budget.checkSseRecord(blockBytes);
+        if (limitError) {
+          onError(limitError, controller);
+          return false;
+        }
+        onRecord(block, separator, controller);
+        if (isFinished()) return false;
+      } else {
+        lastLineEnd = position;
+        scanFrom = lineStart = end;
+      }
+    }
+
+    // Exclude trailing line endings that may form the record separator. This
+    // keeps the record limit identical for whole and arbitrarily split input.
+    let recordBytes = pendingBytes;
+    if (lineStart === pending.length) {
+      recordBytes -= pending.length - lastLineEnd;
+    } else if (pending.endsWith("\r")) {
+      recordBytes -= scanFrom === lineStart ? pending.length - lastLineEnd : 1;
+    }
+    const limitError = budget.checkSseRecord(recordBytes);
+    if (limitError) {
+      onError(limitError, controller);
+      return false;
+    }
+    return true;
   };
 
   return new TransformStream<Uint8Array, Uint8Array>({
     transform(chunk, controller) {
-      pendingBytes += chunk.byteLength;
       try {
-        pending += decoder.decode(chunk, { stream: true });
+        append(decoder.decode(chunk, { stream: true }));
       } catch {
-        fail(
-          controller,
+        onError(
           new Error("Upstream returned invalid UTF-8 in an SSE record."),
+          controller,
         );
         return;
       }
-
-      for (;;) {
-        separatorPattern.lastIndex = searchFrom;
-        const match = separatorPattern.exec(pending);
-        if (!match) {
-          searchFrom = Math.max(0, pending.length - 3);
-          break;
-        }
-        const block = pending.slice(0, match.index);
-        const separator = match[0];
-        pending = pending.slice(match.index + separator.length);
-        searchFrom = 0;
-        const blockBytes = utf8ByteLength(block);
-        pendingBytes -= blockBytes + utf8ByteLength(separator);
-        const limitError = budget.checkSseRecord(blockBytes);
-        if (limitError) {
-          fail(controller, limitError);
-          return;
-        }
-        onRecord(block, separator, controller);
-        if (isFinished()) return;
-      }
-
-      const limitError = budget.checkSseRecord(pendingBytes);
-      if (limitError) fail(controller, limitError);
+      processLines(controller, false);
     },
     flush(controller) {
       try {
-        pending += decoder.decode();
+        append(decoder.decode());
       } catch {
-        fail(
-          controller,
+        onError(
           new Error("Upstream returned invalid UTF-8 in an SSE record."),
+          controller,
         );
         return;
       }
-      onEnd(pending, controller);
+      if (processLines(controller, true)) onEnd(pending, controller);
     },
   });
 }
 
 export function sseData(block: string): string | undefined {
   let data: string | undefined;
-  for (const line of block.split(/\r?\n/)) {
+  for (const line of block.split(/\r\n|[\r\n]/)) {
     if (!line.startsWith("data:")) continue;
     const value = line.slice(5).trimStart();
     data = data === undefined ? value : `${data}\n${value}`;

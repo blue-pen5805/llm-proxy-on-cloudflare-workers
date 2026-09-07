@@ -14,7 +14,7 @@ describe("ProviderBase", () => {
     providerBase = new ProviderBase();
     // Mock methods that would normally be implemented by subclasses or depend on Secrets
     vi.spyOn(providerBase, "headers").mockResolvedValue({
-      "Content-Type": "application/json",
+      Authorization: "Bearer provider-key",
     });
   });
 
@@ -39,7 +39,7 @@ describe("ProviderBase", () => {
       expect(init.method).toBe("POST");
       expect(new Headers(init.headers)).toEqual(
         new Headers({
-          "content-type": "application/json",
+          authorization: "Bearer provider-key",
           "x-request": "test",
         }),
       );

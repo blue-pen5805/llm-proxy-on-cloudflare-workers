@@ -75,7 +75,6 @@ describe("NVIDIA NIM provider", () => {
     expect(new Headers(builtModelsInit.headers)).toEqual(
       new Headers({
         Authorization: "Bearer nim-key",
-        "Content-Type": "application/json",
       }),
     );
   });

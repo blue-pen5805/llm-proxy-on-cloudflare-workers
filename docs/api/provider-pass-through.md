@@ -5,7 +5,7 @@ remaining method, body, query string, and non-proxy headers in the provider's
 native format:
 
 ```bash
-curl https://your-worker.example/openai/v1/responses \
+curl https://your-worker.example/openai/responses \
   --header "Authorization: Bearer $PROXY_API_KEY" \
   --header "Content-Type: application/json" \
   --data '{"model":"gpt-4o-mini","input":"Hello"}'
@@ -15,6 +15,13 @@ Routes are the keys registered in `src/providers.ts`; configured custom
 endpoint names are added dynamically. Append `:<profile>` to a provider name to
 select a named credential pool. Provider-specific request and response formats
 remain the caller's responsibility.
+
+The remaining path is appended to the provider's configured Base URL. OpenAI's
+Base URL already includes `/v1`, so `/openai/responses` targets
+`https://api.openai.com/v1/responses`.
+The caller's `Content-Type`, including multipart boundaries, is preserved on
+direct and Gateway routes. An absent media type remains absent. This supports
+native multipart and binary uploads without changing their body bytes.
 
 Pass-through accepts `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, and `DELETE`.
 Other methods, including `TRACE` and `CONNECT`, return HTTP 405 with the allowed

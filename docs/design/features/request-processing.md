@@ -140,6 +140,14 @@ lacking a matching capability.
 Their top-level modules are stable facades for
 the route handler and stream-conversion entry points.
 
+The shared SSE record reader uses line state for LF, CRLF, and CR, as defined by
+the [SSE parsing standard](https://html.spec.whatwg.org/multipage/server-sent-events.html#parsing-an-event-stream).
+A CR at the end of a network chunk is held until the next chunk or EOF so a
+split CRLF remains one line ending. Original record separators are retained for
+metadata enrichment. Record byte limits exclude the terminating line endings
+and are independent of network chunk boundaries. Unterminated final records
+are passed to the protocol-specific EOF handler.
+
 ## References
 
 - [Cloudflare Workers](https://developers.cloudflare.com/workers/)

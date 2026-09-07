@@ -55,7 +55,6 @@ export const GoogleAiStudio = defineProvider({
     const apiKey =
       apiKeys.length > 0 ? apiKeys[(apiKeyIndex ?? 0) % apiKeys.length] : null;
     return {
-      "Content-Type": "application/json",
       ...(apiKey ? { "x-goog-api-key": apiKey } : {}),
     };
   },

@@ -228,9 +228,15 @@ async function fetchProviderModels(
           upstreamResponse,
           MAX_PROVIDER_MODELS_RESPONSE_BYTES,
         );
-        return operation.convertResponse
-          ? operation.convertResponse.call(provider, data)
-          : (data as OpenAIModelsListResponseBody);
+        try {
+          return operation.convertResponse
+            ? operation.convertResponse.call(provider, data)
+            : (data as OpenAIModelsListResponseBody);
+        } catch {
+          // Adapter exceptions can embed upstream values, including in an
+          // error name or cause. Only a content-free failure may reach logs.
+          throw new Error("Upstream returned an invalid model-list response.");
+        }
       }
       lastStatus = upstreamResponse.status;
       await discardUpstreamBody(upstreamResponse);

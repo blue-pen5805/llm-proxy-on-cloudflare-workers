@@ -86,11 +86,10 @@ export const CustomOpenAI = defineProvider<[CustomOpenAIEndpointConfig]>(
 
       async headers(apiKeyIndex): Promise<HeadersInit> {
         const apiKeys = this.getApiKeys();
-        if (apiKeys.length === 0) return { "Content-Type": "application/json" };
+        if (apiKeys.length === 0) return {};
         const selectedApiKeyIndex =
           apiKeyIndex !== undefined ? apiKeyIndex % apiKeys.length : 0;
         return {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${apiKeys[selectedApiKeyIndex]}`,
         };
       },

@@ -173,7 +173,13 @@ export async function readResponseJson(
   maximumBytes: number = MAX_BUFFERED_RESPONSE_BYTES,
 ): Promise<unknown> {
   const text = await readRequestText(response, maximumBytes);
-  return JSON.parse(text) as unknown;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    // Engine SyntaxErrors can include response fragments. Do not retain the
+    // original error as a cause: callers may log errors at this boundary.
+    throw new SyntaxError("Upstream response is not valid JSON.");
+  }
 }
 
 export function getRequestPath(request: Request): string {

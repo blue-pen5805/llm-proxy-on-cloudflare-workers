@@ -21,6 +21,15 @@ credentials. A custom step `endpoint` is normalized to a relative path, limited
 to 2,048 characters, and cannot contain a URL scheme, backslash, control
 character, or `.` or `..` path segment.
 
+A query string inside a step's `endpoint` is forwarded unchanged, including
+credential-like names such as `api_key` or `token`. These are caller-supplied
+provider parameters in the JSON payload, not proxy authentication. Their
+preservation is permitted and does not constitute a credential-stripping
+failure. Incoming request URL credentials are still removed, and authentication
+requires a supported header. The proxy never inserts its authentication key or
+configured provider keys into step URLs. Callers own the values they place in
+these parameters and their upstream meaning.
+
 ## REST API
 
 The proxy exposes Cloudflare's account-level AI Gateway REST API through exactly

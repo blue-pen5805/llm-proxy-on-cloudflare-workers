@@ -66,9 +66,7 @@ export const AzureOpenAI = defineProvider({
       apiKeyIndex,
       this.credentialProfile,
     );
-    return apiKey
-      ? { "Content-Type": "application/json", "api-key": apiKey }
-      : { "Content-Type": "application/json" };
+    return apiKey ? { "api-key": apiKey } : {};
   },
 
   aiGatewayPath(pathname: string): string {

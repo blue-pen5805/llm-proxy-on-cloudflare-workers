@@ -76,7 +76,6 @@ describe("Cline provider", () => {
     expect(new Headers(builtModelsInit.headers)).toEqual(
       new Headers({
         Authorization: "Bearer cline-token",
-        "Content-Type": "application/json",
       }),
     );
   });

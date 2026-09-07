@@ -7,6 +7,7 @@ import {
   BUILT_IN_PROVIDER_CONSTRUCTORS,
   createProviderRegistry,
 } from "~/src/providers";
+import { defineProvider } from "~/src/providers/provider";
 import { ProviderRegistry } from "~/src/providers/registry";
 import type { RoutedRequestContext } from "~/src/request_context";
 import { handleChatCompletionsRequest } from "~/src/requests/chat_completions";
@@ -711,4 +712,284 @@ describe("OpenCode catalog security boundary", () => {
       }
     },
   );
+});
+
+describe("response content and pass-through boundaries", () => {
+  it("preserves caller-owned Universal Endpoint queries without using them for proxy authentication", async () => {
+    const endpoint =
+      "chat/completions?api_key=example-caller-value&TOKEN=example-token&x=%20&api%5Fkey=example-encoded";
+    const query = { model: "fixture", messages: [] };
+    const env = {
+      ...environment,
+      PROXY_API_KEY: "example-proxy-key",
+      CLOUDFLARE_ACCOUNT_ID: "account",
+    } as Env;
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("ok"));
+    try {
+      for (const authenticated of [false, true]) {
+        const context = createTestRoutedContext({
+          request: new Request(
+            "https://proxy.example/g/gateway/?token=example-proxy-key",
+            {
+              method: "POST",
+              headers: authenticated
+                ? { authorization: "Bearer example-proxy-key" }
+                : {},
+              body: JSON.stringify([{ provider: "openai", endpoint, query }]),
+            },
+          ),
+        });
+        const response = await worker.fetch(
+          new Request<unknown, IncomingRequestCfProperties>(context.request),
+          env,
+          context.ctx,
+        );
+        expect(response.status).toBe(authenticated ? 200 : 401);
+        if (!authenticated) expect(fetch).not.toHaveBeenCalled();
+      }
+      expect(fetch).toHaveBeenCalledOnce();
+      const [url, init] = fetch.mock.calls[0];
+      expect(url).toBe("https://gateway.ai.cloudflare.com/v1/account/gateway");
+      expect(JSON.parse(String(init?.body))).toEqual([
+        {
+          provider: "openai",
+          endpoint,
+          query,
+          headers: {
+            authorization: "Bearer sk-adversarial",
+            "content-type": "application/json",
+          },
+        },
+      ]);
+      expect(String(init?.body)).not.toContain("example-proxy-key");
+    } finally {
+      fetch.mockRestore();
+    }
+  });
+
+  it.each(["invalid JSON", "converter exception"])(
+    "keeps upstream content out of logs on %s",
+    async (failure) => {
+      const marker = "PRIVATE_FIXTURE";
+      const damaged = defineProvider({
+        openAICompatible: true,
+        baseUrl: "https://damaged.example",
+        getApiKeys: () => ["example-provider-key"],
+        endpoints: {
+          models: {
+            path: "/models",
+            convertResponse(data) {
+              const error = new Error(JSON.stringify(data));
+              error.name = marker;
+              throw error;
+            },
+          },
+        },
+      });
+      const healthy = defineProvider({
+        available: () => true,
+        endpoints: {
+          models: {
+            path: "/models",
+            getStaticModels: () => ({
+              object: "list",
+              data: [
+                {
+                  id: "working",
+                  object: "model",
+                  created: 0,
+                  owned_by: "healthy",
+                },
+              ],
+            }),
+          },
+        },
+      });
+      const logs = (["info", "warn", "error"] as const).map((method) =>
+        vi.spyOn(console, method).mockImplementation(() => {}),
+      );
+      const fetch = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(
+          new Response(
+            failure === "invalid JSON"
+              ? marker
+              : JSON.stringify({ data: marker }),
+          ),
+        );
+      try {
+        const context = createTestRoutedContext({
+          request: new Request("https://proxy.example/v1/models"),
+          providers: new ProviderRegistry({ damaged, healthy }),
+        });
+        const response = await Environments.run(
+          { MODELS_CACHE_TTL_SECONDS: "0" } as Env,
+          () => handleRouting(context),
+        );
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject({
+          data: [{ id: "healthy/working" }],
+        });
+        const records = logs.flatMap((log) => log.mock.calls);
+        expect(JSON.stringify(records)).not.toContain("PRIVATE_");
+        expect(logs[2]).toHaveBeenCalledWith(
+          expect.objectContaining({
+            event: "provider.models.failed",
+            error_name: failure === "invalid JSON" ? "SyntaxError" : "Error",
+            error_message:
+              failure === "invalid JSON"
+                ? "Upstream response is not valid JSON."
+                : "Upstream returned an invalid model-list response.",
+          }),
+        );
+      } finally {
+        fetch.mockRestore();
+        logs.forEach((log) => log.mockRestore());
+      }
+    },
+  );
+
+  it.each([false, true])(
+    "preserves multipart and binary representations through Gateway=%s",
+    async (gateway) => {
+      const env = {
+        OPENAI_API_KEY: "example-provider-key",
+        ANTHROPIC_API_KEY: "example-provider-key",
+        GEMINI_API_KEY: "example-provider-key",
+        AZURE_OPENAI_API_KEY: "example-provider-key",
+        AZURE_OPENAI_RESOURCE_NAME: "resource",
+        CLOUDFLARE_API_KEY: "example-provider-key",
+        CLOUDFLARE_ACCOUNT_ID: "account",
+        OPENCODE_API_KEY: "example-provider-key",
+        AWS_BEARER_TOKEN_BEDROCK: "example-provider-key",
+        AWS_BEDROCK_REGION: "us-east-1",
+      } as Env;
+      const providers = new ProviderRegistry(BUILT_IN_PROVIDER_CONSTRUCTORS, [
+        {
+          name: "custom",
+          baseUrl: "https://custom.example",
+          apiKeys: ["example-provider-key"],
+        },
+        { name: "anonymous", baseUrl: "https://anonymous.example" },
+      ]);
+      const fetch = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation(async () => new Response("ok"));
+      try {
+        for (const [name, authHeader] of [
+          ["openai", "authorization"],
+          ["anthropic", "x-api-key"],
+          ["google-ai-studio", "x-goog-api-key"],
+          ["azure-openai", "api-key"],
+          ["workers-ai", "authorization"],
+          ["aws-bedrock", "authorization"],
+          ["opencode-zen", "authorization"],
+          ["custom", "authorization"],
+          ["anonymous", "authorization"],
+        ]) {
+          for (const multipart of [true, false]) {
+            const form = new FormData();
+            form.set(
+              "file",
+              new Blob([new Uint8Array([0, 255, 13, 10])]),
+              "fixture.bin",
+            );
+            const request = new Request(`https://proxy.example/${name}/files`, {
+              method: "POST",
+              body: multipart ? form : new Uint8Array([0, 255, 13, 10]),
+              headers: {
+                authorization: "Bearer example-proxy-key",
+                ...(multipart
+                  ? {}
+                  : { "Content-Type": "application/octet-stream" }),
+              },
+            });
+            const expectedBytes = await request.clone().arrayBuffer();
+            const contentType = request.headers.get("content-type");
+            await Environments.run(env, () =>
+              handleRouting(
+                createTestRoutedContext({ request, env, providers }),
+                gateway
+                  ? new CloudflareAIGateway(
+                      "account",
+                      "gateway",
+                      "example-gateway-key",
+                      undefined,
+                      true,
+                    )
+                  : undefined,
+              ),
+            );
+            const init = fetch.mock.calls.at(-1)![1]!;
+            const headers = new Headers(init.headers);
+            expect(headers.get("content-type")).toBe(contentType);
+            expect(await new Response(init.body).arrayBuffer()).toEqual(
+              expectedBytes,
+            );
+            expect(headers.get(authHeader)).toBe(
+              name === "anonymous"
+                ? null
+                : authHeader === "authorization"
+                  ? "Bearer example-provider-key"
+                  : "example-provider-key",
+            );
+            expect(JSON.stringify([...headers])).not.toContain(
+              "example-proxy-key",
+            );
+          }
+        }
+      } finally {
+        fetch.mockRestore();
+      }
+    },
+  );
+
+  it.each([false, true])(
+    "does not invent a content type for opaque pass-through, Gateway=%s",
+    async (gateway) => {
+      const request = new Request("https://proxy.example/openai/files", {
+        method: "POST",
+        body: new Uint8Array([1, 2, 3]),
+      });
+      const fetch = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(new Response("ok"));
+      try {
+        await Environments.run(environment, () =>
+          handleRouting(
+            createTestRoutedContext({ request }),
+            gateway ? new CloudflareAIGateway("account", "gateway") : undefined,
+          ),
+        );
+        expect(
+          new Headers(fetch.mock.calls[0][1]?.headers).has("content-type"),
+        ).toBe(false);
+      } finally {
+        fetch.mockRestore();
+      }
+    },
+  );
+
+  it("routes the documented OpenAI Responses pass-through example without duplicating v1", async () => {
+    const request = new Request("https://proxy.example/openai/responses", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: '{"model":"fixture","input":"hello"}',
+    });
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("ok"));
+    try {
+      await Environments.run(environment, () =>
+        handleRouting(createTestRoutedContext({ request })),
+      );
+      expect(fetch.mock.calls[0][0]).toBe(
+        "https://api.openai.com/v1/responses",
+      );
+    } finally {
+      fetch.mockRestore();
+    }
+  });
 });

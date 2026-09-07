@@ -31,6 +31,18 @@ describe("parseJsonOrReturnText", () => {
 });
 
 describe("bounded body parsing", () => {
+  it.each(["PRIVATE_FIXTURE", '{"data":"PRIVATE_FIXTURE", invalid}'])(
+    "does not expose malformed upstream JSON %s",
+    async (body) => {
+      const result = readResponseJson(new Response(body));
+      await expect(result).rejects.toThrow(
+        "Upstream response is not valid JSON.",
+      );
+      await expect(result).rejects.toBeInstanceOf(SyntaxError);
+      await expect(result).rejects.not.toHaveProperty("cause");
+    },
+  );
+
   it("rejects an invalid length even when there is no body to release", async () => {
     const request = new Request("https://example.com", {
       headers: { "content-length": "invalid" },
