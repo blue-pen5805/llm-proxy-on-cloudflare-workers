@@ -5,7 +5,7 @@
 
 ## 前提条件
 
-- Node.js 22.12 以降と npm
+- Node.js 22.13 以降と npm
 - Workers と Secret を作成できる Cloudflare アカウント
 - 対応プロバイダーのキーを1つ以上
 

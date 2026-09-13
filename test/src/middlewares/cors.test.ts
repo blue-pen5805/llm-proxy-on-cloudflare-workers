@@ -1,15 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { MiddlewareContext } from "~/src/middleware";
-import { corsMiddleware } from "~/src/middlewares/cors";
+import { corsMiddleware as middleware } from "~/src/middlewares/cors";
+import { ProxyRequestState } from "~/src/request_context";
 import { handleOptions } from "~/src/requests/options";
+import { testMiddleware } from "../../helpers/hono";
 
 vi.mock("~/src/requests/options", async (importOriginal) => ({
   ...(await importOriginal<typeof import("~/src/requests/options")>()),
   handleOptions: vi.fn().mockResolvedValue(new Response(null, { status: 204 })),
 }));
 
+const corsMiddleware = testMiddleware(middleware);
+
 describe("corsMiddleware", () => {
-  let context: MiddlewareContext;
+  let context: ProxyRequestState;
   const next = vi.fn().mockResolvedValue(new Response("ok"));
 
   beforeEach(() => {
@@ -17,7 +20,7 @@ describe("corsMiddleware", () => {
     next.mockResolvedValue(new Response("ok"));
     context = {
       request: new Request("http://localhost/"),
-    } as MiddlewareContext;
+    } as ProxyRequestState;
   });
 
   it("should call handleOptions for OPTIONS requests", async () => {

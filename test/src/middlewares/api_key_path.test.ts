@@ -1,6 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
-import { apiKeyPathMiddleware } from "~/src/middlewares/api_key_path";
-import { requestMiddleware } from "~/src/middlewares/request";
+import { apiKeyPathMiddleware as keyMiddleware } from "~/src/middlewares/api_key_path";
+import { requestMiddleware as pathMiddleware } from "~/src/middlewares/request";
+import { testMiddleware } from "../../helpers/hono";
+
+const apiKeyPathMiddleware = testMiddleware(keyMiddleware);
+
+const requestMiddleware = testMiddleware(pathMiddleware);
 
 describe("apiKeyPathMiddleware", () => {
   it.each([

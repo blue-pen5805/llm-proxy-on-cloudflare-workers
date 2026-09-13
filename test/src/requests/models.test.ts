@@ -62,7 +62,7 @@ function registryFor(providers: Record<string, Provider>): ProviderRegistry {
 }
 
 async function requestModels(
-  overrides: Partial<RoutedRequestContext> = {},
+  overrides: Partial<RoutedRequestContext & { ctx: ExecutionContext }> = {},
   aiGateway?: CloudflareAIGateway,
 ): Promise<Response> {
   const context = createTestRoutedContext(overrides);
@@ -72,7 +72,7 @@ async function requestModels(
 }
 
 async function requestModel(
-  overrides: Partial<RoutedRequestContext>,
+  overrides: Partial<RoutedRequestContext & { ctx: ExecutionContext }>,
   modelId: string,
   aiGateway?: CloudflareAIGateway,
 ): Promise<Response> {

@@ -1,5 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
-import { requestMiddleware } from "~/src/middlewares/request";
+import { requestMiddleware as middleware } from "~/src/middlewares/request";
+import { testMiddleware } from "../../helpers/hono";
+
+const requestMiddleware = testMiddleware(middleware);
 
 describe("requestMiddleware", () => {
   it("should initialize context.pathname", async () => {

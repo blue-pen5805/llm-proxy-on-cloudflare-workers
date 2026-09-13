@@ -1,11 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { MiddlewareContext } from "~/src/middleware";
-import { authMiddleware } from "~/src/middlewares/auth";
+import { authMiddleware as middleware } from "~/src/middlewares/auth";
+import { ProxyRequestState } from "~/src/request_context";
 import { Config } from "~/src/utils/config";
 import { ServiceUnavailableError, UnauthorizedError } from "~/src/utils/error";
+import { testMiddleware } from "../../helpers/hono";
+
+const authMiddleware = testMiddleware(middleware);
 
 describe("authMiddleware", () => {
-  let context: MiddlewareContext;
+  let context: ProxyRequestState;
   const next = vi.fn().mockResolvedValue(new Response("ok"));
 
   beforeEach(() => {
@@ -13,7 +16,7 @@ describe("authMiddleware", () => {
     context = {
       request: new Request("http://localhost/v1/chat/completions"),
       pathname: "",
-    } as MiddlewareContext;
+    } as ProxyRequestState;
   });
 
   it("should allow request in development mode", async () => {

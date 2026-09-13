@@ -1,11 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
-import { MiddlewareContext } from "~/src/middleware";
-import { aiGatewayMiddleware } from "~/src/middlewares/ai_gateway";
+import { aiGatewayMiddleware as middleware } from "~/src/middlewares/ai_gateway";
+import { ProxyRequestState } from "~/src/request_context";
 import { Config } from "~/src/utils/config";
+import { testMiddleware } from "../../helpers/hono";
+
+const aiGatewayMiddleware = testMiddleware(middleware);
 
 describe("aiGatewayMiddleware", () => {
-  let context: MiddlewareContext;
+  let context: ProxyRequestState;
   const next = vi.fn().mockResolvedValue(new Response("ok"));
 
   beforeEach(() => {
@@ -13,7 +16,7 @@ describe("aiGatewayMiddleware", () => {
     context = {
       request: new Request("http://localhost/v1/chat/completions"),
       pathname: "/v1/chat/completions",
-    } as MiddlewareContext;
+    } as ProxyRequestState;
   });
 
   it("should set AI Gateway from URL if it starts with /g/", async () => {

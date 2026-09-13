@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { MiddlewareContext } from "~/src/middleware";
 import { createProvider } from "~/src/providers/provider";
+import type { ProxyRequestState } from "~/src/request_context";
 import {
   determineApiKeySelectionPolicy,
   getEligibleApiKeyIndexes,
@@ -26,7 +26,7 @@ describe("API key selection logging", () => {
     (selection, fallback, expected) => {
       expect(
         determineApiKeySelectionPolicy(
-          selection as MiddlewareContext["apiKeyIndex"],
+          selection as ProxyRequestState["apiKeyIndex"],
           fallback,
         ),
       ).toBe(expected);

@@ -1,4 +1,6 @@
+import { createExecutionContext } from "cloudflare:test";
 import { bench, describe } from "vitest";
+import worker from "~/src/index";
 import {
   BUILT_IN_PROVIDER_CONSTRUCTORS,
   createProviderRegistry,
@@ -103,7 +105,16 @@ const lastSlotRequest = new Request("https://proxy.example/v1/models", {
   headers: { Authorization: "Bearer proxy-key-63-" + "x".repeat(24) },
 });
 
+const healthRequest = new Request("https://proxy.example/ping", {
+  headers: { Authorization: "Bearer proxy-key-15-" + "x".repeat(24) },
+});
+const healthExecutionContext = createExecutionContext();
+
 describe("per-request setup paths", () => {
+  bench("dispatch an authenticated health request", async () => {
+    await worker.fetch(healthRequest, requestEnv, healthExecutionContext);
+  });
+
   bench("authenticate a proxied request", () => {
     Environments.run(requestEnv, () => isRequestAuthorized(authorizedRequest));
   });

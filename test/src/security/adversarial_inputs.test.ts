@@ -1,8 +1,7 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
 import worker from "~/src/index";
-import { corsMiddleware } from "~/src/middlewares/cors";
-import { handleRouting } from "~/src/middlewares/router";
+import { corsMiddleware as cors } from "~/src/middlewares/cors";
 import {
   BUILT_IN_PROVIDER_CONSTRUCTORS,
   createProviderRegistry,
@@ -12,12 +11,15 @@ import { ProviderRegistry } from "~/src/providers/registry";
 import type { RoutedRequestContext } from "~/src/request_context";
 import { handleChatCompletionsRequest } from "~/src/requests/chat_completions";
 import { handleVirtualModelsRequest } from "~/src/requests/virtual_models";
-import { resolveRoute } from "~/src/routing";
 import { Config } from "~/src/utils/config";
 import { Environments } from "~/src/utils/environments";
 import { parseVirtualModels } from "~/src/utils/virtual_models";
+import { testMiddleware } from "../../helpers/hono";
+import { handleRouting } from "../../helpers/hono";
 import { opencodeCatalog, opencodeCatalogUrl } from "../../helpers/opencode";
 import { createTestRoutedContext } from "../../helpers/request_context";
+
+const corsMiddleware = testMiddleware(cors);
 
 // Names that exist on Object.prototype. A plain object used as a lookup table
 // resolves them even though no provider or virtual model is configured, so
@@ -194,7 +196,7 @@ describe("adversarial provider selectors", () => {
 
   it.each(["TRACE", "CONNECT"])(
     "rejects provider pass-through method %s with 405",
-    (method) => {
+    async (method) => {
       const request = new Request("https://proxy.example/openai/v1/models");
       Object.defineProperty(request, "method", { value: method });
       const context = createTestRoutedContext({
@@ -203,7 +205,7 @@ describe("adversarial provider selectors", () => {
         providers: createProviderRegistry(environment),
       });
 
-      expect(() => resolveRoute(context, false)).toThrow(
+      await expect(handleRouting(context)).rejects.toThrow(
         expect.objectContaining({ status: 405 }),
       );
     },
@@ -282,16 +284,26 @@ describe("adversarial provider selectors", () => {
   });
 
   it("does not reject an unknown top-level Responses field as malformed", async () => {
-    const response = await Environments.run(environment, () =>
-      handleRouting(
-        routingContext(
-          { model: "openai/model", input: "hi", __proto_field__: true },
-          "/v1/responses",
+    // Model an upstream rejection locally; these are wire-preservation tests,
+    // not live-provider checks with operator credentials.
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 401 }));
+    try {
+      const response = await Environments.run(environment, () =>
+        handleRouting(
+          routingContext(
+            { model: "openai/model", input: "hi", __proto_field__: true },
+            "/v1/responses",
+          ),
         ),
-      ),
-    );
+      );
 
-    expect(response.status).toBe(401);
+      expect(response.status).toBe(401);
+      expect(fetch).toHaveBeenCalledOnce();
+    } finally {
+      fetch.mockRestore();
+    }
   });
 
   it("rejects a non-object Responses reasoning field during Chat conversion", async () => {
@@ -308,51 +320,71 @@ describe("adversarial provider selectors", () => {
   });
 
   it("ignores a built-in tool nested in a Responses allowed-tools choice", async () => {
-    const response = await Environments.run(environment, () =>
-      handleRouting(
-        routingContext(
-          {
-            model: "openai/model",
-            input: "hi",
-            tool_choice: {
-              type: "allowed_tools",
-              mode: "auto",
-              tools: [{ type: "web_search" }],
+    // Model an upstream rejection locally; these are wire-preservation tests,
+    // not live-provider checks with operator credentials.
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 401 }));
+    try {
+      const response = await Environments.run(environment, () =>
+        handleRouting(
+          routingContext(
+            {
+              model: "openai/model",
+              input: "hi",
+              tool_choice: {
+                type: "allowed_tools",
+                mode: "auto",
+                tools: [{ type: "web_search" }],
+              },
             },
-          },
-          "/v1/responses",
+            "/v1/responses",
+          ),
         ),
-      ),
-    );
+      );
 
-    expect(response.status).toBe(401);
+      expect(response.status).toBe(401);
+      expect(fetch).toHaveBeenCalledOnce();
+    } finally {
+      fetch.mockRestore();
+    }
   });
 
   it("ignores an unsupported Responses prompt-cache breakpoint", async () => {
-    const response = await Environments.run(environment, () =>
-      handleRouting(
-        routingContext(
-          {
-            model: "openai/model",
-            input: [
-              {
-                role: "user",
-                content: [
-                  {
-                    type: "input_text",
-                    text: "hi",
-                    prompt_cache_breakpoint: { mode: "implicit" },
-                  },
-                ],
-              },
-            ],
-          },
-          "/v1/responses",
+    // Model an upstream rejection locally; these are wire-preservation tests,
+    // not live-provider checks with operator credentials.
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 401 }));
+    try {
+      const response = await Environments.run(environment, () =>
+        handleRouting(
+          routingContext(
+            {
+              model: "openai/model",
+              input: [
+                {
+                  role: "user",
+                  content: [
+                    {
+                      type: "input_text",
+                      text: "hi",
+                      prompt_cache_breakpoint: { mode: "implicit" },
+                    },
+                  ],
+                },
+              ],
+            },
+            "/v1/responses",
+          ),
         ),
-      ),
-    );
+      );
 
-    expect(response.status).toBe(401);
+      expect(response.status).toBe(401);
+      expect(fetch).toHaveBeenCalledOnce();
+    } finally {
+      fetch.mockRestore();
+    }
   });
 
   it("rejects an inherited provider name on the Messages route", async () => {
@@ -414,25 +446,35 @@ describe("adversarial provider selectors", () => {
   );
 
   it("ignores an unsupported field in a Messages system block", async () => {
-    const response = await Environments.run(environment, () =>
-      handleRouting(
-        routingContext(
-          {
-            model: "openai/model",
-            max_tokens: 8,
-            messages: [
-              {
-                role: "system",
-                content: [{ type: "text", text: "hi", untrusted: true }],
-              },
-            ],
-          },
-          "/v1/messages",
+    // Model an upstream rejection locally; these are wire-preservation tests,
+    // not live-provider checks with operator credentials.
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 401 }));
+    try {
+      const response = await Environments.run(environment, () =>
+        handleRouting(
+          routingContext(
+            {
+              model: "openai/model",
+              max_tokens: 8,
+              messages: [
+                {
+                  role: "system",
+                  content: [{ type: "text", text: "hi", untrusted: true }],
+                },
+              ],
+            },
+            "/v1/messages",
+          ),
         ),
-      ),
-    );
+      );
 
-    expect(response.status).toBe(401);
+      expect(response.status).toBe(401);
+      expect(fetch).toHaveBeenCalledOnce();
+    } finally {
+      fetch.mockRestore();
+    }
   });
 });
 
@@ -992,4 +1034,133 @@ describe("response content and pass-through boundaries", () => {
       fetch.mockRestore();
     }
   });
+});
+
+describe("Hono path boundaries", () => {
+  it.each(["%0A", "%0D", "%E2%80%A8", "%E2%80%A9"])(
+    "keeps encoded line separator %s inside authentication, CORS, and logging boundaries",
+    async (separator) => {
+      const fetch = vi
+        .spyOn(globalThis, "fetch")
+        .mockRejectedValue(new Error("Unexpected upstream request"));
+      const info = vi.spyOn(console, "info").mockImplementation(() => {});
+      const env = {
+        PROXY_API_KEY: "example-proxy-key",
+        ALLOWED_ORIGINS: '["https://client.example"]',
+      } as Env;
+      try {
+        for (const method of ["GET", "HEAD", "POST"]) {
+          for (const authenticated of [false, true]) {
+            info.mockClear();
+            const response = await worker.fetch(
+              new Request(`https://proxy.example/missing${separator}suffix`, {
+                method,
+                headers: {
+                  Origin: "https://client.example",
+                  ...(authenticated
+                    ? { Authorization: "Bearer example-proxy-key" }
+                    : {}),
+                },
+              }),
+              env,
+              createTestRoutedContext().ctx,
+            );
+            const status = authenticated ? 404 : 401;
+            expect(response.status).toBe(status);
+            expect(response.headers.get("Cache-Control")).toBe("no-store");
+            expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
+              "https://client.example",
+            );
+            expect(response.headers.get("Vary")).toBe("Origin");
+            expect(response.headers.get("WWW-Authenticate")).toBe(
+              authenticated ? null : "Bearer",
+            );
+            if (method === "HEAD") {
+              expect(response.body).toBeNull();
+            } else {
+              expect(await response.json()).toMatchObject({
+                error: {
+                  type: authenticated
+                    ? "not_found_error"
+                    : "authentication_error",
+                },
+              });
+            }
+            const events = info.mock.calls.map(([event]) => event);
+            expect(
+              events.filter((event) => event.event === "request.started"),
+            ).toHaveLength(1);
+            expect(
+              events.filter((event) => event.event === "request.completed"),
+            ).toEqual([expect.objectContaining({ status, method })]);
+          }
+        }
+        const preflight = await worker.fetch(
+          new Request(`https://proxy.example/missing${separator}suffix`, {
+            method: "OPTIONS",
+            headers: {
+              Origin: "https://client.example",
+              "Access-Control-Request-Method": "POST",
+            },
+          }),
+          env,
+          createTestRoutedContext().ctx,
+        );
+        expect(preflight.status).toBe(200);
+        expect(preflight.body).toBeNull();
+        expect(preflight.headers.get("Access-Control-Allow-Origin")).toBe(
+          "https://client.example",
+        );
+        expect(preflight.headers.get("Access-Control-Allow-Methods")).toContain(
+          "POST",
+        );
+        expect(fetch).not.toHaveBeenCalled();
+      } finally {
+        fetch.mockRestore();
+        info.mockRestore();
+      }
+    },
+  );
+
+  it.each([
+    ["POST", "/ai/run?trace=true", 404],
+    ["POST", "/ai/run/extra", 404],
+    ["POST", "/compat/chat/completions/extra", 404],
+    ["GET", "/v1/models/%E0%A4%A", 400],
+    ["GET", "/v1/models/%", 400],
+    ["GET", "/ping/", 404],
+    ["GET", "/key/0/ping", 400],
+    ["POST", "/key/0/ai/not-real", 400],
+    ["POST", "/key/nope/v1/messages", 400],
+  ] as const)(
+    "rejects %s %s after authentication without upstream I/O",
+    async (method, path, status) => {
+      const fetch = vi
+        .spyOn(globalThis, "fetch")
+        .mockRejectedValue(new Error("Unexpected upstream request"));
+      const env = {
+        PROXY_API_KEY: "example-proxy-key",
+        CLOUDFLARE_ACCOUNT_ID: "example-account",
+        AI_GATEWAY_NAME: "example-gateway",
+      } as Env;
+      try {
+        for (const authenticated of [false, true]) {
+          const response = await worker.fetch(
+            new Request(`https://proxy.example${path}`, {
+              method,
+              headers: authenticated
+                ? { Authorization: "Bearer example-proxy-key" }
+                : {},
+            }),
+            env,
+            createTestRoutedContext().ctx,
+          );
+          expect(response.status).toBe(authenticated ? status : 401);
+        }
+        expect(fetch).not.toHaveBeenCalled();
+      } finally {
+        fetch.mockRestore();
+      }
+    },
+  );
 });

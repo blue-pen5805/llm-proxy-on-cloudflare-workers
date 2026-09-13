@@ -31,7 +31,8 @@ locally; they request secret deletion only during deployment.
 
 | Path               | Responsibility                                     |
 | ------------------ | -------------------------------------------------- |
-| `src/index.ts`     | Worker entry point and middleware order            |
+| `src/index.ts`     | Hono Worker entry point and middleware order       |
+| `src/routing.ts`   | Hono endpoint declarations and namespace guards    |
 | `src/middlewares/` | Cross-cutting request processing                   |
 | `src/requests/`    | Route handlers                                     |
 | `src/providers/`   | Provider adapters and request translation          |
@@ -43,6 +44,49 @@ locally; they request secret deletion only during deployment.
 
 See [Design documentation](design/overview.md) before changing request flow,
 provider behavior, authentication, or key rotation.
+
+## Hono tools and skill
+
+`hono` is the runtime framework; `@hono/cli` is a development dependency.
+`npm ci` installs the versions recorded in `package-lock.json`. The CLI uses the
+`next` release specified by the official Hono skill for its agent commands.
+
+```bash
+npm run hono -- agent-context
+npm run hono:routes
+npm run hono -- request /ping --runtime workerd -X OPTIONS
+```
+
+`hono:routes` inspects `src/routing.ts`, the authenticated endpoint application,
+with `--verbose` so handlers that accept `next`, including the compatibility
+endpoint and namespace guards, appear in the output.
+Inspect entry middleware separately with
+`npm run hono -- routes src/index.ts --verbose`. The provider wildcard uses the
+configured registry; its concrete provider names are not static Hono routes.
+
+Use `--runtime workerd` for requests to the Worker entry point, which requires
+Worker bindings and an ExecutionContext. The CLI starts the base
+`wrangler.jsonc` configuration locally and disposes the Worker after the request.
+It does not read `config.develop.jsonc` or invoke the `npm run dev` secret helper.
+OPTIONS can be tested without authentication; other requests fail closed when
+proxy authentication is unconfigured. For authenticated automated tests, pass
+fake bindings and `createExecutionContext()` to `app.request()` in Workers
+Vitest, as in `test/src/hono_integration.test.ts`. Keep real credentials out of
+CLI arguments and test fixtures.
+
+The [Hono skill](../../.agents/skills/hono/SKILL.md) is bundled in
+`.agents/skills/hono/`, with its upstream MIT license, for sharing through Git.
+[Codex discovers repository skills](https://learn.chatgpt.com/docs/build-skills#where-codex-loads-local-skills)
+in `.agents/skills/`; no separate personal installation is required.
+The skill comes from [honojs/skills](https://github.com/honojs/skills). Local
+adjustments are Markdown formatting and removal of an upstream release TODO;
+review upstream updates before replacing the bundled copy.
+
+The skill's API reference and the installed CLI's `agent-context` output guide
+Hono work; repository security and request-processing contracts remain
+authoritative. See also the
+[Hono CLI reference](https://github.com/honojs/cli) and
+[Hono testing guide](https://hono.dev/docs/guides/testing).
 
 ## Adding or changing configuration
 
@@ -212,4 +256,4 @@ explicit operator confirmation.
 - Prefer repository-relative examples and placeholders over personal URLs,
   accounts, provider keys, or environment names.
 - Verify commands against `package.json`, settings against the JSON Schema, and
-  routes against `src/middlewares/router.ts` before publishing changes.
+  routes against `src/routing.ts` before publishing changes.

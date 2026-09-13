@@ -22,15 +22,3 @@ export function headersForRewrittenBody(source: Headers): Headers {
   }
   return headers;
 }
-
-export function withoutBodyForHead(
-  request: Request,
-  response: Response,
-): Response {
-  if (request.method !== "HEAD") return response;
-  return new Response(null, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: response.headers,
-  });
-}

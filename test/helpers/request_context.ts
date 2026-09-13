@@ -21,8 +21,10 @@ const defaultTestEnv: Env = {
 
 /** Build complete request state for tests that enter at the routing boundary. */
 export function createTestRoutedContext(
-  overrides: Partial<RoutedRequestContext> = {},
-): RoutedRequestContext {
+  overrides: Partial<Omit<RoutedRequestContext, "ctx">> & {
+    ctx?: ExecutionContext;
+  } = {},
+): RoutedRequestContext & { ctx: ExecutionContext } {
   const request =
     overrides.request ?? new Request("https://proxy.example.invalid/");
 

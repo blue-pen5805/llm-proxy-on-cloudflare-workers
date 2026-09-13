@@ -1,18 +1,17 @@
-import { Middleware } from "../middleware";
+import type { ProxyMiddleware } from "../request_context";
 import { RequestLogger } from "../utils/logger";
 
-export const loggingMiddleware: Middleware = async (context, next) => {
+export const loggingMiddleware: ProxyMiddleware = async (c, next) => {
+  const context = c.get("proxy");
   if (context.request.method === "OPTIONS") {
     RequestLogger.start();
   }
-  const downstreamResponse = await next();
+  await next();
 
   RequestLogger.start();
   RequestLogger.info("request.completed", "Request completed", {
     ...RequestLogger.requestFields(),
-    status: downstreamResponse.status,
+    status: c.res.status,
     duration_ms: RequestLogger.requestDurationMs(),
   });
-
-  return downstreamResponse;
 };

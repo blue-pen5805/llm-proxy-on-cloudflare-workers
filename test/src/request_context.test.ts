@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assertRoutedRequestContext,
-  type MiddlewareContext,
+  type ProxyRequestState,
 } from "~/src/request_context";
 import { createTestRoutedContext } from "../helpers/request_context";
 
@@ -14,7 +14,7 @@ describe("request context", () => {
 
   it("rejects state that reached routing without a provider registry", () => {
     const routed = createTestRoutedContext();
-    const context: MiddlewareContext = {
+    const context: ProxyRequestState = {
       request: routed.request,
       env: routed.env,
       ctx: routed.ctx,

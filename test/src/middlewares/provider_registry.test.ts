@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { MiddlewareContext } from "~/src/middleware";
-import { providerRegistryMiddleware } from "~/src/middlewares/provider_registry";
+import { providerRegistryMiddleware as middleware } from "~/src/middlewares/provider_registry";
 import { createProviderRegistry } from "~/src/providers";
+import type { ProxyRequestState } from "~/src/request_context";
+import { testMiddleware } from "../../helpers/hono";
 
 vi.mock("~/src/providers", () => ({
   createProviderRegistry: vi.fn(() => ({ names: () => [] })),
 }));
+
+const providerRegistryMiddleware = testMiddleware(middleware);
 
 describe("providerRegistryMiddleware", () => {
   beforeEach(() => {
@@ -14,7 +17,7 @@ describe("providerRegistryMiddleware", () => {
 
   it("installs one request-scoped provider registry", async () => {
     const env = {} as Env;
-    const context = { env } as MiddlewareContext;
+    const context = { env } as ProxyRequestState;
     const next = vi.fn().mockResolvedValue(new Response());
 
     await providerRegistryMiddleware(context, next);
@@ -29,7 +32,7 @@ describe("providerRegistryMiddleware", () => {
     const context = {
       env: {} as Env,
       providers,
-    } as unknown as MiddlewareContext;
+    } as unknown as ProxyRequestState;
 
     await providerRegistryMiddleware(
       context,

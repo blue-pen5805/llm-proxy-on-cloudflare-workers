@@ -38,6 +38,13 @@ compatibility contract permits it.
 
 ## Shared request setup
 
+Hono entry middleware and route dispatch use isolate-scoped route tables.
+Authenticated path preparation and endpoint matching share the original Request
+and one proxy state object. Routing does not reserialize the body or construct
+an intermediate Request. Hono owns HEAD response-body suppression. Cross-origin
+responses retain the same body stream while policy is applied to writable
+headers.
+
 Request parsing, authentication configuration, routing metadata, and provider
 instances are reused within one request. Common transformations use single-pass
 iteration and avoid intermediate request objects. Bounded fan-out operations

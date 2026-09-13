@@ -18,6 +18,11 @@ The matching zero-based slot is retained in request scope and logged as
 rejected request receives `WWW-Authenticate: Bearer`, advertising the scheme
 without a realm that would name the deployment.
 
+The entry application uses a constant Hono matching path so encoded URL
+characters cannot skip authentication, CORS, error handling, or request logs.
+The original URL remains available for authenticated path preparation and
+upstream forwarding.
+
 Authentication precedes `/key/<selection>` parsing. Were the order reversed, a
 malformed selection would answer an unauthenticated client with HTTP 400 while
 every other path answered HTTP 401, confirming that the prefix exists.
@@ -32,7 +37,10 @@ CORS preflight is answered before authentication. Actual cross-origin responses,
 including authentication and routing errors, receive the matching CORS origin
 header without changing the authentication requirement. Such responses carry
 `Vary: Origin`; the error guard also adds the applicable CORS headers to errors
-raised during CORS handling. Preflight permits the bounded provider pass-through
+raised during CORS handling. Hono response replacement merges existing headers,
+so the CORS middleware makes response headers writable through `c.header` and
+applies the proxy policy in place. It does not reintroduce upstream permissions
+by assigning a replacement response. Preflight permits the bounded provider pass-through
 method set (`GET`, `HEAD`, `POST`, `PUT`, `PATCH`, and `DELETE`), and actual
 responses expose the model cache and truncation diagnostic headers.
 `ALLOWED_ORIGINS` optionally restricts browser access to exact origins. Its

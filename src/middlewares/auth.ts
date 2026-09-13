@@ -1,4 +1,4 @@
-import { Middleware } from "../middleware";
+import type { ProxyMiddleware } from "../request_context";
 import { getAuthorizedProxyKeyIndex } from "../utils/authorization";
 import { Config } from "../utils/config";
 import { ServiceUnavailableError, UnauthorizedError } from "../utils/error";
@@ -19,12 +19,14 @@ function isLocalRuntime(request: Request): boolean {
   return request.headers.get("cf-ray") === null;
 }
 
-export const authMiddleware: Middleware = async (context, next) => {
+export const authMiddleware: ProxyMiddleware = async (c, next) => {
+  const context = c.get("proxy");
   context.pathname = removeAuthorizationQueryParameters(context.pathname);
 
   if (Config.isDevelopment()) {
     if (isLocalRuntime(context.request)) {
-      return await next();
+      await next();
+      return;
     }
     RequestLogger.warn(
       "auth.development_mode_ignored",
@@ -49,5 +51,5 @@ export const authMiddleware: Middleware = async (context, next) => {
   context.proxyKeyIndex = proxyKeyIndex;
   RequestLogger.setProxyKeyIndex(proxyKeyIndex);
 
-  return await next();
+  await next();
 };

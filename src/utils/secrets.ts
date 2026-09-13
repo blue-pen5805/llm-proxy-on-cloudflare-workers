@@ -167,7 +167,7 @@ export class Secrets {
   /**
    * Resolves a selection (number or range) to a single apiKeyIndex.
    *
-   * @param selection - The selection from MiddlewareContext
+   * @param selection - The selection from ProxyRequestState
    * @param length - The total number of available API keys
    * @returns A single index within the range [0, length-1]
    */

@@ -1,17 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { MiddlewareContext } from "~/src/middleware";
-import { errorMiddleware } from "~/src/middlewares/error";
+import { errorMiddleware as middleware } from "~/src/middlewares/error";
+import { ProxyRequestState } from "~/src/request_context";
 import { AppError, MethodNotAllowedError } from "~/src/utils/error";
+import { testMiddleware } from "../../helpers/hono";
+
+const errorMiddleware = testMiddleware(middleware);
 
 describe("errorMiddleware", () => {
-  let context: MiddlewareContext;
+  let context: ProxyRequestState;
 
   beforeEach(() => {
     vi.resetAllMocks();
     context = {
       request: new Request("http://localhost/"),
       pathname: "/",
-    } as MiddlewareContext;
+    } as ProxyRequestState;
   });
 
   it("should catch AppError and return appropriate response", async () => {

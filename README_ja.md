@@ -31,7 +31,7 @@ Cohere、Hugging Face、Mistral、NVIDIA NIM、Ollama、Perplexity、Replicate�
 
 ## クイックスタート
 
-Node.js 22.12 以降、npm、Cloudflare アカウント、1つ以上のプロバイダー認証情報が必要です。
+Node.js 22.13 以降、npm、Cloudflare アカウント、1つ以上のプロバイダー認証情報が必要です。
 
 ```bash
 git clone https://github.com/blue-pen5805/llm-proxy-on-cloudflare-workers.git

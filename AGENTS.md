@@ -13,6 +13,16 @@ These instructions apply to the entire repository.
   and documented limits as contracts. Keep implementation, tests, and
   documentation synchronized.
 
+## Use Hono for HTTP request processing
+
+- Use the [repository Hono skill](.agents/skills/hono/SKILL.md) for changes to
+  routing and middleware. Read `npm run hono -- agent-context` for the installed
+  CLI's workflow, and use `npm run hono:routes` to inspect endpoint declarations.
+- Keep HTTP composition and dispatch in Hono. Preserve the authenticated path
+  preparation boundary and the protocol handlers' streaming contracts.
+- Follow [Hono tooling setup](docs/developer/development.md#hono-tools-and-skill)
+  for the bundled skill and local CLI requests.
+
 ## Protect configuration and credentials
 
 - Never edit `config.jsonc` or `config.<environment>.jsonc`. They are ignored,

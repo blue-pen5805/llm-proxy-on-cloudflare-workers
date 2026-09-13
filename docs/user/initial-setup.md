@@ -5,7 +5,7 @@ all available settings, see the [Configuration reference](configuration.md).
 
 ## Prerequisites
 
-- Node.js 22.12 or later and npm
+- Node.js 22.13 or later and npm
 - A Cloudflare account with permission to create Workers and secrets
 - At least one supported provider credential
 

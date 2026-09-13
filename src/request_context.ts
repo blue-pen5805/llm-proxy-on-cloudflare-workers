@@ -1,10 +1,11 @@
+import type { Context, ExecutionContext, MiddlewareHandler } from "hono";
 import type { CloudflareAIGateway } from "./ai_gateway";
 import type { ProviderRegistry } from "./providers";
 
 export type ApiKeySelection = number | { start?: number; end?: number };
 
-/** Request-scoped state while the ordered middleware pipeline is running. */
-export interface MiddlewareContext {
+/** Request-scoped state shared by Hono middleware and protocol handlers. */
+export interface ProxyRequestState {
   request: Request;
   env: Env;
   ctx: ExecutionContext;
@@ -16,7 +17,7 @@ export interface MiddlewareContext {
 }
 
 /** State guaranteed to be available once request preparation reaches routing. */
-export interface RoutedRequestContext extends MiddlewareContext {
+export interface RoutedRequestContext extends ProxyRequestState {
   providers: ProviderRegistry;
 }
 
@@ -25,9 +26,17 @@ export interface RoutedRequestContext extends MiddlewareContext {
  * The provider-registry middleware is the runtime owner of this invariant.
  */
 export function assertRoutedRequestContext(
-  context: MiddlewareContext,
+  context: ProxyRequestState,
 ): asserts context is RoutedRequestContext {
   if (!context.providers) {
     throw new Error("Request routing requires a provider registry.");
   }
 }
+
+/** Hono owns HTTP composition; protocol handlers share this request-local state. */
+export type ProxyEnv = {
+  Bindings: Env;
+  Variables: { proxy: ProxyRequestState };
+};
+export type ProxyContext = Context<ProxyEnv>;
+export type ProxyMiddleware = MiddlewareHandler<ProxyEnv>;

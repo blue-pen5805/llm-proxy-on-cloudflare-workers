@@ -22,6 +22,16 @@ export function addCorsHeaders(request: Request, response: Response): Response {
   if (request.headers.get("Origin") === null) return response;
 
   const headers = new Headers(response.headers);
+  applyCorsHeaders(request, headers);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+/** Apply the proxy policy to writable response headers without copying the body. */
+export function applyCorsHeaders(request: Request, headers: Headers): void {
   // Upstream CORS policy cannot grant access denied by this proxy's allowlist.
   headers.delete("Access-Control-Allow-Origin");
   headers.delete("Access-Control-Expose-Headers");
@@ -39,11 +49,6 @@ export function addCorsHeaders(request: Request, response: Response): Response {
   // The presence of the CORS headers depends on the request's Origin, so any
   // cache in front of the Worker must key on it.
   headers.append("Vary", "Origin");
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
 }
 
 // https://developers.cloudflare.com/workers/examples/cors-header-proxy/

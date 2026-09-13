@@ -1,7 +1,8 @@
-import { Middleware } from "../middleware";
 import { createProviderRegistry } from "../providers";
+import type { ProxyMiddleware } from "../request_context";
 
-export const providerRegistryMiddleware: Middleware = async (context, next) => {
+export const providerRegistryMiddleware: ProxyMiddleware = async (c, next) => {
+  const context = c.get("proxy");
   context.providers ??= createProviderRegistry(context.env);
-  return await next();
+  await next();
 };

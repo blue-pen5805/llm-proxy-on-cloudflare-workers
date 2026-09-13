@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MiddlewareContext } from "~/src/middleware";
-import { loggingMiddleware } from "~/src/middlewares/logging";
+import { loggingMiddleware as middleware } from "~/src/middlewares/logging";
+import { ProxyRequestState } from "~/src/request_context";
 import { RequestLogger } from "~/src/utils/logger";
+import { testMiddleware } from "../../helpers/hono";
+
+const loggingMiddleware = testMiddleware(middleware);
 
 describe("loggingMiddleware", () => {
   afterEach(() => {
@@ -14,7 +17,7 @@ describe("loggingMiddleware", () => {
       method: "POST",
       headers: { "cf-ray": "ray-id" },
     });
-    const context = { request } as MiddlewareContext;
+    const context = { request } as ProxyRequestState;
     const expected = new Response("ok", { status: 201 });
 
     const response = await RequestLogger.run(request, () =>
@@ -66,7 +69,7 @@ describe("loggingMiddleware", () => {
 
     await RequestLogger.run(request, () =>
       loggingMiddleware(
-        { request } as MiddlewareContext,
+        { request } as ProxyRequestState,
         async () => new Response("ok"),
       ),
     );
@@ -90,7 +93,7 @@ describe("loggingMiddleware", () => {
 
     await expect(
       RequestLogger.run(request, () =>
-        loggingMiddleware({ request } as MiddlewareContext, async () => {
+        loggingMiddleware({ request } as ProxyRequestState, async () => {
           throw error;
         }),
       ),

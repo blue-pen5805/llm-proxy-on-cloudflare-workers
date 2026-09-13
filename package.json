@@ -1,9 +1,11 @@
 {
   "name": "llm-proxy-on-cloudflare-workers",
-  "description": "A serverless proxy on Cloudflare Workers for multiple LLM APIs with unified authentication and key rotation.",
-  "author": "blue.pen5805",
   "version": "0.2.1",
+  "private": true,
+  "description": "A serverless proxy on Cloudflare Workers for multiple LLM APIs with unified authentication and key rotation.",
   "license": "MIT",
+  "author": "blue.pen5805",
+  "homepage": "https://github.com/blue-pen5805/llm-proxy-on-cloudflare-workers#readme",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/blue-pen5805/llm-proxy-on-cloudflare-workers.git"
@@ -11,36 +13,40 @@
   "bugs": {
     "url": "https://github.com/blue-pen5805/llm-proxy-on-cloudflare-workers/issues"
   },
-  "homepage": "https://github.com/blue-pen5805/llm-proxy-on-cloudflare-workers#readme",
-  "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=22.13.0"
   },
   "scripts": {
-    "deploy": "wrangler deploy",
-    "dev": "tsx scripts/with-secrets.ts --env develop -- wrangler dev --env-file .dev.vars.develop",
+    "bench": "vitest bench --run",
     "cf-typegen": "tsx scripts/with-secrets.ts --env example --include-null-placeholders -- wrangler types --env-file .dev.vars.example",
     "cf:login": "wrangler login",
     "cf:logout": "wrangler logout",
-    "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
-    "test:types": "tsc --noEmit -p test/tsconfig.json && tsc --noEmit -p test/scripts/tsconfig.json",
-    "test:live-chat": "tsx scripts/test-live-chat.ts",
-    "test-watch": "vitest watch",
-    "bench": "vitest bench --run",
-    "tsc": "tsc --noEmit && npm run test:types",
+    "deploy": "wrangler deploy",
+    "dev": "tsx scripts/with-secrets.ts --env develop -- wrangler dev --env-file .dev.vars.develop",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
+    "hono": "hono",
+    "hono:routes": "hono routes src/routing.ts --verbose",
     "lint": "oxlint --deny-warnings src scripts test",
     "lint:fix": "oxlint --fix src scripts test",
-    "verify": "npm run tsc && npm run format:check && npm run lint && npm run test:coverage",
     "secrets": "tsx scripts/create-config.ts",
-    "secrets:deploy": "tsx scripts/deploy-secrets.ts"
+    "secrets:deploy": "tsx scripts/deploy-secrets.ts",
+    "test": "vitest run",
+    "test-watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
+    "test:live-chat": "tsx scripts/test-live-chat.ts",
+    "test:types": "tsc --noEmit -p test/tsconfig.json && tsc --noEmit -p test/scripts/tsconfig.json",
+    "tsc": "tsc --noEmit && npm run test:types",
+    "verify": "npm run tsc && npm run format:check && npm run lint && npm run test:coverage"
+  },
+  "dependencies": {
+    "hono": "^4.13.7"
   },
   "devDependencies": {
     "@clack/prompts": "^1.7.0",
     "@cloudflare/vitest-pool-workers": "^0.21.3",
+    "@hono/cli": "^0.2.0-next.7",
     "@types/node": "^22.20.1",
     "@vitest/coverage-istanbul": "4.1.10",
     "ajv": "^8.20.0",

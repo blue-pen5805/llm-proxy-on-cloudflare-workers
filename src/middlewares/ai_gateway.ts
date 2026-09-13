@@ -3,11 +3,12 @@ import {
   isCloudflareAiPath,
   isSafeCloudflareAIGatewayId,
 } from "../ai_gateway/utils";
-import { Middleware } from "../middleware";
+import type { ProxyMiddleware } from "../request_context";
 import { Config } from "../utils/config";
 import { BadRequestError, ConfigurationError } from "../utils/error";
 
-export const aiGatewayMiddleware: Middleware = async (context, next) => {
+export const aiGatewayMiddleware: ProxyMiddleware = async (c, next) => {
+  const context = c.get("proxy");
   const {
     accountId,
     name: defaultGatewayId,
@@ -59,5 +60,5 @@ export const aiGatewayMiddleware: Middleware = async (context, next) => {
     );
   }
 
-  return await next();
+  await next();
 };

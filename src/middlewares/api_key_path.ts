@@ -1,4 +1,4 @@
-import { Middleware } from "../middleware";
+import type { ProxyMiddleware } from "../request_context";
 import { BadRequestError } from "../utils/error";
 
 function parseIndex(value: string | undefined): number | undefined {
@@ -12,7 +12,8 @@ function parseIndex(value: string | undefined): number | undefined {
   return index;
 }
 
-export const apiKeyPathMiddleware: Middleware = async (context, next) => {
+export const apiKeyPathMiddleware: ProxyMiddleware = async (c, next) => {
+  const context = c.get("proxy");
   let { pathname } = context;
 
   if (pathname.startsWith("/key/")) {
@@ -57,5 +58,5 @@ export const apiKeyPathMiddleware: Middleware = async (context, next) => {
 
   context.pathname = pathname;
 
-  return await next();
+  await next();
 };

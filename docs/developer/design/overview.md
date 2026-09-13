@@ -13,6 +13,10 @@ User-facing commands and endpoint examples live in the
 
 ## Request flow
 
+A typed Hono entry application prepares the request before passing the original
+Request and request-scoped state to a Hono routing application. Prefix parsing
+therefore precedes route matching without copying or buffering the body.
+
 ```mermaid
 flowchart LR
   Client --> Logging[Lifecycle logging]
@@ -62,12 +66,11 @@ and [security](features/security_config.md).
 
 ## Authoritative implementation points
 
-| Concern                         | Source                       |
-| ------------------------------- | ---------------------------- |
-| Middleware order                | `src/index.ts`               |
-| Route table                     | `src/routing.ts`             |
-| Route execution                 | `src/middlewares/router.ts`  |
-| Built-in providers              | `src/providers.ts`           |
-| Configuration shape             | `schemas/config-schema.json` |
-| Worker bindings and migrations  | `wrangler.jsonc`             |
-| Secret and key-selection policy | `src/utils/secrets.ts`       |
+| Concern                               | Source                       |
+| ------------------------------------- | ---------------------------- |
+| Middleware order                      | `src/index.ts`               |
+| Hono route declarations and execution | `src/routing.ts`             |
+| Built-in providers                    | `src/providers.ts`           |
+| Configuration shape                   | `schemas/config-schema.json` |
+| Worker bindings and migrations        | `wrangler.jsonc`             |
+| Secret and key-selection policy       | `src/utils/secrets.ts`       |

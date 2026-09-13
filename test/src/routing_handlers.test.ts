@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
 import { CloudflareAIGateway } from "~/src/ai_gateway";
-import { handleRouting } from "~/src/middlewares/router";
 import { handleAiGatewayRestRequest } from "~/src/requests/ai_gateway_rest";
 import { handleCompatibilityRequest } from "~/src/requests/compat";
 import { handleMessagesRequest } from "~/src/requests/messages";
@@ -9,7 +8,8 @@ import { handleProviderProxyRequest } from "~/src/requests/proxy";
 import { handleResponsesRequest } from "~/src/requests/responses";
 import { handleVirtualModelsRequest } from "~/src/requests/virtual_models";
 import { BadRequestError, NotFoundError } from "~/src/utils/error";
-import { createTestRoutedContext } from "../../helpers/request_context";
+import { handleRouting } from "../helpers/hono";
+import { createTestRoutedContext } from "../helpers/request_context";
 
 // Mock the request handlers
 vi.mock("~/src/requests/chat_completions", () => ({
@@ -58,7 +58,7 @@ vi.mock("~/src/requests/universal_endpoint", () => ({
   ),
 }));
 
-describe("handleRouting", () => {
+describe("Hono endpoint handlers", () => {
   const request = new Request("http://localhost/");
 
   it("should route to status", async () => {
@@ -425,6 +425,36 @@ describe("handleRouting", () => {
   it("should throw NotFoundError for unknown routes", async () => {
     await expect(
       handleRouting(createTestRoutedContext({ request, pathname: "/unknown" })),
+    ).rejects.toThrow(NotFoundError);
+  });
+  it.each(["/", "/compat/chat/completions", "/compat/unknown"])(
+    "rejects POST %s without a Gateway or matching provider",
+    async (pathname) => {
+      await expect(
+        handleRouting(
+          createTestRoutedContext({
+            request: new Request(`https://proxy.example${pathname}`, {
+              method: "POST",
+            }),
+            pathname,
+          }),
+        ),
+      ).rejects.toThrow(NotFoundError);
+    },
+  );
+
+  it("rejects query-bearing Gateway REST routes", async () => {
+    const pathname = "/ai/run?trace=true";
+    await expect(
+      handleRouting(
+        createTestRoutedContext({
+          request: new Request(`https://proxy.example${pathname}`, {
+            method: "POST",
+          }),
+          pathname,
+        }),
+        new CloudflareAIGateway("account", "gateway"),
+      ),
     ).rejects.toThrow(NotFoundError);
   });
 });

@@ -1,19 +1,34 @@
 # Request Processing
 
-## Middleware model
+## Hono application and request state
 
-The Worker uses a composed middleware chain to keep authentication, path
-rewriting, Gateway selection, and route handlers independent. A shared
-`MiddlewareContext` carries only request-scoped state: the request, Worker
-environment, execution context, normalized path, optional key selection,
-optional AI Gateway client, and the request's provider registry.
+The Worker exports a typed Hono application. Hono owns middleware composition,
+HTTP method/path dispatch, and HEAD response-body suppression. Authentication,
+credential isolation, CORS policy, and protocol translation remain explicit
+proxy policies rather than framework defaults.
 
-`composeMiddleware` enforces single forward traversal. Calling `next()` twice
-rejects, and reaching the end of the chain produces a not-found error.
+The application has two stages. The entry application in `src/index.ts` matches
+a constant `/` path so every request enters the common middleware, including
+paths containing encoded line separators. It prepares and authenticates the
+original request without Hono decoding its path for entry-stage matching.
+The routing application in `src/routing.ts`
+receives the same original Request and its prepared state. Its `getPath` reads
+the prepared path, so route matching happens after authenticated prefix parsing
+without constructing another Request or touching its body. Both Hono route
+tables are constructed once per isolate and contain no request-specific values.
 
-The internal field is named `pathname`, but it stores the URL suffix after the
-origin, including the query string. This preserves non-authentication query
-parameters on pass-through requests.
+The entry application's typed `proxy` Context variable holds `ProxyRequestState`:
+the Request, Worker bindings, execution context, normalized path, optional key
+selection, optional AI Gateway client, and provider registry. The routing stage
+receives `RoutedRequestContext`, which requires the provider registry. Protocol
+handlers consume this state directly rather than depending on Hono response or
+body-parsing helpers.
+
+The internal field `pathname` stores the URL suffix after the origin, including
+the query string. Hono route matching uses only the path component; upstream
+forwarding retains non-authentication query parameters with their original
+encoding and order. Gateway REST routes additionally require an exact suffix,
+so a query-bearing REST path is rejected.
 
 ## Ordered stages and path rewriting
 
@@ -22,9 +37,10 @@ The order in `src/index.ts` is behaviorally significant:
 1. `loggingMiddleware` guarantees a request-start record and records final
    response status and request latency. Route handlers emit the start record
    earlier when safe endpoint-specific metadata becomes available.
-2. `errorMiddleware` converts known application errors to JSON and redacts
-   unexpected error details from clients. Because it wraps CORS handling, its
-   responses include the applicable cross-origin headers.
+2. Hono's `onError` uses `errorResponse` for Error instances. The
+   `errorMiddleware` boundary also contains non-Error thrown values. Both use
+   the same protocol-specific JSON envelope, redact unexpected details, and
+   apply the applicable CORS headers.
 3. `corsMiddleware` answers preflight requests immediately and adds CORS headers
    to actual cross-origin responses.
 4. `requestMiddleware` initializes the origin-relative path, including its
@@ -41,11 +57,11 @@ The order in `src/index.ts` is behaviorally significant:
 8. `aiGatewayMiddleware` selects the default or path-specific Gateway and
    removes an optional `/g/<name>` prefix. A prefix without
    `CLOUDFLARE_ACCOUNT_ID` fails with HTTP 400.
-9. `routerMiddleware` requires the provider registry established by the prior
-   stage, resolves the request to a typed route without invoking a handler, and
-   then executes that route. Resolution preserves route priority and rejects an
-   extracted key selection when the selected route has no key-selection
-   contract. Execution owns handler invocation and endpoint-specific logging.
+9. The entry application requires the provider registry and dispatches to the
+   Hono routing application. Its method/path declarations own handler invocation
+   and endpoint-specific logging. Namespace guards preserve reserved-route
+   priority; handlers reject key selection when the route has no such contract.
+   The final provider route resolves names only through the operator's registry.
 
 For example, after successful authentication:
 
@@ -75,8 +91,8 @@ providers without a declared model-list operation.
 
 ## Key prefix and route matching
 
-The router resolves a typed route before invoking its handler. It rejects a key
-prefix when that route cannot consume a provider credential. Prefix syntax,
+Hono matches the prepared path to a handler. The handler rejects a key prefix
+when its route cannot consume a provider credential. Prefix syntax,
 methods, aliases, and reserved namespaces are defined in [HTTP API and
 routing](../../../user/api/overview.md).
 
@@ -86,10 +102,11 @@ configuration.
 
 ## Request-scoped environment and failures
 
-The entry point runs the chain inside `Environments.run`, backed by
-`AsyncLocalStorage`. Provider instances and utilities can read the current
+The outer Hono middleware runs request processing inside `Environments.run`,
+backed by `AsyncLocalStorage`. Provider instances and utilities can read the current
 `Env` without mutable module-level request state. After authentication,
-`providerRegistryMiddleware` creates one `ProviderRegistry` in that scope.
+`providerRegistryMiddleware` attaches the configuration-specific
+`ProviderRegistry` to the request.
 Invalid custom endpoint configuration therefore becomes a safe HTTP 503 without
 being disclosed to unauthenticated requests. Routing reads provider names
 without eagerly constructing adapters; handlers reuse lazily created instances.
@@ -98,8 +115,9 @@ Handlers may return upstream responses directly or throw application errors.
 The outer error boundary preserves public messages for known errors. Unknown
 values are logged and converted to a generic HTTP 500 JSON response.
 OpenAI-compatible local failures use the OpenAI error object; Messages routes
-use the Anthropic error object. `HEAD` health and model routes execute their
-`GET` contract and discard the response body.
+use the Anthropic error object. Hono executes `HEAD` using the matching `GET`
+handler and suppresses the response body. The raw Request retains its `HEAD` method, so provider pass-through sends
+`HEAD` upstream.
 
 JSON-inspecting handlers share a bounded HTTP body reader. Invalid or oversized
 Content-Length values and streamed byte-limit violations release the rejected
@@ -129,5 +147,8 @@ are passed to the protocol-specific EOF handler.
 
 ## References
 
+- [Hono application API](https://hono.dev/docs/api/hono)
+- [Hono middleware](https://hono.dev/docs/guides/middleware)
+- [Hono Context](https://hono.dev/docs/api/context)
 - [Cloudflare Workers](https://developers.cloudflare.com/workers/)
 - [Fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API)
