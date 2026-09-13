@@ -473,6 +473,17 @@ async function formatHttpError(
   return `${status}: ${detail}${truncationNotice}`;
 }
 
+async function drainResponseBody(response: Response): Promise<void> {
+  if (!response.body) return;
+  const reader = response.body.getReader();
+  try {
+    // Consume without buffering so normal completion does not close the socket early.
+    while (!(await reader.read()).done) {}
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 async function executeRequest(
   testCase: LiveChatTestCase,
   route: LiveChatTestResult["route"],
@@ -501,9 +512,7 @@ async function executeRequest(
       },
     );
     if (response.ok) {
-      if (response.body) {
-        await response.body.cancel().catch(() => undefined);
-      }
+      await drainResponseBody(response);
       return { provider: testCase.provider, route, status: response.status };
     }
     return {
@@ -612,9 +621,7 @@ export async function verifyLocalDevelopmentServer(
         signal: abortController.signal,
       },
     );
-    if (response.body) {
-      await response.body.cancel().catch(() => undefined);
-    }
+    await drainResponseBody(response);
     if (!response.ok) {
       throw new Error(`local /ping returned HTTP ${response.status}.`);
     }

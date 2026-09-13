@@ -145,12 +145,16 @@ script never retries. With the default explicit key selection, a full run makes
 one upstream attempt per applicable check, up to two per provider. Gateway
 policy and provider requirements can reduce this to one check.
 
-Any HTTP 2xx response passes. Network errors, timeouts, and non-2xx responses
-fail the command. A non-2xx result includes up to 16 KiB of its upstream error
-body so provider messages, types, and codes remain visible. Credential-like JSON
+An HTTP 2xx response passes after its body is fully received. Successful bodies
+are read and discarded incrementally without parsing or retaining their content.
+The request timeout includes body consumption. Network errors, body read errors,
+timeouts, and non-2xx responses fail the command. A non-2xx result includes up to
+16 KiB of its upstream error body so provider messages, types, and codes remain
+visible. Credential-like JSON
 fields, Bearer values, common API-key forms, and the configured proxy key are
-redacted before output. Successful response bodies are discarded. The process
-exits nonzero when at least one check fails.
+redacted before output. The `/ping` readiness check also consumes its response
+body within its 10-second timeout. The process exits nonzero when at least one
+check fails.
 
 For example, a provider response remains actionable in the summary:
 

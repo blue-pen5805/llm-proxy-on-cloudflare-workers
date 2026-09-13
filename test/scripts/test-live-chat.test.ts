@@ -454,27 +454,136 @@ describe("live Chat Completions test script", () => {
     );
   });
 
-  it("tolerates response-body cleanup failures", async () => {
-    const body = {
-      cancel: vi.fn().mockRejectedValue(new Error("cleanup failed")),
-    };
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue({
-      ok: true,
-      status: 200,
-      body,
-    } as unknown as Response);
+  it.each(["chat", "readiness"])(
+    "waits for the complete %s body without cancelling",
+    async (kind) => {
+      let controller!: ReadableStreamDefaultController<Uint8Array>;
+      const cancel = vi.fn();
+      const body = new ReadableStream<Uint8Array>({
+        start(value) {
+          controller = value;
+        },
+        cancel,
+      });
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response(body));
+      let completed = false;
+      const request =
+        kind === "chat"
+          ? runLiveChatTests(
+              parseLiveChatConfig('{"providers":{"ollama":"model-test"}}'),
+              { baseUrl: "http://localhost:8787", fetcher },
+            )
+          : verifyLocalDevelopmentServer(
+              "http://localhost:8787",
+              undefined,
+              fetcher,
+            );
+      const completion = request.then((result) => {
+        completed = true;
+        return result;
+      });
+      controller.enqueue(new TextEncoder().encode("first"));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(completed).toBe(false);
+      controller.enqueue(new TextEncoder().encode("last"));
+      controller.close();
+      const result = await completion;
+      if (kind === "chat")
+        expect(result).toEqual([
+          { provider: "ollama", route: "chat-direct", status: 200 },
+        ]);
+      expect(completed).toBe(true);
+      expect(cancel).not.toHaveBeenCalled();
+      expect(body.locked).toBe(false);
+    },
+  );
 
-    await expect(
-      verifyLocalDevelopmentServer("http://localhost:8787", undefined, fetcher),
-    ).resolves.toBeUndefined();
-    const results = await runLiveChatTests(
-      parseLiveChatConfig('{"providers":{"ollama":"model-test"}}'),
-      { baseUrl: "http://localhost:8787", fetcher },
-    );
+  it.each(["chat", "readiness"])(
+    "reports %s body read failures",
+    async (kind) => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.error(new Error("body failed"));
+        },
+      });
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response(body));
+      if (kind === "chat") {
+        await expect(
+          runLiveChatTests(
+            parseLiveChatConfig('{"providers":{"ollama":"model-test"}}'),
+            { baseUrl: "http://localhost:8787", fetcher },
+          ),
+        ).resolves.toEqual([
+          { provider: "ollama", route: "chat-direct", error: "body failed" },
+        ]);
+      } else {
+        await expect(
+          verifyLocalDevelopmentServer(
+            "http://localhost:8787",
+            undefined,
+            fetcher,
+          ),
+        ).rejects.toThrow("body failed");
+      }
+      expect(body.locked).toBe(false);
+    },
+  );
 
-    expect(results).toHaveLength(1);
-    expect(body.cancel).toHaveBeenCalledTimes(2);
-  });
+  it.each(["chat", "readiness"])(
+    "keeps the %s timeout active while reading the body",
+    async (kind) => {
+      vi.useFakeTimers();
+      try {
+        const fetcher = vi.fn<typeof fetch>().mockImplementation(
+          async (_input, init) =>
+            new Response(
+              new ReadableStream<Uint8Array>({
+                start(controller) {
+                  controller.enqueue(new TextEncoder().encode("partial"));
+                  init?.signal?.addEventListener(
+                    "abort",
+                    () =>
+                      controller.error(
+                        new DOMException("aborted", "AbortError"),
+                      ),
+                    { once: true },
+                  );
+                },
+              }),
+            ),
+        );
+        const expectation =
+          kind === "chat"
+            ? expect(
+                runLiveChatTests(
+                  parseLiveChatConfig('{"providers":{"ollama":"model-test"}}'),
+                  { baseUrl: "http://localhost:8787", timeoutMs: 100, fetcher },
+                ),
+              ).resolves.toEqual([
+                {
+                  provider: "ollama",
+                  route: "chat-direct",
+                  error: "Timed out after 100 ms",
+                },
+              ])
+            : expect(
+                verifyLocalDevelopmentServer(
+                  "http://localhost:8787",
+                  undefined,
+                  fetcher,
+                ),
+              ).rejects.toThrow("Local development server is unavailable");
+        await vi.advanceTimersByTimeAsync(10_001);
+        await expectation;
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
 
   it("times out an unresponsive readiness check", async () => {
     vi.useFakeTimers();
