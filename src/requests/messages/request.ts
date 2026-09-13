@@ -1,5 +1,6 @@
 import { anthropicErrorResponse } from "../error_response";
 import { isJsonObject as isObject, type JsonObject } from "../sse";
+import { appendChatHistory } from "../tool_history";
 import type { MessagesRequest } from "./types";
 
 export type { MessagesRequest } from "./types";
@@ -147,7 +148,7 @@ function convertMessage(message: unknown): JsonObject[] {
   let ordinary: JsonObject[] = [];
   const flushOrdinary = () => {
     if (ordinary.length > 0) {
-      converted.push({ role, content: ordinary });
+      appendChatHistory(converted, { role, content: ordinary });
       ordinary = [];
     }
   };
@@ -183,7 +184,7 @@ function convertMessage(message: unknown): JsonObject[] {
         unsupported("messages.content.tool_use");
       }
       flushOrdinary();
-      converted.push({
+      appendChatHistory(converted, {
         role: "assistant",
         content: null,
         tool_calls: [
@@ -356,7 +357,7 @@ export function convertMessagesRequest(rawBody: unknown): {
   if (system) messages.push(system);
   for (const message of body.messages) {
     for (const converted of convertMessage(message)) {
-      messages.push(converted);
+      appendChatHistory(messages, converted);
     }
   }
   return {

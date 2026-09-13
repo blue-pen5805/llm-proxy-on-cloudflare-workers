@@ -155,8 +155,9 @@ export function convertStreamingResponse(
         finishReason = choice.finish_reason;
       }
       if (!isObject(choice.delta)) continue;
-      if (typeof choice.delta.content === "string") {
-        const limitError = budget.addText(choice.delta.content);
+      for (const text of [choice.delta.content, choice.delta.refusal]) {
+        if (typeof text !== "string") continue;
+        const limitError = budget.addText(text);
         if (limitError) {
           fail(controller, limitError);
           return;
@@ -165,7 +166,7 @@ export function convertStreamingResponse(
         if (finished) return;
         event(controller, "content_block_delta", {
           index: textOutputIndex,
-          delta: { type: "text_delta", text: choice.delta.content },
+          delta: { type: "text_delta", text },
         });
       }
       if (!Array.isArray(choice.delta.tool_calls)) continue;
@@ -175,21 +176,32 @@ export function convertStreamingResponse(
         const fn = isObject(callDelta.function) ? callDelta.function : {};
         let tool = tools.get(callDelta.index);
         if (!tool) {
-          const limitError = budget.addTool() ?? budget.addOutputItem();
+          const id =
+            typeof callDelta.id === "string"
+              ? callDelta.id
+              : `toolu_${crypto.randomUUID()}`;
+          const name = typeof fn.name === "string" ? fn.name : "";
+          const limitError =
+            budget.addTool() ??
+            budget.addOutputItem() ??
+            budget.addToolMetadata(id) ??
+            budget.addToolMetadata(name);
           if (limitError) {
             fail(controller, limitError);
             return;
           }
           tool = {
-            id:
-              typeof callDelta.id === "string"
-                ? callDelta.id
-                : `toolu_${crypto.randomUUID()}`,
-            name: typeof fn.name === "string" ? fn.name : "",
+            id,
+            name,
             input: "",
           };
           tools.set(callDelta.index, tool);
         } else if (typeof fn.name === "string" && fn.name !== tool.name) {
+          const limitError = budget.addToolMetadata(fn.name);
+          if (limitError) {
+            fail(controller, limitError);
+            return;
+          }
           tool.name = fn.name;
         }
         if (typeof fn.arguments === "string") {

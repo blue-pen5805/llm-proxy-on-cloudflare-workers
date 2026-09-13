@@ -163,6 +163,9 @@ function validateRuntimeConfig(config: Record<string, unknown>): void {
   Environments.runWithConfig(config, () => {
     Config.customOpenAIEndpoints();
     Config.allowedOrigins();
+    if (config.PROXY_API_KEY !== undefined && !Config.apiKeys()?.length) {
+      throw new Error("PROXY_API_KEY is invalid.");
+    }
   });
 }
 
@@ -481,6 +484,7 @@ export async function deploySecrets(
   environmentName?: string,
   isDryRun: boolean = false,
   fileSystem: FileSystemOperations = fs,
+  synchronizeCustomProviders: boolean = false,
 ): Promise<DeployResult> {
   // Validate environment name if provided
   if (environmentName && !validateEnvironmentName(environmentName)) {
@@ -514,6 +518,31 @@ export async function deploySecrets(
     validateRuntimeConfig(resultingConfig);
 
     const deployableSecrets = filterSecretsForDeployment(parsedConfig);
+
+    // Complete local validation and serialization before any external operation.
+    // Reuse this single parsed snapshot for Gateway and Worker updates.
+    if (synchronizeCustomProviders) {
+      try {
+        const syncResult = await syncAiGatewayCustomProviders(
+          parsedConfig,
+          isDryRun,
+        );
+        if (syncResult.enabled) {
+          console.log(
+            syncResult.dryRun
+              ? `☁️  AI Gateway Custom Providers: ${syncResult.desired} definitions would be reconciled.`
+              : `☁️  AI Gateway Custom Providers: ${syncResult.created} created, ${syncResult.updated} updated, ${syncResult.unchanged} unchanged.`,
+          );
+        }
+      } catch (error) {
+        return {
+          success: false,
+          messages: [
+            `❌ AI Gateway Custom Provider synchronization failed: ${getErrorMessage(error)}`,
+          ],
+        };
+      }
+    }
 
     if (Object.keys(deployableSecrets).length === 0) {
       return {
@@ -628,33 +657,12 @@ export async function runDeploySecretsCli(): Promise<void> {
     `🔐 Deploying secrets${environmentName ? ` from config.${environmentName}.jsonc to ${environmentName} environment` : " from config.jsonc to default environment"}${isDryRun ? " (dry run)" : ""}...`,
   );
 
-  const configPath = getConfigPath(repositoryRoot, environmentName);
-  if (fs.existsSync(configPath)) {
-    try {
-      const config = parseJsonc(fs.readFileSync(configPath, "utf8"));
-      const syncResult = await syncAiGatewayCustomProviders(config, isDryRun);
-      if (syncResult.enabled) {
-        console.log(
-          syncResult.dryRun
-            ? `☁️  AI Gateway Custom Providers: ${syncResult.desired} definitions would be reconciled.`
-            : `☁️  AI Gateway Custom Providers: ${syncResult.created} created, ${syncResult.updated} updated, ${syncResult.unchanged} unchanged.`,
-        );
-      }
-    } catch (error) {
-      reportCliResult({
-        success: false,
-        messages: [
-          `❌ AI Gateway Custom Provider synchronization failed: ${getErrorMessage(error)}`,
-        ],
-      });
-      return;
-    }
-  }
-
   const deploymentResult = await deploySecrets(
     repositoryRoot,
     environmentName,
     isDryRun,
+    fs,
+    true,
   );
 
   reportCliResult(

@@ -53,6 +53,51 @@ function routingContext(body: unknown, pathname: string): RoutedRequestContext {
 }
 
 describe("adversarial provider selectors", () => {
+  it("rejects oversized reflected tool metadata on the Messages conversion route", async () => {
+    const name = "x".repeat(64 * 1024);
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(
+          `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: "a", function: { name, arguments: "{}" } }] }, finish_reason: "tool_calls" }] })}\n\ndata: [DONE]\n\n`,
+          { headers: { "content-type": "text/event-stream" } },
+        ),
+      );
+    try {
+      const response = await worker.fetch(
+        new Request("https://proxy.example/v1/messages", {
+          method: "POST",
+          headers: {
+            authorization: "Bearer example-proxy",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "openai/fixture",
+            max_tokens: 16,
+            stream: true,
+            messages: [{ role: "user", content: "hello" }],
+            tools: [{ name, input_schema: { type: "object" } }],
+          }),
+        }),
+        {
+          PROXY_API_KEY: "example-proxy",
+          OPENAI_API_KEY: "example-provider",
+        } as Env,
+        createTestRoutedContext().ctx,
+      );
+      expect(response.status).toBe(200);
+      const body = await response.text();
+      expect(fetch).toHaveBeenCalledOnce();
+      expect(body).toContain(
+        "Streaming tool metadata exceeds the proxy limit.",
+      );
+      expect(body).not.toContain("event: message_stop");
+      expect(body).not.toContain(name);
+    } finally {
+      fetch.mockRestore();
+    }
+  });
+
   it.each([false, true])(
     "strips connection-scoped fields while retaining operator credentials (Gateway %s)",
     async (viaGateway) => {

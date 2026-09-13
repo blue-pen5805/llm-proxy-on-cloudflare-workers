@@ -1142,6 +1142,67 @@ describe("deploy-secrets", () => {
       vi.restoreAllMocks();
     });
 
+    it.each([
+      { KEY: "x".repeat(MAX_WORKER_SECRET_BYTES + 1) },
+      { PROXY_API_KEY: Array.from({ length: 65 }, (_, i) => `fake-${i}`) },
+      { PROXY_API_KEY: '["fake",1]' },
+      { PROXY_API_KEY: '[" "]' },
+      {
+        CUSTOM_OPENAI_ENDPOINTS: [
+          { name: "custom", url: "https://example.com" },
+        ],
+      },
+      { ALLOWED_ORIGINS: ["not-an-origin"] },
+    ])(
+      "rejects invalid configuration before any external operation",
+      async (config) => {
+        process.argv = ["node", "deploy-secrets.ts"];
+        vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+        const log = vi
+          .spyOn(console, "log")
+          .mockImplementation(() => undefined);
+        const exit = vi.spyOn(process, "exit").mockImplementation((() => {
+          throw new Error("exited");
+        }) as never);
+
+        await expect(runDeploySecretsCli()).rejects.toThrow("exited");
+
+        expect(exit).toHaveBeenCalledWith(1);
+        expect(log).not.toHaveBeenCalledWith("🎉 Secret deployment completed!");
+        expect(syncAiGatewayCustomProviders).not.toHaveBeenCalled();
+        expect(execFileSync).not.toHaveBeenCalled();
+        expect(spawn).not.toHaveBeenCalled();
+        expect(fs.writeFileSync).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      { KEY: "fake-value" },
+      { PROXY_API_KEY: null },
+      { PROXY_API_KEY: "" },
+      { PROXY_API_KEY: [] },
+      { PROXY_API_KEY: {} },
+      { PROXY_API_KEY: Array.from({ length: 64 }, (_, i) => `fake-${i}`) },
+    ])(
+      "preserves partial updates, deletion, no-ops and valid authentication",
+      async (config) => {
+        process.argv = ["node", "deploy-secrets.ts", "--dry-run"];
+        vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+        vi.spyOn(console, "log").mockImplementation(() => undefined);
+        const exit = vi
+          .spyOn(process, "exit")
+          .mockImplementation((() => undefined) as never);
+
+        await runDeploySecretsCli();
+
+        expect(exit).not.toHaveBeenCalled();
+        expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+        expect(syncAiGatewayCustomProviders).toHaveBeenCalledWith(config, true);
+        expect(execFileSync).not.toHaveBeenCalled();
+        expect(spawn).not.toHaveBeenCalled();
+      },
+    );
+
     it("prints help", async () => {
       process.argv = ["node", "deploy-secrets.ts", "--help"];
       const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
@@ -1187,6 +1248,14 @@ describe("deploy-secrets", () => {
       await runDeploySecretsCli();
 
       expect(log).toHaveBeenCalledWith("🎉 Secret deployment completed!");
+      expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+      expect(syncAiGatewayCustomProviders).toHaveBeenCalledWith(
+        { KEY: "value" },
+        false,
+      );
+      expect(
+        vi.mocked(syncAiGatewayCustomProviders).mock.invocationCallOrder[0],
+      ).toBeLessThan(vi.mocked(spawn).mock.invocationCallOrder[0]);
     });
 
     it("describes an environment-specific dry run", async () => {
@@ -1255,6 +1324,9 @@ describe("deploy-secrets", () => {
       expect(log).toHaveBeenCalledWith(
         "❌ AI Gateway Custom Provider synchronization failed: sync failed",
       );
+      expect(execFileSync).not.toHaveBeenCalled();
+      expect(spawn).not.toHaveBeenCalled();
+      expect(fs.writeFileSync).not.toHaveBeenCalled();
       expect(exit).toHaveBeenCalledWith(1);
     });
 

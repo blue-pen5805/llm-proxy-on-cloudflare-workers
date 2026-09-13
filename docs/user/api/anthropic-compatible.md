@@ -53,6 +53,9 @@ sources become Chat image URLs. Assistant `tool_use` blocks become function
 tool calls, and user `tool_result` blocks become tool messages. A missing tool
 result content becomes an empty message, while `is_error` is removed because
 Chat has no equivalent.
+Parallel calls within one assistant turn share a single Chat `tool_calls`
+array. Text and calls retain their respective order within that assistant
+message; tool results remain subsequent tool messages.
 
 The top-level `system` value and `system` role messages, including
 `mid_conv_system` text, become system messages. Custom tool definitions,
@@ -84,6 +87,7 @@ into `message_start`, `content_block_start`, `content_block_delta`,
 `content_block_stop`, `message_delta`, and `message_stop` events. Multiline SSE
 data is joined before parsing. Message start and delta events use the current
 message, delta, and usage field sets.
+Chat refusal deltas are streamed as text in the same text block.
 
 Anthropic content blocks are sequential, while Chat chunks may interleave text
 and tool-call deltas. The converter therefore streams text at index 0, retains
@@ -98,11 +102,14 @@ default.
 ### Streaming limits and failures
 
 The converter independently caps each SSE record at 1 MiB, cumulative text at
-4 MiB, cumulative tool arguments at 4 MiB, tool calls at 64, and output items
+4 MiB (including refusals), cumulative tool arguments at 4 MiB, cumulative tool
+metadata at 64 KiB, tool calls at 64, and output items
 at 64. These limits leave headroom beneath the Workers 128 MiB isolate limit.
 
 Malformed or oversized streams emit a terminal error without `message_stop`
-and cancel the upstream stream. A stream is also treated as truncated when it
+and cancel the upstream stream. Chat chunks containing an upstream error or
+`finish_reason: "error"` emit a fixed error message without copying the upstream
+error payload or reporting successful completion. A stream is also treated as truncated when it
 ends without `[DONE]`. Backpressure and downstream cancellation otherwise
 propagate through the Chat path.
 

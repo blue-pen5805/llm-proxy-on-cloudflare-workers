@@ -2,11 +2,6 @@ import { Secrets } from "../../utils/secrets";
 import { jsonEndpoint } from "../inference";
 import { defineProvider } from "../provider";
 
-const inferencePaths = new Set([
-  "/v1/chat/completions",
-  "/v1/responses",
-  "/v1/messages",
-]);
 const inferenceUpstream = {
   name: "huggingface/inference",
   baseUrl: () => "https://router.huggingface.co",
@@ -23,16 +18,12 @@ export const HuggingFace = defineProvider({
 
   apiKeyName: "HUGGINGFACE_API_KEY",
   baseUrl: "https://api-inference.huggingface.co/models",
-  async buildHeadersForPath(pathname, headers, apiKeyIndex) {
-    const merged = new Headers(headers);
-    if (inferencePaths.has(pathname)) {
-      const apiKey = Secrets.get(
-        "HUGGINGFACE_API_KEY",
-        apiKeyIndex,
-        this.credentialProfile,
-      );
-      if (apiKey) merged.set("authorization", `Bearer ${apiKey}`);
-    }
-    return merged;
+  async headers(apiKeyIndex): Promise<HeadersInit> {
+    const apiKey = Secrets.get(
+      "HUGGINGFACE_API_KEY",
+      apiKeyIndex,
+      this.credentialProfile,
+    );
+    return apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
   },
 });

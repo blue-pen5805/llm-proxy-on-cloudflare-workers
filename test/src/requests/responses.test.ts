@@ -468,10 +468,6 @@ describe("handleResponsesRequest", () => {
         {
           role: "assistant",
           content: [{ type: "text", text: "No" }],
-        },
-        {
-          role: "assistant",
-          content: null,
           tool_calls: [
             {
               id: "call_1",

@@ -42,6 +42,8 @@ export function convertStreamingResponse(
   let started = false;
   let finished = false;
   let text = "";
+  let refusal = "";
+  const contentIndexes = new Map<"output_text" | "refusal", number>();
   const textLogprobs: JsonObject[] = [];
   const textEventLogprobs: JsonObject[] = [];
   let messageId: string | undefined;
@@ -100,43 +102,59 @@ export function convertStreamingResponse(
       output_index: messageOutputIndex,
       item,
     });
+  };
+  const startPart = (
+    controller: TransformStreamDefaultController<Uint8Array>,
+    type: "output_text" | "refusal",
+  ): number | undefined => {
+    const existingIndex = contentIndexes.get(type);
+    if (existingIndex !== undefined) return existingIndex;
+    startMessage(controller);
+    if (finished) return undefined;
+    const index = contentIndexes.size;
+    contentIndexes.set(type, index);
     event(controller, "response.content_part.added", {
       item_id: messageId,
       output_index: messageOutputIndex,
-      content_index: 0,
-      part: { type: "output_text", text: "", annotations: [] },
+      content_index: index,
+      part:
+        type === "output_text"
+          ? { type, text: "", annotations: [] }
+          : { type, refusal: "" },
     });
+    return index;
   };
   const finish = (controller: TransformStreamDefaultController<Uint8Array>) => {
     start(controller);
     finished = true;
     if (messageId && messageOutputIndex !== undefined) {
-      const part = {
-        type: "output_text",
-        text,
-        annotations: [],
-        logprobs: textLogprobs,
-      };
+      const content: JsonObject[] = [];
+      for (const [type, index] of contentIndexes) {
+        const isText = type === "output_text";
+        const part = isText
+          ? { type, text, annotations: [], logprobs: textLogprobs }
+          : { type, refusal };
+        content.push(part);
+        event(controller, `response.${type}.done`, {
+          item_id: messageId,
+          output_index: messageOutputIndex,
+          content_index: index,
+          ...(isText ? { logprobs: textEventLogprobs, text } : { refusal }),
+        });
+        event(controller, "response.content_part.done", {
+          item_id: messageId,
+          output_index: messageOutputIndex,
+          content_index: index,
+          part,
+        });
+      }
       const item = {
         id: messageId,
         type: "message",
         status: "completed",
         role: "assistant",
-        content: [part],
+        content,
       };
-      event(controller, "response.output_text.done", {
-        item_id: messageId,
-        output_index: messageOutputIndex,
-        content_index: 0,
-        logprobs: textEventLogprobs,
-        text,
-      });
-      event(controller, "response.content_part.done", {
-        item_id: messageId,
-        output_index: messageOutputIndex,
-        content_index: 0,
-        part,
-      });
       event(controller, "response.output_item.done", {
         output_index: messageOutputIndex,
         item,
@@ -228,8 +246,8 @@ export function convertStreamingResponse(
           fail(controller, limitError);
           return;
         }
-        startMessage(controller);
-        if (finished) return;
+        const contentIndex = startPart(controller, "output_text");
+        if (contentIndex === undefined) return;
         text += choice.delta.content;
         const deltaLogprobs = convertTokenLogprobs(choice.logprobs, false);
         const itemLogprobs = convertTokenLogprobs(choice.logprobs, true);
@@ -249,9 +267,26 @@ export function convertStreamingResponse(
         event(controller, "response.output_text.delta", {
           item_id: messageId,
           output_index: messageOutputIndex,
-          content_index: 0,
+          content_index: contentIndex,
           delta: choice.delta.content,
           logprobs: deltaLogprobs,
+          ...takeObfuscation(),
+        });
+      }
+      if (typeof choice.delta.refusal === "string") {
+        const limitError = budget.addText(choice.delta.refusal);
+        if (limitError) {
+          fail(controller, limitError);
+          return;
+        }
+        const contentIndex = startPart(controller, "refusal");
+        if (contentIndex === undefined) return;
+        refusal += choice.delta.refusal;
+        event(controller, "response.refusal.delta", {
+          item_id: messageId,
+          output_index: messageOutputIndex,
+          content_index: contentIndex,
+          delta: choice.delta.refusal,
           ...takeObfuscation(),
         });
       }

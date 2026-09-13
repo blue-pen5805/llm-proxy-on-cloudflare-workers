@@ -106,8 +106,10 @@ JSON. Other values remain exact text so credential-like strings are never
 coerced. Deployment update semantics and serialized-size limits are defined in
 [configuration files](../../../user/configuration.md#configuration-files).
 
-The editor and deployment helper use a JSONC parser, validate against the
-tracked schema, and preserve comments when editing. Credential input and stored
+The editor and deployment helper use a JSONC parser. The editor validates
+against the tracked schema and preserves comments when editing. Deployment
+validates effective updates using runtime readers and serialized secret bounds.
+Credential input and stored
 values are masked, output is value-free, and generated local files use
 owner-only permissions. Operator configuration files remain untracked.
 
@@ -118,6 +120,12 @@ omitted settings retain their deployed value, `CUSTOM_OPENAI_ENDPOINTS` and
 safe because no endpoint reference remains. Runtime validation repeats critical
 checks for bindings installed outside the repository tooling and fails closed
 with a non-disclosing HTTP 503.
+
+Effective proxy-key updates must produce a nonempty key pool within the runtime
+64-key bound. Unchanged settings and explicit deletions retain their partial
+update semantics. All local validation completes before Custom Provider
+synchronization or Wrangler operations, using one parsed configuration snapshot
+throughout the deployment.
 
 ## Error and diagnostic disclosure
 

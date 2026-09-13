@@ -190,7 +190,22 @@ export function createChatCompletionSseTransform({
       );
       return;
     }
-    if (isJsonObject(parsed)) onChunk(parsed, controller);
+    if (!isJsonObject(parsed)) return;
+    if (
+      parsed.error != null ||
+      (Array.isArray(parsed.choices) &&
+        parsed.choices.some(
+          (choice) => isJsonObject(choice) && choice.finish_reason === "error",
+        ))
+    ) {
+      // Upstream error payloads may contain request data or credentials.
+      onError(
+        new Error("Upstream Chat Completions stream failed."),
+        controller,
+      );
+      return;
+    }
+    onChunk(parsed, controller);
   };
 
   return createSseRecordTransform({

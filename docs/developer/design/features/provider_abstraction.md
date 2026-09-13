@@ -275,10 +275,23 @@ provider's Chat conversion capability. Message and nested system blocks retain
 their order within the request byte limit; array length does not become a
 JavaScript function argument count.
 
+Adjacent assistant fragments within one converted turn share a Chat assistant
+message, including all parallel function or custom tool calls. Text order and
+call order are preserved within their respective fields; Chat cannot represent
+interleaving between text blocks and tool calls. Tool results and other roles
+end the turn. Consecutive Messages assistant messages form the same turn;
+system messages remain explicit boundaries.
+
 On conversion paths, successful JSON and SSE responses are converted back to the
 selected public protocol. Both streaming converters share the bounded Chat
 Completions SSE decoder and implement only their protocol-specific state and
-event output. Upstream errors pass through. The complete mappings, limits, and
+event output. HTTP errors pass through. Chat SSE error payloads or an explicit
+`finish_reason: "error"` terminate conversion with a fixed, content-free error
+event and upstream cancellation; they never produce a successful terminal event.
+Refusal deltas are retained as Messages text or Responses refusal content, sharing
+the text byte budget. Both converters count retained tool names and IDs against
+the metadata budget, including changed names.
+The complete mappings, limits, and
 explicit exclusions live in the [OpenAI-compatible
 API](../../../user/api/openai-compatible.md#responses) and [Anthropic-compatible
 API](../../../user/api/anthropic-compatible.md#messages) guides.

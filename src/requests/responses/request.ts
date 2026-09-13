@@ -1,5 +1,6 @@
 import { openAIErrorResponse } from "../error_response";
 import { isJsonObject as isObject, type JsonObject } from "../sse";
+import { appendChatHistory } from "../tool_history";
 import type { ResponsesRequest } from "./types";
 
 export type { ResponsesRequest } from "./types";
@@ -436,7 +437,7 @@ export function convertResponsesRequest(rawBody: unknown): {
   } else if (Array.isArray(body.input)) {
     for (const item of body.input) {
       const converted = convertInputItem(item);
-      if (converted) messages.push(converted);
+      if (converted) appendChatHistory(messages, converted);
     }
   } else {
     unsupported("input");

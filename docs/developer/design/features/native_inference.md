@@ -96,6 +96,13 @@ These capabilities follow [Anthropic OpenAI SDK compatibility](https://platform.
 
 ## Provider API boundaries
 
+Replicate and Hugging Face use the selected profile and credential slot as a
+Bearer token on all pass-through paths. Hugging Face uses the same authentication
+for its declared Inference Providers operations. Without a local key, adapters
+leave authentication absent so Gateway BYOK can supply it. See
+[Replicate authentication](https://replicate.com/docs/reference/http) and
+[Hugging Face Inference Providers](https://huggingface.co/docs/inference-providers/tasks/text-generation).
+
 DeepSeek uses `/responses` and `/anthropic/v1/messages`; Messages authentication
 uses `x-api-key`, while Chat and Responses use Bearer authentication. Native
 fields and upstream model mapping remain under DeepSeek's control. See

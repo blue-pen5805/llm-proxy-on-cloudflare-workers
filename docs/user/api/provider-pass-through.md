@@ -35,6 +35,9 @@ metadata, and credential-like query parameters, including API-key variants,
 through byte-for-byte, including empty fields. Path `.` and `..` segments are
 rejected; matching text inside a query value is preserved.
 
+Replicate and Hugging Face pass-through paths use Bearer authentication from
+the selected provider profile and key slot, including non-chat operations.
+
 All outbound requests use manual redirect handling, so the Worker never follows
 a redirect with credentials attached. Pass-through routes return upstream 3xx
 responses unchanged; clients must not replay the proxy credential when

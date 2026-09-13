@@ -80,6 +80,18 @@ provider segment of `custom-llm-proxy-<name>`. Names that require slug
 normalization receive a deterministic hash suffix so distinct configured names
 do not silently collapse to the same slug.
 
+### Shared account namespace
+
+Custom Provider definitions belong to the Cloudflare account, not to an
+individual Gateway or Wrangler environment. Managed names are shared across
+deployments in that account. Synchronizing the same provider name with a
+different Base URL updates the destination for every Gateway using that name;
+each Worker still supplies its own selected credentials and request body.
+This shared namespace is an accepted operational constraint. Environments that
+require different destinations must use distinct custom endpoint names or
+separate Cloudflare accounts. Selecting a different Gateway alone does not
+isolate the definitions. See [Cloudflare Custom Providers](https://developers.cloudflare.com/ai-gateway/configuration/custom-providers/).
+
 ### Custom Provider path behavior
 
 Cloudflare's [Custom Providers documentation](https://developers.cloudflare.com/ai-gateway/configuration/custom-providers/)
@@ -111,8 +123,11 @@ The provider-specific Gateway endpoint preserves native request bodies and
 supports non-standard paths; it does not apply the Compatibility Endpoint
 contract to incompatible operations.
 
-Custom Providers are synchronized by `npm run secrets:deploy` before Worker
-secrets are applied. The helper lists account providers and creates missing
+Custom Providers are synchronized by `npm run secrets:deploy` after local
+configuration and secret-size validation and before Worker secrets are applied.
+Validation and both updates use one parsed configuration snapshot. Invalid
+local settings cause no management API or Wrangler operations.
+The helper lists account providers and creates missing
 managed definitions or updates their routing metadata. It does not store
 provider credentials in Custom Provider metadata, delete stale definitions, or
 overwrite an existing slug owned by a different display name. Synchronization uses

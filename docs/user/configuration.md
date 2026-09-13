@@ -33,6 +33,11 @@ The `$schema` path for a file in the repository root is
 `npm run secrets:deploy` applies runtime validation that the JSON Schema cannot
 express, including endpoint-name uniqueness, exact CORS origins, and bounded,
 acyclic virtual-model graphs. `--dry-run` performs the same validation.
+Effective `PROXY_API_KEY` updates must also pass the runtime authentication
+reader, including its 64-key limit and requirement for at least one nonblank
+key. Omitted and empty no-op values remain unchanged, and `null` remains an
+explicit deletion. Local validation and serialized secret-size checks finish
+before any Gateway synchronization or Wrangler operation.
 
 `CUSTOM_OPENAI_ENDPOINTS` and `VIRTUAL_MODELS` are interdependent. When either
 changes, include the final value or `null` for both so retained deployment state
@@ -228,6 +233,14 @@ not overwrite an unrelated provider that owns the generated slug. `--dry-run`
 validates prerequisites without contacting Cloudflare or exposing Base URLs and
 credentials. See the [AI Gateway design](../developer/design/features/ai_gateway.md#custom-provider-path-behavior)
 for path construction and synchronization details.
+
+Custom Provider names are shared by all Gateways and Worker environments in
+the same Cloudflare account. Deploying a different Base URL for the same name
+changes the destination for all of them, while each Worker continues sending
+its own credentials and request body. This is an accepted deployment constraint.
+Use distinct custom endpoint names or separate accounts when environments need
+different destinations; different Gateway names do not isolate these definitions.
+See [the shared account namespace](../developer/design/features/ai_gateway.md#shared-account-namespace).
 
 ## Routing and key selection
 

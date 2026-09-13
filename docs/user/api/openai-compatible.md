@@ -132,6 +132,9 @@ messages become system messages for broader provider compatibility. Text,
 image-URL, uploaded-file-ID, and base64 file parts map to Chat content parts.
 Responses function and custom tool calls map to assistant tool calls; their
 string outputs and text-part output arrays map to tool messages.
+Consecutive assistant text and call items share one Chat assistant turn, with
+parallel calls in a single `tool_calls` array. Text and calls retain their
+respective order; tool outputs and other roles end that turn.
 
 Function and custom tool definitions and named choices are wrapped in their
 Chat Completions shapes. An `allowed_tools` choice converts each named function
@@ -178,16 +181,19 @@ a final `response.completed` or `response.incomplete`. Custom calls use the
 matching `response.custom_tool_call_input.delta` and done events. Text delta and
 done events always contain the current `logprobs` field. Terminal `error` events
 put `code`, `message`, and `param` directly on the event.
+Refusals use `response.refusal.delta` and `response.refusal.done`, and remain
+refusal parts in the completed message. Text and refusal parts receive content
+indexes in the order first encountered.
 
 Unless `include_obfuscation` is `false`, an upstream Chat obfuscation string is
-moved to the first corresponding Responses text, function-argument, or
+moved to the first corresponding Responses text, refusal, function-argument, or
 custom-tool-input delta produced from that chunk. It is consumed once per
 bounded Chat record and is never duplicated across events. Multiline SSE data
 is joined before parsing.
 
 ### Streaming limits and failures
 
-The converter caps each SSE record at 1 MiB, retained text at 4 MiB, retained
+The converter caps each SSE record at 1 MiB, retained text and refusals together at 4 MiB, retained
 tool arguments at 4 MiB, retained logprobs at 4 MiB, tool metadata at 64 KiB,
 tool calls at 64, and output items at 64. These independent limits leave headroom beneath the Workers
 128 MiB isolate limit while the converter retains the content required to
@@ -198,6 +204,10 @@ emits no successful terminal event, and cancels the upstream stream. Success
 requires the `[DONE]` sentinel. A stream that ends without it emits a terminal
 `error` event and no success event. Backpressure and downstream cancellation
 otherwise propagate through the Chat request path.
+Chat chunks with an upstream error or `finish_reason: "error"` also terminate
+conversion with a fixed `error` event. Their upstream error payload is not
+copied into the converted response, and a later `[DONE]` cannot turn the failure
+into success.
 
 The logprob budget counts serialized nonempty converted batches for both
 text events and output items, including token byte arrays and alternatives.

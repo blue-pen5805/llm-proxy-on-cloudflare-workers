@@ -10,6 +10,16 @@ dated section; when multiple changes share a date, put the newest change first.
 Planned version: `1.0.0`. The package remains at `0.2.1` until the version
 update is explicitly approved.
 
+### 2026-09-13
+
+- Preserved parallel tool-call histories in Messages and Responses conversion
+  by grouping each assistant turn's text and calls into one Chat message.
+- Authenticated Replicate and Hugging Face pass-through operations with the
+  selected provider credential profile and key slot.
+- Reported upstream Chat streaming failures as terminal conversion errors,
+  preserved refusal deltas in Messages and Responses output, and enforced the
+  Messages tool-metadata byte limit.
+
 ### 2026-09-07
 
 - Accepted LF, CRLF, and CR SSE line endings across arbitrary network chunk
