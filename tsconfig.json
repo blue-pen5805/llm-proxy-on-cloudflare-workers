@@ -38,5 +38,10 @@
     "skipLibCheck": true
   },
   "exclude": ["test"],
-  "include": ["worker-configuration.d.ts", "src/**/*.ts", "scripts/**/*.ts"]
+  "include": [
+    ".cloudflare/types/index.d.ts",
+    "cloudflare.config.ts",
+    "src/**/*.ts",
+    "scripts/**/*.ts"
+  ]
 }

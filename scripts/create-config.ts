@@ -544,19 +544,22 @@ export function getConfigTuiPath(
 export async function discoverCloudflareAccounts(
   execute?: typeof execFileAsync,
 ): Promise<CloudflareAccount[]> {
-  /* istanbul ignore if -- omitted only when the real Wrangler CLI is invoked */
+  /* istanbul ignore if -- omitted only when the real cf CLI is invoked */
   if (!execute) execute = execFileAsync;
-  const { stdout } = await execute("wrangler", ["whoami", "--json"], {
+  const { stdout } = await execute("cf", ["auth", "whoami"], {
     cwd: process.cwd(),
     encoding: "utf8",
     maxBuffer: 1024 * 1024,
   });
   const parsedOutput = JSON.parse(stdout) as {
-    loggedIn?: unknown;
+    authenticated?: unknown;
     accounts?: unknown;
   };
-  if (parsedOutput.loggedIn !== true || !Array.isArray(parsedOutput.accounts)) {
-    throw new Error("Wrangler returned an unexpected identity response.");
+  if (
+    parsedOutput.authenticated !== true ||
+    !Array.isArray(parsedOutput.accounts)
+  ) {
+    throw new Error("cf returned an unexpected identity response.");
   }
 
   return parsedOutput.accounts.flatMap((account) => {
@@ -1046,7 +1049,7 @@ export async function runConfigTui(
   let accounts: CloudflareAccount[] = [];
   try {
     let discoverAccounts = dependencies.discoverAccounts;
-    /* istanbul ignore if -- the default invokes the real Wrangler CLI */
+    /* istanbul ignore if -- the default invokes the real cf CLI */
     if (!discoverAccounts) discoverAccounts = discoverCloudflareAccounts;
     accounts = await discoverAccounts();
   } catch {

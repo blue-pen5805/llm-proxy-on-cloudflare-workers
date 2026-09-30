@@ -48,13 +48,13 @@ describe("with-secrets", () => {
           "--env",
           "develop",
           "--",
-          "wrangler",
+          "cf",
           "dev",
           "--local",
         ]),
       ).toEqual({
         env: "develop",
-        command: ["wrangler", "dev", "--local"],
+        command: ["cf", "dev", "--local"],
       });
     });
 
@@ -70,13 +70,13 @@ describe("with-secrets", () => {
         parseWithSecretsArguments([
           "--include-null-placeholders",
           "--",
-          "wrangler",
+          "cf",
           "types",
         ]),
       ).toEqual({
         env: undefined,
         includeNullPlaceholders: true,
-        command: ["wrangler", "types"],
+        command: ["cf", "types"],
       });
     });
 

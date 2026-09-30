@@ -31,7 +31,7 @@ route names, credentials, and additional requirements.
 
 ## Quick start
 
-Requires Node.js 22.13 or later, npm, a Cloudflare account, and at least one
+Requires Node.js 22.18 or later, npm, a Cloudflare account, and at least one
 provider credential.
 
 ```bash

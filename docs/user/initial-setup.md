@@ -5,7 +5,7 @@ all available settings, see the [Configuration reference](configuration.md).
 
 ## Prerequisites
 
-- Node.js 22.13 or later and npm
+- Node.js 22.18 or later and npm
 - A Cloudflare account with permission to create Workers and secrets
 - At least one supported provider credential
 
@@ -17,14 +17,15 @@ cd llm-proxy-on-cloudflare-workers
 npm ci
 ```
 
-## 2. Authenticate Wrangler
+## 2. Authenticate the Cloudflare CLI
 
 ```bash
 npm run cf:login
 ```
 
+`cf` maintains its own login; run this even if Wrangler is already authenticated.
 Complete the browser authorization for the Cloudflare account that will own the
-Worker. The default Worker name is `llm-proxy`; change `name` in `wrangler.jsonc`
+Worker. The default Worker name is `llm-proxy`; change `worker.name` in `cloudflare.config.ts`
 before the first deployment if necessary.
 
 ## 3. Create local configuration
@@ -36,7 +37,7 @@ npm run secrets
 ```
 
 The terminal UI creates or safely edits `config.jsonc`, masks credentials, and
-can discover the Cloudflare account from Wrangler. See
+can discover the Cloudflare account from cf. See
 [Configuration files](configuration.md#configuration-files) for its complete
 behavior and named-environment rules.
 
@@ -77,7 +78,7 @@ secrets. Run the second command again whenever configuration changes.
 
 ## 6. Verify the deployment
 
-Wrangler prints the Worker URL after deployment. Replace the example host below:
+cf prints the Worker URL after deployment. Replace the example host below:
 
 ```bash
 curl https://your-worker.example/ping \

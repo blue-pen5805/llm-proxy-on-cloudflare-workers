@@ -17,15 +17,43 @@ Replace placeholders in `config.develop.jsonc`, set `DEV` deliberately, and run:
 npm run dev
 ```
 
-The command generates `.dev.vars.develop` for the lifetime of Wrangler and
-removes it on normal exit. Both files are ignored by Git.
+The command generates `.dev.vars.develop` for the lifetime of cf and
+removes it on normal exit. `cf dev --mode develop` loads this file and uses the
+`llm-proxy-develop` Worker configuration. Both files are ignored by Git.
 
 ### Local development does not start
 
-Confirm `config.develop.jsonc` exists and contains valid JSONC. If Wrangler was
+Confirm `config.develop.jsonc` exists and contains valid JSONC. If cf was
 terminated abruptly, remove the generated `.dev.vars.develop` and retry
 `npm run dev`. Keep both files out of Git. Top-level `null` values are omitted
 locally; they request secret deletion only during deployment.
+
+## Cloudflare tooling
+
+The project uses the beta Cloudflare CLI, `cf`. `cloudflare.config.ts` owns
+Worker deployment settings. `cf` uses its internal Wrangler bundler with default
+settings, including automatic type generation during development and builds.
+Vitest takes the entry point, compatibility date, and compatibility flags from
+`cloudflare.config.ts` and passes them directly to the Workers test plugin.
+No separate Wrangler configuration file is needed.
+
+Node.js 22.18 or later is required to load the TypeScript configuration.
+The project has no install-time lifecycle script. `npm run tsc` generates
+`.cloudflare/types/index.d.ts` before type checking, including in CI and
+`npm run verify`. Generate the types separately with `npm run cf-typegen`
+when needed by the editor; the directory is ignored.
+Application binding names come from the configuration schema in `src/env.d.ts`.
+They are not declared as required secrets because providers and settings are
+optional and validated by the application.
+
+```bash
+npm run build
+npm run deploy -- --dry-run
+```
+
+These checks build and package the Worker without uploading it. For CLI
+configuration and commands, see the official
+[cf migration reference](https://developers.cloudflare.com/cf/wrangler/reference/).
 
 ## Project map
 
@@ -38,7 +66,7 @@ locally; they request secret deletion only during deployment.
 | `src/providers/`   | Provider adapters and request translation          |
 | `src/ai_gateway/`  | Cloudflare AI Gateway URL and payload construction |
 | `src/utils/`       | Configuration, secrets, key selection, and helpers |
-| `scripts/`         | Local config and Wrangler secret tooling           |
+| `scripts/`         | Local config and cf secret tooling                 |
 | `schemas/`         | JSON Schema for configuration files                |
 | `test/`            | Unit and Worker-runtime tests                      |
 
@@ -54,7 +82,6 @@ provider behavior, authentication, or key rotation.
 ```bash
 npm run hono -- agent-context
 npm run hono:routes
-npm run hono -- request /ping --runtime workerd -X OPTIONS
 ```
 
 `hono:routes` inspects `src/routing.ts`, the authenticated endpoint application,
@@ -64,22 +91,33 @@ Inspect entry middleware separately with
 `npm run hono -- routes src/index.ts --verbose`. The provider wildcard uses the
 configured registry; its concrete provider names are not static Hono routes.
 
-Use `--runtime workerd` for requests to the Worker entry point, which requires
-Worker bindings and an ExecutionContext. The CLI starts the base
-`wrangler.jsonc` configuration locally and disposes the Worker after the request.
-It does not read `config.develop.jsonc` or invoke the `npm run dev` secret helper.
-OPTIONS can be tested without authentication; other requests fail closed when
-proxy authentication is unconfigured. For authenticated automated tests, pass
-fake bindings and `createExecutionContext()` to `app.request()` in Workers
-Vitest, as in `test/src/hono_integration.test.ts`. Keep real credentials out of
-CLI arguments and test fixtures.
+Use `cf dev` for local Worker requests so the real Workers runtime supplies
+bindings and an ExecutionContext. Start the server and issue HTTP requests
+from another terminal:
+
+```bash
+# First terminal: generates .dev.vars.develop and starts cf dev --mode develop
+npm run dev
+
+# Second terminal: preflight requires no credentials
+curl -i -X OPTIONS http://127.0.0.1:8787/ping
+```
+
+The current Hono CLI's `request --runtime workerd` requires a legacy Wrangler
+configuration and is not used in this project. Keep Hono CLI for route
+inspection; do not substitute its Node runtime for Worker integration checks.
+For authenticated automated tests, pass fake bindings and
+`createExecutionContext()` to `app.request()` in Workers Vitest, as in
+`test/src/hono_integration.test.ts`. Keep real credentials out of CLI arguments
+and test fixtures.
 
 The [Hono skill](../../.agents/skills/hono/SKILL.md) is bundled in
 `.agents/skills/hono/`, with its upstream MIT license, for sharing through Git.
 [Codex discovers repository skills](https://learn.chatgpt.com/docs/build-skills#where-codex-loads-local-skills)
 in `.agents/skills/`; no separate personal installation is required.
 The skill comes from [honojs/skills](https://github.com/honojs/skills). Local
-adjustments are Markdown formatting and removal of an upstream release TODO;
+adjustments include Markdown formatting, removal of an upstream release TODO,
+and routing Worker runtime checks through `cf dev`;
 review upstream updates before replacing the bundled copy.
 
 The skill's API reference and the installed CLI's `agent-context` output guide
@@ -106,7 +144,7 @@ Keep the following artifacts synchronized:
    when behavior or architecture changes
 
 After changing the schema, run `npm run cf-typegen`; do not edit
-`worker-configuration.d.ts` manually.
+`.cloudflare/types/index.d.ts` manually.
 
 ## Adding a provider
 
@@ -144,7 +182,7 @@ Update one dependency or a tightly related group at a time:
 3. Run `npx npm-check-updates --upgrade PACKAGE_NAME`, then `npm install`.
 4. Review both `package.json` and `package-lock.json` for unrelated updates.
 5. Regenerate and compare Worker bindings with `npm run cf-typegen` when
-   Wrangler, Workers types, or configuration behavior changes.
+   cf, Workers types, or configuration behavior changes.
 6. Run the complete verification workflow below.
 
 If a reported vulnerability cannot be resolved in the same update, record in

@@ -124,7 +124,7 @@ with a non-disclosing HTTP 503.
 Effective proxy-key updates must produce a nonempty key pool within the runtime
 64-key bound. Unchanged settings and explicit deletions retain their partial
 update semantics. All local validation completes before Custom Provider
-synchronization or Wrangler operations, using one parsed configuration snapshot
+synchronization or cf operations, using one parsed configuration snapshot
 throughout the deployment.
 
 ## Error and diagnostic disclosure
@@ -159,3 +159,32 @@ application-layer policies around the Worker.
 - [Workers limits](https://developers.cloudflare.com/workers/platform/limits/#environment-variables)
 - [Workers secrets](https://developers.cloudflare.com/workers/configuration/secrets/)
 - [Workers Request API](https://developers.cloudflare.com/workers/runtime-apis/request/)
+
+## Deployment tooling
+
+`cf` handles authentication, code deployment, and Worker secret operations.
+`cloudflare.config.ts` owns the deployment configuration and rejects undeclared
+named modes. Vitest derives its entry point and runtime compatibility settings
+from that configuration and supplies them through the test plugin's `main` and
+`miniflare` options. Hono CLI inspects route declarations; `cf dev` serves local
+HTTP checks. Wrangler remains the internal bundler, using its default settings
+without a separate configuration file. See the official
+[Workers test configuration](https://developers.cloudflare.com/workers/testing/vitest-integration/configuration/#cloudflaretestoptions).
+
+The configuration editor reads `cf auth whoami` JSON (`authenticated` and
+`accounts`). Secret deployment maps the helper's `--env` to `cf --mode`,
+evaluates `cloudflare.config.ts` with that mode, and passes its `worker.name`
+explicitly as `--worker` to both secret list and bulk API commands. Undeclared
+modes are rejected before Gateway synchronization or invoking those commands. Deployment
+uses `cf workers secrets bulk --file` with a JSON Merge Patch body containing
+`secrets`: each set operation is `{ name, type: "secret_text", text }`, each
+delete is `null`, and omitted names remain unchanged. The owner-only temporary
+file is removed on completion and interruption. Both CLI output streams are
+suppressed because API responses or errors may include secret material; only
+the child process outcome is reported. Code must be deployed before secrets
+are uploaded.
+
+The `KeyRotationManager` export has a deletion tombstone so installations
+that still have its namespace can apply the deletion. No live Durable Object
+namespace is declared. See the official [cf configuration mapping](https://developers.cloudflare.com/cf/wrangler/reference/)
+and [bulk secret API](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/secrets/methods/bulk_update/).

@@ -7,13 +7,13 @@ updates:
 
 1. Edit the target configuration and preview it with
    `npm run secrets:deploy -- --dry-run [--env <env>]`.
-2. Deploy code with `npm run deploy -- [--env <env>]` and settings with
-   `npm run secrets:deploy -- [--env <env>]` to the same Wrangler environment.
+2. Deploy code with `npm run deploy -- [--mode <env>]` and settings with
+   `npm run secrets:deploy -- [--env <env>]` to the same cf mode.
 3. Check `/ping`, `/status`, `/v1/models`, and a real request for each critical
    provider. Review diagnostic output privately.
 
-Bracketed arguments are optional; declare named environments in
-`wrangler.jsonc`. Code and secret deployments are separate operations.
+Bracketed arguments are optional; define named modes and their Worker names in
+`cloudflare.config.ts`. Code and secret deployments are separate operations.
 
 ## Safe configuration changes
 
@@ -33,8 +33,8 @@ Bracketed arguments are optional; declare named environments in
 
 ## Observability
 
-Workers Logs are enabled for every invocation in `wrangler.jsonc`; traces use
-head sampling. Filter structured records by `event` and correlate them with the
+Workers Logs are enabled for every invocation in `cloudflare.config.ts`;
+traces use head sampling. Filter structured records by `event` and correlate them with the
 complete `request_id`. Use `request.started` for the route and safe routing
 metadata, `subrequest.completed` or `subrequest.failed` for upstream outcomes,
 and `request.completed` for the final status and handler latency.
@@ -74,7 +74,7 @@ when sizing a deployment.
 - Confirm `DEV` is not being relied on outside local development. A deployed
   Worker ignores it and logs `auth.development_mode_ignored` when it is set.
 - Verify the client sends one of the supported proxy authentication formats.
-- Confirm the key was deployed to the same Wrangler environment as the code.
+- Confirm the key was deployed to the same cf mode as the code.
 - A Bearer header must contain the proxy key, not the provider key.
 
 ### Provider returns HTTP 401 or 403

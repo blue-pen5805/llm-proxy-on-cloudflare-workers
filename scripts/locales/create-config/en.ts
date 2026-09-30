@@ -10,11 +10,11 @@ export const ENGLISH_CREATE_CONFIG_MESSAGES = {
   keyboardTitle: "Keyboard",
   exampleNotFound: "{file} was not found.",
   accountDiscoveryUnavailable:
-    "Wrangler account discovery was unavailable. You can enter CLOUDFLARE_ACCOUNT_ID manually.",
+    "cf account discovery was unavailable. You can enter CLOUDFLARE_ACCOUNT_ID manually.",
   cloudflareAccount: "Cloudflare account",
   noConfigurationWritten: "No configuration file was written.",
   noChangesWritten: "No changes were written.",
-  accountsReported: "Accounts reported by wrangler whoami --json",
+  accountsReported: "Accounts reported by cf auth whoami",
   configUnchanged: "{file}",
   configChanged: "{file} has unsaved changes",
   providers: "Providers",

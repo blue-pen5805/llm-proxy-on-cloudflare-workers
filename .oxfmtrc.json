@@ -22,7 +22,7 @@
     "sortSideEffects": true
   },
   "sortPackageJson": false,
-  "ignorePatterns": ["worker-configuration.d.ts"],
+  "ignorePatterns": [".cloudflare/"],
   "overrides": [
     {
       "files": ["*.jsonc"],

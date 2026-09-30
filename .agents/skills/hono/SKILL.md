@@ -29,7 +29,7 @@ Follow the output. It explains every command (`routes`, `request`, `batch`, `sna
 Notes:
 
 - `hono request` sends a request with `app.request()` — no server needed. Do not pass credentials directly in CLI arguments; use environment variables for sensitive values.
-- For Cloudflare Workers bindings (KV, D1, R2, etc.), use `hono request /path --runtime workerd`. It starts the app with the wrangler config of the project, so the local bindings (`c.env`) are real. wrangler must be installed in the project.
+- In this repository, use `npm run dev` (`cf dev --mode develop`) and HTTP requests for Worker runtime checks. The current Hono CLI workerd mode requires a legacy Wrangler configuration; this project uses `cloudflare.config.ts`. Keep `hono routes` for endpoint inspection and Workers Vitest for automated binding-aware tests. See [local development](../../../docs/developer/development.md#hono-tools-and-skill).
 - For several requests, or a flow that keeps state (POST, then use the returned id), run them in one `hono batch -` call. One JSON object per line; `save` a value and use it as `{{id}}` in later steps. The steps share one app instance. Declare the expected status/body per step with `expect` (body is a deep partial match) and iterate until the summary shows `"failed": 0`:
 
   ```bash

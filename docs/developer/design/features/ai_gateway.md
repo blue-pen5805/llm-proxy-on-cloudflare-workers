@@ -83,7 +83,7 @@ do not silently collapse to the same slug.
 ### Shared account namespace
 
 Custom Provider definitions belong to the Cloudflare account, not to an
-individual Gateway or Wrangler environment. Managed names are shared across
+individual Gateway or cf mode. Managed names are shared across
 deployments in that account. Synchronizing the same provider name with a
 different Base URL updates the destination for every Gateway using that name;
 each Worker still supplies its own selected credentials and request body.
@@ -126,7 +126,7 @@ contract to incompatible operations.
 Custom Providers are synchronized by `npm run secrets:deploy` after local
 configuration and secret-size validation and before Worker secrets are applied.
 Validation and both updates use one parsed configuration snapshot. Invalid
-local settings cause no management API or Wrangler operations.
+local settings cause no management API or cf operations.
 The helper lists account providers and creates missing
 managed definitions or updates their routing metadata. It does not store
 provider credentials in Custom Provider metadata, delete stale definitions, or

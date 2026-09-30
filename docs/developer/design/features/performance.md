@@ -122,7 +122,7 @@ or scan custom endpoint configuration for each lookup.
 [Development and verification](../../development.md#performance-measurement)
 defines benchmark commands and comparison requirements. Production evaluation
 uses Workers CPU time; handler latency also includes upstream wait.
-`wrangler.jsonc` sets `limits.cpu_ms` to 1,000 ms as an invocation guardrail.
+`cloudflare.config.ts` sets `worker.limits.cpuMs` to 1,000 ms as an invocation guardrail.
 Investigate sustained limit errors with CPU metrics before raising it.
 
 ## References

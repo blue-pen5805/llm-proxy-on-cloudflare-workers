@@ -285,7 +285,7 @@ describe("configuration TUI", () => {
     },
   );
 
-  it("creates a protected config and defaults the account from Wrangler", async () => {
+  it("creates a protected config and defaults the account from Cf", async () => {
     const prompts = new PromptHarness({
       passwords: ["client-secret"],
       selects: ["__save"],
@@ -322,7 +322,7 @@ describe("configuration TUI", () => {
     expect(JSON.stringify(prompts.notes)).not.toContain("client-secret");
   });
 
-  it("offers multiple Wrangler accounts and still allows a manual override", async () => {
+  it("offers multiple Cf accounts and still allows a manual override", async () => {
     const prompts = new PromptHarness({
       passwords: ["client-secret"],
       selects: [
@@ -469,7 +469,7 @@ describe("configuration TUI", () => {
     await runConfigTui(
       {},
       dependencies(prompts, fileSystem, [
-        { id: "wrangler-account", name: "Wrangler account" },
+        { id: "cf-account", name: "Cf account" },
       ]),
     );
 
@@ -1124,11 +1124,11 @@ describe("Esc key mapping", () => {
   });
 });
 
-describe("Wrangler account discovery", () => {
+describe("Cf account discovery", () => {
   it("runs whoami in JSON mode and keeps only well-formed accounts", async () => {
     const execute = vi.fn().mockResolvedValue({
       stdout: JSON.stringify({
-        loggedIn: true,
+        authenticated: true,
         accounts: [
           { id: "one", name: "First" },
           null,
@@ -1144,15 +1144,15 @@ describe("Wrangler account discovery", () => {
       { id: "one", name: "First" },
     ]);
     expect(execute).toHaveBeenCalledWith(
-      "wrangler",
-      ["whoami", "--json"],
+      "cf",
+      ["auth", "whoami"],
       expect.objectContaining({ encoding: "utf8" }),
     );
   });
 
   it.each([
-    { loggedIn: false, accounts: [] },
-    { loggedIn: true, accounts: null },
+    { authenticated: false, accounts: [] },
+    { authenticated: true, accounts: null },
   ])("rejects an unexpected identity response", async (response) => {
     const execute = vi.fn().mockResolvedValue({
       stdout: JSON.stringify(response),

@@ -90,7 +90,7 @@ export function reportCliResult(
   }
 }
 
-/** Validate a Wrangler environment suffix. */
+/** Validate a configuration environment suffix used as a cf mode. */
 export function validateEnvironmentName(environmentName: string): boolean {
   return /^[a-zA-Z0-9_-]+$/.test(environmentName);
 }

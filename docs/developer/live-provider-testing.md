@@ -1,6 +1,6 @@
 # Live Provider Chat Completions Testing
 
-This contributor guide tests provider integration through a local Wrangler
+This contributor guide tests provider integration through a local cf
 development server with real credentials and models. It is intentionally
 separate from `npm run test`: every configured provider makes billable network
 requests.
@@ -88,23 +88,16 @@ npm run test:live-chat
 
 The script reads `config.develop.jsonc` for proxy authentication, Gateway
 routing policy, and credential redaction. Provider credentials are used by the
-Wrangler development server and are never copied to the model configuration or
+cf development server and are never copied to the model configuration or
 command line. If
 `DEV` is explicitly `true`, the local request omits proxy authentication in the
 same way as the Worker.
 
-The only accepted target is a loopback address. The default is
-`http://127.0.0.1:8787`. To use another local port, start Wrangler and the test
-with matching values; deployed Worker URLs remain rejected:
-
-```bash
-# First terminal
-npm run dev -- --port 8790
-
-# Second terminal
-export LLM_PROXY_LOCAL_URL="http://127.0.0.1:8790"
-npm run test:live-chat
-```
+The only accepted target is a loopback address. `npm run dev` uses
+`http://127.0.0.1:8787`, which is also the test script's default. If using a
+local server at another loopback address or port, set `LLM_PROXY_LOCAL_URL`
+to its URL before running `npm run test:live-chat`. Deployed Worker URLs
+remain rejected.
 
 To select a non-default AI Gateway, set its name before running:
 

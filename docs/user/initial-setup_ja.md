@@ -5,7 +5,7 @@
 
 ## 前提条件
 
-- Node.js 22.13 以降と npm
+- Node.js 22.18 以降と npm
 - Workers と Secret を作成できる Cloudflare アカウント
 - 対応プロバイダーのキーを1つ以上
 
@@ -17,14 +17,16 @@ cd llm-proxy-on-cloudflare-workers
 npm ci
 ```
 
-## 2. Wrangler の認証
+## 2. Cloudflare CLI の認証
 
 ```bash
 npm run cf:login
 ```
 
+`cf` の認証情報は独立しているため、Wrangler で認証済みでも実行してください。
+
 Worker を所有する Cloudflare アカウントでブラウザー認証を完了します。Worker の既定名は
-`llm-proxy` です。変更する場合は初回デプロイ前に `wrangler.jsonc` の `name` を
+`llm-proxy` です。変更する場合は初回デプロイ前に `cloudflare.config.ts` の `worker.name` を
 編集してください。
 
 ## 3. ローカル設定の作成
@@ -34,7 +36,7 @@ npm run secrets
 ```
 
 ターミナル UI は `config.jsonc` を安全に作成または編集し、認証情報を伏せます。
-Wrangler から Cloudflare アカウントを取得することもできます。UI の全動作と名前付き
+cf から Cloudflare アカウントを取得することもできます。UI の全動作と名前付き
 環境の規則は英語版の [Configuration files](configuration.md#configuration-files) を
 参照してください。
 
@@ -72,7 +74,7 @@ Secret として登録します。設定を変更したら後者を再実行し�
 
 ## 6. 動作確認
 
-Wrangler が表示した URL に置き換えて実行します。
+cf が表示した URL に置き換えて実行します。
 
 ```bash
 curl https://your-worker.example/ping \

@@ -1,11 +1,18 @@
 import { resolve } from "path";
 import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vitest/config";
+import cloudflareConfig from "./cloudflare.config.ts";
+
+const { worker } = cloudflareConfig({ mode: undefined, isPreview: false });
 
 export default defineConfig({
   plugins: [
     cloudflareTest({
-      wrangler: { configPath: "./wrangler.jsonc" },
+      main: resolve(import.meta.dirname, worker.entrypoint),
+      miniflare: {
+        compatibilityDate: worker.compatibilityDate,
+        compatibilityFlags: worker.compatibilityFlags,
+      },
     }),
   ],
   test: {

@@ -15,15 +15,15 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=22.13.0"
+    "node": ">=22.18.0"
   },
   "scripts": {
     "bench": "vitest bench --run",
-    "cf-typegen": "tsx scripts/with-secrets.ts --env example --include-null-placeholders -- wrangler types --env-file .dev.vars.example",
-    "cf:login": "wrangler login",
-    "cf:logout": "wrangler logout",
-    "deploy": "wrangler deploy",
-    "dev": "tsx scripts/with-secrets.ts --env develop -- wrangler dev --env-file .dev.vars.develop",
+    "cf-typegen": "cf workers types",
+    "cf:login": "cf auth login",
+    "cf:logout": "cf auth logout",
+    "deploy": "cf deploy",
+    "dev": "tsx scripts/with-secrets.ts --env develop -- cf dev --mode develop",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "hono": "hono",
@@ -37,8 +37,9 @@
     "test:coverage": "vitest run --coverage",
     "test:live-chat": "tsx scripts/test-live-chat.ts",
     "test:types": "tsc --noEmit -p test/tsconfig.json && tsc --noEmit -p test/scripts/tsconfig.json",
-    "tsc": "tsc --noEmit && npm run test:types",
-    "verify": "npm run tsc && npm run format:check && npm run lint && npm run test:coverage"
+    "tsc": "npm run cf-typegen && tsc --noEmit && npm run test:types",
+    "verify": "npm run tsc && npm run format:check && npm run lint && npm run test:coverage",
+    "build": "cf build"
   },
   "dependencies": {
     "hono": "^4.13.7"
@@ -50,6 +51,7 @@
     "@types/node": "^22.20.1",
     "@vitest/coverage-istanbul": "4.1.10",
     "ajv": "^8.20.0",
+    "cf": "1.0.0-beta.6",
     "jsonc-parser": "^3.3.1",
     "oxfmt": "^0.63.0",
     "oxlint": "^1.78.0",
@@ -58,7 +60,7 @@
     "typescript": "~7.0.2",
     "vite": "^8.2.1",
     "vitest": "4.1.10",
-    "wrangler": "^4.123.0"
+    "wrangler": "4.144.0"
   },
   "cloudflare": {
     "bindings": {

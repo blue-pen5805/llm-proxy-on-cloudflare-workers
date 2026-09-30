@@ -15,7 +15,8 @@
     "./src/**/*.ts",
     "./helpers/**/*.ts",
     "./performance/**/*.ts",
-    "../worker-configuration.d.ts"
+    "../.cloudflare/types/index.d.ts",
+    "../src/env.d.ts"
   ],
   "exclude": []
 }

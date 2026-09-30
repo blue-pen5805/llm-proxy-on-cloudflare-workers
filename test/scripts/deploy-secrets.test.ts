@@ -4,7 +4,7 @@ import { EventEmitter } from "node:events";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   deploySecrets,
-  executeWranglerSecretBulk,
+  executeCfSecretBulk,
   listExistingSecretNames,
   filterSecretsForDeployment,
   MAX_WORKER_SECRET_BYTES,
@@ -55,7 +55,7 @@ const createMockFsOps = (
   writeFileSync: vi.fn(),
 });
 
-function mockWranglerSpawn(
+function mockCfSpawn(
   code: number | null = 0,
   signal: NodeJS.Signals | null = null,
 ) {
@@ -72,7 +72,7 @@ describe("deploy-secrets", () => {
   beforeEach(() => {
     vi.mocked(execFileSync).mockReset();
     vi.mocked(spawn).mockReset();
-    mockWranglerSpawn();
+    mockCfSpawn();
     vi.mocked(fs.writeFileSync).mockReset();
     vi.mocked(fs.readFileSync).mockReset();
     vi.mocked(fs.unlinkSync).mockReset();
@@ -239,7 +239,17 @@ describe("deploy-secrets", () => {
 
       const result = serializeSecretsJson(secrets);
       const parsed = JSON.parse(result);
-      expect(parsed).toEqual(secrets);
+      expect(parsed).toEqual({
+        secrets: {
+          API_KEY: { name: "API_KEY", type: "secret_text", text: "secret" },
+          ANOTHER_KEY: {
+            name: "ANOTHER_KEY",
+            type: "secret_text",
+            text: "value",
+          },
+          DELETED_KEY: null,
+        },
+      });
     });
   });
 
@@ -535,7 +545,7 @@ describe("deploy-secrets", () => {
       },
     );
 
-    it("rejects a cycle before a real deployment invokes Wrangler", async () => {
+    it("rejects a cycle before a real deployment invokes Cf", async () => {
       const mockFs = createMockFsOps({
         "/root/config.jsonc": JSON.stringify({
           CUSTOM_OPENAI_ENDPOINTS: null,
@@ -651,7 +661,7 @@ describe("deploy-secrets", () => {
       expect(result.messages.join("\n")).not.toContain("null");
     });
 
-    it("should reject oversized serialized secrets before invoking Wrangler", async () => {
+    it("should reject oversized serialized secrets before invoking Cf", async () => {
       const mockFs = createMockFsOps({
         "/root/config.jsonc": JSON.stringify({
           LARGE_SECRET: "x".repeat(MAX_WORKER_SECRET_BYTES + 1),
@@ -699,17 +709,19 @@ describe("deploy-secrets", () => {
         "PROD_API_KEY": "production-secret"
       }`;
       const mockFs = createMockFsOps({
-        "/root/config.prod.jsonc": configContent,
+        "/root/config.develop.jsonc": configContent,
       });
 
-      const result = await deploySecrets("/root", "prod", true, mockFs);
+      const result = await deploySecrets("/root", "develop", true, mockFs);
 
       expect(result.success).toBe(true);
       expect(
-        result.messages.some((msg) => msg.includes("config.prod.jsonc")),
+        result.messages.some((msg) => msg.includes("config.develop.jsonc")),
       ).toBe(true);
       expect(
-        result.messages.some((msg) => msg.includes("Target environment: prod")),
+        result.messages.some((msg) =>
+          msg.includes("Target environment: develop"),
+        ),
       ).toBe(true);
     });
 
@@ -769,7 +781,7 @@ describe("deploy-secrets", () => {
       // Route the shared execFileSync mock used by `secret list`; the default
       // spawn mock completes `secret bulk`, whose payload is inspected via
       // writeFileSync.
-      const routeWrangler = (listOutput: string | (() => never)) => {
+      const routeCf = (listOutput: string | (() => never)) => {
         vi.mocked(execFileSync).mockImplementation(
           (_cmd, args?: readonly string[]) => {
             if (args?.includes("list")) {
@@ -786,7 +798,7 @@ describe("deploy-secrets", () => {
       });
 
       it("skips deletions for secrets that are not currently set", async () => {
-        routeWrangler('[{"name":"API_KEY","type":"secret_text"}]');
+        routeCf('[{"name":"API_KEY","type":"secret_text"}]');
         const mockFs = createMockFsOps({
           "/root/config.jsonc": '{"OLD_KEY":null,"API_KEY":"val"}',
         });
@@ -803,11 +815,15 @@ describe("deploy-secrets", () => {
         // OLD_KEY must be absent from the payload handed to `secret bulk`.
         const bulkPayload = vi.mocked(fs.writeFileSync).mock
           .calls[0][1] as string;
-        expect(JSON.parse(bulkPayload)).toEqual({ API_KEY: "val" });
+        expect(JSON.parse(bulkPayload)).toEqual({
+          secrets: {
+            API_KEY: { name: "API_KEY", type: "secret_text", text: "val" },
+          },
+        });
       });
 
       it("keeps deletions for secrets that currently exist", async () => {
-        routeWrangler('[{"name":"OLD_KEY","type":"secret_text"}]');
+        routeCf('[{"name":"OLD_KEY","type":"secret_text"}]');
         const mockFs = createMockFsOps({
           "/root/config.jsonc": '{"OLD_KEY":null}',
         });
@@ -820,11 +836,11 @@ describe("deploy-secrets", () => {
 
         const bulkPayload = vi.mocked(fs.writeFileSync).mock
           .calls[0][1] as string;
-        expect(JSON.parse(bulkPayload)).toEqual({ OLD_KEY: null });
+        expect(JSON.parse(bulkPayload)).toEqual({ secrets: { OLD_KEY: null } });
       });
 
       it("deploys nothing when every deletion targets an absent secret", async () => {
-        routeWrangler("[]");
+        routeCf("[]");
         const mockFs = createMockFsOps({
           "/root/config.jsonc": '{"OLD_KEY":null}',
         });
@@ -841,7 +857,7 @@ describe("deploy-secrets", () => {
       });
 
       it("falls back to sending deletions when existing secrets can't be listed", async () => {
-        routeWrangler(() => {
+        routeCf(() => {
           throw new Error("worker not found");
         });
         const mockFs = createMockFsOps({
@@ -856,11 +872,11 @@ describe("deploy-secrets", () => {
 
         const bulkPayload = vi.mocked(fs.writeFileSync).mock
           .calls[0][1] as string;
-        expect(JSON.parse(bulkPayload)).toEqual({ OLD_KEY: null });
+        expect(JSON.parse(bulkPayload)).toEqual({ secrets: { OLD_KEY: null } });
       });
 
       it("does not query existing secrets on a dry run", async () => {
-        routeWrangler("[]");
+        routeCf("[]");
         const mockFs = createMockFsOps({
           "/root/config.jsonc": '{"OLD_KEY":null}',
         });
@@ -884,25 +900,40 @@ describe("deploy-secrets", () => {
 
       expect(names).toEqual(new Set(["A", "B"]));
       expect(execFileSync).toHaveBeenCalledWith(
-        "wrangler",
-        ["secret", "list", "--format", "json"],
-        { encoding: "utf8" },
+        "cf",
+        ["workers", "secrets", "list", "--worker", "llm-proxy"],
+        { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
       );
     });
 
-    it("passes the environment through to Wrangler", () => {
+    it("passes the environment through to Cf", () => {
       vi.mocked(execFileSync).mockReturnValue("[]");
 
-      expect(listExistingSecretNames("prod")).toEqual(new Set());
+      expect(listExistingSecretNames("develop")).toEqual(new Set());
       expect(execFileSync).toHaveBeenCalledWith(
-        "wrangler",
-        ["secret", "list", "--format", "json", "--env", "prod"],
-        { encoding: "utf8" },
+        "cf",
+        [
+          "workers",
+          "secrets",
+          "list",
+          "--worker",
+          "llm-proxy-develop",
+          "--mode",
+          "develop",
+        ],
+        { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
       );
+    });
+
+    it("rejects undeclared modes before invoking cf", () => {
+      expect(() => listExistingSecretNames("unknown")).toThrow(
+        "Unknown deployment mode: unknown",
+      );
+      expect(execFileSync).not.toHaveBeenCalled();
     });
 
     it("tolerates surrounding output around the JSON array", () => {
-      vi.mocked(execFileSync).mockReturnValue('⛅️ wrangler\n[{"name":"A"}]\n');
+      vi.mocked(execFileSync).mockReturnValue('⛅️ cf\n[{"name":"A"}]\n');
 
       expect(listExistingSecretNames()).toEqual(new Set(["A"]));
     });
@@ -925,7 +956,7 @@ describe("deploy-secrets", () => {
       expect(listExistingSecretNames()).toBeNull();
     });
 
-    it("returns null when Wrangler exits with an error", () => {
+    it("returns null when Cf exits with an error", () => {
       vi.mocked(execFileSync).mockImplementation(() => {
         throw new Error("no worker");
       });
@@ -934,11 +965,11 @@ describe("deploy-secrets", () => {
     });
   });
 
-  describe("executeWranglerSecretBulk", () => {
+  describe("executeCfSecretBulk", () => {
     it("builds a dry-run command without writing plaintext", async () => {
-      const result = await executeWranglerSecretBulk(
+      const result = await executeCfSecretBulk(
         '{"KEY":"value"}',
-        "prod",
+        "develop",
         true,
       );
 
@@ -947,14 +978,16 @@ describe("deploy-secrets", () => {
       expect(spawn).not.toHaveBeenCalled();
       expect(result).toEqual({
         success: true,
-        message: expect.stringContaining("--env prod"),
+        message: expect.stringMatching(
+          /--worker llm-proxy-develop .*--mode develop/,
+        ),
       });
     });
 
-    it("executes Wrangler and cleans up on success", async () => {
+    it("executes Cf and cleans up on success", async () => {
       const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-      const result = await executeWranglerSecretBulk('{"KEY":"value"}');
+      const result = await executeCfSecretBulk('{"KEY":"value"}');
 
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         expect.stringMatching(/\.secrets-temp-.*\.json$/),
@@ -962,12 +995,20 @@ describe("deploy-secrets", () => {
         { flag: "wx", mode: 0o600 },
       );
       expect(spawn).toHaveBeenCalledWith(
-        "wrangler",
-        ["secret", "bulk", expect.stringMatching(/\.secrets-temp-.*\.json$/)],
-        { stdio: "inherit" },
+        "cf",
+        [
+          "workers",
+          "secrets",
+          "bulk",
+          "--worker",
+          "llm-proxy",
+          "--file",
+          expect.stringMatching(/\.secrets-temp-.*\.json$/),
+        ],
+        { stdio: "ignore" },
       );
       expect(log).toHaveBeenCalledWith(
-        expect.stringContaining("🚀 Executing: wrangler secret bulk"),
+        expect.stringContaining("🚀 Executing: cf workers secrets bulk"),
       );
       expect(fs.unlinkSync).toHaveBeenCalled();
       expect(result).toEqual({
@@ -976,24 +1017,54 @@ describe("deploy-secrets", () => {
       });
     });
 
+    it("targets the configured develop Worker for a non-dry-run bulk invocation", async () => {
+      await expect(executeCfSecretBulk("{}", "develop")).resolves.toMatchObject(
+        { success: true },
+      );
+      expect(spawn).toHaveBeenCalledWith(
+        "cf",
+        [
+          "workers",
+          "secrets",
+          "bulk",
+          "--worker",
+          "llm-proxy-develop",
+          "--file",
+          expect.stringMatching(/\.secrets-temp-.*\.json$/),
+          "--mode",
+          "develop",
+        ],
+        { stdio: "ignore" },
+      );
+    });
+
+    it.each([false, true])(
+      "rejects undeclared modes without writing secrets (dry run: %s)",
+      async (dryRun) => {
+        await expect(
+          executeCfSecretBulk("{}", "unknown", dryRun),
+        ).rejects.toThrow("Unknown deployment mode: unknown");
+        expect(fs.writeFileSync).not.toHaveBeenCalled();
+        expect(spawn).not.toHaveBeenCalled();
+      },
+    );
+
     it("cleans up and reports execution failures", async () => {
       vi.mocked(spawn)
         .mockReset()
         .mockImplementation(() => {
-          throw new Error("wrangler failed");
+          throw new Error("cf failed");
         });
       vi.mocked(fs.existsSync).mockReturnValue(true);
 
-      await expect(
-        executeWranglerSecretBulk('{"KEY":"value"}'),
-      ).resolves.toEqual({
+      await expect(executeCfSecretBulk('{"KEY":"value"}')).resolves.toEqual({
         success: false,
-        message: "❌ Error deploying secrets: wrangler failed",
+        message: "❌ Error deploying secrets: cf failed",
       });
       expect(fs.unlinkSync).toHaveBeenCalled();
     });
 
-    it("reports a Wrangler process start error", async () => {
+    it("reports a Cf process start error", async () => {
       vi.mocked(spawn).mockReset();
       const child = Object.assign(new EventEmitter(), {
         kill: vi.fn(() => true),
@@ -1003,7 +1074,7 @@ describe("deploy-secrets", () => {
         return child as never;
       });
 
-      await expect(executeWranglerSecretBulk("{}")).resolves.toEqual({
+      await expect(executeCfSecretBulk("{}")).resolves.toEqual({
         success: false,
         message: "❌ Error deploying secrets: spawn failed",
       });
@@ -1016,7 +1087,7 @@ describe("deploy-secrets", () => {
       });
       vi.mocked(fs.existsSync).mockReturnValue(false);
 
-      await expect(executeWranglerSecretBulk("{}")).resolves.toEqual({
+      await expect(executeCfSecretBulk("{}")).resolves.toEqual({
         success: false,
         message: "❌ Error deploying secrets: disk full",
       });
@@ -1027,9 +1098,7 @@ describe("deploy-secrets", () => {
       vi.spyOn(console, "log").mockImplementation(() => undefined);
       vi.mocked(fs.existsSync).mockReturnValue(false);
 
-      await expect(
-        executeWranglerSecretBulk('{"KEY":"value"}'),
-      ).resolves.toEqual({
+      await expect(executeCfSecretBulk('{"KEY":"value"}')).resolves.toEqual({
         success: true,
         message: "✅ Secrets deployed successfully",
       });
@@ -1042,15 +1111,13 @@ describe("deploy-secrets", () => {
         throw new Error("permission denied");
       });
 
-      await expect(
-        executeWranglerSecretBulk('{"KEY":"value"}'),
-      ).resolves.toEqual({
+      await expect(executeCfSecretBulk('{"KEY":"value"}')).resolves.toEqual({
         success: true,
         message: "✅ Secrets deployed successfully",
       });
     });
 
-    it("deletes the temporary file and stops Wrangler when interrupted", async () => {
+    it("deletes the temporary file and stops Cf when interrupted", async () => {
       vi.spyOn(console, "log").mockImplementation(() => undefined);
       vi.mocked(spawn).mockReset();
       const kill = vi.fn(() => true);
@@ -1067,35 +1134,35 @@ describe("deploy-secrets", () => {
         return child as never;
       });
 
-      const result = await executeWranglerSecretBulk('{"KEY":"value"}');
+      const result = await executeCfSecretBulk('{"KEY":"value"}');
 
       expect(interruptHandler).toBeDefined();
       expect(fs.unlinkSync).toHaveBeenCalled();
       expect(kill).toHaveBeenCalledWith("SIGINT");
       expect(result).toEqual({
         success: false,
-        message: "❌ Error deploying secrets: Wrangler interrupted by SIGINT.",
+        message: "❌ Error deploying secrets: cf interrupted by SIGINT.",
       });
       expect(process.listeners("SIGINT")).not.toContain(interruptHandler);
     });
 
-    it("reports a Wrangler exit code", async () => {
+    it("reports a Cf exit code", async () => {
       vi.mocked(spawn).mockReset();
-      mockWranglerSpawn(2);
+      mockCfSpawn(2);
 
-      await expect(executeWranglerSecretBulk("{}")).resolves.toEqual({
+      await expect(executeCfSecretBulk("{}")).resolves.toEqual({
         success: false,
-        message: "❌ Error deploying secrets: Wrangler exited with code 2.",
+        message: "❌ Error deploying secrets: cf exited with code 2.",
       });
     });
 
     it("reports a child termination signal", async () => {
       vi.mocked(spawn).mockReset();
-      mockWranglerSpawn(null, "SIGTERM");
+      mockCfSpawn(null, "SIGTERM");
 
-      await expect(executeWranglerSecretBulk("{}")).resolves.toEqual({
+      await expect(executeCfSecretBulk("{}")).resolves.toEqual({
         success: false,
-        message: "❌ Error deploying secrets: Wrangler terminated by SIGTERM.",
+        message: "❌ Error deploying secrets: cf terminated by SIGTERM.",
       });
     });
 
@@ -1117,7 +1184,7 @@ describe("deploy-secrets", () => {
         return child as never;
       });
 
-      const result = await executeWranglerSecretBulk("{}");
+      const result = await executeCfSecretBulk("{}");
 
       expect(fs.unlinkSync).toHaveBeenCalled();
       expect(result.success).toBe(false);
@@ -1141,6 +1208,37 @@ describe("deploy-secrets", () => {
       process.argv = originalArgv;
       vi.restoreAllMocks();
     });
+
+    it.each([false, true])(
+      "rejects undeclared modes before Gateway synchronization (dry run: %s)",
+      async (dryRun) => {
+        process.argv = [
+          "node",
+          "deploy-secrets.ts",
+          "--env",
+          "unknown",
+          ...(dryRun ? ["--dry-run"] : []),
+        ];
+        vi.mocked(fs.readFileSync).mockReturnValue('{"KEY":"fake-value"}');
+        const log = vi
+          .spyOn(console, "log")
+          .mockImplementation(() => undefined);
+        const exit = vi.spyOn(process, "exit").mockImplementation((() => {
+          throw new Error("exited");
+        }) as never);
+
+        await expect(runDeploySecretsCli()).rejects.toThrow("exited");
+
+        expect(exit).toHaveBeenCalledWith(1);
+        expect(log).toHaveBeenCalledWith(
+          "❌ Error processing config.unknown.jsonc: Unknown deployment mode: unknown",
+        );
+        expect(syncAiGatewayCustomProviders).not.toHaveBeenCalled();
+        expect(execFileSync).not.toHaveBeenCalled();
+        expect(spawn).not.toHaveBeenCalled();
+        expect(fs.writeFileSync).not.toHaveBeenCalled();
+      },
+    );
 
     it.each([
       { KEY: "x".repeat(MAX_WORKER_SECRET_BYTES + 1) },
@@ -1263,7 +1361,7 @@ describe("deploy-secrets", () => {
         "node",
         "deploy-secrets.ts",
         "--env",
-        "prod",
+        "develop",
         "--dry-run",
       ];
       vi.mocked(fs.existsSync).mockReturnValue(true);
@@ -1273,7 +1371,7 @@ describe("deploy-secrets", () => {
       await runDeploySecretsCli();
 
       expect(log).toHaveBeenCalledWith(
-        "🔐 Deploying secrets from config.prod.jsonc to prod environment (dry run)...",
+        "🔐 Deploying secrets from config.develop.jsonc to develop environment (dry run)...",
       );
     });
 

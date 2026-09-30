@@ -72,5 +72,5 @@ and [security](features/security_config.md).
 | Hono route declarations and execution | `src/routing.ts`             |
 | Built-in providers                    | `src/providers.ts`           |
 | Configuration shape                   | `schemas/config-schema.json` |
-| Worker bindings and migrations        | `wrangler.jsonc`             |
+| Worker bindings and migrations        | `cloudflare.config.ts`       |
 | Secret and key-selection policy       | `src/utils/secrets.ts`       |

@@ -49,10 +49,6 @@ export function parseWithSecretsArguments(
     } else if (currentArgument === "--") {
       hasReachedCommand = true;
     } else {
-      // If we encounter something that doesn't look like our flag, treat it as start of command if we haven't seen '--'
-      // But typically, we expect structure: [our-flags] -- [command]
-      // To be safe and flexible, if we see something unknown and haven't seen '--', we could error or assume it's part of command?
-      // The requirement was `tsx scripts/with-secrets.ts --env develop -- wrangler dev ...`
       throw new Error(
         `Unknown argument: ${currentArgument}. Use '--' to separate the command.`,
       );
@@ -136,11 +132,11 @@ export async function runCommandWithSecretsCli() {
 
   const childProcess = spawn(commandName, commandArguments, {
     stdio: "inherit",
-    shell: process.platform === "win32", // Use shell only on Windows to resolve commands like 'wrangler'
+    shell: process.platform === "win32", // Use shell only on Windows to resolve commands like 'cf'
   });
 
   // Without an "error" listener, a command that cannot be spawned (for example
-  // a missing `wrangler` on PATH) turns into an unhandled 'error' event and a
+  // a missing `cf` on PATH) turns into an unhandled 'error' event and a
   // raw stack trace.
   childProcess.on("error", (error) => {
     console.error(`❌ Failed to run ${commandName}: ${getErrorMessage(error)}`);

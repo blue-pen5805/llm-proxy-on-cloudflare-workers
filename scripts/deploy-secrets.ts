@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import cloudflareConfig from "../cloudflare.config.ts";
 import { BUILT_IN_PROVIDER_NAME_SET } from "../src/providers/names.ts";
 import { Config } from "../src/utils/config.ts";
 import { Environments } from "../src/utils/environments.ts";
@@ -248,7 +249,7 @@ export function showHelp(): string {
 Usage: secrets:deploy [options]
 
 Options:
-  --env <name>          Specify environment name for both config file and wrangler deployment
+  --env <name>          Specify environment name for both config file and cf deployment mode
                         - No env: Use config.jsonc and deploy to default environment
                         - With env: Use config.<env>.jsonc and deploy to <env> environment
   --dry-run             Show what would be deployed without executing
@@ -260,8 +261,8 @@ Examples:
   npm run secrets:deploy -- --env production # Deploy from config.production.jsonc to production environment
   npm run secrets:deploy -- --dry-run        # Show what would be deployed
 
-Note: This script deploys secrets to Cloudflare Workers using 'wrangler secret bulk'.
-Make sure you have authenticated with Wrangler before running this script.
+Note: This script deploys secrets to Cloudflare Workers using 'cf workers secrets bulk'.
+Make sure you have authenticated with cf before running this script.
 `;
 }
 
@@ -269,7 +270,7 @@ Make sure you have authenticated with Wrangler before running this script.
  * Convert a value to secret format
  */
 export function serializeSecretValue(value: unknown): SecretOperationValue {
-  // In Wrangler's JSON bulk format, null is an explicit delete operation.
+  // In cf's JSON bulk format, null is an explicit delete operation.
   if (value === null) {
     return null;
   }
@@ -332,18 +333,29 @@ export function filterSecretsForDeployment(
 }
 
 /**
- * Generate secrets JSON for wrangler secret bulk
+ * Generate secrets JSON for cf workers secrets bulk
  */
 export function serializeSecretsJson(
   secrets: Record<string, SecretOperationValue>,
 ): string {
-  return JSON.stringify(secrets, null, 2);
+  return JSON.stringify(
+    {
+      secrets: Object.fromEntries(
+        Object.entries(secrets).map(([name, text]) => [
+          name,
+          text === null ? null : { name, type: "secret_text", text },
+        ]),
+      ),
+    },
+    null,
+    2,
+  );
 }
 
 /**
- * Execute wrangler secret bulk command
+ * Execute cf workers secrets bulk command
  */
-export async function executeWranglerSecretBulk(
+export async function executeCfSecretBulk(
   secretsJson: string,
   environmentName?: string,
   isDryRun: boolean = false,
@@ -352,9 +364,21 @@ export async function executeWranglerSecretBulk(
     process.cwd(),
     `.secrets-temp-${randomUUID()}.json`,
   );
-  const wranglerArguments = ["secret", "bulk", tempFilePath];
-  if (environmentName) wranglerArguments.push("--env", environmentName);
-  const commandDisplay = `wrangler ${wranglerArguments.join(" ")}`;
+  const { worker } = cloudflareConfig({
+    mode: environmentName,
+    isPreview: false,
+  });
+  const cfArguments = [
+    "workers",
+    "secrets",
+    "bulk",
+    "--worker",
+    worker.name,
+    "--file",
+    tempFilePath,
+  ];
+  if (environmentName) cfArguments.push("--mode", environmentName);
+  const commandDisplay = `cf ${cfArguments.join(" ")}`;
 
   if (isDryRun) {
     return {
@@ -372,7 +396,7 @@ export async function executeWranglerSecretBulk(
       // Deletion is best effort; the file is owner-only and version-ignored.
     }
   };
-  // Use an asynchronous child so signal callbacks can run while Wrangler is
+  // Use an asynchronous child so signal callbacks can run while cf is
   // active. Synchronous child-process APIs block JavaScript signal handlers and
   // can leave the plaintext file behind when the parent is terminated.
   const interruptSignals: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
@@ -395,7 +419,9 @@ export async function executeWranglerSecretBulk(
     fs.writeFileSync(tempFilePath, secretsJson, { flag: "wx", mode: 0o600 });
     created = true;
     console.log(`🚀 Executing: ${commandDisplay}`);
-    child = spawn("wrangler", wranglerArguments, { stdio: "inherit" });
+    // API responses and errors can contain secret data. Report only the
+    // process outcome; never forward either output stream to the terminal.
+    child = spawn("cf", cfArguments, { stdio: "ignore" });
     await new Promise<void>((resolve, reject) => {
       child!.once("error", reject);
       child!.once("exit", (code, signal) => {
@@ -408,7 +434,7 @@ export async function executeWranglerSecretBulk(
           : signal
             ? `terminated by ${signal}`
             : `exited with code ${code}`;
-        reject(new Error(`Wrangler ${outcome}.`));
+        reject(new Error(`cf ${outcome}.`));
       });
     });
 
@@ -434,24 +460,31 @@ export async function executeWranglerSecretBulk(
  * List the names of secrets currently configured on the Worker.
  *
  * Returns `null` when the set of existing secrets can't be determined (for
- * example the Worker doesn't exist yet, or Wrangler emitted non-JSON output).
+ * example the Worker doesn't exist yet, or cf emitted non-JSON output).
  * Callers treat `null` as "unknown" and fall back to their previous behaviour
  * rather than blocking a deploy.
  */
 export function listExistingSecretNames(
   environmentName?: string,
 ): Set<string> | null {
-  const wranglerArguments = ["secret", "list", "--format", "json"];
-  if (environmentName) wranglerArguments.push("--env", environmentName);
+  // API commands do not infer worker.name from the project's configuration.
+  // Resolve outside the fallback catch so invalid modes cannot be ignored.
+  const { worker } = cloudflareConfig({
+    mode: environmentName,
+    isPreview: false,
+  });
+  const cfArguments = ["workers", "secrets", "list", "--worker", worker.name];
+  if (environmentName) cfArguments.push("--mode", environmentName);
 
   try {
-    // Capture stdout (default "pipe") instead of inheriting, so the JSON is
-    // available to parse and Wrangler's own listing isn't echoed to the user.
-    const output = execFileSync("wrangler", wranglerArguments, {
+    // Capture both output streams, including failures, so API responses
+    // cannot disclose secret material through the terminal.
+    const output = execFileSync("cf", cfArguments, {
       encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
     });
 
-    // Isolate the JSON array in case Wrangler prints anything alongside it.
+    // Isolate the JSON array in case cf prints anything alongside it.
     const start = output.indexOf("[");
     const end = output.lastIndexOf("]");
     if (start === -1 || end === -1 || end < start) return null;
@@ -505,6 +538,8 @@ export async function deploySecrets(
   }
 
   try {
+    // Reject undeclared deployment modes before any Gateway synchronization.
+    cloudflareConfig({ mode: environmentName, isPreview: false });
     const configFileContent = fileSystem.readFileSync(configPath, "utf8");
     const parsedConfig = parseJsonc(configFileContent);
     const warnings = deprecatedConfigWarnings(parsedConfig);
@@ -556,7 +591,7 @@ export async function deploySecrets(
 
     const messages: string[] = [...warnings];
 
-    // Resolve deletions against the Worker's current secrets so Wrangler only
+    // Resolve deletions against the Worker's current secrets so cf only
     // reports keys it actually removed. Without this, `secret bulk` prints a
     // "deleted" line for every null entry, even ones that were never set. Dry
     // runs stay offline, so they still preview every requested deletion.
@@ -617,7 +652,7 @@ export async function deploySecrets(
       messages.push("🔍 Dry run mode - values are intentionally redacted.");
     }
 
-    const deploymentResult = await executeWranglerSecretBulk(
+    const deploymentResult = await executeCfSecretBulk(
       secretsJson,
       environmentName,
       isDryRun,

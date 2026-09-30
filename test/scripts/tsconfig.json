@@ -12,6 +12,10 @@
     },
     "types": ["node"]
   },
-  "include": ["./**/*.ts", "../../worker-configuration.d.ts"],
+  "include": [
+    "./**/*.ts",
+    "../../.cloudflare/types/index.d.ts",
+    "../../src/env.d.ts"
+  ],
   "exclude": []
 }

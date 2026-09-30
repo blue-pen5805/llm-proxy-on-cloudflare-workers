@@ -10,11 +10,11 @@ export const JAPANESE_CREATE_CONFIG_MESSAGES = {
   keyboardTitle: "キーボード",
   exampleNotFound: "{file} が見つかりません。",
   accountDiscoveryUnavailable:
-    "Wrangler からアカウントを取得できませんでした。CLOUDFLARE_ACCOUNT_ID は手動で入力できます。",
+    "cf からアカウントを取得できませんでした。CLOUDFLARE_ACCOUNT_ID は手動で入力できます。",
   cloudflareAccount: "Cloudflare アカウント",
   noConfigurationWritten: "設定ファイルは書き込まれませんでした。",
   noChangesWritten: "変更は書き込まれませんでした。",
-  accountsReported: "wrangler whoami --json が返したアカウント",
+  accountsReported: "cf auth whoami が返したアカウント",
   configUnchanged: "{file}",
   configChanged: "{file} に未保存の変更があります",
   providers: "プロバイダー",

@@ -5,9 +5,8 @@ describe("TypeScript CLI package scripts", () => {
   it("uses the same transforming runtime for every TypeScript entry point", () => {
     expect(packageJson.scripts).toEqual(
       expect.objectContaining({
-        dev: "tsx scripts/with-secrets.ts --env develop -- wrangler dev --env-file .dev.vars.develop",
-        "cf-typegen":
-          "tsx scripts/with-secrets.ts --env example --include-null-placeholders -- wrangler types --env-file .dev.vars.example",
+        dev: "tsx scripts/with-secrets.ts --env develop -- cf dev --mode develop",
+        "cf-typegen": "cf workers types",
         "test:live-chat": "tsx scripts/test-live-chat.ts",
         secrets: "tsx scripts/create-config.ts",
         "secrets:deploy": "tsx scripts/deploy-secrets.ts",

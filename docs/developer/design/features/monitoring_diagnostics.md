@@ -55,7 +55,7 @@ to diagnostics. Their output is operator metadata and requires private handling.
 
 ## Platform observability
 
-`wrangler.jsonc` enables Workers Logs for every invocation and sampled traces.
+`cloudflare.config.ts` enables Workers Logs for every invocation and sampled traces.
 Application records contain a human-readable `message`, stable `event`, and
 `request_id`, plus safe routing and outcome fields when applicable. The request
 ID uses Cloudflare's `cf-ray` value when available and otherwise a generated
