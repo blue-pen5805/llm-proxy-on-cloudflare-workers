@@ -392,6 +392,116 @@ describe("Responses JSON to Chat", () => {
 });
 
 describe("Responses SSE to Chat", () => {
+  it.each([
+    ["completed", false],
+    ["completed", true],
+    ["incomplete", false],
+    ["incomplete", true],
+  ] as const)(
+    "finishes and cancels an open stream after CR-only response.%s (split: %s)",
+    async (status, split) => {
+      const terminal = {
+        type: `response.${status}`,
+        response: {
+          status,
+          ...(status === "incomplete"
+            ? { incomplete_details: { reason: "max_output_tokens" } }
+            : {}),
+        },
+      };
+      const ending = `data: ${JSON.stringify(terminal)}\r`;
+      const pending = split ? [ending, "\r"] : [`${ending}\r`];
+      const cancel = vi.fn();
+      const source = new Response(
+        new ReadableStream<Uint8Array>({
+          pull(controller) {
+            const chunk = pending.shift();
+            if (chunk) controller.enqueue(new TextEncoder().encode(chunk));
+          },
+          cancel,
+        }),
+      );
+      const response = responsesStream(source, source.body!, base.model, false);
+      const text = await response.text();
+      expect(chunks(text).at(-1).choices[0].finish_reason).toBe(
+        status === "completed" ? "stop" : "length",
+      );
+      expect(text.endsWith("data: [DONE]\n\n")).toBe(true);
+      await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce());
+    },
+  );
+
+  it("preserves subsequent usage after a nonterminal Responses JSON record ending in CR", async () => {
+    const pending = [
+      `data: ${JSON.stringify({ type: "response.output_text.delta", delta: "hello" })}\r\r`,
+      records(completed),
+    ];
+    const source = new Response(
+      new ReadableStream<Uint8Array>({
+        pull(controller) {
+          const chunk = pending.shift();
+          if (chunk) controller.enqueue(new TextEncoder().encode(chunk));
+          else controller.close();
+        },
+      }),
+    );
+    const response = responsesStream(source, source.body!, base.model, true);
+    const output = chunks(await response.text());
+    expect(output[1].choices[0].delta.content).toBe("hello");
+    expect(output.at(-1).usage).toEqual(responsesUsage(responsesOutput.usage));
+  });
+
+  it("rejects malformed Responses JSON through the normal parser after a CR-only record", async () => {
+    const pending = ['data: {"type":"response.completed"\r\r'];
+    const source = new Response(
+      new ReadableStream<Uint8Array>({
+        pull(controller) {
+          const chunk = pending.shift();
+          if (chunk) controller.enqueue(new TextEncoder().encode(chunk));
+          else controller.close();
+        },
+      }),
+    );
+    const response = responsesStream(source, source.body!, base.model, false);
+    await expect(response.text()).rejects.toThrow(SyntaxError);
+  });
+
+  it("accepts message output items before text deltas", async () => {
+    const output = chunks(
+      await stream(
+        records(
+          {
+            type: "response.output_item.added",
+            output_index: 0,
+            item: { type: "message" },
+          },
+          { type: "response.output_text.delta", delta: "hello" },
+          completed,
+        ),
+      ).text(),
+    );
+    expect(output[1].choices[0].delta.content).toBe("hello");
+    expect(output.at(-1).choices[0].finish_reason).toBe("stop");
+  });
+
+  it.each(["web_search_call", "custom_tool_call", undefined])(
+    "rejects unsupported output item %s instead of silently completing",
+    async (type) => {
+      await expect(
+        stream(
+          records(
+            {
+              type: "response.output_item.added",
+              output_index: 0,
+              item: { type },
+            },
+            completed,
+          ),
+        ).text(),
+      ).rejects.toThrow("Unsupported Responses output item.");
+    },
+  );
+
   it("streams text, refusal, sparse tool indexes, finish reason and requested usage", async () => {
     const response = stream(
       ": ping\n\n" +

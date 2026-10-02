@@ -55,6 +55,12 @@ describe("bounded body parsing", () => {
   it.each([
     ["invalid", BadRequestError],
     ["-1", BadRequestError],
+    ["", BadRequestError],
+    ["+10", BadRequestError],
+    ["0x10", BadRequestError],
+    ["1e1", BadRequestError],
+    ["10.0", BadRequestError],
+    ["9007199254740992", BadRequestError],
     ["11", PayloadTooLargeError],
   ] as const)(
     "releases an upstream body rejected by declared Content-Length %s",
@@ -68,6 +74,18 @@ describe("bounded body parsing", () => {
       );
       expect(cancel).toHaveBeenCalledOnce();
       expect(response.body!.locked).toBe(false);
+    },
+  );
+
+  it.each(["0", "2", "002"])(
+    "accepts decimal Content-Length %s",
+    async (contentLength) => {
+      const response = new Response(contentLength === "0" ? null : "{}", {
+        headers: { "content-length": contentLength },
+      });
+      expect(await readRequestText(response, 2)).toBe(
+        contentLength === "0" ? "" : "{}",
+      );
     },
   );
 

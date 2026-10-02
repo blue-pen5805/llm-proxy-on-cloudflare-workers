@@ -140,10 +140,15 @@ the route handler and stream-conversion entry points.
 The shared SSE record reader uses line state for LF, CRLF, and CR, as defined by
 the [SSE parsing standard](https://html.spec.whatwg.org/multipage/server-sent-events.html#parsing-an-event-stream).
 A CR at the end of a network chunk is held until the next chunk or EOF so a
-split CRLF remains one line ending. Original record separators are retained for
+split CRLF remains one line ending. A known terminal record whose blank line
+ends at that CR can close immediately without waiting for a possible LF.
+Terminal probes run only at that boundary, after the record byte limit is
+checked; normal parsing still validates the terminal event. Original record separators are retained for
 metadata enrichment. Record byte limits exclude the terminating line endings
 and are independent of network chunk boundaries. Unterminated final records
 are passed to the protocol-specific EOF handler.
+SSE data fields remove at most one ASCII space after the colon, retain other
+whitespace, and treat a colon-free `data` field as an empty data line.
 
 ## References
 

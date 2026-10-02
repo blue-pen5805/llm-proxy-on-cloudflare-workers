@@ -49,18 +49,23 @@ export function nativeUsage(
   };
 }
 
-export function nativeFinishReason(reason: unknown): string {
+export function nativeFinishReason(reason: unknown, hasTools = false): string {
   if (reason === "max_tokens" || reason === "MAX_TOKENS") return "length";
   if (reason === "tool_use") return "tool_calls";
   if (
     reason === "SAFETY" ||
     reason === "RECITATION" ||
+    reason === "BLOCKLIST" ||
+    reason === "PROHIBITED_CONTENT" ||
+    reason === "SPII" ||
+    reason === "IMAGE_SAFETY" ||
+    reason === "IMAGE_PROHIBITED_CONTENT" ||
     reason === "refusal" ||
     reason === "guardrail_intervened" ||
     reason === "content_filtered"
   )
     return "content_filter";
-  return "stop";
+  return hasTools ? "tool_calls" : "stop";
 }
 
 export function nativeMessage(
@@ -158,9 +163,10 @@ export function convertNativeJson(
           return {
             index: candidate.index ?? index,
             message,
-            finish_reason: message.tool_calls
-              ? "tool_calls"
-              : nativeFinishReason(candidate.finishReason),
+            finish_reason: nativeFinishReason(
+              candidate.finishReason,
+              message.tool_calls !== undefined,
+            ),
           };
         });
     tokens = body.usageMetadata;

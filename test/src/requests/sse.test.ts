@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createChatCompletionSseTransform,
   createSseRecordTransform,
   sseData,
+  sseEventType,
 } from "~/src/requests/sse";
 import {
   StreamingResponseBudget,
@@ -37,11 +38,17 @@ function budget(bytes = 1024) {
     outputItems: 64,
   } satisfies StreamingResponseLimits);
 }
-async function records(input: string, sizes: number[], maximum?: number) {
+async function records(
+  input: string,
+  sizes: number[],
+  maximum?: number,
+  isTerminalRecord?: (block: string) => boolean,
+) {
   const result: { block: string; separator: string }[] = [];
   let tail: string | undefined;
   const transform = createSseRecordTransform({
     budget: budget(maximum),
+    isTerminalRecord,
     onRecord(block, separator) {
       result.push({ block, separator });
     },
@@ -59,6 +66,95 @@ async function records(input: string, sizes: number[], maximum?: number) {
 }
 
 describe("SSE line state", () => {
+  it.each([
+    [": ping", undefined],
+    ["data: invalid-json", undefined],
+    ["data: null", undefined],
+    ["data: []", undefined],
+    ['data: {"type":123}', undefined],
+    ['data: {"type":"message_stop"}', "message_stop"],
+  ])(
+    "probes terminal event types without replacing malformed-data errors (%j)",
+    (block, expected) => {
+      expect(sseEventType(block)).toBe(expected);
+    },
+  );
+
+  it.each([false, true])(
+    "closes an open Chat stream on a CR-only terminal record (split %s)",
+    async (split) => {
+      const cancel = vi.fn();
+      const source = new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const chunk of split
+            ? ["data: [DONE]\r", "\r"]
+            : ["data: [DONE]\r\r"])
+            controller.enqueue(encoder.encode(chunk));
+        },
+        cancel,
+      });
+      let finished = false;
+      const transform = createChatCompletionSseTransform({
+        budget: budget(),
+        onChunk() {
+          throw new Error("Unexpected data after terminal record");
+        },
+        onDone(controller) {
+          finished = true;
+          controller.enqueue(encoder.encode("complete"));
+          controller.terminate();
+        },
+        onError(error, controller) {
+          controller.error(error);
+        },
+        isFinished: () => finished,
+      });
+      expect(await new Response(source.pipeThrough(transform)).text()).toBe(
+        "complete",
+      );
+      await Promise.resolve();
+      expect(cancel).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("preserves split CRLF separators when the terminal probe rejects the record", async () => {
+    const input = "data: first\r\n\r\ndata: second\r\n\r\n";
+    const probe = vi.fn(() => false);
+    const result = await records(
+      input,
+      Array(input.length).fill(1),
+      undefined,
+      probe,
+    );
+    expect(result.result).toEqual([
+      { block: "data: first", separator: "\r\n\r\n" },
+      { block: "data: second", separator: "\r\n\r\n" },
+    ]);
+    expect(probe).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects oversized CR-only records before probing their JSON", async () => {
+    const probe = vi.fn(() => true);
+    await expect(
+      records('data: {"type":"message_stop"}\r\r', [], 8, probe),
+    ).rejects.toThrow("Upstream SSE record exceeds the proxy limit.");
+    expect(probe).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["data", ""],
+    ["data:", ""],
+    ["data: value", "value"],
+    ["data:  value", " value"],
+    ["data:\tvalue", "\tvalue"],
+    ["data: \tvalue", "\tvalue"],
+    ["data:\u00a0value", "\u00a0value"],
+    ["data: first\ndata\ndata:  last", "first\n\n last"],
+    ["metadata: ignored\n: comment", undefined],
+  ])("preserves SSE data field semantics for %j", (block, expected) => {
+    expect(sseData(block)).toBe(expected);
+  });
+
   it.each(["\n", "\r\n", "\r"])(
     "preserves records and endings for %j at every byte split",
     async (ending) => {
@@ -125,6 +221,30 @@ describe("SSE line state", () => {
       result: [],
       tail: "data: tail\r",
     });
+  });
+
+  it("skips the end callback when a buffered CR-only record finishes at EOF", async () => {
+    let finished = false;
+    const onEnd = vi.fn();
+    const onRecord = vi.fn((block: string, separator: string) => {
+      expect(block).toBe("data: final");
+      expect(separator).toBe("\r\r");
+      finished = true;
+    });
+    const transform = createSseRecordTransform({
+      budget: budget(),
+      onRecord,
+      onEnd,
+      onError(error, controller) {
+        controller.error(error);
+      },
+      isFinished: () => finished,
+    });
+    await new Response(
+      new Response("data: final\r\r").body!.pipeThrough(transform),
+    ).text();
+    expect(onRecord).toHaveBeenCalledOnce();
+    expect(onEnd).not.toHaveBeenCalled();
   });
 
   it("dispatches a CR-only terminal event at EOF without a false truncation error", async () => {

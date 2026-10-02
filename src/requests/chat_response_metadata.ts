@@ -90,6 +90,7 @@ function enrichEventStream(
   const encoder = new TextEncoder();
   const budget = new StreamingResponseBudget();
   let metadataWritten = false;
+  let finished = false;
   const writeMetadata = (controller: TransformStreamDefaultController) => {
     if (metadataWritten) return;
     controller.enqueue(
@@ -115,8 +116,13 @@ function enrichEventStream(
     createSseRecordTransform({
       budget,
       onRecord(block, separator, controller) {
-        if (sseData(block)?.trim() === "[DONE]") writeMetadata(controller);
+        const done = sseData(block)?.trim() === "[DONE]";
+        if (done) writeMetadata(controller);
         controller.enqueue(encoder.encode(block + separator));
+        if (done) {
+          finished = true;
+          controller.terminate();
+        }
       },
       onError(error, controller) {
         fail(controller, error.message);
@@ -124,8 +130,20 @@ function enrichEventStream(
       onEnd(pending, controller) {
         if (sseData(pending)?.trim() === "[DONE]") writeMetadata(controller);
         if (pending) controller.enqueue(encoder.encode(pending));
+        if (pending && !metadataWritten) {
+          // Keep the upstream bytes intact while closing its final record
+          // before appending an independent metadata event.
+          const separator = pending.endsWith("\r")
+            ? "\r"
+            : pending.endsWith("\n")
+              ? "\n"
+              : "\n\n";
+          controller.enqueue(encoder.encode(separator));
+        }
         writeMetadata(controller);
       },
+      isFinished: () => finished,
+      isTerminalRecord: (block) => sseData(block)?.trim() === "[DONE]",
     }),
   );
 

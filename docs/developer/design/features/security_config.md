@@ -129,6 +129,12 @@ throughout the deployment.
 
 ## Error and diagnostic disclosure
 
+Buffered HTTP body readers accept only decimal digits in `Content-Length`,
+within the safe-integer range, as required by
+[RFC 9110, section 8.6](https://www.rfc-editor.org/rfc/rfc9110.html#section-8.6).
+Malformed lengths are rejected before body parsing and release the unread body.
+Declared lengths do not replace the enforced byte limit on the actual stream.
+
 Known application errors return stable public messages. Unexpected exceptions
 are logged and returned as a generic HTTP 500 error. Subrequest logging records
 only the upstream URL scheme, host, and path; query strings and fragments are

@@ -34,6 +34,7 @@ export const MAX_AGGREGATED_MODELS_BYTES = 4 * 1024 * 1024;
 export const MAX_MODELS_RATE_LIMIT_KEY_ATTEMPTS = 3;
 
 const MODELS_CACHE_NAME = "llm-proxy-models";
+const MODELS_RESPONSE_ENVELOPE_BYTES = '{"data":[],"object":"list"}'.length;
 
 const EMPTY_MODELS: OpenAIModelsListResponseBody = {
   object: "list",
@@ -191,6 +192,7 @@ async function fetchProviderModels(
       apiKeyIndex,
       aiGatewayProvider ? clientGatewayHeaders : undefined,
     );
+    abortController.signal.throwIfAborted();
     if (aiGateway && aiGatewayProvider) {
       const [gatewayUrl, gatewayInit] = aiGateway.buildProviderEndpointRequest({
         provider: aiGatewayProvider,
@@ -221,6 +223,7 @@ async function fetchProviderModels(
   const modelsPromise = (async () => {
     let lastStatus = 0;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      abortController.signal.throwIfAborted();
       const apiKeyIndex = initialApiKeyIndex + attempt;
       const upstreamResponse = await fetchModelsWithKey(apiKeyIndex);
       if (upstreamResponse.ok) {
@@ -240,6 +243,7 @@ async function fetchProviderModels(
       }
       lastStatus = upstreamResponse.status;
       await discardUpstreamBody(upstreamResponse);
+      abortController.signal.throwIfAborted();
       if (lastStatus !== 429 || attempt + 1 >= maxAttempts) {
         break;
       }
@@ -381,10 +385,14 @@ async function aggregateModels(
   // fragment without parsing the aggregate.
   const serializedModels: string[] = [];
   const modelIds: string[] = [];
-  let aggregatedBytes = 0;
+  let aggregatedBytes = MODELS_RESPONSE_ENVELOPE_BYTES;
   let truncated = false;
-  let providerFailed = providerEnumeration.failures.length > 0;
-  for (const { providerName, error } of providerEnumeration.failures) {
+  const providerFailures = providerEnumeration.failures.filter(
+    ({ providerName }) =>
+      providerFilterSet === undefined || providerFilterSet.has(providerName),
+  );
+  let providerFailed = providerFailures.length > 0;
+  for (const { providerName, error } of providerFailures) {
     RequestLogger.error(
       "provider.models.failed",
       "Provider model discovery failed",
@@ -413,7 +421,8 @@ async function aggregateModels(
       });
       serializedModels.push(serializedModel);
       modelIds.push(virtualModelId);
-      aggregatedBytes += utf8ByteLength(serializedModel);
+      aggregatedBytes +=
+        utf8ByteLength(serializedModel) + (serializedModels.length > 1 ? 1 : 0);
     }
   }
 
@@ -482,7 +491,8 @@ async function aggregateModels(
         id: qualifiedModelId,
         ...model,
       });
-      const modelBytes = utf8ByteLength(serializedModel);
+      const modelBytes =
+        utf8ByteLength(serializedModel) + (serializedModels.length > 0 ? 1 : 0);
       if (aggregatedBytes + modelBytes > MAX_AGGREGATED_MODELS_BYTES) {
         truncated = true;
         break providerResults;

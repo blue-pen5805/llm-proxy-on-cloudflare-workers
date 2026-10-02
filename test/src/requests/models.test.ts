@@ -770,6 +770,8 @@ describe("models", () => {
     vi.mocked(helpers.withTimeout).mockImplementation(
       async (promise, abortController, _timeoutMs, providerName) => {
         if (providerName === "openai") {
+          // The real timeout wrapper observes late rejection after aborting.
+          void promise.catch(() => undefined);
           abortController.abort();
           const error = new Error("Provider openai request timed out");
           error.name = "TimeoutError";

@@ -166,6 +166,12 @@ describe("adversarial provider selectors", () => {
 
   it.each([
     ["invalid", 400],
+    ["", 400],
+    ["0x10", 400],
+    ["1e1", 400],
+    ["+10", 400],
+    ["10.0", 400],
+    ["9007199254740992", 400],
     [String(10 * 1024 * 1024 + 1), 413],
   ] as const)(
     "rejects client Content-Length %s with HTTP %s before inference",
@@ -178,6 +184,32 @@ describe("adversarial provider selectors", () => {
       await expect(
         Environments.run(environment, () => handleRouting(context)),
       ).rejects.toMatchObject({ status });
+    },
+  );
+
+  it.each(["openai\u0000", "openai/../anthropic", "openai:__proto__"])(
+    "rejects malformed provider filter %j before discovery",
+    async (provider) => {
+      const fetch = vi.spyOn(globalThis, "fetch");
+      try {
+        const response = await Environments.run(environment, () =>
+          handleRouting(
+            createTestRoutedContext({
+              request: new Request(
+                `https://proxy.example/v1/models?provider=${encodeURIComponent(provider)}`,
+              ),
+              env: environment,
+            }),
+          ),
+        );
+        expect(response.status).toBe(400);
+        expect(await response.json()).toMatchObject({
+          error: { message: "Invalid provider filter.", param: "provider" },
+        });
+        expect(fetch).not.toHaveBeenCalled();
+      } finally {
+        fetch.mockRestore();
+      }
     },
   );
 

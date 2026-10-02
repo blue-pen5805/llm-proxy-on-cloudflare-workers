@@ -248,13 +248,21 @@ unchanged. Rewriting removes `Content-Length`, `Content-Encoding`,
 
 For `text/event-stream`, a transform inserts one OpenAI-compatible metadata
 chunk before `data: [DONE]`, or at the end of a valid stream without that
-marker. Other chunks pass through. Responses and Messages converters place the
-metadata on their protocol-specific final response update. The completion
+marker. The terminal record retains its received line endings and closes the
+output, cancelling the upstream reader without waiting for upstream EOF or
+forwarding records after `[DONE]`. Other chunks pass through. Responses and
+Messages converters place the metadata on their protocol-specific final response
+update. The completion
 fields therefore describe stream completion, while `headers_received_ms`
 describes time to headers. Backpressure and cancellation propagate upstream.
 Each SSE record is limited to 1 MiB; an oversized or malformed record produces
 a terminal compatible error, suppresses metadata and the success marker, and
 cancels the upstream stream.
+
+At EOF, a final nonterminal record lacking a blank-line separator is closed
+before the metadata event is appended, retaining its existing bytes. A complete
+CR-only terminal record closes immediately even when the upstream remains open;
+an optional LF in a later chunk is not awaited or forwarded.
 
 Virtual-model retries retain metadata from the winning concrete attempt.
 `requested_model` identifies the client-visible virtual model, while `provider`

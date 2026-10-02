@@ -23,11 +23,14 @@ interface SseRecordTransformOptions {
     controller: TransformStreamDefaultController<Uint8Array>,
   ) => void;
   isFinished?: () => boolean;
+  /** Pure probe: true requires onRecord to finish or throw, without another record. */
+  isTerminalRecord?: (block: string) => boolean;
 }
 
 /**
  * Split SSE records with line state for LF, CRLF, and CR. A trailing CR is
- * held until the next chunk (or EOF) so split CRLF stays one line ending.
+ * held until the next chunk (or EOF) so split CRLF stays one line ending,
+ * except a terminal record may close immediately at its final CR.
  * Scan each decoded character once and retain the original line endings for
  * callers that enrich otherwise unchanged SSE records.
  */
@@ -37,6 +40,7 @@ export function createSseRecordTransform({
   onError,
   onEnd,
   isFinished = () => false,
+  isTerminalRecord,
 }: SseRecordTransformOptions): TransformStream<Uint8Array, Uint8Array> {
   const decoder = new TextDecoder("utf-8", {
     fatal: true,
@@ -70,20 +74,26 @@ export function createSseRecordTransform({
       const position = match.index;
       const isCr = pending[position] === "\r";
       scanFrom = position;
-      if (isCr && position + 1 === pending.length && !endOfStream) break;
+      const trailingCr =
+        isCr && position + 1 === pending.length && !endOfStream;
+      if (trailingCr && position !== lineStart) break;
       const end = position + (isCr && pending[position + 1] === "\n" ? 2 : 1);
       if (position === lineStart) {
         const block = pending.slice(0, lastLineEnd);
         const separator = pending.slice(lastLineEnd, end);
         const blockBytes = utf8ByteLength(block);
-        pendingBytes -= blockBytes + separator.length;
-        pending = pending.slice(end);
-        scanFrom = lineStart = lastLineEnd = 0;
         const limitError = budget.checkSseRecord(blockBytes);
         if (limitError) {
           onError(limitError, controller);
           return false;
         }
+        // A CR already completes the blank line. Only terminal records may
+        // bypass waiting for a possible LF: there is no next record to frame,
+        // and waiting would leave an otherwise finished upstream open forever.
+        if (trailingCr && !isTerminalRecord?.(block)) break;
+        pendingBytes -= blockBytes + separator.length;
+        pending = pending.slice(end);
+        scanFrom = lineStart = lastLineEnd = 0;
         onRecord(block, separator, controller);
         if (isFinished()) return false;
       } else {
@@ -139,11 +149,27 @@ export function createSseRecordTransform({
 export function sseData(block: string): string | undefined {
   let data: string | undefined;
   for (const line of block.split(/\r\n|[\r\n]/)) {
-    if (!line.startsWith("data:")) continue;
-    const value = line.slice(5).trimStart();
+    if (line !== "data" && !line.startsWith("data:")) continue;
+    // SSE removes at most one ASCII space after the colon. Further spaces,
+    // tabs, and other whitespace belong to the event payload.
+    const value = line.startsWith("data: ") ? line.slice(6) : line.slice(5);
     data = data === undefined ? value : `${data}\n${value}`;
   }
   return data;
+}
+
+/** Inspect a bounded JSON record without replacing the caller's error path. */
+export function sseEventType(block: string): string | undefined {
+  const data = sseData(block);
+  if (data === undefined) return undefined;
+  try {
+    const event: unknown = JSON.parse(data);
+    return isJsonObject(event) && typeof event.type === "string"
+      ? event.type
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 interface ChatCompletionSseTransformOptions {
@@ -227,5 +253,6 @@ export function createChatCompletionSseTransform({
       );
     },
     isFinished,
+    isTerminalRecord: (block) => sseData(block) === "[DONE]",
   });
 }

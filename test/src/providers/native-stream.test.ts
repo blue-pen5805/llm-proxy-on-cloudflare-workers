@@ -78,6 +78,185 @@ async function converse(
 }
 
 describe("native inference streaming", () => {
+  it.each([false, true])(
+    "finishes and cancels an open Messages stream after CR-only message_stop (split: %s)",
+    async (split) => {
+      const ending = `data: ${JSON.stringify(stop)}\r`;
+      const pending = [sse([start, finish])];
+      pending.push(
+        ...(split
+          ? [encoder.encode(ending), encoder.encode("\r")]
+          : [encoder.encode(`${ending}\r`)]),
+      );
+      const cancel = vi.fn();
+      const source = new Response(
+        new ReadableStream<Uint8Array>({
+          pull(controller) {
+            const chunk = pending.shift();
+            if (chunk) controller.enqueue(chunk);
+          },
+          cancel,
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      );
+      const response = await transformNativeResponse(
+        source,
+        "messages",
+        "claude",
+        {},
+      );
+      const text = await response.text();
+      expect(chunks(text).at(-1)!.choices[0].finish_reason).toBe("stop");
+      expect(text.endsWith("data: [DONE]\n\n")).toBe(true);
+      await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce());
+    },
+  );
+
+  it("keeps reading Gemini usage after a finish reason ending in CR", async () => {
+    const parts = [
+      `data: ${JSON.stringify({ candidates: [{ finishReason: "STOP" }] })}\r\r`,
+      `data: ${JSON.stringify({ usageMetadata: { promptTokenCount: 7, candidatesTokenCount: 3 } })}\r\r`,
+    ];
+    const source = new Response(
+      new ReadableStream<Uint8Array>({
+        pull(controller) {
+          const part = parts.shift();
+          if (part) controller.enqueue(encoder.encode(part));
+          else controller.close();
+        },
+      }),
+      { headers: { "content-type": "text/event-stream" } },
+    );
+    const response = await transformNativeResponse(
+      source,
+      "generateContent",
+      "gemini",
+      {
+        stream_options: { include_usage: true },
+      },
+    );
+    const text = await response.text();
+    expect(chunks(text).at(-1)!.usage).toMatchObject({
+      prompt_tokens: 7,
+      completion_tokens: 3,
+      total_tokens: 10,
+    });
+    expect(text.endsWith("data: [DONE]\n\n")).toBe(true);
+  });
+
+  it("rejects malformed Messages JSON through the normal parser after a CR-only record", async () => {
+    const pending = [
+      sse([start, finish]),
+      encoder.encode('data: {"type":"message_stop"\r\r'),
+    ];
+    const source = new Response(
+      new ReadableStream<Uint8Array>({
+        pull(controller) {
+          const chunk = pending.shift();
+          if (chunk) controller.enqueue(chunk);
+          else controller.close();
+        },
+      }),
+      { headers: { "content-type": "text/event-stream" } },
+    );
+    const response = await transformNativeResponse(
+      source,
+      "messages",
+      "claude",
+      {},
+    );
+    await expect(response.text()).rejects.toThrow(SyntaxError);
+  });
+
+  it.each([
+    "BLOCKLIST",
+    "PROHIBITED_CONTENT",
+    "SPII",
+    "IMAGE_SAFETY",
+    "IMAGE_PROHIBITED_CONTENT",
+  ])(
+    "preserves Gemini filter reason %s with and without tools",
+    async (reason) => {
+      for (const hasTools of [false, true]) {
+        const events = hasTools
+          ? [
+              {
+                candidates: [
+                  {
+                    content: {
+                      parts: [{ functionCall: { name: "f", args: {} } }],
+                    },
+                  },
+                ],
+              },
+            ]
+          : [];
+        const response = await gemini([
+          ...events,
+          { candidates: [{ finishReason: reason }] },
+        ]);
+        const text = await response.text();
+        const output = chunks(text);
+        expect(output.at(-1)!.choices[0].finish_reason).toBe("content_filter");
+        expect(output[0].choices[0].delta.tool_calls).toEqual(
+          hasTools ? [expect.objectContaining({ index: 0 })] : undefined,
+        );
+        expect(text.endsWith("data: [DONE]\n\n")).toBe(true);
+      }
+    },
+  );
+
+  it.each([false, 0, "", {}])(
+    "rejects malformed Messages terminal reason %j",
+    async (stop_reason) => {
+      await expect(
+        (
+          await messages([start, { ...finish, delta: { stop_reason } }, stop])
+        ).text(),
+      ).rejects.toThrow("Invalid native stream finish reason.");
+    },
+  );
+
+  it.each([undefined, null, false, 0, "", {}])(
+    "rejects malformed Converse terminal reason %j",
+    async (stopReason) => {
+      await expect(
+        (await converse([["messageStop", { stopReason }]])).text(),
+      ).rejects.toThrow("Invalid native stream finish reason.");
+    },
+  );
+
+  it.each([
+    ["STOP", "tool_calls"],
+    ["MAX_TOKENS", "length"],
+    ["SAFETY", "content_filter"],
+    ["RECITATION", "content_filter"],
+  ])(
+    "preserves Gemini terminal reason %s after tool deltas",
+    async (reason, expected) => {
+      const response = await gemini([
+        {
+          candidates: [
+            { content: { parts: [{ functionCall: { name: "f", args: {} } }] } },
+          ],
+        },
+        { candidates: [{ finishReason: reason }] },
+      ]);
+      const text = await response.text();
+      expect(chunks(text).at(-1)!.choices[0].finish_reason).toBe(expected);
+      expect(text.endsWith("data: [DONE]\n\n")).toBe(true);
+    },
+  );
+
+  it.each([null, false, 0, ""])(
+    "rejects malformed Gemini terminal reason %j",
+    async (finishReason) => {
+      await expect(
+        (await gemini([{ candidates: [{ finishReason }] }])).text(),
+      ).rejects.toThrow("Invalid native stream finish reason.");
+    },
+  );
+
   it("converts fragmented Messages text, tool arguments and final usage", async () => {
     const response = await messages(
       [

@@ -4,6 +4,7 @@ import { ProviderRegistry } from "~/src/providers";
 import { defineProvider } from "~/src/providers/provider";
 import {
   handleModelsRequest,
+  MAX_AGGREGATED_MODELS_BYTES,
   MAX_MODELS_PER_PROVIDER,
 } from "~/src/requests/models";
 import { Environments } from "~/src/utils/environments";
@@ -29,6 +30,91 @@ async function modelsCache() {
 
 describe("model discovery failure isolation", () => {
   afterEach(() => vi.restoreAllMocks());
+
+  it.each(["healthy", "virtual"])(
+    "caches complete %s results despite an unselected provider failure",
+    async (selected) => {
+      const put = await modelsCache();
+      const providers = new ProviderRegistry({
+        unreadable: defineProvider({
+          getCredentialProfiles() {
+            throw new Error("unreadable");
+          },
+        }),
+        healthy: modelProvider(),
+      });
+      const send = vi
+        .spyOn(providers.get("healthy")!, "send")
+        .mockResolvedValue(Response.json({ data: [model("working")] }));
+      const context = createTestRoutedContext({
+        providers,
+        request: new Request(
+          `https://proxy.example.invalid/v1/models?provider=${selected}`,
+        ),
+      });
+      context.env = {
+        ...context.env,
+        MODELS_CACHE_TTL_SECONDS: "60",
+        VIRTUAL_MODELS: '{"virtual/alias":["healthy/working"]}',
+      };
+      const response = await Environments.run(context.env, () =>
+        handleModelsRequest(context),
+      );
+      expect(await response.json()).toMatchObject({
+        data: [
+          { id: selected === "virtual" ? "virtual/alias" : "healthy/working" },
+        ],
+      });
+      expect(send).toHaveBeenCalledTimes(selected === "healthy" ? 1 : 0);
+      await waitOnExecutionContext(context.ctx);
+      expect(put).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([0, 1])(
+    "counts the JSON envelope and separators in the aggregate byte limit (excess %s)",
+    async (excess) => {
+      const entries = [
+        { ...model("first"), _: "" },
+        { ...model("second"), _: "" },
+      ];
+      const initial = JSON.stringify({
+        data: entries.map((entry) => ({ ...entry, id: `large/${entry.id}` })),
+        object: "list",
+      });
+      entries[1]._ = "x".repeat(
+        MAX_AGGREGATED_MODELS_BYTES -
+          new TextEncoder().encode(initial).length +
+          excess,
+      );
+      const providers = new ProviderRegistry({
+        large: defineProvider({
+          available: () => true,
+          endpoints: {
+            models: {
+              path: "/models",
+              getStaticModels: () => ({ object: "list", data: entries }),
+            },
+          },
+        }),
+      });
+      const context = createTestRoutedContext({
+        providers,
+        env: { MODELS_CACHE_TTL_SECONDS: "0" } as Env,
+      });
+      const response = await Environments.run(context.env, () =>
+        handleModelsRequest(context),
+      );
+      const body = await response.text();
+      expect(new TextEncoder().encode(body).length).toBeLessThanOrEqual(
+        MAX_AGGREGATED_MODELS_BYTES,
+      );
+      expect(JSON.parse(body).data).toHaveLength(excess ? 1 : 2);
+      expect(response.headers.get("X-Proxy-Models-Truncated")).toBe(
+        excess ? "true" : null,
+      );
+    },
+  );
 
   it.each(["", "?provider=unreadable"])(
     "isolates provider enumeration failures for an unfiltered or selected provider (%s)",

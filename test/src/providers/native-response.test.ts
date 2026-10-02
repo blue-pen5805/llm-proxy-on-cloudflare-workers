@@ -18,6 +18,74 @@ const protocols: NativeProtocol[] = ["messages", "generateContent", "converse"];
 const request = { model: "example", messages: [], max_tokens: 64 };
 
 describe("native inference JSON responses", () => {
+  it.each([
+    "BLOCKLIST",
+    "PROHIBITED_CONTENT",
+    "SPII",
+    "IMAGE_SAFETY",
+    "IMAGE_PROHIBITED_CONTENT",
+  ])("preserves Gemini filter reason %s with and without tools", (reason) => {
+    for (const hasTools of [false, true]) {
+      const result = convertNativeJson(
+        {
+          candidates: [
+            {
+              ...(hasTools
+                ? {
+                    content: {
+                      parts: [{ functionCall: { name: "f", args: {} } }],
+                    },
+                  }
+                : {}),
+              finishReason: reason,
+            },
+          ],
+        },
+        "generateContent",
+        "gemini",
+      );
+      expect(result.choices).toEqual([
+        expect.objectContaining({
+          finish_reason: "content_filter",
+          message: hasTools
+            ? expect.objectContaining({ tool_calls: [expect.any(Object)] })
+            : { role: "assistant", content: null },
+        }),
+      ]);
+    }
+  });
+
+  it.each([
+    ["STOP", "tool_calls"],
+    ["MAX_TOKENS", "length"],
+    ["SAFETY", "content_filter"],
+    ["RECITATION", "content_filter"],
+  ])(
+    "preserves Gemini finish reason %s with tool output",
+    (reason, expected) => {
+      const result = convertNativeJson(
+        {
+          candidates: [
+            {
+              content: { parts: [{ functionCall: { name: "f", args: {} } }] },
+              finishReason: reason,
+            },
+          ],
+        },
+        "generateContent",
+        "gemini",
+      );
+      expect(result.choices).toEqual([
+        expect.objectContaining({
+          finish_reason: expected,
+          message: expect.objectContaining({
+            tool_calls: [expect.any(Object)],
+          }),
+        }),
+      ]);
+    },
+  );
+
   it("converts Anthropic tools, finish reasons, and cached usage into Chat Completions", async () => {
     const source = Response.json(
       {

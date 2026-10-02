@@ -11,6 +11,9 @@ response contracts are in the [management API](../../../user/api/proxy-managemen
 For each configured credential, `/status` calls the provider's model-list path
 directly or through the active AI Gateway. Checks start concurrently with an
 individual five-second timeout and isolated results.
+The deadline includes credential/header preparation, the upstream request, and
+response-body cancellation. A timed-out slot remains `unknown`; preparation
+that finishes after the deadline cannot start a new upstream request.
 
 The number of checks follows the deployed credential count, so a large
 configuration can exhaust the per-request subrequest budget. Provider

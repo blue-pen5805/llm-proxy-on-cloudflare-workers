@@ -245,7 +245,8 @@ provider-qualified or virtual model ID from the same aggregate and returns
 When `VIRTUAL_MODELS` is configured, every virtual model is listed first with
 `owned_by: "virtual"`. All configured providers are queried concurrently, each
 with a 60-second timeout and 1 MiB response limit. At most 1,000 models per
-provider and 4 MiB of serialized model entries are retained. A bounded
+provider are retained, and the complete serialized aggregate, including its JSON
+envelope and separators, is limited to 4 MiB. A bounded
 aggregate includes `X-Proxy-Models-Truncated: true` when it is truncated.
 Non-successful upstream responses are discarded before provider-specific model
 conversion. Provider enumeration and fetch failures are logged and omitted, so a
@@ -264,7 +265,9 @@ are de-duplicated rather than rejected.
 Successful complete aggregates are cached for `MODELS_CACHE_TTL_SECONDS`
 (default 300; `0` disables caching) per Gateway and key selection, and served
 with `X-Proxy-Models-Cache: HIT` or `MISS`. Partial or truncated aggregates are
-served but never cached. `Cache-Control: no-cache` skips the cached copy and
+served but never cached.
+Provider failures outside an explicit filter do not make its result partial.
+`Cache-Control: no-cache` skips the cached copy and
 refreshes it. `Cache-Control: no-store` or any `cf-aig-*` request header bypasses
 the cache entirely, and bypassed responses carry no cache header.
 

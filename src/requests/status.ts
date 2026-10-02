@@ -75,55 +75,59 @@ async function checkProviderConnectivity(
   });
 
   try {
-    const [path, init] = await buildModelsRequest(
-      providerInstance,
-      models,
-      apiKeyIndex,
-    );
-    let responsePromise: Promise<Response>;
+    return await withTimeout(
+      (async () => {
+        const [path, init] = await buildModelsRequest(
+          providerInstance,
+          models,
+          apiKeyIndex,
+        );
+        abortController.signal.throwIfAborted();
+        let responsePromise: Promise<Response>;
 
-    if (aiGateway && aiGatewayProvider) {
-      const [requestInfo, requestInit] = aiGateway.buildProviderEndpointRequest(
-        {
-          provider: aiGatewayProvider,
-          method: "GET",
-          path: gatewayProviderPath(
-            providerName,
-            providerInstance,
-            path,
-            aiGatewayProvider,
-          ),
-          headers: init.headers!,
-        },
-      );
+        if (aiGateway && aiGatewayProvider) {
+          const [requestInfo, requestInit] =
+            aiGateway.buildProviderEndpointRequest({
+              provider: aiGatewayProvider,
+              method: "GET",
+              path: gatewayProviderPath(
+                providerName,
+                providerInstance,
+                path,
+                aiGatewayProvider,
+              ),
+              headers: init.headers!,
+            });
 
-      responsePromise = RequestLogger.withFields(keyLogFields, () =>
-        fetchWithLogging(requestInfo, {
-          ...requestInit,
-          signal: abortController.signal,
-        }),
-      );
-    } else {
-      responsePromise = RequestLogger.withFields(keyLogFields, () =>
-        providerInstance.send(
-          providerInstance.baseUrl() + providerInstance.pathnamePrefix() + path,
-          { ...init, signal: abortController.signal },
-        ),
-      );
-    }
+          responsePromise = RequestLogger.withFields(keyLogFields, () =>
+            fetchWithLogging(requestInfo, {
+              ...requestInit,
+              signal: abortController.signal,
+            }),
+          );
+        } else {
+          responsePromise = RequestLogger.withFields(keyLogFields, () =>
+            providerInstance.send(
+              providerInstance.baseUrl() +
+                providerInstance.pathnamePrefix() +
+                path,
+              { ...init, signal: abortController.signal },
+            ),
+          );
+        }
 
-    const connectivityResponse = await withTimeout(
-      responsePromise,
+        const connectivityResponse = await responsePromise;
+
+        const connectivityStatus = classifyConnectivity(connectivityResponse);
+        if (connectivityResponse.body) {
+          await connectivityResponse.body.cancel().catch(() => undefined);
+        }
+        return connectivityStatus;
+      })(),
       abortController,
       CONNECTIVITY_CHECK_TIMEOUT_MS,
       providerName,
     );
-
-    const connectivityStatus = classifyConnectivity(connectivityResponse);
-    if (connectivityResponse.body) {
-      await connectivityResponse.body.cancel().catch(() => undefined);
-    }
-    return connectivityStatus;
   } catch (error) {
     if (
       error instanceof ProviderNotSupportedError ||

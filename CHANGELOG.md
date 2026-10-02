@@ -10,6 +10,23 @@ dated section; when multiple changes share a date, put the newest change first.
 Planned version: `1.0.0`. The package remains at `0.2.1` until the version
 update is explicitly approved.
 
+### 2026-10-02
+
+- Preserved Gemini token-limit and content-filter finish reasons alongside tool
+  calls, including blocklist, prohibited-content, sensitive-information, and image
+  safety filters, and rejected malformed streaming terminal reasons and unsupported
+  Responses streaming output items.
+- Completed Chat response metadata streams at `[DONE]`, cancelled the upstream
+  reader, and preserved SSE data-field whitespace and empty data lines. Completed
+  CR-only terminal records without waiting for upstream EOF and separated final
+  unterminated records from appended metadata.
+- Applied diagnostic deadlines to status preparation and response cleanup, and
+  prevented model-discovery subrequests after their deadline.
+- Counted the full model-list JSON body toward the 4 MiB limit and allowed
+  complete filtered results to be cached despite unrelated provider failures.
+- Rejected malformed, nondecimal, and unsafe-integer `Content-Length` values
+  before buffered body parsing.
+
 ### 2026-09-13
 
 - Preserved parallel tool-call histories in Messages and Responses conversion

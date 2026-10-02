@@ -284,3 +284,14 @@ both CRCs according to the
 Malformed, truncated, or upstream error streams fail the output stream;
 cancellation propagates to the upstream reader. Valid terminal events are
 required before successful completion and the Chat `[DONE]` marker.
+
+Gemini conversion preserves token-limit and content-filter finish reasons even
+when a candidate contains function calls. Function calls yield `tool_calls` only
+when no token-limit or content-filter reason takes precedence. Native streaming
+terminal reasons must be nonempty strings.
+Gemini's `BLOCKLIST`, `PROHIBITED_CONTENT`, `SPII`, `IMAGE_SAFETY`, and
+`IMAGE_PROHIBITED_CONTENT` also map to `content_filter`, following the
+[Gemini FinishReason contract](https://ai.google.dev/api/generate-content#FinishReason).
+Responses conversion accepts message, reasoning, and function-call output items;
+unsupported output items fail both JSON and SSE conversion rather than silently
+omitting output and reporting successful completion.

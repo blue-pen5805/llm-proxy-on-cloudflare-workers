@@ -25,6 +25,79 @@ function metadataArguments(response: Response) {
 }
 
 describe("enrichChatResponseWithMetadata", () => {
+  it.each([false, true])(
+    "closes at a CR-only done marker without waiting for another upstream byte (split %s)",
+    async (split) => {
+      const cancel = vi.fn();
+      const source = new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const chunk of split
+            ? ["data: [DONE]\r", "\r"]
+            : ["data: [DONE]\r\r"])
+            controller.enqueue(new TextEncoder().encode(chunk));
+        },
+        cancel,
+      });
+      const response = await enrichChatResponseWithMetadata(
+        metadataArguments(
+          new Response(source, {
+            headers: { "content-type": "text/event-stream" },
+          }),
+        ),
+      );
+      const text = await response.text();
+      expect(text.endsWith("data: [DONE]\r\r")).toBe(true);
+      expect(text.match(/proxy-metadata/g)).toHaveLength(1);
+      await Promise.resolve();
+      expect(cancel).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each(["", ": ping\n\n", 'data: {"choices":[]}\n\n'])(
+    "appends metadata to a cleanly closed SSE stream without a done marker (%j)",
+    async (input) => {
+      const upstream = new Response(input, {
+        headers: { "content-type": "text/event-stream" },
+      });
+      const text = await (
+        await enrichChatResponseWithMetadata(metadataArguments(upstream))
+      ).text();
+      expect(text.startsWith(input)).toBe(true);
+      expect(text.match(/proxy-metadata/g)).toHaveLength(1);
+      expect(text).not.toContain("[DONE]");
+    },
+  );
+
+  it.each(["\n", "\r\n", "\r"])(
+    "closes and cancels an open upstream at a %j done marker",
+    async (ending) => {
+      const cancel = vi.fn();
+      const terminal = `data: [DONE]${ending}${ending}`;
+      const source = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode(
+              terminal + `data: {"unexpected":"after-done"}${ending}${ending}`,
+            ),
+          );
+        },
+        cancel,
+      });
+      const upstream = new Response(source, {
+        headers: { "content-type": "text/event-stream" },
+      });
+      const response = await enrichChatResponseWithMetadata(
+        metadataArguments(upstream),
+      );
+      const text = await response.text();
+      expect(text.endsWith(terminal)).toBe(true);
+      expect(text.match(/proxy-metadata/g)).toHaveLength(1);
+      expect(text).not.toContain("after-done");
+      await Promise.resolve();
+      expect(cancel).toHaveBeenCalledOnce();
+    },
+  );
+
   it("adds proxy metadata to a successful JSON object", async () => {
     const response = await enrichChatResponseWithMetadata(
       metadataArguments(
@@ -310,6 +383,38 @@ describe("enrichChatResponseWithMetadata", () => {
       text.indexOf("proxy-metadata"),
     );
   });
+
+  it.each(["", "\n", "\r", "\r\n"])(
+    "separates an unterminated final event ending in %j from metadata",
+    async (ending) => {
+      const chunk = { choices: [{ delta: { content: "日本語" } }] };
+      const input = `data: ${JSON.stringify(chunk)}${ending}`;
+      const upstream = new Response(input, {
+        headers: { "Content-Type": "text/event-stream" },
+      });
+      const response = await enrichChatResponseWithMetadata(
+        metadataArguments(upstream),
+      );
+      const text = await response.text();
+
+      expect(text.startsWith(input)).toBe(true);
+      const records = text
+        .split(/\r\n|[\r\n]/)
+        .join("\n")
+        .split("\n\n")
+        .filter(Boolean);
+      expect(records).toHaveLength(2);
+      const payloads = records.map((record) => {
+        expect(record.startsWith("data: ")).toBe(true);
+        return JSON.parse(record.slice("data: ".length));
+      });
+      expect(payloads[0]).toEqual(chunk);
+      expect(payloads[1]).toMatchObject({
+        id: "proxy-metadata",
+        llm_proxy: { provider: "openai" },
+      });
+    },
+  );
 
   it("inserts metadata before a done marker that has no trailing newline", async () => {
     const upstream = new Response("data: [DONE]", {

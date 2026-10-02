@@ -68,10 +68,12 @@ membership set or scan across cooling slots.
 ## Bounded model aggregation
 
 Per-provider byte and count bounds plus an aggregate byte bound prevent
-concurrent discovery from accumulating unbounded responses. Non-successful
+concurrent discovery from accumulating unbounded responses. The aggregate byte
+budget includes the complete JSON envelope and model separators. Non-successful
 responses are discarded before conversion; reaching one provider's count limit
-does not skip later providers. Retries share a provider deadline. Exact limits
-and truncation behavior are defined in the [Models
+does not skip later providers. Retries share a provider deadline and cannot
+start after that deadline, including when a late response ignores cancellation.
+Exact limits and truncation behavior are defined in the [Models
 API](../../../user/api/openai-compatible.md#models).
 
 ## Model aggregate caching
@@ -88,10 +90,11 @@ filter — so clients cannot create arbitrary cache partitions or poison another
 scope. Requests that carry `cf-aig-*`
 Gateway tuning headers or `Cache-Control: no-store` bypass the cache entirely;
 `Cache-Control: no-cache` skips the read but refreshes the entry. Aggregates
-with a failed provider or a truncated result are served but never stored, so a
-transient upstream outage cannot pin a degraded list for the full TTL. The
-stored copy's `Cache-Control` header only encodes the internal TTL. Served
-responses replace it with `private, no-store`, keeping responses issued under
+with a failed selected provider or a truncated result are served but never stored,
+so a transient upstream outage cannot pin a degraded list for the full TTL.
+Failures outside a request's provider filter do not prevent caching its complete
+result. The stored copy's `Cache-Control` header only encodes the internal TTL.
+Served responses replace it with `private, no-store`, keeping responses issued under
 `Authorization` out of shared HTTP caches. Cache writes ride
 `ctx.waitUntil`, keeping the store off the response's critical path.
 

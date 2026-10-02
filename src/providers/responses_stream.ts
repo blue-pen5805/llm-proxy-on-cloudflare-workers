@@ -2,6 +2,7 @@ import { headersForRewrittenBody } from "../requests/response";
 import {
   createSseRecordTransform,
   sseData,
+  sseEventType,
   type JsonObject,
 } from "../requests/sse";
 import { StreamingResponseBudget } from "../requests/stream_limits";
@@ -75,6 +76,12 @@ export function responsesStream(
       delta(controller, { refusal: responsesText(event.delta) });
     else if (event.type === "response.output_item.added") {
       const item = nativeObject(event.item);
+      if (
+        item.type !== "message" &&
+        item.type !== "reasoning" &&
+        item.type !== "function_call"
+      )
+        throw new Error("Unsupported Responses output item.");
       if (item.type === "function_call") {
         const index = outputIndex(event.output_index);
         if (tools.has(index))
@@ -132,6 +139,10 @@ export function responsesStream(
         throw new Error("Responses stream ended without a terminal event.");
     },
     isFinished: () => finished,
+    isTerminalRecord(block) {
+      const type = sseEventType(block);
+      return type === "response.completed" || type === "response.incomplete";
+    },
   });
   const headers = headersForRewrittenBody(response.headers);
   headers.set("content-type", "text/event-stream");

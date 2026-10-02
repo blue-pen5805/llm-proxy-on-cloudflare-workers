@@ -119,7 +119,10 @@ export async function readRequestText(
   if (contentLength !== null) {
     const declaredBytes = Number(contentLength);
     let error: BadRequestError | PayloadTooLargeError | undefined;
-    if (!Number.isSafeInteger(declaredBytes) || declaredBytes < 0) {
+    if (
+      !/^[0-9]+$/.test(contentLength) ||
+      !Number.isSafeInteger(declaredBytes)
+    ) {
       error = new BadRequestError("Invalid Content-Length header.");
     } else if (declaredBytes > maximumBytes) {
       error = new PayloadTooLargeError();

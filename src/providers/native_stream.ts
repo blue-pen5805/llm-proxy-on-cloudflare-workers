@@ -3,6 +3,7 @@ import {
   createSseRecordTransform,
   isJsonObject,
   sseData,
+  sseEventType,
   type JsonObject,
 } from "../requests/sse";
 import { StreamingResponseBudget } from "../requests/stream_limits";
@@ -32,6 +33,12 @@ function validIndex(value: unknown, maximum = Number.MAX_SAFE_INTEGER): number {
 function deltaText(value: unknown): string {
   if (typeof value !== "string") throw new Error("Invalid native text delta.");
   return value;
+}
+
+function streamFinishReason(value: unknown, hasTools = false): string {
+  if (typeof value !== "string" || value.length === 0)
+    throw new Error("Invalid native stream finish reason.");
+  return nativeFinishReason(value, hasTools);
 }
 
 /** Only frame data and bounded tool/candidate indexes are retained between chunks. */
@@ -127,7 +134,7 @@ export function nativeStream(
       tokens = { ...tokens, ...nativeObject(event.usage) };
       if (reason != null) {
         sawFinishReason = true;
-        delta(controller, {}, nativeFinishReason(reason));
+        delta(controller, {}, streamFinishReason(reason));
       }
     } else if (event.type === "message_stop") {
       if (!sawFinishReason)
@@ -172,9 +179,10 @@ export function nativeStream(
         index: choiceIndex,
         delta: message,
         finish_reason: terminal
-          ? candidateTools.has(choiceIndex)
-            ? "tool_calls"
-            : nativeFinishReason(candidate.finishReason)
+          ? streamFinishReason(
+              candidate.finishReason,
+              candidateTools.has(choiceIndex),
+            )
           : null,
       };
     });
@@ -209,7 +217,7 @@ export function nativeStream(
         );
     } else if (type === "messageStop") {
       sawFinishReason = true;
-      delta(controller, {}, nativeFinishReason(event.stopReason));
+      delta(controller, {}, streamFinishReason(event.stopReason));
     } else if (type === "metadata") {
       tokens = nativeObject(event.usage);
     }
@@ -250,6 +258,8 @@ export function nativeStream(
             if (!finished) end(controller);
           },
           isFinished: () => finished,
+          isTerminalRecord: (block) =>
+            protocol === "messages" && sseEventType(block) === "message_stop",
         });
   const headers = headersForRewrittenBody(response.headers);
   headers.set("content-type", "text/event-stream");
