@@ -3,14 +3,33 @@
 
   // --- General Authentication ---
   // API Key for llm proxy.
+  // A single string is used verbatim as one key (it may contain commas or
+  // digits). To configure multiple keys, use a JSON array, e.g.
+  //   "PROXY_API_KEY": ["key-one", "key-two"]
   "PROXY_API_KEY": "YOUR-PROXY-API-KEY",
 
   // --- AI Gateway ---
   "CLOUDFLARE_ACCOUNT_ID": null,
   "AI_GATEWAY_NAME": null,
+  // Route every upstream provider request through AI Gateway. Uses the
+  // "default" Gateway when AI_GATEWAY_NAME is null.
+  "ALWAYS_USE_AI_GATEWAY": false,
   "CF_AIG_TOKEN": null,
+  // Cloudflare API token with AI Gateway permission for /ai/* REST API routes
+  // and AI Gateway Write permission for Custom Provider synchronization.
+  "CLOUDFLARE_API_TOKEN": null,
 
   // --- API keys for providers ---
+  // Each setting accepts one key, an array of rotating keys, or named profiles.
+  // Choose a single unprofiled key:
+  // "OPENAI_API_KEY": "sk-..."
+  // Or an unprofiled key array:
+  // "OPENAI_API_KEY": ["YOUR-OPENAI-KEY-1", "YOUR-OPENAI-KEY-2"]
+  // Or a profile map:
+  // "OPENAI_API_KEY": {
+  //   "default": ["YOUR-DEFAULT-OPENAI-KEY"],
+  //   "second": ["YOUR-SECOND-OPENAI-KEY"]
+  // }
   // OpenAI: https://platform.openai.com/
   "OPENAI_API_KEY": null,
   // Google AI Studio: https://aistudio.google.com/
@@ -21,6 +40,10 @@
   "CEREBRAS_API_KEY": null,
   // Cohere: https://dashboard.cohere.com
   "COHERE_API_KEY": null,
+  // OpenCode Zen and Go: https://opencode.ai/zen
+  "OPENCODE_API_KEY": null,
+  // Cline: https://app.cline.bot/dashboard
+  "CLINE_API_KEY": null,
   // DeepSeek: https://platform.deepseek.com/
   "DEEPSEEK_API_KEY": null,
   // xAI: https://console.x.ai/
@@ -29,6 +52,8 @@
   "GROQ_API_KEY": null,
   // Mistral: https://console.mistral.ai/
   "MISTRAL_API_KEY": null,
+  // NVIDIA NIM: https://build.nvidia.com/
+  "NVIDIA_NIM_API_KEY": null,
   // OpenRouter: https://openrouter.ai/
   "OPENROUTER_API_KEY": null,
   // HuggingFace: https://huggingface.co/
@@ -41,21 +66,76 @@
   "CLOUDFLARE_API_KEY": null,
   // Ollama Cloud: https://ollama.com/
   "OLLAMA_API_KEY": null,
+  // Azure OpenAI: https://azure.microsoft.com/products/ai-services/openai-service
+  "AZURE_OPENAI_API_KEY": null,
+  "AZURE_OPENAI_RESOURCE_NAME": null,
+  "AZURE_OPENAI_API_VERSION": "2024-10-21",
+  // Google Vertex AI through Cloudflare AI Gateway.
+  // Paste the downloaded service-account JSON and add "region": "us-central1".
+  "GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_JSON": null,
+  // Amazon Bedrock: https://aws.amazon.com/bedrock/
+  // Use an Amazon Bedrock short-term or long-term bearer token.
+  // AI Gateway BYOK may omit it.
+  "AWS_BEARER_TOKEN_BEDROCK": null,
+  "AWS_BEDROCK_REGION": "us-east-1",
 
   // --- Custom OpenAI Compatible Endpoints ---
   "CUSTOM_OPENAI_ENDPOINTS": [
     // {
     //   "name": "my-custom-llm",
     //   "baseUrl": "https://llm.example.com/v1",
-    //   "apiKeys": [],
-    //   "models": ["model-1", "model-2"] // Optional
-    //   "chatCompletionPath": "/v1/chat/completions", // Optional
-    //   "modelsPath": "/v1/models" // Optional
+    //   "apiKeys": [], // Or { "default": [...], "second": [...] }
+    //   "models": ["model-1", "model-2"], // Optional
+    //   "chatCompletionPath": "/chat/completions", // Optional
+    //   "modelsPath": "/models", // Optional
+    //   "responsesPath": "/responses", // Optional: native Responses API
+    //   "messagesPath": "/messages" // Optional: native Messages API
     // }
   ],
 
+  // --- Virtual models ---
+  // Maps a model name to an ordered list of candidates. "virtual/<name>" is the
+  // recommended convention, but any key works; real providers always take
+  // precedence, so a key that collides with one is never reached. A bare string
+  // is attempted once. Use an object to retry that candidate up to 5 additional
+  // times before advancing. Retryable outcomes are 401/403/429/5xx responses and
+  // network errors. A candidate may reference another virtual model; references
+  // must be acyclic. At most 100 virtual models, 16 candidates per model, and
+  // 96 expanded provider attempts per model are accepted.
+  "VIRTUAL_MODELS": null,
+  // "VIRTUAL_MODELS": {
+  //   "virtual/fast-tier": [
+  //     // timeout is milliseconds and covers waiting for response headers.
+  //     { "model": "groq/llama-3.3-70b-versatile", "retries": 2, "timeout": 5000 },
+  //     "cerebras/llama-3.3-70b",
+  //     "virtual/reliable-tier"
+  //   ],
+  //   "virtual/reliable-tier": [
+  //     "openai/gpt-4o-mini"
+  //   ]
+  // },
+
   // --- Configurations ---
+  // Development-only auth bypass. This is never deployed by the secrets script,
+  // so it only takes effect locally via `npm run dev`; deployed Workers always
+  // run with authentication enabled.
   "DEV": false,
+  // Exact browser origins allowed by CORS. null preserves the wildcard default.
+  // Example: ["https://console.example.com", "http://localhost:3000"]
+  "ALLOWED_ORIGINS": null,
   "DEFAULT_MODEL": null,
-  "ENABLE_GLOBAL_ROUND_ROBIN": false
+  // Add llm_proxy routing metadata to routed Chat Completions and converted
+  // Responses or Messages JSON and streaming responses. Disabled by default
+  // for strict client compatibility.
+  "CHAT_RESPONSE_METADATA_ENABLED": false,
+  // Seconds to avoid an API-key slot after HTTP 401, 403, 429, or 5xx.
+  // HTTP 404 is not credential-attributable. Set to 0 to disable cooldowns
+  // (default: 60).
+  "API_KEY_COOLDOWN_SECONDS": null,
+  // TTL in seconds for the aggregated /models response cache (default: 300).
+  // Set to 0 to disable caching.
+  "MODELS_CACHE_TTL_SECONDS": null,
+  // Opt-in TTL in seconds for the authenticated /status diagnostic cache.
+  // The default 0 preserves live connectivity checks on every request.
+  "STATUS_CACHE_TTL_SECONDS": null
 }

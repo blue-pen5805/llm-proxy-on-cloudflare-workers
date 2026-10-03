@@ -1,0 +1,904 @@
+import { describe, expect, it, vi } from "vitest";
+import {
+  AI_GATEWAY_CHAT_PROVIDERS,
+  BUILT_IN_LIVE_CHAT_CONTRACTS,
+  MAX_ERROR_DETAIL_BYTES,
+  MIN_COMPLETION_TOKENS,
+  parseLiveChatArguments,
+  parseLiveChatConfig,
+  parseLocalWorkerAuthentication,
+  runLiveChatTests,
+  verifyLocalDevelopmentServer,
+} from "../../scripts/test-live-chat";
+import { CloudflareAIGateway } from "../../src/ai_gateway";
+
+describe("live Chat Completions test script", () => {
+  it("accepts provider names as positional or named arguments", () => {
+    expect(
+      parseLiveChatArguments(["openai", "--provider", "anthropic", "openai"]),
+    ).toEqual({
+      configPath: "live-chat-models.jsonc",
+      providers: new Set(["openai", "anthropic"]),
+      help: false,
+    });
+
+    expect(
+      parseLiveChatArguments([
+        "--config",
+        "live-chat-models.staging.jsonc",
+        "-h",
+      ]),
+    ).toEqual({
+      configPath: "live-chat-models.staging.jsonc",
+      providers: undefined,
+      help: true,
+    });
+    expect(() => parseLiveChatArguments(["--unknown"])).toThrow(
+      "Unexpected argument: --unknown",
+    );
+  });
+
+  it("reads proxy authentication from the local Worker configuration", () => {
+    expect(
+      parseLocalWorkerAuthentication(
+        '{"DEV":false,"PROXY_API_KEY":["first","second"]}',
+      ),
+    ).toEqual({
+      alwaysUseAiGateway: false,
+      defaultGatewayName: undefined,
+      developmentMode: false,
+      proxyApiKey: "first",
+      sensitiveValues: ["second", "first"],
+    });
+    expect(parseLocalWorkerAuthentication('{"DEV":true}')).toEqual({
+      alwaysUseAiGateway: false,
+      defaultGatewayName: undefined,
+      developmentMode: true,
+      proxyApiKey: undefined,
+      sensitiveValues: [],
+    });
+    expect(() => parseLocalWorkerAuthentication('{"DEV":false}')).toThrow(
+      "must set PROXY_API_KEY unless DEV is true",
+    );
+  });
+
+  it("collects nested and serialized credential values longest-first", () => {
+    expect(
+      parseLocalWorkerAuthentication(
+        JSON.stringify({
+          DEV: "true",
+          PROVIDER_CREDENTIAL: JSON.stringify({
+            access_token: "long-provider-token",
+            metadata: ["nested-value"],
+          }),
+          short_secret: "tiny",
+          public: "not-sensitive",
+        }),
+      ).sensitiveValues,
+    ).toEqual([
+      '{"access_token":"long-provider-token","metadata":["nested-value"]}',
+      "long-provider-token",
+      "nested-value",
+      "tiny",
+    ]);
+  });
+
+  it("bounds recursive credential collection", () => {
+    let nested: unknown = "deep-secret";
+    for (let index = 0; index < 22; index++) nested = { secret: nested };
+    expect(
+      parseLocalWorkerAuthentication(
+        JSON.stringify({ DEV: true, credential: nested }),
+      ).sensitiveValues,
+    ).not.toContain("deep-secret");
+  });
+
+  it("tracks Gateway support for every provider in the example", () => {
+    const exampleProviders = [
+      "anthropic",
+      "aws-bedrock",
+      "azure-openai",
+      "cerebras",
+      "cohere",
+      "cline",
+      "deepseek",
+      "google-ai-studio",
+      "google-vertex-ai",
+      "grok",
+      "groq",
+      "huggingface",
+      "mistral",
+      "nvidia-nim",
+      "ollama",
+      "openai",
+      "opencode-go",
+      "opencode-zen",
+      "openrouter",
+      "perplexity-ai",
+      "workers-ai",
+    ];
+    const configuredExample = JSON.stringify({
+      providers: Object.fromEntries(
+        exampleProviders.map((provider) => [provider, "model-id"]),
+      ),
+    });
+
+    expect(Object.keys(BUILT_IN_LIVE_CHAT_CONTRACTS)).toEqual(exampleProviders);
+    expect(parseLiveChatConfig(configuredExample)).toHaveLength(21);
+
+    for (const providerName of exampleProviders) {
+      expect(AI_GATEWAY_CHAT_PROVIDERS.has(providerName)).toBe(
+        providerName !== "huggingface" &&
+          CloudflareAIGateway.isSupportedProvider(providerName),
+      );
+    }
+  });
+
+  it("loads selected built-in models and skips null entries", () => {
+    expect(
+      parseLiveChatConfig(`{
+        // Only selected providers make requests.
+        "providers": {
+          "openai": "gpt-test",
+          "anthropic": null,
+        },
+      }`),
+    ).toEqual([
+      expect.objectContaining({
+        provider: "openai",
+        model: "gpt-test",
+      }),
+    ]);
+  });
+
+  it("accepts custom model selections without a provider path", () => {
+    expect(parseLiveChatConfig('{"providers":{"custom":"model"}}')).toEqual([
+      { provider: "custom", model: "model", supportsMaxCompletionTokens: true },
+    ]);
+    expect(
+      parseLiveChatConfig(
+        '{"providers":{"custom":{"model":"model","directPath":"/v1/chat/completions"}}}',
+      ),
+    ).toEqual(parseLiveChatConfig('{"providers":{"custom":"model"}}'));
+  });
+
+  it("accepts model objects without a path override", () => {
+    expect(
+      parseLiveChatConfig('{"providers":{"custom":{"model":"model"}}}'),
+    ).toEqual(parseLiveChatConfig('{"providers":{"custom":"model"}}'));
+  });
+
+  it("rejects unsafe direct paths", () => {
+    expect(() =>
+      parseLiveChatConfig(
+        '{"providers":{"custom":{"model":"model","directPath":"//attacker.example/chat"}}}',
+      ),
+    ).toThrow("must be a safe absolute path");
+  });
+
+  it("rejects malformed provider configuration", () => {
+    for (const source of [
+      "{}",
+      '{"providers":[]}',
+      '{"providers":{"Bad Name":"model"}}',
+      '{"providers":{"openai":"  "}}',
+      '{"providers":{"openai":42}}',
+      '{"providers":{"openai":null}}',
+    ]) {
+      expect(() => parseLiveChatConfig(source)).toThrow();
+    }
+  });
+
+  it("rejects every unsafe direct-path form", () => {
+    for (const directPath of [
+      "relative",
+      "/path\\\\segment",
+      "/path?query=true",
+      "/path#fragment",
+      "/path/../chat",
+      "/path/./chat",
+      "/path\u0000chat",
+    ]) {
+      expect(() =>
+        parseLiveChatConfig(
+          JSON.stringify({
+            providers: { custom: { model: "model", directPath } },
+          }),
+        ),
+      ).toThrow("must be a safe absolute path");
+    }
+  });
+
+  it("uses the same public Chat route with separate direct and Gateway destinations", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    const results = await runLiveChatTests(
+      parseLiveChatConfig('{"providers":{"openai":"gpt-test"}}'),
+      {
+        baseUrl: "http://127.0.0.1:8787/",
+        proxyApiKey: "proxy-secret",
+        gatewayName: "live gateway",
+        fetcher,
+      },
+    );
+    expect(results).toEqual([
+      { provider: "openai", route: "chat-direct", status: 200 },
+      { provider: "openai", route: "chat-gateway", status: 200 },
+    ]);
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
+      "http://127.0.0.1:8787/key/0/v1/chat/completions",
+      "http://127.0.0.1:8787/key/0/g/live%20gateway/v1/chat/completions",
+    ]);
+    for (const [, init] of fetcher.mock.calls)
+      expect(JSON.parse(String(init?.body))).toEqual({
+        model: "openai/gpt-test",
+        messages: [{ role: "user", content: "Reply with OK." }],
+        stream: false,
+        max_completion_tokens: MIN_COMPLETION_TOKENS,
+      });
+  });
+
+  it("uses the default Gateway only for supported providers", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    const results = await runLiveChatTests(
+      parseLiveChatConfig(
+        '{"providers":{"openai":"gpt-test","ollama":"model-test","custom":"model-test"}}',
+      ),
+      {
+        baseUrl: "http://127.0.0.1:8787",
+        fetcher,
+      },
+    );
+    expect(results.map(({ provider, route }) => ({ provider, route }))).toEqual(
+      [
+        { provider: "openai", route: "chat-direct" },
+        { provider: "openai", route: "chat-gateway" },
+        { provider: "ollama", route: "chat-direct" },
+        { provider: "custom", route: "chat-direct" },
+      ],
+    );
+    expect(fetcher.mock.calls[1][0]).toBe(
+      "http://127.0.0.1:8787/key/0/g/default/v1/chat/completions",
+    );
+  });
+
+  it("tests Anthropic Chat directly and skips direct requests for Gateway-required providers", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async () => new Response("ok"));
+    const results = await runLiveChatTests(
+      parseLiveChatConfig(
+        '{"providers":{"anthropic":"claude-test","google-vertex-ai":"gemini","workers-ai":"@cf/model"}}',
+      ),
+      {
+        baseUrl: "http://127.0.0.1:8787",
+        fetcher,
+      },
+    );
+    expect(results.map(({ provider, route }) => ({ provider, route }))).toEqual(
+      [
+        { provider: "anthropic", route: "chat-direct" },
+        { provider: "anthropic", route: "chat-gateway" },
+        { provider: "google-vertex-ai", route: "chat-gateway" },
+        { provider: "workers-ai", route: "chat-gateway" },
+      ],
+    );
+  });
+
+  it("omits duplicate default routing when the Worker already selects a Gateway", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async () => new Response("ok"));
+    const cases = parseLiveChatConfig(
+      '{"providers":{"openai":"model","ollama":"model"}}',
+    );
+    const results = await runLiveChatTests(cases, {
+      baseUrl: "http://localhost:8787",
+      defaultGatewayName: "configured",
+      fetcher,
+    });
+    expect(results.map(({ route }) => route)).toEqual([
+      "chat-gateway",
+      "chat-direct",
+    ]);
+    expect(fetcher.mock.calls[0][0]).toBe(
+      "http://localhost:8787/key/0/g/configured/v1/chat/completions",
+    );
+    expect(fetcher.mock.calls[1][0]).toBe(
+      "http://localhost:8787/key/0/v1/chat/completions",
+    );
+    fetcher.mockClear();
+    const strict = await runLiveChatTests(cases, {
+      baseUrl: "http://localhost:8787",
+      alwaysUseAiGateway: true,
+      defaultGatewayName: "configured",
+      gatewayName: "selected",
+      fetcher,
+    });
+    expect(strict.map(({ route }) => route)).toEqual([
+      "chat-gateway",
+      "chat-gateway",
+    ]);
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual(
+      Array(2).fill(
+        "http://localhost:8787/key/0/g/selected/v1/chat/completions",
+      ),
+    );
+  });
+
+  it("reads the local routing policy without inferring a Gateway from credentials alone", () => {
+    for (const [config, expected] of [
+      [{}, { alwaysUseAiGateway: false, defaultGatewayName: undefined }],
+      [
+        { CLOUDFLARE_ACCOUNT_ID: "account" },
+        { alwaysUseAiGateway: false, defaultGatewayName: undefined },
+      ],
+      [
+        { CLOUDFLARE_ACCOUNT_ID: "account", AI_GATEWAY_NAME: "configured" },
+        { alwaysUseAiGateway: false, defaultGatewayName: "configured" },
+      ],
+      [
+        { CLOUDFLARE_ACCOUNT_ID: "account", ALWAYS_USE_AI_GATEWAY: "TRUE" },
+        { alwaysUseAiGateway: true, defaultGatewayName: "default" },
+      ],
+    ]) {
+      expect(
+        parseLocalWorkerAuthentication(
+          JSON.stringify({ DEV: true, ...config }),
+        ),
+      ).toMatchObject(expected);
+    }
+  });
+
+  it("runs only the selected providers", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    const cases = parseLiveChatConfig(
+      '{"providers":{"openai":"gpt-test","ollama":"model-test"}}',
+    );
+    const results = await runLiveChatTests(cases, {
+      baseUrl: "http://127.0.0.1:8787",
+      providers: new Set(["ollama"]),
+      fetcher,
+    });
+    expect(results).toEqual([
+      { provider: "ollama", route: "chat-direct", status: 200 },
+    ]);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    await expect(
+      runLiveChatTests(cases, {
+        baseUrl: "http://127.0.0.1:8787",
+        providers: new Set(["absent"]),
+        fetcher,
+      }),
+    ).rejects.toThrow("No configured providers matched the requested names");
+  });
+
+  it("rejects deployed Worker targets", async () => {
+    await expect(
+      runLiveChatTests(
+        [
+          {
+            provider: "openai",
+            model: "gpt-test",
+            supportsMaxCompletionTokens: true,
+          },
+        ],
+        {
+          baseUrl: "https://deployed-worker.example",
+          proxyApiKey: "proxy-secret",
+          fetcher: vi.fn<typeof fetch>(),
+        },
+      ),
+    ).rejects.toThrow("must target a loopback development server");
+  });
+
+  it("validates local URL, timeout, and key-selection inputs", async () => {
+    const testCases = parseLiveChatConfig(
+      '{"providers":{"openai":"gpt-test"}}',
+    );
+    const fetcher = vi.fn<typeof fetch>();
+
+    for (const baseUrl of [
+      " ",
+      "ftp://localhost:8787",
+      "http://user:password@localhost:8787",
+      "http://localhost:8787?query=true",
+      "http://localhost:8787#fragment",
+    ]) {
+      await expect(
+        runLiveChatTests(testCases, { baseUrl, fetcher }),
+      ).rejects.toThrow();
+    }
+    for (const timeoutMs of [0, 120_001, 1.5, Number.NaN]) {
+      await expect(
+        runLiveChatTests(testCases, {
+          baseUrl: "http://localhost:8787",
+          timeoutMs,
+          fetcher,
+        }),
+      ).rejects.toThrow("LIVE_CHAT_TIMEOUT_MS");
+    }
+    await expect(
+      runLiveChatTests(testCases, {
+        baseUrl: "http://[::1]:8787",
+        keySelection: "invalid",
+        fetcher,
+      }),
+    ).rejects.toThrow("LLM_PROXY_KEY_SELECTION");
+  });
+
+  it("checks that the local development server is ready", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response("Pong", { status: 200 }));
+
+    await expect(
+      verifyLocalDevelopmentServer(
+        "http://127.0.0.1:8787",
+        "proxy-secret",
+        fetcher,
+      ),
+    ).resolves.toBeUndefined();
+    expect(fetcher).toHaveBeenCalledWith(
+      "http://127.0.0.1:8787/ping",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer proxy-secret",
+        }),
+      }),
+    );
+  });
+
+  it.each(["chat", "readiness"])(
+    "waits for the complete %s body without cancelling",
+    async (kind) => {
+      let controller!: ReadableStreamDefaultController<Uint8Array>;
+      const cancel = vi.fn();
+      const body = new ReadableStream<Uint8Array>({
+        start(value) {
+          controller = value;
+        },
+        cancel,
+      });
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response(body));
+      let completed = false;
+      const request =
+        kind === "chat"
+          ? runLiveChatTests(
+              parseLiveChatConfig('{"providers":{"ollama":"model-test"}}'),
+              { baseUrl: "http://localhost:8787", fetcher },
+            )
+          : verifyLocalDevelopmentServer(
+              "http://localhost:8787",
+              undefined,
+              fetcher,
+            );
+      const completion = request.then((result) => {
+        completed = true;
+        return result;
+      });
+      controller.enqueue(new TextEncoder().encode("first"));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(completed).toBe(false);
+      controller.enqueue(new TextEncoder().encode("last"));
+      controller.close();
+      const result = await completion;
+      if (kind === "chat")
+        expect(result).toEqual([
+          { provider: "ollama", route: "chat-direct", status: 200 },
+        ]);
+      expect(completed).toBe(true);
+      expect(cancel).not.toHaveBeenCalled();
+      expect(body.locked).toBe(false);
+    },
+  );
+
+  it.each(["chat", "readiness"])(
+    "reports %s body read failures",
+    async (kind) => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.error(new Error("body failed"));
+        },
+      });
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response(body));
+      if (kind === "chat") {
+        await expect(
+          runLiveChatTests(
+            parseLiveChatConfig('{"providers":{"ollama":"model-test"}}'),
+            { baseUrl: "http://localhost:8787", fetcher },
+          ),
+        ).resolves.toEqual([
+          { provider: "ollama", route: "chat-direct", error: "body failed" },
+        ]);
+      } else {
+        await expect(
+          verifyLocalDevelopmentServer(
+            "http://localhost:8787",
+            undefined,
+            fetcher,
+          ),
+        ).rejects.toThrow("body failed");
+      }
+      expect(body.locked).toBe(false);
+    },
+  );
+
+  it.each(["chat", "readiness"])(
+    "keeps the %s timeout active while reading the body",
+    async (kind) => {
+      vi.useFakeTimers();
+      try {
+        const fetcher = vi.fn<typeof fetch>().mockImplementation(
+          async (_input, init) =>
+            new Response(
+              new ReadableStream<Uint8Array>({
+                start(controller) {
+                  controller.enqueue(new TextEncoder().encode("partial"));
+                  init?.signal?.addEventListener(
+                    "abort",
+                    () =>
+                      controller.error(
+                        new DOMException("aborted", "AbortError"),
+                      ),
+                    { once: true },
+                  );
+                },
+              }),
+            ),
+        );
+        const expectation =
+          kind === "chat"
+            ? expect(
+                runLiveChatTests(
+                  parseLiveChatConfig('{"providers":{"ollama":"model-test"}}'),
+                  { baseUrl: "http://localhost:8787", timeoutMs: 100, fetcher },
+                ),
+              ).resolves.toEqual([
+                {
+                  provider: "ollama",
+                  route: "chat-direct",
+                  error: "Timed out after 100 ms",
+                },
+              ])
+            : expect(
+                verifyLocalDevelopmentServer(
+                  "http://localhost:8787",
+                  undefined,
+                  fetcher,
+                ),
+              ).rejects.toThrow("Local development server is unavailable");
+        await vi.advanceTimersByTimeAsync(10_001);
+        await expectation;
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("times out an unresponsive readiness check", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetcher = vi.fn<typeof fetch>().mockImplementation(
+        (_input, init) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              reject(new DOMException("aborted", "AbortError"));
+            });
+          }),
+      );
+      const check = verifyLocalDevelopmentServer(
+        "http://localhost:8787",
+        undefined,
+        fetcher,
+      );
+      const expectation = expect(check).rejects.toThrow(
+        "Local development server is unavailable",
+      );
+      await vi.advanceTimersByTimeAsync(10_001);
+      await expectation;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reports readiness failures without leaking the proxy key", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 503 }));
+
+    await expect(
+      verifyLocalDevelopmentServer(
+        "http://localhost:8787/",
+        "proxy-secret",
+        fetcher,
+      ),
+    ).rejects.toThrow("local /ping returned HTTP 503");
+
+    const rejection = vi
+      .fn<typeof fetch>()
+      .mockRejectedValue(new Error("Bearer proxy-secret unavailable"));
+    await expect(
+      verifyLocalDevelopmentServer(
+        "http://localhost:8787",
+        "proxy-secret",
+        rejection,
+      ),
+    ).rejects.not.toThrow("proxy-secret");
+  });
+
+  it("does not probe a deployed target during the readiness check", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+
+    await expect(
+      verifyLocalDevelopmentServer(
+        "https://deployed-worker.example",
+        "proxy-secret",
+        fetcher,
+      ),
+    ).rejects.toThrow("must target a loopback development server");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("uses the provider-supported legacy token field only when required", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    const testCases = parseLiveChatConfig(
+      '{"providers":{"cohere":"command-test"}}',
+    );
+
+    await runLiveChatTests(testCases, {
+      baseUrl: "http://127.0.0.1:8787",
+      proxyApiKey: "proxy-secret",
+      fetcher,
+    });
+
+    for (const call of fetcher.mock.calls) {
+      expect(JSON.parse(String(call[1]?.body))).toMatchObject({
+        max_tokens: MIN_COMPLETION_TOKENS,
+      });
+      expect(JSON.parse(String(call[1]?.body))).not.toHaveProperty(
+        "max_completion_tokens",
+      );
+    }
+  });
+
+  it("can omit explicit key selection for Gateway-managed BYOK", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    const testCases = parseLiveChatConfig(
+      '{"providers":{"openai":"gpt-test"}}',
+    );
+
+    await runLiveChatTests(testCases, {
+      baseUrl: "http://127.0.0.1:8787",
+      proxyApiKey: "proxy-secret",
+      keySelection: null,
+      fetcher,
+    });
+
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
+      "http://127.0.0.1:8787/v1/chat/completions",
+      "http://127.0.0.1:8787/g/default/v1/chat/completions",
+    ]);
+  });
+
+  it("reports structured HTTP error details with credentials redacted", async () => {
+    const responseBody = JSON.stringify({
+      error: {
+        message: "model not found",
+        type: "invalid_request_error",
+        code: "model_not_found",
+        api_key: "sk-secret123456",
+        authorization: "Bearer provider-secret",
+      },
+      proxy: "proxy-secret",
+      detail: "provider-live-secret is invalid",
+    });
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(
+      async () =>
+        new Response(responseBody, {
+          status: 401,
+          statusText: "Unauthorized",
+        }),
+    );
+    const testCases = parseLiveChatConfig(
+      '{"providers":{"openai":"gpt-test"}}',
+    );
+
+    const results = await runLiveChatTests(testCases, {
+      baseUrl: "http://127.0.0.1:8787",
+      proxyApiKey: "proxy-secret",
+      sensitiveValues: ["provider-live-secret"],
+      fetcher,
+    });
+
+    expect(results).toEqual([
+      {
+        provider: "openai",
+        route: "chat-direct",
+        status: 401,
+        error:
+          'HTTP 401 Unauthorized: {"error":{"message":"model not found","type":"invalid_request_error","code":"model_not_found","api_key":"***","authorization":"***"},"proxy":"***","detail":"*** is invalid"}',
+      },
+      {
+        provider: "openai",
+        route: "chat-gateway",
+        status: 401,
+        error:
+          'HTTP 401 Unauthorized: {"error":{"message":"model not found","type":"invalid_request_error","code":"model_not_found","api_key":"***","authorization":"***"},"proxy":"***","detail":"*** is invalid"}',
+      },
+    ]);
+    expect(JSON.stringify(results)).toContain("model not found");
+    expect(JSON.stringify(results)).not.toContain("sk-secret123456");
+    expect(JSON.stringify(results)).not.toContain("provider-secret");
+    expect(JSON.stringify(results)).not.toContain("provider-live-secret");
+    expect(JSON.stringify(results)).not.toContain("proxy-secret");
+  });
+
+  it("reports redacted plain-text error details", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockImplementation(
+        async () =>
+          new Response(
+            "upstream says Bearer top-secret and rejected sk-abcdefghijk",
+            { status: 429, statusText: "Too Many Requests" },
+          ),
+      );
+    const testCases = parseLiveChatConfig(
+      '{"providers":{"openai":"gpt-test"}}',
+    );
+
+    const results = await runLiveChatTests(testCases, {
+      baseUrl: "http://127.0.0.1:8787",
+      proxyApiKey: "proxy-secret",
+      fetcher,
+    });
+
+    expect(results[0].error).toBe(
+      "HTTP 429 Too Many Requests: upstream says Bearer *** and rejected sk-***",
+    );
+    expect(JSON.stringify(results)).not.toContain("top-secret");
+    expect(JSON.stringify(results)).not.toContain("abcdefghijk");
+  });
+
+  it("handles empty error bodies and nested arrays", async () => {
+    const responses = [
+      new Response(null, { status: 500 }),
+      new Response(JSON.stringify(["AIza1234567890123456", 42, null]), {
+        status: 400,
+      }),
+    ];
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async () => responses.shift()!);
+    const results = await runLiveChatTests(
+      parseLiveChatConfig('{"providers":{"openai":"gpt-test"}}'),
+      { baseUrl: "http://localhost:8787", fetcher },
+    );
+
+    expect(results[0].error).toBe("HTTP 500 Internal Server Error");
+    expect(results[1].error).toBe('HTTP 400 Bad Request: ["AIza***",42,null]');
+  });
+
+  it("bounds recursive error redaction", async () => {
+    let nested: unknown = "deep-secret";
+    for (let index = 0; index < 22; index++) nested = { value: nested };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(JSON.stringify(nested), { status: 500 }));
+    const results = await runLiveChatTests(
+      parseLiveChatConfig('{"providers":{"ollama":"model-test"}}'),
+      { baseUrl: "http://localhost:8787", fetcher },
+    );
+
+    expect(results[0].error).toContain("[nested value omitted]");
+    expect(results[0].error).not.toContain("deep-secret");
+  });
+
+  it("requires values for named CLI options", () => {
+    expect(() => parseLiveChatArguments(["--config"])).toThrow(
+      "--config requires a path",
+    );
+    expect(() => parseLiveChatArguments(["--provider"])).toThrow(
+      "--provider requires a provider name",
+    );
+  });
+
+  it("redacts thrown request errors and reports timeouts", async () => {
+    const testCases = parseLiveChatConfig(
+      '{"providers":{"ollama":"model-test"}}',
+    );
+    const rejected = vi
+      .fn<typeof fetch>()
+      .mockRejectedValue(new Error("Bearer request-secret failed"));
+    const rejectedResults = await runLiveChatTests(testCases, {
+      baseUrl: "http://localhost:8787",
+      sensitiveValues: ["request-secret"],
+      fetcher: rejected,
+    });
+    expect(rejectedResults[0].error).toBe("Bearer *** failed");
+
+    vi.useFakeTimers();
+    try {
+      const abortingFetcher = vi.fn<typeof fetch>().mockImplementation(
+        (_input, init) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              reject(new DOMException("aborted", "AbortError"));
+            });
+          }),
+      );
+      const resultPromise = runLiveChatTests(testCases, {
+        baseUrl: "http://localhost:8787",
+        timeoutMs: 5,
+        fetcher: abortingFetcher,
+      });
+      await vi.advanceTimersByTimeAsync(10);
+      const results = await resultPromise;
+      expect(
+        results.every(({ error }) => error === "Timed out after 5 ms"),
+      ).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("bounds oversized HTTP error details", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(
+      async () =>
+        new Response("x".repeat(MAX_ERROR_DETAIL_BYTES + 100), {
+          status: 500,
+        }),
+    );
+    const testCases = parseLiveChatConfig(
+      '{"providers":{"openai":"gpt-test"}}',
+    );
+
+    const results = await runLiveChatTests(testCases, {
+      baseUrl: "http://127.0.0.1:8787",
+      proxyApiKey: "proxy-secret",
+      fetcher,
+    });
+
+    expect(results[0].error).toContain(
+      `[truncated at ${MAX_ERROR_DETAIL_BYTES} bytes]`,
+    );
+    expect(results[0].error?.length).toBeLessThan(MAX_ERROR_DETAIL_BYTES + 100);
+  });
+
+  it("tolerates stream cancellation failure after truncating an error", async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode("x".repeat(MAX_ERROR_DETAIL_BYTES + 1)),
+        );
+      },
+      cancel() {
+        return Promise.reject(new Error("cleanup failed"));
+      },
+    });
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(stream, { status: 500 }));
+
+    const results = await runLiveChatTests(
+      parseLiveChatConfig('{"providers":{"ollama":"model-test"}}'),
+      { baseUrl: "http://localhost:8787", fetcher },
+    );
+
+    expect(results[0].error).toContain("[truncated at");
+  });
+});

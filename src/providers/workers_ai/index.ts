@@ -13,5 +13,5 @@ AI Gateway Base URL: https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_
 
 ## APIs
 Chat Completions: /v1/chat/completions
-Models:           /models/search?task=Text Generation
+Models:           /models/search?task=Text%20Generation
 */

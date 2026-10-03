@@ -1,13 +1,14 @@
-import { OpenAICompatibleProvider } from "../provider";
+import { chatCompletionsEndpoint, jsonEndpoint } from "../inference";
+import { defineProvider } from "../provider";
 
-export class Grok extends OpenAICompatibleProvider {
-  get chatCompletionPath(): string {
-    return "/v1/chat/completions";
-  }
-  get modelsPath(): string {
-    return "/v1/models";
-  }
+export const Grok = defineProvider({
+  endpoints: {
+    chat_completions: chatCompletionsEndpoint("/v1/chat/completions"),
+    responses: jsonEndpoint("/v1/responses"),
+    models: { path: "/v1/models" },
+  },
 
-  readonly apiKeyName: keyof Env = "GROK_API_KEY";
-  readonly baseUrlProp: string = "https://api.x.ai";
-}
+  openAICompatible: true,
+  apiKeyName: "GROK_API_KEY",
+  baseUrl: "https://api.x.ai",
+});

@@ -1,0 +1,22 @@
+{
+  // Worker-runtime test code. `test/scripts` runs under Node instead and has
+  // its own project, because the Workers and Node global type declarations
+  // (URL, streams) are not assignable to each other in one program.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["es2023"],
+    "paths": {
+      "~/src/*": ["../src/*"]
+    },
+    "types": ["node", "@cloudflare/vitest-plugin/types"]
+  },
+  "include": [
+    "./src/**/*.ts",
+    "./helpers/**/*.ts",
+    "./performance/**/*.ts",
+    "../.cloudflare/types/index.d.ts",
+    "../src/env.d.ts"
+  ],
+  "exclude": []
+}

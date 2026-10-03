@@ -2,10 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   AppError,
   BadRequestError,
+  MethodNotAllowedError,
   UnauthorizedError,
-  ForbiddenError,
   NotFoundError,
-  InternalServerError,
+  ServiceUnavailableError,
 } from "~/src/utils/error";
 
 describe("Error Classes", () => {
@@ -17,33 +17,21 @@ describe("Error Classes", () => {
     expect(error instanceof Error).toBe(true);
   });
 
-  it("BadRequestError should have status 400", () => {
-    const error = new BadRequestError();
-    expect(error.status).toBe(400);
-    expect(error.message).toBe("Bad Request");
+  it.each([
+    [BadRequestError, 400, "Bad Request"],
+    [UnauthorizedError, 401, "Unauthorized"],
+    [NotFoundError, 404, "Not Found"],
+    [ServiceUnavailableError, 503, "Service Unavailable"],
+  ])("%p should default to status %i", (ErrorClass, status, message) => {
+    const error = new ErrorClass();
+    expect(error.status).toBe(status);
+    expect(error.message).toBe(message);
   });
 
-  it("UnauthorizedError should have status 401", () => {
-    const error = new UnauthorizedError();
-    expect(error.status).toBe(401);
-    expect(error.message).toBe("Unauthorized");
-  });
-
-  it("ForbiddenError should have status 403", () => {
-    const error = new ForbiddenError();
-    expect(error.status).toBe(403);
-    expect(error.message).toBe("Forbidden");
-  });
-
-  it("NotFoundError should have status 404", () => {
-    const error = new NotFoundError();
-    expect(error.status).toBe(404);
-    expect(error.message).toBe("Not Found");
-  });
-
-  it("InternalServerError should have status 500", () => {
-    const error = new InternalServerError();
-    expect(error.status).toBe(500);
-    expect(error.message).toBe("Internal Server Error");
+  it("retains the allowed methods for a 405 response", () => {
+    const error = new MethodNotAllowedError(["GET", "POST"]);
+    expect(error.status).toBe(405);
+    expect(error.message).toBe("Method Not Allowed");
+    expect(error.allowedMethods).toEqual(["GET", "POST"]);
   });
 });

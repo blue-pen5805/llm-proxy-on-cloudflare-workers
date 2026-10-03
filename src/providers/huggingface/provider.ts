@@ -1,31 +1,29 @@
-import { ProviderBase, ProviderNotSupportedError } from "../provider";
+import { Secrets } from "../../utils/secrets";
+import { jsonEndpoint } from "../inference";
+import { defineProvider } from "../provider";
 
-export class HuggingFace extends ProviderBase {
-  get chatCompletionPath(): string {
-    return "";
-  }
-  get modelsPath(): string {
-    return "";
-  }
+const inferenceUpstream = {
+  name: "huggingface/inference",
+  baseUrl: () => "https://router.huggingface.co",
+};
 
-  readonly apiKeyName: keyof Env = "HUGGINGFACE_API_KEY";
-  readonly baseUrlProp: string = "https://api-inference.huggingface.co/models";
+export const HuggingFace = defineProvider({
+  endpoints: {
+    chat_completions: jsonEndpoint("/v1/chat/completions", {
+      upstream: inferenceUpstream,
+    }),
+    responses: jsonEndpoint("/v1/responses", { upstream: inferenceUpstream }),
+    messages: jsonEndpoint("/v1/messages", { upstream: inferenceUpstream }),
+  },
 
-  async buildChatCompletionsRequest({
-    body, // eslint-disable-line @typescript-eslint/no-unused-vars
-    headers, // eslint-disable-line @typescript-eslint/no-unused-vars
-  }: {
-    body: string;
-    headers: HeadersInit;
-  }): Promise<[string, RequestInit]> {
-    throw new ProviderNotSupportedError(
-      "HuggingFace does not support chat completions",
+  apiKeyName: "HUGGINGFACE_API_KEY",
+  baseUrl: "https://api-inference.huggingface.co/models",
+  async headers(apiKeyIndex): Promise<HeadersInit> {
+    const apiKey = Secrets.get(
+      "HUGGINGFACE_API_KEY",
+      apiKeyIndex,
+      this.credentialProfile,
     );
-  }
-
-  async buildModelsRequest(): Promise<[string, RequestInit]> {
-    throw new ProviderNotSupportedError(
-      "HuggingFace does not support models list via this proxy.",
-    );
-  }
-}
+    return apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
+  },
+});

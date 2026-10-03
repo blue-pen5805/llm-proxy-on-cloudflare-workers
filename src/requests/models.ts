@@ -1,62 +1,267 @@
 import { CloudflareAIGateway } from "../ai_gateway";
-import { MiddlewareContext } from "../middleware";
-import { getAllProviders } from "../providers";
+import { gatewayProviderPath } from "../ai_gateway/custom_provider";
+import { buildModelsRequest } from "../providers/models";
 import { OpenAIModelsListResponseBody } from "../providers/openai/types";
+import { parseProviderSelector } from "../providers/profile";
 import { ProviderBase, ProviderNotSupportedError } from "../providers/provider";
-import { selectApiKeyIndex } from "../utils/api_key_selection";
-import { Environments } from "../utils/environments";
-import { fetch2, withTimeout } from "../utils/helpers";
+import type { ApiKeySelection, RoutedRequestContext } from "../request_context";
+import {
+  determineApiKeySelectionPolicy,
+  recordApiKeySelection,
+  selectApiKeyIndex,
+} from "../utils/api_key_selection";
+import { stripProxyAuthorizationHeaders } from "../utils/authorization";
+import { Config, VIRTUAL_MODEL_PROVIDER_NAME } from "../utils/config";
+import {
+  fetchWithLogging,
+  readResponseJson,
+  utf8ByteLength,
+  withTimeout,
+} from "../utils/helpers";
+import { RequestLogger } from "../utils/logger";
+import { openAIErrorResponse } from "./error_response";
+import { resolveAiGatewayModelsProvider } from "./model_gateway";
+import { PRIVATE_NO_STORE_HEADERS } from "./response";
+import { isJsonObject } from "./sse";
 
 // Timeout for individual provider model fetch operations (milliseconds)
-const PROVIDER_FETCH_TIMEOUT_MS = 5000;
+const PROVIDER_FETCH_TIMEOUT_MS = 60_000;
+const MAX_PROVIDER_MODELS_RESPONSE_BYTES = 1024 * 1024;
+export const MAX_MODELS_PER_PROVIDER = 1000;
+export const MAX_AGGREGATED_MODELS_BYTES = 4 * 1024 * 1024;
+// Automatic model discovery starts at the first key and, on HTTP 429 only,
+// tries sequential later keys. This bound includes the original attempt.
+export const MAX_MODELS_RATE_LIMIT_KEY_ATTEMPTS = 3;
+
+const MODELS_CACHE_NAME = "llm-proxy-models";
+const MODELS_RESPONSE_ENVELOPE_BYTES = '{"data":[],"object":"list"}'.length;
 
 const EMPTY_MODELS: OpenAIModelsListResponseBody = {
   object: "list",
   data: [],
 };
 
-async function fetchProviderModels(
-  providerName: string,
-  provider: ProviderBase,
-  selection: MiddlewareContext["apiKeyIndex"],
+function reportModelsCacheUnavailable(
+  operation: "open" | "match" | "put",
+): void {
+  RequestLogger.warn(
+    "models.cache.unavailable",
+    "Models cache operation was unavailable; continuing without it",
+    { operation },
+  );
+}
+
+async function putModelsCache(
+  cache: Cache,
+  key: Request,
+  response: Response,
+): Promise<void> {
+  try {
+    await cache.put(key, response);
+  } catch {
+    reportModelsCacheUnavailable("put");
+  }
+}
+
+/**
+ * Cache key for the aggregated models response. Built exclusively from
+ * operator-validated values: account and gateway ids are charset-checked at
+ * construction, and key selections are integers parsed by the `/key/...`
+ * middleware. Clients cannot inject arbitrary partitions into the key.
+ */
+function buildModelsCacheKey(
+  apiKeySelection: ApiKeySelection | undefined,
   aiGateway?: CloudflareAIGateway,
+  providerFilter?: readonly string[],
+): Request {
+  const gatewayScope = aiGateway
+    ? `${aiGateway.accountId}/${aiGateway.gatewayId}/${aiGateway.alwaysUse ? "always" : "auto"}`
+    : "direct";
+  const keyScope =
+    apiKeySelection === undefined
+      ? "default"
+      : typeof apiKeySelection === "number"
+        ? `index-${apiKeySelection}`
+        : `range-${apiKeySelection.start ?? ""}-${apiKeySelection.end ?? ""}`;
+  const providerScope =
+    providerFilter === undefined
+      ? "all"
+      : `providers-${providerFilter.map(encodeURIComponent).join(",")}`;
+  return new Request(
+    `https://models-cache.llm-proxy.internal/${gatewayScope}/${keyScope}/${providerScope}`,
+    { method: "GET" },
+  );
+}
+
+async function discardUpstreamBody(response: Response): Promise<void> {
+  if (!response.body) return;
+  try {
+    await response.body.cancel();
+  } catch {
+    // The status is still authoritative if the body is already locked.
+  }
+}
+
+function requestedProviders(
+  request: Request,
+  availableProviders: ReadonlySet<string>,
+): string[] | Response | undefined {
+  const values = new URL(request.url).searchParams.getAll("provider");
+  if (values.length === 0) return undefined;
+  if (values.length !== 1) {
+    return openAIErrorResponse("provider must be specified once.", 400, {
+      param: "provider",
+    });
+  }
+  const providers = [
+    ...new Set(values[0].split(",").map((value) => value.trim())),
+  ];
+  if (
+    providers.length === 0 ||
+    providers.length > 32 ||
+    providers.some(
+      (provider) =>
+        provider === "" ||
+        (provider !== VIRTUAL_MODEL_PROVIDER_NAME &&
+          !availableProviders.has(provider)),
+    )
+  ) {
+    return openAIErrorResponse("Invalid provider filter.", 400, {
+      param: "provider",
+    });
+  }
+  return providers.sort();
+}
+
+async function fetchProviderModels(
+  providerSelector: string,
+  provider: ProviderBase,
+  selection: ApiKeySelection | undefined,
+  aiGateway?: CloudflareAIGateway,
+  clientGatewayHeaders?: HeadersInit,
 ): Promise<OpenAIModelsListResponseBody> {
-  if (!provider.available()) {
+  const parsedSelector = parseProviderSelector(providerSelector);
+  /* istanbul ignore next -- registry entries always use valid selectors */
+  if (!parsedSelector) return EMPTY_MODELS;
+  const { providerName, profile } = parsedSelector;
+  const operation = provider.endpoints.models;
+  if (!operation) return EMPTY_MODELS;
+  const aiGatewayProvider = resolveAiGatewayModelsProvider(
+    providerName,
+    provider,
+    operation,
+    aiGateway,
+  );
+  if (
+    !provider.available() &&
+    (!aiGatewayProvider || operation.requiresProviderCredentials)
+  ) {
     return EMPTY_MODELS;
   }
 
-  const staticModels = provider.staticModels();
-  if (staticModels) {
-    return staticModels;
+  const getStaticModels = operation.getStaticModels?.call(provider);
+  if (getStaticModels) {
+    return getStaticModels;
   }
 
-  const apiKeyIndex = await selectApiKeyIndex(provider, selection, "first");
-  const [path, init] = await provider.buildModelsRequest(apiKeyIndex);
-  const abortController = new AbortController();
-
-  let responsePromise: Promise<Response>;
-  if (aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)) {
-    const [gatewayUrl, gatewayInit] = aiGateway.buildProviderEndpointRequest({
-      provider: providerName,
-      method: init.method,
-      path,
-      headers: await provider.headers(apiKeyIndex),
-    });
-    responsePromise = fetch2(gatewayUrl, {
-      ...gatewayInit,
-      signal: abortController.signal,
-    });
-  } else {
-    responsePromise = provider.fetch(
-      path,
-      { ...init, signal: abortController.signal },
-      apiKeyIndex,
-    );
-  }
-
-  const modelsPromise = responsePromise.then(async (response) =>
-    provider.modelsToOpenAIFormat(await response.json()),
+  const keyCount = provider.getApiKeys().length;
+  const initialApiKeyIndex = await selectApiKeyIndex(
+    provider,
+    selection,
+    "first",
   );
+  const selectionPolicy = determineApiKeySelectionPolicy(selection, "first");
+  const maxAttempts =
+    selection === undefined && keyCount > 1
+      ? Math.min(MAX_MODELS_RATE_LIMIT_KEY_ATTEMPTS, keyCount)
+      : 1;
+  const abortController = new AbortController();
+  const fetchModelsWithKey = async (apiKeyIndex: number) => {
+    const keyLogFields = recordApiKeySelection({
+      provider: providerName,
+      credentialProfile: profile,
+      operation: "models",
+      keyIndex: apiKeyIndex,
+      keyCount,
+      selectionPolicy,
+      viaAiGateway: aiGatewayProvider !== undefined,
+    });
+    const [path, init] = await buildModelsRequest(
+      provider,
+      operation,
+      apiKeyIndex,
+      aiGatewayProvider ? clientGatewayHeaders : undefined,
+    );
+    abortController.signal.throwIfAborted();
+    if (aiGateway && aiGatewayProvider) {
+      const [gatewayUrl, gatewayInit] = aiGateway.buildProviderEndpointRequest({
+        provider: aiGatewayProvider,
+        method: init.method,
+        path: gatewayProviderPath(
+          providerName,
+          provider,
+          path,
+          aiGatewayProvider,
+        ),
+        headers: init.headers!,
+      });
+      return RequestLogger.withFields(keyLogFields, () =>
+        fetchWithLogging(gatewayUrl, {
+          ...gatewayInit,
+          signal: abortController.signal,
+        }),
+      );
+    }
+    return RequestLogger.withFields(keyLogFields, () =>
+      provider.send(provider.baseUrl() + provider.pathnamePrefix() + path, {
+        ...init,
+        signal: abortController.signal,
+      }),
+    );
+  };
+
+  const modelsPromise = (async () => {
+    let lastStatus = 0;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      abortController.signal.throwIfAborted();
+      const apiKeyIndex = initialApiKeyIndex + attempt;
+      const upstreamResponse = await fetchModelsWithKey(apiKeyIndex);
+      if (upstreamResponse.ok) {
+        const data = await readResponseJson(
+          upstreamResponse,
+          MAX_PROVIDER_MODELS_RESPONSE_BYTES,
+        );
+        try {
+          return operation.convertResponse
+            ? operation.convertResponse.call(provider, data)
+            : (data as OpenAIModelsListResponseBody);
+        } catch {
+          // Adapter exceptions can embed upstream values, including in an
+          // error name or cause. Only a content-free failure may reach logs.
+          throw new Error("Upstream returned an invalid model-list response.");
+        }
+      }
+      lastStatus = upstreamResponse.status;
+      await discardUpstreamBody(upstreamResponse);
+      abortController.signal.throwIfAborted();
+      if (lastStatus !== 429 || attempt + 1 >= maxAttempts) {
+        break;
+      }
+      RequestLogger.warn(
+        "provider.models.key_retry",
+        "Retrying provider model discovery with the next credential after HTTP 429",
+        {
+          provider: providerName,
+          ...(profile !== "default" ? { credential_profile: profile } : {}),
+          key_index: apiKeyIndex,
+          next_key_index: apiKeyIndex + 1,
+          status: lastStatus,
+          attempt: attempt + 1,
+        },
+      );
+    }
+    throw new Error(`Provider models request failed with HTTP ${lastStatus}.`);
+  })();
   return withTimeout(
     modelsPromise,
     abortController,
@@ -65,53 +270,323 @@ async function fetchProviderModels(
   );
 }
 
-export async function models(
-  context: MiddlewareContext,
+/**
+ * A served aggregate plus, on the uncached path, the per-model JSON fragments
+ * it was assembled from and their ids in the same order.
+ * `/v1/models/<model>` reuses those fragments so it never re-parses the
+ * aggregate it just serialized.
+ */
+interface AggregatedModels {
+  response: Response;
+  models?: { ids: string[]; serialized: string[] };
+}
+
+export async function handleModelsRequest(
+  context: RoutedRequestContext,
   aiGateway: CloudflareAIGateway | undefined = undefined,
-) {
-  const providerEntries = Object.entries(getAllProviders(Environments.all()));
-  const requests = providerEntries.map(([providerName, provider]) =>
-    fetchProviderModels(providerName, provider, context.apiKeyIndex, aiGateway),
+): Promise<Response> {
+  return (await aggregateModels(context, aiGateway)).response;
+}
+
+async function aggregateModels(
+  context: RoutedRequestContext,
+  aiGateway: CloudflareAIGateway | undefined,
+): Promise<AggregatedModels> {
+  const providerEnumeration = context.providers.allSettled();
+  const allProviderEntries = Object.entries(providerEnumeration.providers);
+  const providerFilter = requestedProviders(
+    context.request,
+    new Set([
+      ...allProviderEntries.map(([providerName]) => providerName),
+      // A registered provider that cannot enumerate profiles is unavailable,
+      // not an unknown client selector.
+      ...providerEnumeration.failures.map(({ providerName }) => providerName),
+    ]),
   );
-
-  const responses = await Promise.allSettled(requests);
-  const models = responses.map((response, index) => {
-    const provider = providerEntries[index][0];
-
-    if (response.status === "rejected") {
-      if (response.reason instanceof ProviderNotSupportedError) {
-        return [];
-      }
-
-      console.error(
-        `Error fetching models for provider ${provider}:`,
-        response.reason,
-      );
-      return [];
+  if (providerFilter instanceof Response) return { response: providerFilter };
+  const providerFilterSet =
+    providerFilter === undefined ? undefined : new Set(providerFilter);
+  const sanitizedGatewayHeaders = aiGateway
+    ? stripProxyAuthorizationHeaders(context.request.headers, {
+        preserveAiGatewayHeaders: true,
+      })
+    : undefined;
+  const clientGatewayHeaders: Record<string, string> = {};
+  let hasClientGatewayTuning = false;
+  sanitizedGatewayHeaders?.forEach((value, key) => {
+    if (key.startsWith("cf-aig-")) {
+      clientGatewayHeaders[key] = value;
+      hasClientGatewayTuning = true;
     }
-    if (!response.value?.data) {
-      console.error(
-        `Invalid response for provider ${provider}:`,
-        response.value,
-      );
-      return [];
-    }
-
-    return response.value.data.map(({ id, ...model }) => ({
-      id: `${provider}/${id}`,
-      ...model,
-    }));
   });
+  // The provider fan-out is expensive (one upstream request per provider), so
+  // successful aggregates are cached briefly. Requests carrying per-request
+  // Gateway tuning (`cf-aig-*`) or `Cache-Control: no-store` bypass the cache
+  // entirely; `Cache-Control: no-cache` skips the read but refreshes the entry.
+  const cacheTtlSeconds = Config.modelsCacheTtlSeconds();
+  const requestCacheControl =
+    context.request.headers.get("Cache-Control")?.toLowerCase() ?? "";
+  const cacheEnabled =
+    cacheTtlSeconds > 0 &&
+    !hasClientGatewayTuning &&
+    !requestCacheControl.includes("no-store");
+  let modelsCache: { cache: Cache; key: Request } | undefined;
+  if (cacheEnabled) {
+    try {
+      const cache = await caches.open(MODELS_CACHE_NAME);
+      const candidate = {
+        cache,
+        key: buildModelsCacheKey(
+          context.apiKeyIndex,
+          aiGateway,
+          providerFilter,
+        ),
+      };
+      let cacheUsable = true;
+      if (!requestCacheControl.includes("no-cache")) {
+        try {
+          const cachedResponse = await cache.match(candidate.key);
+          if (cachedResponse) {
+            const cachedHeaders = new Headers(cachedResponse.headers);
+            // The stored Cache-Control only encodes the internal TTL; it must
+            // not let a response served under Authorization enter shared HTTP
+            // caches.
+            cachedHeaders.set(
+              "Cache-Control",
+              PRIVATE_NO_STORE_HEADERS["Cache-Control"],
+            );
+            cachedHeaders.set("X-Proxy-Models-Cache", "HIT");
+            return {
+              response: new Response(cachedResponse.body, {
+                headers: cachedHeaders,
+              }),
+            };
+          }
+        } catch {
+          reportModelsCacheUnavailable("match");
+          // A failed cache read is treated as an unavailable Cache API for the
+          // whole request. Provider discovery remains authoritative.
+          cacheUsable = false;
+        }
+      }
+      if (cacheUsable) modelsCache = candidate;
+    } catch {
+      reportModelsCacheUnavailable("open");
+    }
+  }
 
-  return new Response(
-    JSON.stringify({
-      data: models.flat(),
-      object: "list",
-    }),
-    {
-      headers: {
-        "Content-Type": "application/json",
-      },
-    },
+  const providerEntries = allProviderEntries.filter(
+    ([providerName]) =>
+      providerFilterSet === undefined || providerFilterSet.has(providerName),
   );
+  // Models are kept as their serialized JSON so the byte budget and the final
+  // response body reuse one JSON.stringify pass per model. Their ids are kept
+  // alongside, in the same order, so a single-model retrieval can locate one
+  // fragment without parsing the aggregate.
+  const serializedModels: string[] = [];
+  const modelIds: string[] = [];
+  let aggregatedBytes = MODELS_RESPONSE_ENVELOPE_BYTES;
+  let truncated = false;
+  const providerFailures = providerEnumeration.failures.filter(
+    ({ providerName }) =>
+      providerFilterSet === undefined || providerFilterSet.has(providerName),
+  );
+  let providerFailed = providerFailures.length > 0;
+  for (const { providerName, error } of providerFailures) {
+    RequestLogger.error(
+      "provider.models.failed",
+      "Provider model discovery failed",
+      error,
+      { provider: providerName },
+    );
+  }
+
+  // Operator-defined virtual models are advertised at the front of the list so
+  // clients discover them ahead of provider models. They are bounded (at most
+  // MAX_VIRTUAL_MODELS) and cheap, so they are always included; only their bytes
+  // are counted against the aggregate budget. A malformed VIRTUAL_MODELS value
+  // fails closed here exactly as it does on a chat request.
+  const virtualModels = Config.virtualModels();
+  if (
+    virtualModels &&
+    (providerFilterSet === undefined ||
+      providerFilterSet.has(VIRTUAL_MODEL_PROVIDER_NAME))
+  ) {
+    for (const virtualModelId of Object.keys(virtualModels)) {
+      const serializedModel = JSON.stringify({
+        id: virtualModelId,
+        object: "model",
+        created: 0,
+        owned_by: VIRTUAL_MODEL_PROVIDER_NAME,
+      });
+      serializedModels.push(serializedModel);
+      modelIds.push(virtualModelId);
+      aggregatedBytes +=
+        utf8ByteLength(serializedModel) + (serializedModels.length > 1 ? 1 : 0);
+    }
+  }
+
+  const settledModelRequests = await Promise.allSettled(
+    providerEntries.map(([providerName, provider]) =>
+      fetchProviderModels(
+        providerName,
+        provider,
+        context.apiKeyIndex,
+        aiGateway,
+        hasClientGatewayTuning ? clientGatewayHeaders : undefined,
+      ),
+    ),
+  );
+
+  providerResults: for (const [
+    index,
+    settledRequest,
+  ] of settledModelRequests.entries()) {
+    const providerName = providerEntries[index][0];
+    if (settledRequest.status === "rejected") {
+      if (!(settledRequest.reason instanceof ProviderNotSupportedError)) {
+        providerFailed = true;
+        RequestLogger.error(
+          "provider.models.failed",
+          "Provider model discovery failed",
+          settledRequest.reason,
+          {
+            provider: providerName,
+          },
+        );
+      }
+      continue;
+    }
+    const providerModels = settledRequest.value?.data;
+    const retainedModels = Array.isArray(providerModels)
+      ? providerModels.slice(0, MAX_MODELS_PER_PROVIDER)
+      : undefined;
+    // Validate the bounded batch before publishing any of this provider's
+    // entries. A malformed entry must not fail the complete aggregate or
+    // produce a synthetic ID such as "provider/undefined".
+    if (
+      !retainedModels ||
+      retainedModels.some(
+        (model) =>
+          !isJsonObject(model) ||
+          typeof model.id !== "string" ||
+          model.id.length === 0,
+      )
+    ) {
+      providerFailed = true;
+      RequestLogger.warn(
+        "provider.models.invalid_response",
+        "Provider model discovery returned an invalid response",
+        {
+          provider: providerName,
+        },
+      );
+      continue;
+    }
+
+    if (providerModels.length > MAX_MODELS_PER_PROVIDER) truncated = true;
+    for (const { id, ...model } of retainedModels) {
+      const qualifiedModelId = `${providerName}/${id}`;
+      const serializedModel = JSON.stringify({
+        id: qualifiedModelId,
+        ...model,
+      });
+      const modelBytes =
+        utf8ByteLength(serializedModel) + (serializedModels.length > 0 ? 1 : 0);
+      if (aggregatedBytes + modelBytes > MAX_AGGREGATED_MODELS_BYTES) {
+        truncated = true;
+        break providerResults;
+      }
+      serializedModels.push(serializedModel);
+      modelIds.push(qualifiedModelId);
+      aggregatedBytes += modelBytes;
+    }
+  }
+
+  if (truncated) {
+    RequestLogger.warn(
+      "provider.models.aggregate_truncated",
+      "Aggregated model list was truncated",
+      {
+        maximum_bytes: MAX_AGGREGATED_MODELS_BYTES,
+        maximum_models_per_provider: MAX_MODELS_PER_PROVIDER,
+      },
+    );
+  }
+
+  const responseBody = `{"data":[${serializedModels.join(",")}],"object":"list"}`;
+  const responseHeaders: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...PRIVATE_NO_STORE_HEADERS,
+    ...(truncated ? { "X-Proxy-Models-Truncated": "true" } : {}),
+  };
+
+  if (modelsCache === undefined) {
+    return {
+      response: new Response(responseBody, { headers: responseHeaders }),
+      models: { ids: modelIds, serialized: serializedModels },
+    };
+  }
+
+  // Degraded aggregates (a failed provider or a truncated list) are served but
+  // never cached, so a transient upstream outage cannot pin an incomplete
+  // model list for the full TTL.
+  if (!providerFailed && !truncated) {
+    const cachePutPromise = putModelsCache(
+      modelsCache.cache,
+      modelsCache.key,
+      new Response(responseBody, {
+        headers: {
+          ...responseHeaders,
+          "Cache-Control": `public, max-age=${cacheTtlSeconds}`,
+        },
+      }),
+    );
+    context.ctx.waitUntil(cachePutPromise);
+  }
+
+  return {
+    response: new Response(responseBody, {
+      headers: { ...responseHeaders, "X-Proxy-Models-Cache": "MISS" },
+    }),
+    models: { ids: modelIds, serialized: serializedModels },
+  };
+}
+
+export async function handleModelRetrieveRequest(
+  context: RoutedRequestContext,
+  modelId: string,
+  aiGateway: CloudflareAIGateway | undefined = undefined,
+): Promise<Response> {
+  const { response: modelsResponse, models } = await aggregateModels(
+    context,
+    aiGateway,
+  );
+  if (!modelsResponse.ok) return modelsResponse;
+
+  const headers = new Headers(modelsResponse.headers);
+  headers.delete("X-Proxy-Models-Truncated");
+
+  // The aggregate was just assembled from these fragments, so the matching one
+  // is returned directly instead of parsing back the list that was serialized a
+  // moment earlier. A cache hit carries no fragments and reads the stored body.
+  if (models) {
+    const modelIndex = models.ids.indexOf(modelId);
+    if (modelIndex === -1) return modelNotFound(modelId);
+    headers.set("Content-Type", "application/json");
+    return new Response(models.serialized[modelIndex], { headers });
+  }
+
+  const cachedModels =
+    (await modelsResponse.json()) as OpenAIModelsListResponseBody;
+  const model = cachedModels.data.find((candidate) => candidate.id === modelId);
+  if (!model) return modelNotFound(modelId);
+  return Response.json(model, { headers });
+}
+
+function modelNotFound(modelId: string): Response {
+  return openAIErrorResponse(`Model '${modelId}' not found.`, 404, {
+    code: "model_not_found",
+    param: "model",
+  });
 }

@@ -1,30 +1,17 @@
-import { ProviderBase, ProviderNotSupportedError } from "../provider";
+import { Secrets } from "../../utils/secrets";
+import { defineProvider } from "../provider";
 
-export class Replicate extends ProviderBase {
-  get chatCompletionPath(): string {
-    return "";
-  }
-  get modelsPath(): string {
-    return "";
-  }
+export const Replicate = defineProvider({
+  endpoints: {},
 
-  readonly apiKeyName: keyof Env = "REPLICATE_API_KEY";
-  readonly baseUrlProp: string = "https://api.replicate.com/v1";
-
-  async buildChatCompletionsRequest({
-    body, // eslint-disable-line @typescript-eslint/no-unused-vars
-    headers, // eslint-disable-line @typescript-eslint/no-unused-vars
-  }: {
-    body: string;
-    headers: HeadersInit;
-  }): Promise<[string, RequestInit]> {
-    throw new ProviderNotSupportedError(
-      "Replicate does not support chat completions",
+  apiKeyName: "REPLICATE_API_KEY",
+  baseUrl: "https://api.replicate.com/v1",
+  async headers(apiKeyIndex): Promise<HeadersInit> {
+    const apiKey = Secrets.get(
+      "REPLICATE_API_KEY",
+      apiKeyIndex,
+      this.credentialProfile,
     );
-  }
-  async buildModelsRequest(): Promise<[string, RequestInit]> {
-    throw new ProviderNotSupportedError(
-      "Replicate does not support models list via this proxy.",
-    );
-  }
-}
+    return apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
+  },
+});

@@ -1,6 +1,5 @@
 import { randomInt } from "node:crypto";
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { Config } from "~/src/utils/config";
 import { Environments } from "~/src/utils/environments";
 import { Secrets } from "~/src/utils/secrets";
 
@@ -8,10 +7,9 @@ vi.mock("node:crypto", () => ({
   randomInt: vi.fn(),
 }));
 vi.mock("~/src/utils/environments");
-vi.mock("~/src/utils/config");
 
 describe("Secrets", () => {
-  let env: { [key: string]: string | string[] };
+  let env: { [key: string]: unknown };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -21,10 +19,8 @@ describe("Secrets", () => {
     };
 
     vi.mocked(Environments.get).mockImplementation((keyName) => {
-      return env[keyName];
+      return env[keyName] as string | object | unknown[] | undefined;
     });
-
-    vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(false);
   });
 
   describe("getAll", () => {
@@ -39,6 +35,16 @@ describe("Secrets", () => {
       expect(Secrets.getAll("ANTHROPIC_API_KEY")).toEqual([]);
     });
 
+    it("filters blank strings without changing configured credential values", () => {
+      env.ANTHROPIC_API_KEY = ["", "   ", "\t", " key-with-padding "];
+      env.OPENAI_API_KEY = " \n ";
+
+      expect(Secrets.getAll("ANTHROPIC_API_KEY")).toEqual([
+        " key-with-padding ",
+      ]);
+      expect(Secrets.getAll("OPENAI_API_KEY")).toEqual([]);
+    });
+
     it("shuffles only multi-key arrays when requested", () => {
       vi.mocked(randomInt).mockReturnValue(0 as never);
       const result = Secrets.getAll("GEMINI_API_KEY", true);
@@ -47,6 +53,31 @@ describe("Secrets", () => {
         expect.arrayContaining(["gemini-key1", "gemini-key2", "gemini-key3"]),
       );
       expect(Secrets.getAll("OPENAI_API_KEY", true)).toEqual(["openai-key"]);
+    });
+
+    it("selects named profiles while treating legacy values as default", () => {
+      env.OLLAMA_API_KEY = {
+        default: ["default-one", "", "default-two"],
+        paid: ["paid-one", "paid-two"],
+        empty: ["  "],
+        "bad/profile": ["ignored"],
+      };
+
+      expect(Secrets.getAll("OLLAMA_API_KEY")).toEqual([
+        "default-one",
+        "default-two",
+      ]);
+      expect(Secrets.getAll("OLLAMA_API_KEY", false, "paid")).toEqual([
+        "paid-one",
+        "paid-two",
+      ]);
+      expect(Secrets.getAll("OPENAI_API_KEY", false, "paid")).toEqual([]);
+      expect(Secrets.getProfiles("OLLAMA_API_KEY")).toEqual([
+        "default",
+        "paid",
+      ]);
+      expect(Secrets.getProfiles("OPENAI_API_KEY")).toEqual(["default"]);
+      expect(Secrets.getProfiles("ANTHROPIC_API_KEY")).toEqual([]);
     });
   });
 
@@ -68,6 +99,11 @@ describe("Secrets", () => {
     it("returns an empty string when no keys exist", () => {
       expect(Secrets.get("ANTHROPIC_API_KEY")).toBe("");
     });
+
+    it("gets a key from a named profile", () => {
+      env.OLLAMA_API_KEY = { paid: ["paid-one", "paid-two"] };
+      expect(Secrets.get("OLLAMA_API_KEY", 1, "paid")).toBe("paid-two");
+    });
   });
 
   describe("getNext", () => {
@@ -77,47 +113,71 @@ describe("Secrets", () => {
       expect(randomInt).not.toHaveBeenCalled();
     });
 
-    it("uses random selection when the Durable Object binding is absent", async () => {
-      vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(true);
-      vi.mocked(Environments.getEnv).mockReturnValue({} as Env);
+    it("rotates sequentially from a random phase", async () => {
       vi.mocked(randomInt).mockReturnValue(2 as never);
 
-      expect(await Secrets.getNext("GEMINI_API_KEY")).toBe(2);
-      expect(randomInt).toHaveBeenCalledWith(3);
-    });
-    it("should return a random apiKeyIndex if global round-robin is disabled", async () => {
-      vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(false);
-      vi.mocked(randomInt).mockReturnValue(1 as any);
-      const apiKeyIndex = await Secrets.getNext("GEMINI_API_KEY");
-      expect(apiKeyIndex).toBe(1);
-      expect(randomInt).toHaveBeenCalledWith(3);
+      // The random phase is drawn once per identifier; later calls advance
+      // the isolate-local counter without touching the random source again.
+      expect(await Secrets.getNextIndex("striped-rotation", 3)).toBe(2);
+      expect(randomInt).toHaveBeenCalledTimes(1);
+      expect(await Secrets.getNextIndex("striped-rotation", 3)).toBe(0);
+      expect(await Secrets.getNextIndex("striped-rotation", 3)).toBe(1);
+      expect(await Secrets.getNextIndex("striped-rotation", 3)).toBe(2);
+      expect(randomInt).toHaveBeenCalledTimes(1);
     });
 
-    it("should use global counter if global round-robin is enabled", async () => {
-      vi.mocked(Config.isGlobalRoundRobinEnabled).mockReturnValue(true);
+    it("keeps independent rotation counters per identifier", async () => {
+      vi.mocked(randomInt).mockReturnValue(0 as never);
 
-      const mockGetNextIndex = vi.fn().mockResolvedValue(1); // Return apiKeyIndex 1
-      const mockEnv = {
-        KEY_ROTATION_MANAGER: {
-          idFromName: vi.fn().mockReturnValue("mock-id"),
-          get: vi.fn().mockReturnValue({
-            getNextIndex: mockGetNextIndex,
-          }),
-        },
+      expect(await Secrets.getNextIndex("striped-first", 2)).toBe(0);
+      expect(await Secrets.getNextIndex("striped-second", 2)).toBe(0);
+      expect(await Secrets.getNextIndex("striped-first", 2)).toBe(1);
+      expect(await Secrets.getNextIndex("striped-second", 2)).toBe(1);
+    });
+
+    it("resets a stored counter that exceeds a shrunken key array", async () => {
+      vi.mocked(randomInt).mockReturnValue(4 as never);
+
+      expect(await Secrets.getNextIndex("striped-bounded", 5)).toBe(4);
+      // The stored counter is now 0; advance twice so it holds 2, then
+      // shrink the key array so the stored value is out of range and must
+      // reset to index zero.
+      expect(await Secrets.getNextIndex("striped-bounded", 5)).toBe(0);
+      expect(await Secrets.getNextIndex("striped-bounded", 5)).toBe(1);
+      expect(await Secrets.getNextIndex("striped-bounded", 2)).toBe(0);
+    });
+
+    it("advances rotation through getNext for configured key names", async () => {
+      vi.mocked(randomInt).mockReturnValue(0 as never);
+
+      const firstIndex = await Secrets.getNext("GEMINI_API_KEY");
+      const secondIndex = await Secrets.getNext("GEMINI_API_KEY");
+      expect(secondIndex).toBe((firstIndex + 1) % 3);
+    });
+
+    it("maintains independent rotation for named profiles", async () => {
+      env.OLLAMA_API_KEY = {
+        default: ["default-one", "default-two"],
+        paid: ["paid-one", "paid-two"],
       };
+      vi.mocked(randomInt).mockReturnValue(0 as never);
 
-      vi.mocked(Environments.getEnv).mockReturnValue(mockEnv as any);
-
-      const apiKeyIndex = await Secrets.getNext("GEMINI_API_KEY");
-      expect(apiKeyIndex).toBe(1);
-      expect(mockGetNextIndex).toHaveBeenCalledWith("GEMINI_API_KEY", 3);
+      expect(await Secrets.getNext("OLLAMA_API_KEY", "paid")).toBe(0);
+      expect(await Secrets.getNext("OLLAMA_API_KEY", "paid")).toBe(1);
+      expect(await Secrets.getNext("OLLAMA_API_KEY")).toBe(0);
     });
   });
 
   describe("resolveApiKeyIndex", () => {
+    it("returns zero for an empty or single-key credential set", () => {
+      expect(Secrets.resolveApiKeyIndex(99, 0)).toBe(0);
+      expect(Secrets.resolveApiKeyIndex({ start: 99 }, 1)).toBe(0);
+    });
+
     it("should return the index itself for numeric selection", () => {
       expect(Secrets.resolveApiKeyIndex(1, 3)).toBe(1);
       expect(Secrets.resolveApiKeyIndex(4, 3)).toBe(1); // 4 % 3 = 1
+      expect(Secrets.resolveApiKeyIndex(-1, 3)).toBe(0);
     });
 
     it("should return a random index within range for range selection", () => {

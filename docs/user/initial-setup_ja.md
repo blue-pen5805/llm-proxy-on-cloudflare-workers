@@ -1,0 +1,100 @@
+# 初期セットアップ
+
+最小構成のプロキシをデプロイし、動作確認するまでの手順です。全設定項目は英語版の
+[Configuration reference](configuration.md) を参照してください。
+
+## 前提条件
+
+- Node.js 22.18 以降と npm
+- Workers と Secret を作成できる Cloudflare アカウント
+- 対応プロバイダーのキーを1つ以上
+
+## 1. インストール
+
+```bash
+git clone https://github.com/blue-pen5805/llm-proxy-on-cloudflare-workers.git
+cd llm-proxy-on-cloudflare-workers
+npm ci
+```
+
+## 2. Cloudflare CLI の認証
+
+```bash
+npm run cf:login
+```
+
+`cf` の認証情報は独立しているため、Wrangler で認証済みでも実行してください。
+
+Worker を所有する Cloudflare アカウントでブラウザー認証を完了します。Worker の既定名は
+`llm-proxy` です。変更する場合は初回デプロイ前に `cloudflare.config.ts` の `worker.name` を
+編集してください。
+
+## 3. ローカル設定の作成
+
+```bash
+npm run secrets
+```
+
+ターミナル UI は `config.jsonc` を安全に作成または編集し、認証情報を伏せます。
+cf から Cloudflare アカウントを取得することもできます。UI の全動作と名前付き
+環境の規則は英語版の [Configuration files](configuration.md#configuration-files) を
+参照してください。
+
+名前付き環境は `npm run secrets -- --env <環境名>` で編集できます。または
+`config.example.jsonc` を `config.jsonc` にコピーして編集します。十分に長く一意な
+`PROXY_API_KEY` と、1つ以上のプロバイダーキーを設定してください。
+
+```jsonc
+{
+  "$schema": "schemas/config-schema.json",
+  "PROXY_API_KEY": "replace-with-a-long-random-value",
+  "OPENAI_API_KEY": "replace-with-your-provider-key",
+}
+```
+
+実値を含む設定ファイルは非公開で保管してください。
+
+## 4. デプロイする設定の確認
+
+```bash
+npm run secrets:deploy -- --dry-run
+```
+
+ドライランは設定名だけを表示し、値、先頭文字列、長さをすべて伏せます。
+
+## 5. コードと設定のデプロイ
+
+```bash
+npm run deploy
+npm run secrets:deploy
+```
+
+前者は Worker のコードとバインディング、後者は `config.jsonc` の空でない値を Worker
+Secret として登録します。設定を変更したら後者を再実行してください。
+
+## 6. 動作確認
+
+cf が表示した URL に置き換えて実行します。
+
+```bash
+curl https://your-worker.example/ping \
+  --header "Authorization: Bearer $PROXY_API_KEY"
+
+curl https://your-worker.example/status \
+  --header "Authorization: Bearer $PROXY_API_KEY"
+
+curl https://your-worker.example/v1/models \
+  --header "Authorization: Bearer $PROXY_API_KEY"
+```
+
+`/ping` は `Pong` を返します。`/status` には認証情報スロット数と設定メタデータが
+含まれるため、出力は非公開で確認してください。`/v1/models` はベストエフォートであり、
+タイムアウトや一覧取得非対応のプロバイダーは省略されます。
+
+モデル一覧のキャッシュを使う場合は、
+[Cache API の利用条件](api/openai-compatible.md#models) を確認してください。
+
+次は英語版の [HTTP API and routing](api/overview.md) を参照してください。名前付き環境、
+キーローテーション、AI Gateway、カスタムエンドポイントは
+[Configuration reference](configuration.md) と
+[Operations and troubleshooting](operations.md) に記載しています。

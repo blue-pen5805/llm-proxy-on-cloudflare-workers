@@ -1,31 +1,25 @@
-import { OpenAIModelsListResponseBody } from "../openai/types";
-import { OpenAICompatibleProvider } from "../provider";
+import { chatCompletionsEndpoint } from "../inference";
+import { convertModelsToOpenAIFormatWithMetadata } from "../models";
+import { defineProvider } from "../provider";
 import { MistralModelsListResponseBody } from "./types";
 
-export class Mistral extends OpenAICompatibleProvider {
-  get chatCompletionPath(): string {
-    return "/v1/chat/completions";
-  }
-  get modelsPath(): string {
-    return "/v1/models";
-  }
+export const Mistral = defineProvider({
+  endpoints: {
+    chat_completions: chatCompletionsEndpoint("/v1/chat/completions"),
 
-  readonly apiKeyName: keyof Env = "MISTRAL_API_KEY";
-  readonly baseUrlProp: string = "https://api.mistral.ai";
+    models: {
+      path: "/v1/models",
+      convertResponse(
+        data,
+      ): ReturnType<typeof convertModelsToOpenAIFormatWithMetadata> {
+        return convertModelsToOpenAIFormatWithMetadata(
+          data as MistralModelsListResponseBody,
+        );
+      },
+    },
+  },
 
-  // Convert model list to OpenAI format
-  modelsToOpenAIFormat(
-    data: MistralModelsListResponseBody,
-  ): OpenAIModelsListResponseBody {
-    return {
-      object: "list",
-      data: data.data.map(({ id, object, created, owned_by, ...model }) => ({
-        id,
-        object,
-        created,
-        owned_by,
-        _: model,
-      })),
-    };
-  }
-}
+  openAICompatible: true,
+  apiKeyName: "MISTRAL_API_KEY",
+  baseUrl: "https://api.mistral.ai",
+});

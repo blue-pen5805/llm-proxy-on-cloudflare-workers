@@ -1,29 +1,27 @@
 import { CloudflareAIGateway } from "../ai_gateway";
-import { getAllProviders } from "../providers";
-import { CustomOpenAI } from "../providers/custom-openai";
+import { gatewayProviderPath } from "../ai_gateway/custom_provider";
+import { getAllProviderInstances } from "../providers";
+import type { ProviderRegistry } from "../providers";
+import { buildModelsRequest, type ModelsEndpoint } from "../providers/models";
+import { parseProviderSelector } from "../providers/profile";
 import { ProviderBase, ProviderNotSupportedError } from "../providers/provider";
+import type { RoutedRequestContext } from "../request_context";
+import { recordApiKeySelection } from "../utils/api_key_selection";
 import { Config } from "../utils/config";
 import { Environments } from "../utils/environments";
-import { fetch2 } from "../utils/helpers";
-import { Secrets } from "../utils/secrets";
+import { fetchWithLogging, withTimeout } from "../utils/helpers";
+import { RequestLogger } from "../utils/logger";
+import { resolveAiGatewayModelsProvider } from "./model_gateway";
+import { NO_STORE_HEADERS } from "./response";
+
+const CONNECTIVITY_CHECK_TIMEOUT_MS = 5000;
+const STATUS_CACHE_NAME = "llm-proxy-status";
 
 type ConnectivityStatus = "valid" | "invalid" | "unknown";
 
 interface ProviderStatus {
   available: boolean;
-  keys: { key: string; status: ConnectivityStatus }[];
-}
-
-/**
- * Masks an API key, showing only the last 3 characters.
- * @param key The API key to mask.
- * @returns The masked API key.
- */
-function maskApiKey(key: string): string {
-  if (key.length <= 3) {
-    return "***";
-  }
-  return "*".repeat(Math.min(10, key.length - 3)) + key.slice(-3);
+  keys: { slot: number; status: ConnectivityStatus }[];
 }
 
 function classifyConnectivity(response: Response): ConnectivityStatus {
@@ -32,11 +30,11 @@ function classifyConnectivity(response: Response): ConnectivityStatus {
   return "unknown";
 }
 
-function getProviderKeys(instance: ProviderBase): string[] {
-  if (instance instanceof CustomOpenAI) {
-    return instance.getApiKeys();
-  }
-  return instance.apiKeyName ? Secrets.getAll(instance.apiKeyName) : [];
+function isSubrequestLimitError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.toLowerCase().includes("too many subrequests")
+  );
 }
 
 /**
@@ -47,99 +45,263 @@ function getProviderKeys(instance: ProviderBase): string[] {
  * @param aiGateway The AI Gateway instance.
  * @returns Connectivity status.
  */
-async function checkConnectivity(
-  instance: ProviderBase,
-  providerName: string,
+async function checkProviderConnectivity(
+  providerInstance: ProviderBase,
+  providerSelector: string,
   apiKeyIndex: number,
+  keyCount: number,
+  models: ModelsEndpoint,
   aiGateway?: CloudflareAIGateway,
 ): Promise<ConnectivityStatus> {
-  if (!instance.modelsPath) {
-    return "unknown";
-  }
+  const parsedSelector = parseProviderSelector(providerSelector);
+  /* istanbul ignore next -- registry entries always use valid selectors */
+  if (!parsedSelector) return "unknown";
+  const { providerName, profile } = parsedSelector;
+  const abortController = new AbortController();
+  const aiGatewayProvider = resolveAiGatewayModelsProvider(
+    providerName,
+    providerInstance,
+    models,
+    aiGateway,
+  );
+  const keyLogFields = recordApiKeySelection({
+    provider: providerName,
+    credentialProfile: profile,
+    operation: "connectivity_check",
+    keyIndex: apiKeyIndex,
+    keyCount,
+    selectionPolicy: "diagnostic_scan",
+    viaAiGateway: aiGatewayProvider !== undefined,
+  });
 
   try {
-    if (aiGateway && CloudflareAIGateway.isSupportedProvider(providerName)) {
-      const [requestInfo, requestInit] = aiGateway.buildProviderEndpointRequest(
-        {
-          provider: providerName,
-          method: "GET",
-          path: instance.modelsPath,
-          headers: await instance.headers(apiKeyIndex),
-        },
-      );
+    return await withTimeout(
+      (async () => {
+        const [path, init] = await buildModelsRequest(
+          providerInstance,
+          models,
+          apiKeyIndex,
+        );
+        abortController.signal.throwIfAborted();
+        let responsePromise: Promise<Response>;
 
-      const response = await fetch2(requestInfo, requestInit);
+        if (aiGateway && aiGatewayProvider) {
+          const [requestInfo, requestInit] =
+            aiGateway.buildProviderEndpointRequest({
+              provider: aiGatewayProvider,
+              method: "GET",
+              path: gatewayProviderPath(
+                providerName,
+                providerInstance,
+                path,
+                aiGatewayProvider,
+              ),
+              headers: init.headers!,
+            });
 
-      return classifyConnectivity(response);
-    }
+          responsePromise = RequestLogger.withFields(keyLogFields, () =>
+            fetchWithLogging(requestInfo, {
+              ...requestInit,
+              signal: abortController.signal,
+            }),
+          );
+        } else {
+          responsePromise = RequestLogger.withFields(keyLogFields, () =>
+            providerInstance.send(
+              providerInstance.baseUrl() +
+                providerInstance.pathnamePrefix() +
+                path,
+              { ...init, signal: abortController.signal },
+            ),
+          );
+        }
 
-    const [requestInfo, requestInit] =
-      await instance.buildModelsRequest(apiKeyIndex);
+        const connectivityResponse = await responsePromise;
 
-    const response = await instance.fetch(
-      requestInfo,
-      requestInit,
-      apiKeyIndex,
+        const connectivityStatus = classifyConnectivity(connectivityResponse);
+        if (connectivityResponse.body) {
+          await connectivityResponse.body.cancel().catch(() => undefined);
+        }
+        return connectivityStatus;
+      })(),
+      abortController,
+      CONNECTIVITY_CHECK_TIMEOUT_MS,
+      providerName,
     );
-
-    return classifyConnectivity(response);
   } catch (error) {
-    if (error instanceof ProviderNotSupportedError) {
+    if (
+      error instanceof ProviderNotSupportedError ||
+      (error instanceof Error && error.name === "TimeoutError") ||
+      isSubrequestLimitError(error)
+    ) {
       return "unknown";
     }
-    console.error(`Error checking connectivity for ${providerName}:`, error);
+    RequestLogger.error(
+      "provider.connectivity.failed",
+      "Provider connectivity check failed",
+      error,
+      {
+        provider: providerName,
+      },
+    );
     return "invalid";
   }
 }
 
-export async function status(aiGateway?: CloudflareAIGateway) {
-  const config = {
-    DEV: Config.isDevelopment(),
-    DEFAULT_MODEL: Config.defaultModel() || null,
-    AI_GATEWAY: Config.aiGateway(),
-    GLOBAL_ROUND_ROBIN: Config.isGlobalRoundRobinEnabled(),
-  };
-
-  const providersStatus: Record<string, ProviderStatus> = {};
-  const env = Environments.all();
-  const allProviders = getAllProviders(env);
-
-  for (const [providerName, instance] of Object.entries(allProviders)) {
-    const allKeys = getProviderKeys(instance);
-
-    if (allKeys.length === 0) {
-      providersStatus[providerName] = {
-        available: instance.available(),
-        keys: [],
-      };
-      continue;
+export async function handleStatusRequest(
+  aiGateway?: CloudflareAIGateway,
+  providerRegistry?: ProviderRegistry,
+  context?: RoutedRequestContext,
+) {
+  const cacheTtlSeconds = Config.statusCacheTtlSeconds();
+  const requestCacheControl =
+    context?.request.headers.get("Cache-Control")?.toLowerCase() ?? "";
+  const cacheEnabled =
+    context !== undefined &&
+    cacheTtlSeconds > 0 &&
+    !requestCacheControl.includes("no-store");
+  let statusCache: { cache: Cache; key: Request } | undefined;
+  if (cacheEnabled) {
+    try {
+      const cache = await caches.open(STATUS_CACHE_NAME);
+      const gatewayScope = aiGateway
+        ? `${aiGateway.accountId}/${aiGateway.gatewayId}/${aiGateway.alwaysUse ? "always" : "auto"}`
+        : "direct";
+      const key = new Request(
+        `https://status-cache.llm-proxy.internal/${gatewayScope}`,
+      );
+      if (!requestCacheControl.includes("no-cache")) {
+        const cached = await cache.match(key);
+        if (cached) {
+          const headers = new Headers(cached.headers);
+          headers.set("Cache-Control", NO_STORE_HEADERS["Cache-Control"]);
+          headers.set("X-Proxy-Status-Cache", "HIT");
+          return new Response(cached.body, { headers });
+        }
+      }
+      statusCache = { cache, key };
+    } catch {
+      RequestLogger.warn(
+        "status.cache.unavailable",
+        "Status cache operation was unavailable; continuing without it",
+      );
     }
-    const keyStatuses = await Promise.all(
-      allKeys.map(async (_key, apiKeyIndex) => ({
-        key: maskApiKey(_key),
-        status: await checkConnectivity(
-          instance,
-          providerName,
-          apiKeyIndex,
-          aiGateway,
-        ),
-      })),
-    );
-
-    providersStatus[providerName] = {
-      available: instance.available(),
-      keys: keyStatuses,
-    };
   }
 
+  const aiGatewayConfig = Config.aiGateway();
+  const configurationStatus = {
+    DEV: Config.isDevelopment(),
+    DEFAULT_MODEL: Config.defaultModel() || null,
+    CHAT_RESPONSE_METADATA_ENABLED: Config.chatResponseMetadataEnabled(),
+    AI_GATEWAY: {
+      ...aiGatewayConfig,
+      token: aiGatewayConfig.token ? "***" : undefined,
+      restApiToken: aiGatewayConfig.restApiToken ? "***" : undefined,
+    },
+    API_KEY_COOLDOWN_SECONDS: Config.apiKeyCooldownSeconds(),
+    STATUS_CACHE_TTL_SECONDS: cacheTtlSeconds,
+  };
+
+  const env = Environments.all();
+  const providerEnumeration = providerRegistry?.allSettled();
+  const providerEntries = Object.entries(
+    providerEnumeration?.providers ?? getAllProviderInstances(env),
+  );
+  // A configured endpoint may be named "__proto__"; see ProviderRegistry.
+  const providersStatus = Object.create(null) as Record<string, ProviderStatus>;
+  const connectivityTasks: (() => Promise<void>)[] = [];
+
+  for (const { providerName, error } of providerEnumeration?.failures ?? []) {
+    RequestLogger.error(
+      "provider.status.failed",
+      "Provider status could not be determined",
+      error,
+      { provider: providerName },
+    );
+    providersStatus[providerName] = { available: false, keys: [] };
+  }
+
+  for (const [providerName, providerInstance] of providerEntries) {
+    // A provider adapter that throws while reading its own configuration must
+    // not remove the other providers from the diagnostic.
+    let allApiKeys: string[];
+    let providerStatus: ProviderStatus;
+    try {
+      allApiKeys = providerInstance.getApiKeys();
+      providerStatus = {
+        available: providerInstance.available(),
+        keys: allApiKeys.map((_apiKey, apiKeyIndex) => ({
+          slot: apiKeyIndex,
+          status: "unknown",
+        })),
+      };
+    } catch (error) {
+      RequestLogger.error(
+        "provider.status.failed",
+        "Provider status could not be determined",
+        error,
+        { provider: providerName },
+      );
+      providersStatus[providerName] = { available: false, keys: [] };
+      continue;
+    }
+    providersStatus[providerName] = providerStatus;
+
+    for (let apiKeyIndex = 0; apiKeyIndex < allApiKeys.length; apiKeyIndex++) {
+      if (!providerInstance.endpoints.models) {
+        continue;
+      }
+      connectivityTasks.push(async () => {
+        providerStatus.keys[apiKeyIndex].status =
+          await checkProviderConnectivity(
+            providerInstance,
+            providerName,
+            apiKeyIndex,
+            allApiKeys.length,
+            providerInstance.endpoints.models!,
+            aiGateway,
+          );
+      });
+    }
+  }
+
+  // The number of checks follows the deployed credential count, so a large
+  // configuration can exhaust the Worker's per-request subrequest budget.
+  // Settle every check independently: an individual failure leaves that slot's
+  // status behind and never turns the whole diagnostic into an error response.
+  await Promise.allSettled(connectivityTasks.map((task) => task()));
+
   const responseBody = {
-    config,
+    config: configurationStatus,
     providers: providersStatus,
   };
 
-  return new Response(JSON.stringify(responseBody, null, 2), {
+  const responseText = JSON.stringify(responseBody);
+  if (statusCache) {
+    const put = statusCache.cache
+      .put(
+        statusCache.key,
+        new Response(responseText, {
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": `public, max-age=${cacheTtlSeconds}`,
+          },
+        }),
+      )
+      .catch(() => {
+        RequestLogger.warn(
+          "status.cache.unavailable",
+          "Status cache operation was unavailable; continuing without it",
+        );
+      });
+    context?.ctx.waitUntil(put);
+  }
+
+  return new Response(responseText, {
     headers: {
       "Content-Type": "application/json",
+      ...NO_STORE_HEADERS,
+      ...(statusCache ? { "X-Proxy-Status-Cache": "MISS" } : {}),
     },
   });
 }

@@ -1,23 +1,21 @@
 import { CloudflareAIGateway } from "../ai_gateway";
-import { fetch2 } from "../utils/helpers";
+import { stripProxyAuthorizationHeaders } from "../utils/authorization";
+import { fetchWithLogging } from "../utils/helpers";
 
-export async function compat(
+export async function handleCompatibilityRequest(
   request: Request,
-  pathname: string,
   aiGateway: CloudflareAIGateway,
 ) {
-  const headers = new Headers(request.headers);
-  headers.delete("Authorization");
-
-  const sanitizedHeaders = Object.fromEntries(headers.entries());
-
-  const [requestInfo, requestInit] = aiGateway.buildCompatRequest({
-    method: request.method,
-    path: pathname,
-    headers: sanitizedHeaders,
-    body: request.body,
-    signal: request.signal,
+  const strippedHeaders = stripProxyAuthorizationHeaders(request.headers, {
+    preserveAiGatewayHeaders: true,
   });
 
-  return fetch2(requestInfo, requestInit);
+  const [requestInfo, requestInit] =
+    aiGateway.buildCompatibilityEndpointRequest({
+      headers: strippedHeaders,
+      body: request.body,
+      signal: request.signal,
+    });
+
+  return fetchWithLogging(requestInfo, requestInit);
 }

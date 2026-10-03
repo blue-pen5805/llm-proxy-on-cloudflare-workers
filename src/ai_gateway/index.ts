@@ -1,18 +1,24 @@
-import { Secrets } from "../utils/secrets";
+import { MAX_COMPATIBILITY_FALLBACK_ATTEMPTS } from "../requests/compatibility_fallback";
+import { BadRequestError, ServiceUnavailableError } from "../utils/error";
 import {
   CloudflareAIGatewayHeaders,
   CloudflareAIGatewayOpenAICompatibleProvider,
   CloudflareAIGatewayProvider,
+  CloudflareAIGatewayRestApiPath,
   CloudflareAIGatewayUniversalEndpointData,
   CloudflareAIGatewayUniversalEndpointHeaders,
 } from "./const";
 import {
+  isSafeCloudflareAccountId,
+  isSafeCloudflareAIGatewayId,
   isCloudflareAIGatewayOpenAICompatibleProvider,
   isCloudflareAIGatewayProvider,
 } from "./utils";
 
 export class CloudflareAIGateway {
   static readonly origin = "https://gateway.ai.cloudflare.com/v1";
+  static readonly restApiOrigin =
+    "https://api.cloudflare.com/client/v4/accounts";
 
   static isSupportedProvider<T extends boolean = false>(
     providerName: string,
@@ -31,10 +37,15 @@ export class CloudflareAIGateway {
     public accountId: string,
     public gatewayId: string,
     public apiKey: string | undefined = undefined,
+    public restApiToken: string | undefined = undefined,
+    public alwaysUse: boolean = false,
   ) {
-    if (!this.accountId || !this.gatewayId) {
+    if (
+      !isSafeCloudflareAccountId(this.accountId) ||
+      !isSafeCloudflareAIGatewayId(this.gatewayId)
+    ) {
       throw new Error(
-        "Cloudflare AI Gateway configuration is incomplete. accountId and gatewayId are required.",
+        "Cloudflare AI Gateway accountId or gatewayId is invalid.",
       );
     }
   }
@@ -44,8 +55,8 @@ export class CloudflareAIGateway {
    * If a provider is specified, it appends the provider to the URL.
    */
   baseUrl(provider: string | undefined = undefined): string {
-    const url = `${CloudflareAIGateway.origin}/${this.accountId}/${this.gatewayId}`;
-    return provider ? `${url}/${provider}` : url;
+    const gatewayBaseUrl = `${CloudflareAIGateway.origin}/${encodeURIComponent(this.accountId)}/${encodeURIComponent(this.gatewayId)}`;
+    return provider ? `${gatewayBaseUrl}/${provider}` : gatewayBaseUrl;
   }
 
   /**
@@ -53,19 +64,17 @@ export class CloudflareAIGateway {
    * Includes the API key and any additional headers provided.
    */
   buildHeaders(additionalHeaders: HeadersInit = {}): HeadersInit {
-    return {
-      "Content-Type": "application/json",
-      ...(this.apiKey
-        ? { "cf-aig-authorization": `Bearer ${this.apiKey}` }
-        : {}),
-      ...additionalHeaders,
-    };
+    const headers = new Headers(additionalHeaders);
+    if (this.apiKey) {
+      headers.set("cf-aig-authorization", `Bearer ${this.apiKey}`);
+    }
+    return headers;
   }
 
   /**
    * Build a request for the Universal Endpoint of AI Gateway.
-   * Supports fallbacks, request retries, and advanced configurations
-   * https://developers.cloudflare.com/ai-gateway/universal/
+   * Supports fallbacks, request retries, and advanced configurations.
+   * https://developers.cloudflare.com/ai-gateway/usage/universal/
    */
   buildUniversalEndpointRequest({
     data,
@@ -74,11 +83,13 @@ export class CloudflareAIGateway {
     data: CloudflareAIGatewayUniversalEndpointData;
     headers?: CloudflareAIGatewayUniversalEndpointHeaders;
   }): [RequestInfo, RequestInit] {
+    const jsonHeaders = new Headers(headers);
+    jsonHeaders.set("content-type", "application/json");
     return [
       this.baseUrl(),
       {
         method: "POST",
-        headers: this.buildHeaders(headers),
+        headers: this.buildHeaders(jsonHeaders),
         body: JSON.stringify(data),
       },
     ];
@@ -96,16 +107,16 @@ export class CloudflareAIGateway {
     body = null,
     headers = {},
   }: {
-    provider: CloudflareAIGatewayProvider;
+    provider: string;
     method?: string;
     path: string;
     body?: BodyInit | null;
     headers?: CloudflareAIGatewayHeaders | HeadersInit;
   }): [RequestInfo, RequestInit] {
-    const url = `${this.baseUrl(provider)}/${path.replace(/^\/+/, "")}`;
+    const providerEndpointUrl = `${this.baseUrl(provider)}/${path.replace(/^\/+/, "")}`;
 
     return [
-      url,
+      providerEndpointUrl,
       {
         method,
         headers: this.buildHeaders(headers),
@@ -114,99 +125,178 @@ export class CloudflareAIGateway {
     ];
   }
 
-  buildCompatRequest({
-    path,
-    method,
+  /** Workers AI uses its account-scoped provider API with an explicit Gateway ID. */
+  buildWorkersAiInferenceRequest({
+    path = "/v1/chat/completions",
+    body,
+    headers,
+  }: {
+    path?: string;
+    body?: BodyInit | null;
+    headers: HeadersInit;
+  }): [RequestInfo, RequestInit] {
+    const providerHeaders = new Headers(headers);
+    if (!providerHeaders.has("authorization"))
+      throw new ServiceUnavailableError("workers-ai is not configured.");
+    providerHeaders.delete("cf-aig-authorization");
+    providerHeaders.set("cf-aig-gateway-id", this.gatewayId);
+    return [
+      `${CloudflareAIGateway.restApiOrigin}/${encodeURIComponent(this.accountId)}/ai${path}`,
+      { method: "POST", headers: providerHeaders, body },
+    ];
+  }
+
+  /** Build a request to AI Gateway's OpenAI-compatible chat endpoint. */
+  buildCompatibilityEndpointRequest({
     headers = {},
     body,
     signal,
   }: {
-    path: string;
-    method: string;
     headers?: HeadersInit;
     body?: BodyInit | null;
     signal?: AbortSignal | null;
   }): [RequestInfo, RequestInit] {
-    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+    const gatewayHeaders = new Headers(this.buildHeaders(headers));
 
-    const gatewayHeaders = new Headers(this.buildHeaders());
-    const additionalHeaders = new Headers(headers);
-    additionalHeaders.forEach((value, key) => {
-      gatewayHeaders.set(key, value);
-    });
-
-    const upperMethod = method.toUpperCase();
     const requestInit: RequestInit = {
-      method,
+      method: "POST",
       headers: gatewayHeaders,
-      ...(body !== undefined &&
-      body !== null &&
-      upperMethod !== "GET" &&
-      upperMethod !== "HEAD"
-        ? { body }
-        : {}),
+      ...(body !== undefined && body !== null ? { body } : {}),
     };
 
     if (signal) {
       requestInit.signal = signal;
     }
 
-    return [`${this.baseUrl()}${normalizedPath}`, requestInit];
+    return [`${this.baseUrl()}/compat/chat/completions`, requestInit];
+  }
+
+  /** Build a request to one of AI Gateway's account-level REST API routes. */
+  buildRestApiRequest({
+    path,
+    headers = {},
+    body,
+    signal,
+  }: {
+    path: CloudflareAIGatewayRestApiPath;
+    headers?: HeadersInit;
+    body?: BodyInit | null;
+    signal?: AbortSignal | null;
+  }): [RequestInfo, RequestInit] {
+    if (!this.restApiToken) {
+      throw new BadRequestError(
+        "AI Gateway REST API requires CLOUDFLARE_API_TOKEN.",
+      );
+    }
+
+    const restHeaders = new Headers(headers);
+    if (!restHeaders.has("content-type")) {
+      restHeaders.set("content-type", "application/json");
+    }
+    restHeaders.set("authorization", `Bearer ${this.restApiToken}`);
+    restHeaders.set("cf-aig-gateway-id", this.gatewayId);
+
+    const requestInit: RequestInit = {
+      method: "POST",
+      headers: restHeaders,
+      ...(body !== undefined && body !== null ? { body } : {}),
+    };
+    if (signal) {
+      requestInit.signal = signal;
+    }
+
+    return [
+      `${CloudflareAIGateway.restApiOrigin}/${encodeURIComponent(this.accountId)}${path}`,
+      requestInit,
+    ];
   }
 
   /**
    * Build a request for OpenAI-compatible chat completions.
    * https://developers.cloudflare.com/ai-gateway/chat-completion/
    */
-  buildChatCompletionsRequest({
+  buildChatCompletionsRequests({
     provider,
     body,
+    parsedBody,
     headers,
-    apiKeyName,
+    headersByCredential,
+    apiKeys = [],
   }: {
     provider: CloudflareAIGatewayOpenAICompatibleProvider;
     body: string;
+    parsedBody?: { model: string; [key: string]: unknown };
     headers: CloudflareAIGatewayHeaders | HeadersInit;
-    apiKeyName: keyof Env;
-  }): [RequestInfo, RequestInit] {
-    const parsedBody = JSON.parse(body) as {
-      model: string;
-      [key: string]: unknown;
-    };
+    headersByCredential?: readonly HeadersInit[];
+    apiKeys?: readonly string[];
+  }): [RequestInfo, RequestInit][] {
+    const chatRequestBody =
+      parsedBody ??
+      (JSON.parse(body) as {
+        model: string;
+        [key: string]: unknown;
+      });
 
-    const apiKeys = Secrets.getAll(apiKeyName, true);
+    // A missing provider key is valid when AI Gateway BYOK is configured. In
+    // that case Gateway injects its stored credential for the upstream call.
+    const credentials: readonly (string | undefined)[] =
+      apiKeys.length > 0
+        ? apiKeys.slice(0, MAX_COMPATIBILITY_FALLBACK_ATTEMPTS)
+        : [undefined];
+    const attemptHeaders = headersByCredential?.slice(0, credentials.length);
+    if (
+      headersByCredential !== undefined &&
+      attemptHeaders?.length !== credentials.length
+    ) {
+      throw new Error(
+        "headersByCredential must contain one header set per compatibility credential attempt.",
+      );
+    }
 
-    const data: CloudflareAIGatewayUniversalEndpointData = apiKeys.map(
-      (apiKey) => {
-        // Overwrite authorization header with the provider's API key
-        const newHeaders = new Headers(headers);
+    // Only headers differ between credential attempts, so the (potentially
+    // large) body is serialized once and shared.
+    const requestBody = JSON.stringify({
+      ...chatRequestBody,
+      model: `${provider}/${chatRequestBody.model}`,
+    });
+
+    return credentials.map((apiKey, attemptIndex) => {
+      const perAttemptHeaders = attemptHeaders?.[attemptIndex];
+      const newHeaders = new Headers(perAttemptHeaders ?? headers);
+      newHeaders.set("content-type", "application/json");
+      // Compatibility Endpoint auth is Authorization: Bearer. When a caller
+      // supplies one shared header snapshot, also replace native credential
+      // headers so later keys cannot keep the first slot's value.
+      if (apiKey) {
         newHeaders.set("authorization", `Bearer ${apiKey}`);
+        if (perAttemptHeaders === undefined) {
+          if (newHeaders.has("x-api-key")) {
+            newHeaders.set("x-api-key", apiKey);
+          }
+          if (newHeaders.has("x-goog-api-key")) {
+            newHeaders.set("x-goog-api-key", apiKey);
+          }
+          if (newHeaders.has("api-key")) {
+            newHeaders.set("api-key", apiKey);
+          }
+        }
+      } else {
+        newHeaders.delete("authorization");
+        newHeaders.delete("x-api-key");
+        newHeaders.delete("x-goog-api-key");
+        newHeaders.delete("api-key");
+      }
 
-        // Convert Headers to plain object
-        const headersObject: Record<string, string> = {};
-        newHeaders.forEach((value, key) => {
-          headersObject[key] = value;
-        });
+      // Convert Headers to plain object
+      const headersObject: Record<string, string> = {};
+      newHeaders.forEach((value, key) => {
+        headersObject[key] = value;
+      });
 
-        return {
-          provider: "compat",
-          endpoint: "chat/completions",
-          headers: headersObject,
-          query: {
-            ...parsedBody,
-            model: `${provider}/${parsedBody.model}`,
-          },
-        };
-      },
-    );
-
-    return [
-      this.baseUrl(),
-      {
-        method: "POST",
-        headers: this.buildHeaders(headers),
-        body: JSON.stringify(data),
-      },
-    ];
+      return this.buildCompatibilityEndpointRequest({
+        headers: headersObject,
+        body: requestBody,
+      });
+    });
   }
 }

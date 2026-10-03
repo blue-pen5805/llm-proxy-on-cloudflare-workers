@@ -1,78 +1,161 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { authenticate } from "~/src/utils/authorization";
+import {
+  getAuthorizedProxyKeyIndex,
+  isRequestAuthorized,
+  stripProxyAuthorizationHeaders,
+} from "~/src/utils/authorization";
 import { Config } from "~/src/utils/config";
 
 vi.mock("~/src/utils/config");
 
-describe("authenticate", () => {
+describe("isRequestAuthorized", () => {
   // Mock the Config.apiKeys method to return a valid API key
   beforeEach(() => {
     vi.mocked(Config.apiKeys).mockReturnValue(["valid-key"]);
   });
 
   // Test when no API key is set in the environment
-  it("should return true when no PROXY_API_KEY is set", () => {
+  it("should return false when no PROXY_API_KEY is set", () => {
     vi.mocked(Config.apiKeys).mockReturnValue(undefined);
     const request = new Request("https://example.com");
 
-    expect(authenticate(request)).toBe(true);
+    expect(isRequestAuthorized(request)).toBe(false);
   });
 
-  // Test when API key is set and authentication succeeds with Authorization header
-  it("should return true when valid Authorization header is provided", () => {
+  it.each([
+    ["a Bearer Authorization header", { Authorization: "Bearer valid-key" }],
+    [
+      "repeated whitespace after Bearer",
+      { Authorization: "Bearer    valid-key" },
+    ],
+    ["an x-api-key header", { "x-api-key": "valid-key" }],
+    ["an x-goog-api-key header", { "x-goog-api-key": "valid-key" }],
+  ])("accepts a configured key sent through %s", (_name, headers) => {
+    expect(
+      isRequestAuthorized(new Request("https://example.com", { headers })),
+    ).toBe(true);
+  });
+
+  it.each([
+    ["a non-Bearer scheme", { Authorization: "Basic valid-key" }],
+    ["an unconfigured key", { Authorization: "Bearer invalid-key" }],
+    ["no credential at all", {}],
+  ])("rejects a request with %s", (_name, headers) => {
+    expect(
+      isRequestAuthorized(new Request("https://example.com", { headers })),
+    ).toBe(false);
+  });
+
+  it("rejects query-string credentials", () => {
+    const request = new Request("https://example.com?key=valid-key");
+
+    expect(isRequestAuthorized(request)).toBe(false);
+  });
+
+  it("reuses cached configured-key digests across repeated requests", () => {
     const request = new Request("https://example.com", {
       headers: {
         Authorization: "Bearer valid-key",
       },
     });
 
-    expect(authenticate(request)).toBe(true);
+    expect(isRequestAuthorized(request)).toBe(true);
+    expect(isRequestAuthorized(request)).toBe(true);
   });
 
-  // Test when API key is set and authentication succeeds with x-api-key header
-  it("should return true when valid x-api-key header is provided", () => {
+  it("returns the matching configured slot without exposing key material", () => {
     const request = new Request("https://example.com", {
-      headers: {
-        "x-api-key": "valid-key",
-      },
+      headers: { Authorization: "Bearer second-key" },
+    });
+    expect(
+      getAuthorizedProxyKeyIndex(request, ["first-key", "second-key"]),
+    ).toBe(1);
+  });
+});
+
+describe("stripProxyAuthorizationHeaders", () => {
+  it.each([false, true])(
+    "removes Connection-nominated headers before Gateway preservation (%s)",
+    (preserveAiGatewayHeaders) => {
+      const original = new Headers({
+        connection:
+          "keep-alive, X-Transient, cf-aig-skip-cache, , invalid token",
+        "proxy-connection": "keep-alive",
+        "x-transient": "connection-only",
+        "cf-aig-skip-cache": "true",
+        "x-end-to-end": "preserved",
+      });
+      const sanitized = stripProxyAuthorizationHeaders(original, {
+        preserveAiGatewayHeaders,
+      });
+      expect([...sanitized.entries()]).toEqual([["x-end-to-end", "preserved"]]);
+      expect(original.get("x-transient")).toBe("connection-only");
+      expect(original.get("cf-aig-skip-cache")).toBe("true");
+    },
+  );
+
+  it("removes proxy credentials while preserving other headers", () => {
+    const original = new Headers({
+      Authorization: "Bearer proxy-secret",
+      "x-api-key": "proxy-secret",
+      "x-goog-api-key": "proxy-secret",
+      "cf-aig-authorization": "Bearer attacker-token",
+      "cf-aig-byok-alias": "privileged-key",
+      "cf-aig-max-attempts": "5",
+      "api-key": "attacker-azure-key",
+      cookie: "session=private",
+      "x-forwarded-for": "203.0.113.1",
+      "true-client-ip": "203.0.113.2",
+      "x-client-header": "preserved",
     });
 
-    expect(authenticate(request)).toBe(true);
+    const sanitized = stripProxyAuthorizationHeaders(original);
+
+    expect(sanitized.has("Authorization")).toBe(false);
+    expect(sanitized.has("x-api-key")).toBe(false);
+    expect(sanitized.has("x-goog-api-key")).toBe(false);
+    expect(sanitized.has("cf-aig-authorization")).toBe(false);
+    expect(sanitized.has("cf-aig-byok-alias")).toBe(false);
+    expect(sanitized.has("cf-aig-max-attempts")).toBe(false);
+    expect(sanitized.has("api-key")).toBe(false);
+    expect(sanitized.has("cookie")).toBe(false);
+    expect(sanitized.has("x-forwarded-for")).toBe(false);
+    expect(sanitized.has("true-client-ip")).toBe(false);
+    expect(sanitized.get("x-client-header")).toBe("preserved");
+    expect(original.get("Authorization")).toBe("Bearer proxy-secret");
   });
 
-  // Test when API key is set and authentication succeeds with x-goog-api-key header
-  it("should return true when valid x-goog-api-key header is provided", () => {
-    const request = new Request("https://example.com", {
-      headers: {
-        "x-goog-api-key": "valid-key",
+  it("preserves request-level AI Gateway headers only when requested", () => {
+    const sanitized = stripProxyAuthorizationHeaders(
+      {
+        "cf-aig-authorization": "Bearer client-gateway-token",
+        "cf-aig-byok-alias": "privileged-key",
+        "cf-aig-max-attempts": "3",
+        "cf-aig-metadata": '{"tenant":"example"}',
+        "cf-connecting-ip": "203.0.113.1",
+        "x-forwarded-for": "203.0.113.1",
       },
-    });
+      { preserveAiGatewayHeaders: true },
+    );
 
-    expect(authenticate(request)).toBe(true);
+    expect(sanitized.has("cf-aig-authorization")).toBe(false);
+    expect(sanitized.has("cf-aig-byok-alias")).toBe(false);
+    expect(sanitized.get("cf-aig-max-attempts")).toBe("3");
+    expect(sanitized.get("cf-aig-metadata")).toBe('{"tenant":"example"}');
+    expect(sanitized.has("cf-connecting-ip")).toBe(false);
+    expect(sanitized.has("x-forwarded-for")).toBe(false);
   });
 
-  // Test when API key is set and authentication succeeds with query parameter 'key'
-  it("should return true when valid 'key' query parameter is provided", () => {
-    const request = new Request("https://example.com?key=valid-key");
-
-    expect(authenticate(request)).toBe(true);
-  });
-
-  // Test when authentication fails due to missing headers
-  it("should return false when no authorization header or query key is provided", () => {
-    const request = new Request("https://example.com");
-
-    expect(authenticate(request)).toBe(false);
-  });
-
-  // Test when authentication fails due to incorrect API key
-  it("should return false when invalid API key is provided", () => {
-    const request = new Request("https://example.com", {
-      headers: {
-        Authorization: "Bearer invalid-key",
+  it("never preserves the client-supplied Gateway cache key", () => {
+    const sanitized = stripProxyAuthorizationHeaders(
+      {
+        "cf-aig-cache-key": "shared-tenant-key",
+        "cf-aig-max-attempts": "3",
       },
-    });
+      { preserveAiGatewayHeaders: true },
+    );
 
-    expect(authenticate(request)).toBe(false);
+    expect(sanitized.has("cf-aig-cache-key")).toBe(false);
+    expect(sanitized.get("cf-aig-max-attempts")).toBe("3");
   });
 });

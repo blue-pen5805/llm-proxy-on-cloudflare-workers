@@ -1,56 +1,45 @@
 #!/usr/bin/env node
-import {
-  getErrorMessage,
-  parseJsonc,
-  validateEnvironmentName,
-} from "./utils.ts";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import {
+  getErrorMessage,
+  parseJsonc,
+  parseCliArgumentsOrExit,
+  parseEnvironmentCliArguments,
+  reportCliResult,
+  validateEnvironmentName,
+} from "./utils.ts";
+import type { FileSystemOperations, OperationResult } from "./utils.ts";
 
-export { parseJsonc, validateEnvironmentName } from "./utils.ts";
+export type { FileSystemOperations } from "./utils.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export interface CliArgs {
+export interface GenerateDevVarsCliArguments {
   env?: string;
   help?: boolean;
 }
 
-export interface FileSystemOperations {
-  existsSync: (path: string) => boolean;
-  readFileSync: (path: string, encoding: BufferEncoding) => string;
-  writeFileSync: (path: string, data: string) => void;
-}
-
-export interface GenerationResult {
-  success: boolean;
-  messages: string[];
-}
-
-export interface GenerationOptions {
-  rootDir: string;
-  env?: string;
-  fsOps?: FileSystemOperations;
-}
+export type GenerationResult = OperationResult;
 
 /**
  * Get file paths for given environment
  */
-export function getFilePaths(
-  rootDir: string,
-  env?: string,
+export function getConfigAndDevVarsPaths(
+  repositoryRoot: string,
+  environmentName?: string,
 ): { configPath: string; devVarsPath: string } {
-  if (env) {
+  if (environmentName) {
     return {
-      configPath: path.join(rootDir, `config.${env}.jsonc`),
-      devVarsPath: path.join(rootDir, `.dev.vars.${env}`),
+      configPath: path.join(repositoryRoot, `config.${environmentName}.jsonc`),
+      devVarsPath: path.join(repositoryRoot, `.dev.vars.${environmentName}`),
     };
   } else {
     return {
-      configPath: path.join(rootDir, "config.jsonc"),
-      devVarsPath: path.join(rootDir, ".dev.vars"),
+      configPath: path.join(repositoryRoot, "config.jsonc"),
+      devVarsPath: path.join(repositoryRoot, ".dev.vars"),
     };
   }
 }
@@ -58,27 +47,16 @@ export function getFilePaths(
 /**
  * Parse command line arguments
  */
-export function parseArgs(argv: string[] = process.argv.slice(2)): CliArgs {
-  const args: CliArgs = {};
-
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === "--env") {
-      if (i + 1 >= argv.length || argv[i + 1].startsWith("-")) {
-        throw new Error("--env option requires a value");
-      }
-      args.env = argv[i + 1];
-      i++; // Skip next argument as it's the value
-    } else if (arg === "--help" || arg === "-h") {
-      args.help = true;
-    } else if (arg.startsWith("-")) {
-      throw new Error(`Unknown option: ${arg}`);
-    } else {
-      throw new Error(`Unexpected argument: ${arg}`);
-    }
+export function parseGenerateDevVarsArguments(
+  commandLineArguments: string[] = process.argv.slice(2),
+): GenerateDevVarsCliArguments {
+  const commonArguments = parseEnvironmentCliArguments(commandLineArguments);
+  const generationArguments: GenerateDevVarsCliArguments = {};
+  if (commonArguments.env !== undefined) {
+    generationArguments.env = commonArguments.env;
   }
-
-  return args;
+  if (commonArguments.help) generationArguments.help = true;
+  return generationArguments;
 }
 
 /**
@@ -95,10 +73,10 @@ Options:
   --help, -h      Show this help message
 
 Examples:
-  npm run generate-dev-vars                    # Generate .dev.vars from config.jsonc
-  npm run generate-dev-vars -- --env example   # Generate .dev.vars.example from config.example.jsonc
-  npm run generate-dev-vars -- --env staging   # Generate .dev.vars.staging from config.staging.jsonc
-  npm run generate-dev-vars -- --env prod      # Generate .dev.vars.prod from config.prod.jsonc
+  npx tsx scripts/generate-dev-vars.ts                    # Generate .dev.vars from config.jsonc
+  npx tsx scripts/generate-dev-vars.ts -- --env example   # Generate .dev.vars.example from config.example.jsonc
+  npx tsx scripts/generate-dev-vars.ts -- --env staging   # Generate .dev.vars.staging from config.staging.jsonc
+  npx tsx scripts/generate-dev-vars.ts -- --env prod      # Generate .dev.vars.prod from config.prod.jsonc
 
 Note: .dev.vars files contain sensitive authentication credentials for development environments.
 `;
@@ -107,13 +85,13 @@ Note: .dev.vars files contain sensitive authentication credentials for developme
 /**
  * Convert a value to environment variable format
  */
-export function valueToEnvVar(value: unknown): string {
+export function serializeEnvironmentValue(value: unknown): string {
   if (value === null || value === undefined) {
     return "";
   }
 
-  if (Array.isArray(value)) {
-    // For arrays, stringify the entire array
+  if (typeof value === "object") {
+    // Structured secrets (including service-account JSON) must remain JSON.
     return JSON.stringify(value);
   }
 
@@ -121,28 +99,76 @@ export function valueToEnvVar(value: unknown): string {
 }
 
 /**
+ * Quote a value so Wrangler's dotenv parser returns it byte-for-byte.
+ *
+ * In particular, double-quoted dotenv values do not JSON-unescape `\"`.
+ * Using JSON.stringify() around JSON arrays therefore leaves backslashes in
+ * API keys at runtime. Single quotes (or backticks when needed) preserve JSON
+ * strings without adding those escapes.
+ */
+export function quoteEnvironmentValueForDotenv(value: string): string {
+  // Keep physical newlines out of the generated file when double quotes can
+  // represent them without changing an existing literal "\\n"/"\\r".
+  if (/[\r\n]/.test(value) && !value.includes('"') && !/\\[nr]/.test(value)) {
+    return `"${value.replace(/\r/g, "\\r").replace(/\n/g, "\\n")}"`;
+  }
+
+  if (!value.includes("'")) {
+    return `'${value}'`;
+  }
+  if (!value.includes("`")) {
+    return `\`${value}\``;
+  }
+
+  // An unquoted dotenv value is exact only when comment parsing and trimming
+  // cannot alter it.
+  if (value === value.trim() && !/[#\r\n]/.test(value)) {
+    return value;
+  }
+
+  // Double quotes are the final quoted form. Wrangler translates literal
+  // "\\n" and "\\r" sequences in this form, so reject values that would be
+  // silently changed.
+  if (!value.includes('"') && !/\\[nr]/.test(value)) {
+    return `"${value}"`;
+  }
+
+  throw new Error(
+    "Environment value cannot be represented losslessly in dotenv format.",
+  );
+}
+
+/**
  * Convert JSON config to .dev.vars format
  */
-export function configToDevVars(
+export function convertConfigToDevVars(
   config: Record<string, unknown>,
-  env?: string,
+  environmentName?: string,
+  includeNullPlaceholders: boolean = false,
 ): string {
-  const lines: string[] = [];
+  const outputLines: string[] = [];
 
   // Add header comment
-  lines.push(`# Environment Variables${env ? ` (${env})` : ""}`);
-  lines.push(`# Generated from config${env ? `.${env}` : ""}.jsonc`);
-  lines.push("");
+  outputLines.push(
+    `# Environment Variables${environmentName ? ` (${environmentName})` : ""}`,
+  );
+  outputLines.push(
+    `# Generated from config${environmentName ? `.${environmentName}` : ""}.jsonc`,
+  );
+  outputLines.push("");
 
   // Skip $schema field
   for (const [key, value] of Object.entries(config)) {
-    if (key === "$schema") continue;
+    if (key === "$schema" || value === undefined) continue;
+    if (value === null && !includeNullPlaceholders) continue;
 
-    const envValue = valueToEnvVar(value);
-    lines.push(`${key}=${envValue}`);
+    const environmentValue = serializeEnvironmentValue(value);
+    outputLines.push(
+      `${key}=${quoteEnvironmentValueForDotenv(environmentValue)}`,
+    );
   }
 
-  return lines.join("\n") + "\n";
+  return outputLines.join("\n") + "\n";
 }
 
 /**
@@ -151,13 +177,14 @@ export function configToDevVars(
 export function generateSingleDevVarsFile(
   configPath: string,
   devVarsPath: string,
-  env: string | undefined,
-  fsOps: FileSystemOperations,
+  environmentName: string | undefined,
+  fileSystem: FileSystemOperations,
+  includeNullPlaceholders: boolean = false,
 ): { success: boolean; message: string } {
   const configFileName = path.basename(configPath);
   const devVarsFileName = path.basename(devVarsPath);
 
-  if (!fsOps.existsSync(configPath)) {
+  if (!fileSystem.existsSync(configPath)) {
     return {
       success: true,
       message: `⚠️  ${configFileName} not found, skipping ${devVarsFileName} generation`,
@@ -165,12 +192,17 @@ export function generateSingleDevVarsFile(
   }
 
   try {
-    const configContent = fsOps.readFileSync(configPath, "utf8");
-    const config = parseJsonc(configContent);
+    const configFileContent = fileSystem.readFileSync(configPath, "utf8");
+    const parsedConfig = parseJsonc(configFileContent);
 
-    const devVarsContent = configToDevVars(config, env);
+    const generatedDevVars = convertConfigToDevVars(
+      parsedConfig,
+      environmentName,
+      includeNullPlaceholders,
+    );
 
-    fsOps.writeFileSync(devVarsPath, devVarsContent);
+    fileSystem.writeFileSync(devVarsPath, generatedDevVars, { mode: 0o600 });
+    fileSystem.chmodSync?.(devVarsPath, 0o600);
 
     return {
       success: true,
@@ -189,68 +221,65 @@ export function generateSingleDevVarsFile(
  * Generate dev vars files based on configuration
  */
 export function generateDevVars(
-  rootDir: string,
-  env?: string,
-  fsOps: FileSystemOperations = fs,
+  repositoryRoot: string,
+  environmentName?: string,
+  fileSystem: FileSystemOperations = fs,
+  includeNullPlaceholders: boolean = false,
 ): GenerationResult {
   // Validate environment name if provided
-  if (env && !validateEnvironmentName(env)) {
+  if (environmentName && !validateEnvironmentName(environmentName)) {
     return {
       success: false,
-      messages: [`❌ Invalid environment name: ${env}`],
+      messages: [`❌ Invalid environment name: ${environmentName}`],
     };
   }
 
-  const { configPath, devVarsPath } = getFilePaths(rootDir, env);
+  const { configPath, devVarsPath } = getConfigAndDevVarsPaths(
+    repositoryRoot,
+    environmentName,
+  );
 
-  const result = generateSingleDevVarsFile(configPath, devVarsPath, env, fsOps);
+  const generationResult = generateSingleDevVarsFile(
+    configPath,
+    devVarsPath,
+    environmentName,
+    fileSystem,
+    includeNullPlaceholders,
+  );
 
   return {
-    success: result.success,
-    messages: [result.message],
+    success: generationResult.success,
+    messages: [generationResult.message],
   };
 }
 
 /**
  * Main function to generate .dev.vars files
  */
-export function main(): void {
-  let args: CliArgs;
+export function runGenerateDevVarsCli(): void {
+  const generationArguments = parseCliArgumentsOrExit(() =>
+    parseGenerateDevVarsArguments(),
+  );
 
-  try {
-    args = parseArgs();
-  } catch (error) {
-    const errorMessage = getErrorMessage(error);
-    console.error(`❌ Error: ${errorMessage}`);
-    console.error("Use --help or -h for usage information.");
-    process.exit(1);
-  }
-
-  if (args.help) {
+  if (generationArguments.help) {
     console.log(showHelp());
     return;
   }
 
-  const rootDir = path.resolve(__dirname, "..");
-  const env = args.env;
+  const repositoryRoot = path.resolve(__dirname, "..");
+  const environmentName = generationArguments.env;
 
   console.log(
-    `🔄 Generating .dev.vars files${env ? ` for environment: ${env}` : ""}...`,
+    `🔄 Generating .dev.vars files${environmentName ? ` for environment: ${environmentName}` : ""}...`,
   );
 
-  const result = generateDevVars(rootDir, env);
+  const generationResult = generateDevVars(repositoryRoot, environmentName);
 
-  result.messages.forEach((message) => console.log(message));
-
-  if (result.success) {
-    console.log("🎉 Dev vars generation completed!");
-  } else {
-    process.exit(1);
-  }
+  reportCliResult(generationResult, "🎉 Dev vars generation completed!");
 }
 
 // Run the script if called directly
 /* istanbul ignore next -- exercised by the runtime, not module tests */
 if (import.meta.url === `file://${process.argv[1]}`) {
-  main();
+  runGenerateDevVarsCli();
 }

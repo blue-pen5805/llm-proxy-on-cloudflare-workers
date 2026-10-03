@@ -1,11 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { MiddlewareContext } from "~/src/middleware";
-import { authMiddleware } from "~/src/middlewares/auth";
+import { authMiddleware as middleware } from "~/src/middlewares/auth";
+import { ProxyRequestState } from "~/src/request_context";
 import { Config } from "~/src/utils/config";
-import { UnauthorizedError } from "~/src/utils/error";
+import { ServiceUnavailableError, UnauthorizedError } from "~/src/utils/error";
+import { testMiddleware } from "../../helpers/hono";
+
+const authMiddleware = testMiddleware(middleware);
 
 describe("authMiddleware", () => {
-  let context: MiddlewareContext;
+  let context: ProxyRequestState;
   const next = vi.fn().mockResolvedValue(new Response("ok"));
 
   beforeEach(() => {
@@ -13,7 +16,7 @@ describe("authMiddleware", () => {
     context = {
       request: new Request("http://localhost/v1/chat/completions"),
       pathname: "",
-    } as MiddlewareContext;
+    } as ProxyRequestState;
   });
 
   it("should allow request in development mode", async () => {
@@ -56,15 +59,46 @@ describe("authMiddleware", () => {
     expect(next).toHaveBeenCalled();
   });
 
-  it("should allow request if no API keys are configured", async () => {
-    vi.spyOn(Config, "isDevelopment").mockReturnValue(false);
-    vi.spyOn(Config, "apiKeys").mockReturnValue(undefined);
+  it("should enforce authentication when DEV is set on a deployed Worker", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.spyOn(Config, "isDevelopment").mockReturnValue(true);
+    vi.spyOn(Config, "apiKeys").mockReturnValue(["valid-key"]);
+    // cf-ray is present on every request that reaches a deployed Worker.
+    context.request = new Request("https://proxy.example/v1/chat/completions", {
+      headers: { "cf-ray": "8f0b1a2c3d4e5f60-NRT" },
+    });
+
+    await expect(authMiddleware(context, next)).rejects.toThrow(
+      UnauthorizedError,
+    );
+    expect(next).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "auth.development_mode_ignored" }),
+    );
+  });
+
+  it("should accept a valid key when DEV is set on a deployed Worker", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.spyOn(Config, "isDevelopment").mockReturnValue(true);
+    vi.spyOn(Config, "apiKeys").mockReturnValue(["valid-key"]);
+    context.request = new Request("https://proxy.example/v1/chat/completions", {
+      headers: {
+        "cf-ray": "8f0b1a2c3d4e5f60-NRT",
+        Authorization: "Bearer valid-key",
+      },
+    });
     const nextResponse = new Response("ok");
     next.mockResolvedValue(nextResponse);
 
-    const response = await authMiddleware(context, next);
+    await expect(authMiddleware(context, next)).resolves.toBe(nextResponse);
+  });
 
-    expect(response).toBe(nextResponse);
-    expect(next).toHaveBeenCalled();
+  it("should fail closed if no API keys are configured", async () => {
+    vi.spyOn(Config, "isDevelopment").mockReturnValue(false);
+    vi.spyOn(Config, "apiKeys").mockReturnValue(undefined);
+    await expect(authMiddleware(context, next)).rejects.toThrow(
+      ServiceUnavailableError,
+    );
+    expect(next).not.toHaveBeenCalled();
   });
 });

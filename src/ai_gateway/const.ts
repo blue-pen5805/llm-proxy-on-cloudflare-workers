@@ -38,15 +38,29 @@ export const OPENAI_COMPATIBLE_PROVIDERS = [
   "deepseek",
   "cerebras",
   "openrouter",
+  "aws-bedrock",
+  "google-vertex-ai",
 ] as const;
 
 export type CloudflareAIGatewayOpenAICompatibleProvider =
   (typeof OPENAI_COMPATIBLE_PROVIDERS)[number];
 
+export const CLOUDFLARE_AI_GATEWAY_REST_API_PATHS = [
+  "/ai/run",
+  "/ai/v1/chat/completions",
+  "/ai/v1/responses",
+  "/ai/v1/messages",
+] as const;
+
+export type CloudflareAIGatewayRestApiPath =
+  (typeof CLOUDFLARE_AI_GATEWAY_REST_API_PATHS)[number];
+
 // https://developers.cloudflare.com/ai-gateway/glossary/
 export type CloudflareAIGatewayHeaders = {
   /** Authentication Token for the AI Gateway, used to authorize requests. */
   "cf-aig-authorization"?: string;
+  /** Selects a stored AI Gateway BYOK credential by alias. */
+  "cf-aig-byok-alias"?: string;
   /** Header to customize the backoff type for request retries of a request. */
   "cf-aig-backoff"?: string;
   /** Override the default cache key in order to precisely set the cacheability setting for any resource. */

@@ -1,0 +1,34 @@
+{
+  "$schema": "schemas/live-chat-models-schema.json",
+
+  // Set each provider you want to test to a currently valid model ID.
+  // null entries are skipped and do not make network requests.
+  "providers": {
+    "anthropic": null,
+    "aws-bedrock": null,
+    "azure-openai": null,
+    "cerebras": null,
+    "cohere": null,
+    "cline": null,
+    "deepseek": null,
+    "google-ai-studio": null,
+    "google-vertex-ai": null,
+    "grok": null,
+    "groq": null,
+    "huggingface": null,
+    "mistral": null,
+    "nvidia-nim": null,
+    "ollama": null,
+    "openai": null,
+    "opencode-go": null,
+    "opencode-zen": null,
+    "openrouter": null,
+    "perplexity-ai": null,
+    "workers-ai": null
+
+    // Replicate is omitted because this proxy does not
+    // implement Chat Completions for it. For a custom OpenAI-compatible
+    // endpoint, add its configured name and model:
+    // "my-endpoint": "model-id"
+  }
+}

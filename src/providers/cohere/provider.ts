@@ -1,50 +1,52 @@
+import { chatCompletionsEndpoint } from "../inference";
 import {
   OpenAIChatCompletionsRequestBody,
   OpenAIModelsListResponseBody,
 } from "../openai/types";
-import { OpenAICompatibleProvider } from "../provider";
+import { defineProvider } from "../provider";
 import { CohereModelsListResponseBody } from "./types";
 
-export class Cohere extends OpenAICompatibleProvider {
-  get chatCompletionPath(): string {
-    return "/compatibility/v1/chat/completions";
-  }
-  get modelsPath(): string {
-    return "/v1/models?page_size=100&endpoint=chat";
-  }
+export const Cohere = defineProvider({
+  endpoints: {
+    chat_completions: chatCompletionsEndpoint(
+      "/compatibility/v1/chat/completions",
+      {
+        supportedParameters: [
+          "messages",
+          "model",
+          "frequency_penalty",
+          "max_tokens",
+          "presence_penalty",
+          "response_format",
+          "seed",
+          "stop",
+          "stream",
+          "temperature",
+          "top_p",
+          "tools",
+        ] satisfies (keyof OpenAIChatCompletionsRequestBody)[],
+      },
+    ),
 
-  readonly apiKeyName: keyof Env = "COHERE_API_KEY";
-  readonly baseUrlProp: string = "https://api.cohere.com";
+    models: {
+      path: "/v1/models?page_size=100&endpoint=chat",
+      convertResponse(data): OpenAIModelsListResponseBody {
+        const providerResponse = data as CohereModelsListResponseBody;
+        return {
+          object: "list",
+          data: providerResponse.models.map(({ name, ...model }) => ({
+            id: name,
+            object: "model",
+            created: 0,
+            owned_by: "cohere",
+            _: model,
+          })),
+        };
+      },
+    },
+  },
 
-  readonly CHAT_COMPLETIONS_SUPPORTED_PARAMETERS: (keyof OpenAIChatCompletionsRequestBody)[] =
-    [
-      "messages",
-      "model",
-      "frequency_penalty",
-      "max_tokens",
-      "presence_penalty",
-      "response_format",
-      "seed",
-      "stop",
-      "stream",
-      "temperature",
-      "top_p",
-      "tools",
-    ];
-
-  // Convert model list to OpenAI format
-  modelsToOpenAIFormat(
-    data: CohereModelsListResponseBody,
-  ): OpenAIModelsListResponseBody {
-    return {
-      object: "list",
-      data: data.models.map(({ name, ...model }) => ({
-        id: name,
-        object: "model",
-        created: 0,
-        owned_by: "cohere",
-        _: model,
-      })),
-    };
-  }
-}
+  openAICompatible: true,
+  apiKeyName: "COHERE_API_KEY",
+  baseUrl: "https://api.cohere.com",
+});

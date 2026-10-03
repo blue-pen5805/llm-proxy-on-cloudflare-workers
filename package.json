@@ -1,56 +1,76 @@
 {
   "name": "llm-proxy-on-cloudflare-workers",
-  "description": "A serverless proxy on Cloudflare Workers for multiple LLM APIs with unified authentication and key rotation.",
-  "author": "blue.pen5805",
-  "version": "0.2.1",
+  "version": "1.0.0",
   "private": true,
+  "description": "A serverless proxy on Cloudflare Workers for multiple LLM APIs with unified authentication and key rotation.",
+  "license": "MIT",
+  "author": "blue.pen5805",
+  "homepage": "https://github.com/blue-pen5805/llm-proxy-on-cloudflare-workers#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blue-pen5805/llm-proxy-on-cloudflare-workers.git"
+  },
+  "bugs": {
+    "url": "https://github.com/blue-pen5805/llm-proxy-on-cloudflare-workers/issues"
+  },
   "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "scripts": {
-    "deploy": "wrangler deploy",
-    "dev": "ts-node scripts/with-secrets.ts --env develop -- wrangler dev --env-file .dev.vars.develop",
-    "cf-typegen": "ts-node scripts/with-secrets.ts --env example -- wrangler types --env-file .dev.vars.example",
-    "cf:login": "wrangler login",
-    "cf:logout": "wrangler logout",
+    "dev": "tsx scripts/with-secrets.ts --env develop -- cf dev --mode develop",
+    "build": "cf build",
+    "cf:login": "cf auth login",
+    "secrets": "tsx scripts/create-config.ts",
+    "deploy": "cf deploy",
+    "secrets:deploy": "tsx scripts/deploy-secrets.ts",
+    "verify": "npm run tsc && npm run format:check && npm run lint && npm run test:coverage",
+    "cf-typegen": "cf workers types",
+    "tsc": "npm run cf-typegen && tsc --noEmit && tsc --noEmit -p test/tsconfig.json && tsc --noEmit -p test/scripts/tsconfig.json",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "lint": "oxlint --deny-warnings src scripts test",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test-watch": "vitest watch",
-    "tsc": "tsc --noEmit",
-    "prettier": "prettier --write .",
-    "prettier-ci": "prettier --check .",
-    "lint": "eslint 'src/**/*.ts'",
-    "lint:fix": "eslint --fix 'src/**/*.ts'",
-    "secrets:deploy": "ts-node scripts/deploy-secrets.ts",
-    "secrets:create": "ts-node scripts/create-config.ts"
+    "test:live-chat": "tsx scripts/test-live-chat.ts",
+    "bench": "vitest bench --run",
+    "hono": "hono",
+    "hono:routes": "hono routes src/routing.ts --verbose"
+  },
+  "dependencies": {
+    "hono": "^4.13.12"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.18.5",
-    "@trivago/prettier-plugin-sort-imports": "^6.0.2",
-    "@types/node": "^26.1.1",
-    "@typescript-eslint/eslint-plugin": "^8.64.0",
-    "@typescript-eslint/parser": "^8.64.0",
-    "@vitest/coverage-istanbul": "^4.1.10",
-    "eslint": "^10.7.0",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-prettier": "^5.5.6",
-    "globals": "^17.7.0",
-    "prettier": "^3.9.5",
-    "ts-node": "^10.9.2",
-    "typescript": "~6.0.3",
-    "typescript-eslint": "^8.64.0",
-    "vite": "^8.1.5",
-    "vitest": "^4.1.10",
-    "wrangler": "^4.111.0"
+    "@clack/prompts": "^1.8.1",
+    "@cloudflare/vitest-plugin": "^1.3.6",
+    "@hono/cli": "^0.2.0-next.9",
+    "@types/node": "^22.20.5",
+    "@vitest/coverage-istanbul": "4.1.11",
+    "ajv": "^8.20.0",
+    "cf": "1.0.0-beta.12",
+    "jsonc-parser": "^3.3.1",
+    "oxfmt": "^0.71.0",
+    "oxlint": "^1.86.0",
+    "oxlint-tsgolint": "^7.0.2003",
+    "tsx": "^4.23.15",
+    "typescript": "~7.0.2",
+    "vite": "^8.3.2",
+    "vitest": "4.1.11",
+    "wrangler": "4.147.0"
   },
   "cloudflare": {
     "bindings": {
       "PROXY_API_KEY": {
-        "description": "API key to authenticate requests to the LLM Proxy server. (Any string can be used)"
+        "description": "Required. Generate a strong, unique value used to authenticate requests to the proxy."
       },
       "OPENAI_API_KEY": {
-        "description": "Your OpenAI API key."
+        "description": "Optional. Your [OpenAI API key](https://platform.openai.com/api-keys). Configure at least one provider key."
       },
       "GEMINI_API_KEY": {
-        "description": "Your Google AI Studio (Gemini) API key."
+        "description": "Optional. Your [Google AI Studio API key](https://aistudio.google.com/app/apikey). Configure at least one provider key."
+      },
+      "ANTHROPIC_API_KEY": {
+        "description": "Optional. Your [Anthropic API key](https://platform.claude.com/settings/keys). Configure at least one provider key."
       }
     }
   }

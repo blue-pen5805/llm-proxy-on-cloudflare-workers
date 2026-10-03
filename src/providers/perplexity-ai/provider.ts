@@ -1,22 +1,28 @@
-import {
-  OpenAICompatibleProvider,
-  ProviderNotSupportedError,
-} from "../provider";
+import { chatCompletionsEndpoint, jsonEndpoint } from "../inference";
+import { defineProvider } from "../provider";
 
-export class PerplexityAi extends OpenAICompatibleProvider {
-  get chatCompletionPath(): string {
-    return "/v1/chat/completions";
-  }
-  get modelsPath(): string {
-    return "/v1/models";
-  }
+const agentResponsesEndpoint = jsonEndpoint("/v1/responses");
 
-  readonly apiKeyName: keyof Env = "PERPLEXITYAI_API_KEY";
-  readonly baseUrlProp: string = "https://api.perplexity.ai";
+export const PerplexityAi = defineProvider({
+  endpoints: {
+    chat_completions: chatCompletionsEndpoint("/v1/chat/completions", {
+      prepareGateway(data) {
+        return {
+          path: data.model.includes("/")
+            ? "/v1/chat/completions"
+            : "/chat/completions",
+          data,
+        };
+      },
+    }),
+  },
 
-  async buildModelsRequest(): Promise<[string, RequestInit]> {
-    throw new ProviderNotSupportedError(
-      "Perplexity AI does not support models list via this proxy.",
-    );
-  }
-}
+  resolveEndpoint(model, protocol) {
+    return protocol === "responses" && model.includes("/")
+      ? agentResponsesEndpoint
+      : undefined;
+  },
+  openAICompatible: true,
+  apiKeyName: "PERPLEXITYAI_API_KEY",
+  baseUrl: "https://api.perplexity.ai",
+});

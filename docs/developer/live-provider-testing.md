@@ -1,0 +1,160 @@
+# Live Provider Chat Completions Testing
+
+This contributor guide tests provider integration through a local cf
+development server with real credentials and models. It is intentionally
+separate from `npm run test`: every configured provider makes billable network
+requests.
+
+Each selected provider uses the public `/v1/chat/completions` API with a
+provider-qualified model. The script runs the applicable checks sequentially:
+
+1. **`chat-direct`** calls `/v1/chat/completions` without a Gateway prefix and
+   verifies direct provider inference, including the proxy's protocol conversion.
+2. **`chat-gateway`** calls `/g/<gateway>/v1/chat/completions` and verifies the
+   same public API through AI Gateway.
+
+`LLM_PROXY_GATEWAY_NAME` selects the Gateway for `chat-gateway` only. Otherwise,
+the script uses the Worker configuration's default Gateway, or `default` when
+none is configured. It does not add a Gateway prefix to `chat-direct`.
+
+The local Worker configuration determines which checks can run:
+
+- If `CLOUDFLARE_ACCOUNT_ID` and `AI_GATEWAY_NAME` select a default Gateway,
+  native Gateway providers run only `chat-gateway`: the unprefixed route would
+  also use Gateway and would not verify direct inference.
+- With `ALWAYS_USE_AI_GATEWAY=true`, all selected providers run only
+  `chat-gateway`, including Custom Providers. Synchronize those definitions with
+  `npm run secrets:deploy` before testing.
+- Vertex AI and Workers AI require Gateway for Chat and skip `chat-direct`.
+- Providers without native Gateway support, such as Ollama and custom OpenAI
+  endpoints, run only `chat-direct` unless strict Gateway routing is enabled.
+
+To exercise direct inference for native Gateway providers, leave
+`AI_GATEWAY_NAME` unset and `ALWAYS_USE_AI_GATEWAY` false in the local Worker
+configuration. `CLOUDFLARE_ACCOUNT_ID` can remain configured for the explicit
+Gateway check. Restart the local Worker after changing its configuration.
+Provider pass-through and the `/chat/completions` alias are covered by automated
+tests rather than additional live requests.
+
+All routes use `/key/0` by default to disable credential fallback. Set
+`LLM_PROXY_KEY_SELECTION` to another supported index or range when testing a
+different configured slot.
+
+## Configure models
+
+Copy the tracked, credential-free example to the ignored local file:
+
+```bash
+cp live-chat-models.example.jsonc live-chat-models.jsonc
+```
+
+Replace `null` only for providers to test. Use the model ID expected by that
+provider, without the proxy's provider prefix:
+
+```jsonc
+{
+  "$schema": "schemas/live-chat-models-schema.json",
+  "providers": {
+    "openai": "gpt-model-id",
+    "anthropic": "claude-model-id",
+    "groq": null,
+  },
+}
+```
+
+The ignored model file must not contain API keys. Replicate is absent because
+the proxy does not implement Chat Completions for it.
+
+Custom OpenAI-compatible endpoints use the same model-only selection:
+
+```jsonc
+"custom-endpoint": "model-id"
+```
+
+An object with a `model` field is also accepted. The optional `directPath` field
+is validated when present but does not affect the checks; upstream operation
+paths come from the Worker's provider configuration.
+
+## Run the live checks
+
+Follow [local setup](development.md#local-setup) to configure and start the
+Worker with provider credentials and `PROXY_API_KEY` in `config.develop.jsonc`.
+
+Leave the development server running. In a second terminal, run:
+
+```bash
+npm run test:live-chat
+```
+
+The script reads `config.develop.jsonc` for proxy authentication, Gateway
+routing policy, and credential redaction. Provider credentials are used by the
+cf development server and are never copied to the model configuration or
+command line. If
+`DEV` is explicitly `true`, the local request omits proxy authentication in the
+same way as the Worker.
+
+The only accepted target is a loopback address. `npm run dev` uses
+`http://127.0.0.1:8787`, which is also the test script's default. If using a
+local server at another loopback address or port, set `LLM_PROXY_LOCAL_URL`
+to its URL before running `npm run test:live-chat`. Deployed Worker URLs
+remain rejected.
+
+To select a non-default AI Gateway, set its name before running:
+
+```bash
+export LLM_PROXY_GATEWAY_NAME="production"
+```
+
+Select providers with positional names or repeated `--provider` options; use
+`--config` for another model file:
+
+```bash
+npm run test:live-chat -- openai
+npm run test:live-chat -- openai anthropic
+npm run test:live-chat -- --provider openai --provider anthropic
+npm run test:live-chat -- --config live-chat-models.staging.jsonc
+```
+
+`LIVE_CHAT_TIMEOUT_MS` optionally changes the per-request timeout from 30
+seconds, up to 120 seconds.
+
+If the local configuration relies entirely on AI Gateway BYOK and has no
+provider credential slots, disable the `/key/0` prefix explicitly:
+
+```bash
+export LLM_PROXY_KEY_SELECTION="none"
+```
+
+In that mode, the local proxy's configured Gateway fallback behavior applies
+and may make more than one upstream attempt.
+
+## Cost and result contract
+
+The fixed prompt is short, streaming is disabled, and the completion limit is
+100 tokens. The script sends `max_completion_tokens: 100` when the provider
+adapter supports it. For providers such as Cohere that accept only the legacy
+field, it sends `max_tokens: 100` instead. Requests run sequentially and the
+script never retries. With the default explicit key selection, a full run makes
+one upstream attempt per applicable check, up to two per provider. Gateway
+policy and provider requirements can reduce this to one check.
+
+An HTTP 2xx response passes after its body is fully received. Successful bodies
+are read and discarded incrementally without parsing or retaining their content.
+The request timeout includes body consumption. Network errors, body read errors,
+timeouts, and non-2xx responses fail the command. A non-2xx result includes up to
+16 KiB of its upstream error body so provider messages, types, and codes remain
+visible. Credential-like JSON
+fields, Bearer values, common API-key forms, and the configured proxy key are
+redacted before output. The `/ping` readiness check also consumes its response
+body within its 10-second timeout. The process exits nonzero when at least one
+check fails.
+
+For example, a provider response remains actionable in the summary:
+
+```text
+FAIL openai chat-direct: HTTP 404 Not Found: {"error":{"message":"Model not found","type":"invalid_request_error","code":"model_not_found"}}
+```
+
+Hugging Face Chat uses the Router origin. Its native Gateway integration is not
+used for this operation: normal mode runs `chat-direct`, and strict mode runs
+`chat-gateway` through the synchronized inference Custom Provider.

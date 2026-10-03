@@ -1,24 +1,25 @@
-import { OpenAIModelsListResponseBody } from "../openai/types";
-import { OpenAICompatibleProvider } from "../provider";
+import { chatCompletionsEndpoint, jsonEndpoint } from "../inference";
+import { convertModelsToOpenAIFormatWithMetadata } from "../models";
+import { defineProvider } from "../provider";
 import { GroqModelsListResponseBody } from "./types";
 
-export class Groq extends OpenAICompatibleProvider {
-  readonly apiKeyName: keyof Env = "GROQ_API_KEY";
-  readonly baseUrlProp: string = "https://api.groq.com/openai/v1";
+export const Groq = defineProvider({
+  endpoints: {
+    chat_completions: chatCompletionsEndpoint(),
+    responses: jsonEndpoint("/responses"),
+    models: {
+      path: "/models",
+      convertResponse(
+        data,
+      ): ReturnType<typeof convertModelsToOpenAIFormatWithMetadata> {
+        return convertModelsToOpenAIFormatWithMetadata(
+          data as GroqModelsListResponseBody,
+        );
+      },
+    },
+  },
 
-  // Convert model list to OpenAI format
-  modelsToOpenAIFormat(
-    data: GroqModelsListResponseBody,
-  ): OpenAIModelsListResponseBody {
-    return {
-      object: "list",
-      data: data.data.map(({ id, object, created, owned_by, ...model }) => ({
-        id,
-        object,
-        created,
-        owned_by,
-        _: model,
-      })),
-    };
-  }
-}
+  openAICompatible: true,
+  apiKeyName: "GROQ_API_KEY",
+  baseUrl: "https://api.groq.com/openai/v1",
+});

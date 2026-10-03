@@ -3,8 +3,25 @@
 export type OpenAIChatCompletionsRequestBody = {
   messages: (
     | {
-        content: string | string[];
+        content:
+          | string
+          | {
+              type: "text";
+              text: string;
+              prompt_cache_breakpoint?: { mode: "explicit" };
+            }[];
         role: "system";
+        name?: string;
+      }
+    | {
+        content:
+          | string
+          | {
+              type: "text";
+              text: string;
+              prompt_cache_breakpoint?: { mode: "explicit" };
+            }[];
+        role: "developer";
         name?: string;
       }
     | {
@@ -14,6 +31,7 @@ export type OpenAIChatCompletionsRequestBody = {
               | {
                   type: "text";
                   text: string;
+                  prompt_cache_breakpoint?: { mode: "explicit" };
                 }
               | {
                   type: "image_url";
@@ -21,6 +39,16 @@ export type OpenAIChatCompletionsRequestBody = {
                     url: string;
                     detail?: "auto" | "high" | "low";
                   };
+                  prompt_cache_breakpoint?: { mode: "explicit" };
+                }
+              | {
+                  type: "file";
+                  file: {
+                    file_data?: string;
+                    file_id?: string;
+                    filename?: string;
+                  };
+                  prompt_cache_breakpoint?: { mode: "explicit" };
                 }
               | {
                   type: "input_audio";
@@ -28,6 +56,7 @@ export type OpenAIChatCompletionsRequestBody = {
                     data: string;
                     format: "wav" | "mp3";
                   };
+                  prompt_cache_breakpoint?: { mode: "explicit" };
                 }
             )[];
         role: "user";
@@ -40,6 +69,7 @@ export type OpenAIChatCompletionsRequestBody = {
               | {
                   type: string;
                   text: string;
+                  prompt_cache_breakpoint?: { mode: "explicit" };
                 }
               | {
                   type: string;
@@ -54,10 +84,14 @@ export type OpenAIChatCompletionsRequestBody = {
         } | null;
         tool_calls?: {
           id: string;
-          type: string;
-          function: {
+          type: "function" | "custom";
+          function?: {
             name: string;
             arguments: string;
+          };
+          custom?: {
+            name: string;
+            input: string;
           };
         }[];
         function_call?: any | null; // deprecated
@@ -79,11 +113,14 @@ export type OpenAIChatCompletionsRequestBody = {
   metadata?: Record<string, any> | null;
   frequency_penalty?: number | null;
   logit_bias?: Record<string, number> | null;
-  logprobs?: number | null;
+  logprobs?: boolean | null;
+  top_logprobs?: number | null;
   max_tokens?: number | null; // deprecated
   max_completion_tokens?: number | null;
+  reasoning_effort?: string | null;
   n?: number | null;
   modalities?: string[] | null;
+  moderation?: Record<string, any> | null;
   prediction?: {
     type: "content";
     content:
@@ -91,6 +128,7 @@ export type OpenAIChatCompletionsRequestBody = {
       | {
           type: string;
           text: string;
+          prompt_cache_breakpoint?: { mode: "explicit" };
         }[];
   } | null;
   audio?: {
@@ -98,6 +136,12 @@ export type OpenAIChatCompletionsRequestBody = {
     format: string;
   } | null;
   presence_penalty?: number | null;
+  prompt_cache_key?: string | null;
+  prompt_cache_options?: {
+    mode?: "implicit" | "explicit";
+    ttl?: "30m";
+  };
+  prompt_cache_retention?: "in_memory" | "24h" | null;
   response_format?:
     | {
         type: "text" | "json_object";
@@ -106,28 +150,53 @@ export type OpenAIChatCompletionsRequestBody = {
         type: "json_schema";
         json_schema: Record<string, any>;
       };
+  safety_identifier?: string | null;
   seed?: number | null;
   service_tier?: string | null;
   stop?: string | string[] | null;
   stream?: boolean | null;
   stream_options?: {
+    include_obfuscation?: boolean;
     include_usage?: boolean;
   } | null;
+  /** Provider-specific legacy extension; not part of current OpenAI Chat Completions. */
   suffix?: string | null;
   temperature?: number | null;
   top_p?: number | null;
-  tools?: {
-    type: "function";
-    function: {
-      description?: string;
-      name: string;
-      parameters?: Record<string, any>;
-      strict?: boolean | null;
-    };
-  }[];
-  tool_choice?: string | { type: "function"; function: { name: string } };
+  tools?: (
+    | {
+        type: "function";
+        function: {
+          description?: string;
+          name: string;
+          parameters?: Record<string, any>;
+          strict?: boolean | null;
+        };
+      }
+    | {
+        type: "custom";
+        custom: {
+          description?: string;
+          name: string;
+          format?: Record<string, any>;
+        };
+      }
+  )[];
+  tool_choice?:
+    | string
+    | { type: "function"; function: { name: string } }
+    | { type: "custom"; custom: { name: string } }
+    | {
+        type: "allowed_tools";
+        allowed_tools: {
+          mode: "auto" | "required";
+          tools: Record<string, any>[];
+        };
+      };
   parallel_tool_calls?: boolean;
   user?: string;
+  verbosity?: "low" | "medium" | "high" | null;
+  web_search_options?: Record<string, any>;
   function_call?:
     | string
     | {
@@ -138,97 +207,6 @@ export type OpenAIChatCompletionsRequestBody = {
     name: string;
     parameters: Record<string, any>;
   }[]; // deprecated
-};
-
-export type OpenAIChatCompletionsResponseBody = {
-  id: string;
-  choices: {
-    finish_reason:
-      "stop" | "length" | "content_filter" | "tool_calls" | "function_call";
-    index: number;
-    message: {
-      role: string;
-      content: string | null;
-      refusal: string | null;
-      tool_calls?: {
-        id: string;
-        type: string;
-        function: {
-          name: string;
-          arguments: string;
-        };
-      }[];
-      audio?: {
-        id: string;
-        expires_at: number;
-        data: string;
-        transcript: string;
-      } | null;
-    };
-    logprobs?: {
-      content: any[];
-      refusal: any[];
-    } | null;
-  }[];
-  created: number;
-  model: string;
-  service_tier: string | null;
-  system_fingerprint: string;
-  object: "chat.completion";
-  usage: {
-    completion_tokens: number;
-    prompt_tokens: number;
-    total_tokens: number;
-    completion_tokens_details: {
-      accepted_prediction_tokens: number;
-      audio_tokens: number;
-      reasoning_tokens: number;
-      rejected_prediction_tokens: number;
-    };
-    prompt_tokens_details: {
-      audio_tokens: number;
-      cached_tokens: number;
-    };
-  };
-};
-
-// https://platform.openai.com/docs/api-reference/chat/streaming
-export type OpenAIChatCompletionsChunkResponseBody = {
-  id: string;
-  choices: {
-    delta:
-      | {
-          role: string;
-          content: string | null;
-          refusal: string | null;
-          tool_calls: {
-            index: number;
-            id: string;
-            type: string;
-            function: {
-              name: string;
-              arguments: string;
-            };
-          }[];
-        }
-      | object;
-    logprobs?: {
-      content: any[];
-      refusal: any[];
-    } | null;
-    finish_reason: string | null;
-    index: number;
-  }[];
-  created: number;
-  model: string;
-  service_tier: string | null;
-  system_fingerprint: string;
-  object: "chat.completion.chunk";
-  usage?: {
-    completion_tokens: number;
-    prompt_tokens: number;
-    total_tokens: number;
-  } | null;
 };
 
 // --- Models ---

@@ -1,22 +1,33 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Anthropic } from "~/src/providers/anthropic/provider";
+import { Cerebras } from "~/src/providers/cerebras/provider";
+import { chatParameterFilter } from "~/src/providers/chat_parameters";
+import { Cline } from "~/src/providers/cline/provider";
 import { Cohere } from "~/src/providers/cohere/provider";
 import { CustomOpenAI } from "~/src/providers/custom-openai";
+import { DeepSeek } from "~/src/providers/deepseek/provider";
 import { GoogleAiStudio } from "~/src/providers/google-ai-studio/provider";
 import { Grok } from "~/src/providers/grok/provider";
 import { Groq } from "~/src/providers/groq/provider";
 import { HuggingFace } from "~/src/providers/huggingface/provider";
+import { chatCompletionsEndpoint } from "~/src/providers/inference";
 import { Mistral } from "~/src/providers/mistral/provider";
+import { buildModelsRequest } from "~/src/providers/models";
+import { NvidiaNim } from "~/src/providers/nvidia-nim/provider";
+import { Ollama } from "~/src/providers/ollama/provider";
+import { OpenAI } from "~/src/providers/openai/provider";
 import { OpenRouter } from "~/src/providers/openrouter/provider";
 import { PerplexityAi } from "~/src/providers/perplexity-ai/provider";
 import {
+  createProvider,
   OpenAICompatibleProvider,
   ProviderBase,
-  ProviderNotSupportedError,
+  withProviderProfile,
 } from "~/src/providers/provider";
 import { Replicate } from "~/src/providers/replicate/provider";
 import { WorkersAi } from "~/src/providers/workers_ai/provider";
 import { Secrets } from "~/src/utils/secrets";
+import { buildInferenceRequest } from "../../helpers/provider";
 
 describe("provider contracts", () => {
   beforeEach(() => {
@@ -24,6 +35,7 @@ describe("provider contracts", () => {
       name === "CLOUDFLARE_ACCOUNT_ID" ? "account-id" : `key-${index ?? 0}`,
     );
     vi.spyOn(Secrets, "getAll").mockReturnValue(["key-0", "key-1"]);
+    vi.spyOn(Secrets, "getProfiles").mockReturnValue(["default", "paid"]);
     vi.spyOn(Secrets, "getNext").mockResolvedValue(1);
     vi.spyOn(Secrets, "getNextIndex").mockResolvedValue(1);
   });
@@ -38,110 +50,162 @@ describe("provider contracts", () => {
 
       expect(provider.available()).toBe(false);
       expect(provider.getApiKeys()).toEqual([]);
+      expect(provider.getCredentialProfiles()).toEqual([]);
+      expect(provider.getAiGatewayApiKeys()).toEqual([]);
+      expect(provider.configurationError()).toBeUndefined();
       expect(await provider.getNextApiKeyIndex()).toBe(0);
       expect(provider.baseUrl()).toBe("https://example.com");
       expect(provider.pathnamePrefix()).toBe("");
       expect(await provider.headers()).toEqual({});
-      expect(provider.staticModels()).toBeUndefined();
-
-      const models = { object: "list", data: [] } as const;
-      expect(provider.modelsToOpenAIFormat(models)).toBe(models);
+      expect(
+        new Headers(await provider.buildHeadersForPath("/resource")),
+      ).toEqual(new Headers());
+      expect(
+        provider.endpoints.models?.getStaticModels?.call(provider),
+      ).toBeUndefined();
+      expect(provider.aiGatewayPath("/models")).toBe("/models");
+      expect(provider.endpoints).toEqual({});
+      expect(
+        await provider.resolveInference("model-id", "chat_completions"),
+      ).toBeUndefined();
     });
 
     it("rotates configured credentials and merges request headers", async () => {
-      class TestProvider extends ProviderBase {
-        readonly apiKeyName: keyof Env = "OPENAI_API_KEY";
-        readonly baseUrlProp = "https://api.example.test";
-        readonly pathnamePrefixProp = "/v1";
-
-        async headers(index?: number): Promise<HeadersInit> {
+      const provider = createProvider({
+        apiKeyName: "OPENAI_API_KEY",
+        baseUrl: "https://api.example.test",
+        pathnamePrefix: "/v1",
+        async headers(index): Promise<HeadersInit> {
           return { Authorization: `Bearer key-${index ?? 0}` };
-        }
-      }
+        },
+      });
 
-      const provider = new TestProvider();
       expect(provider.available()).toBe(true);
       expect(provider.getApiKeys()).toEqual(["key-0", "key-1"]);
+      expect(provider.getAiGatewayApiKeys()).toEqual(["key-0", "key-1"]);
+      expect(Secrets.getAll).toHaveBeenCalledWith("OPENAI_API_KEY");
       expect(await provider.getNextApiKeyIndex()).toBe(1);
       expect(Secrets.getNext).toHaveBeenCalledWith("OPENAI_API_KEY");
 
-      await expect(
-        provider.buildRequest(
-          "/models",
-          { method: "GET", headers: { Accept: "application/json" } },
-          1,
-        ),
-      ).resolves.toEqual([
-        "https://api.example.test/v1/models",
-        {
-          method: "GET",
-          headers: {
-            Accept: "application/json",
-            Authorization: "Bearer key-1",
-          },
-        },
-      ]);
+      const [url, init] = await provider.buildRequest(
+        "/models",
+        { method: "GET", headers: { Accept: "application/json" } },
+        1,
+      );
+      expect(url).toBe("https://api.example.test/v1/models");
+      expect(init.method).toBe("GET");
+      expect(new Headers(init.headers)).toEqual(
+        new Headers({
+          Accept: "application/json",
+          Authorization: "Bearer key-1",
+        }),
+      );
+    });
+
+    it("uses named credential profiles for keys, Gateway keys, and rotation", async () => {
+      const provider = withProviderProfile(
+        createProvider({ apiKeyName: "OPENAI_API_KEY" }),
+        "paid",
+      );
+
+      expect(provider.getApiKeys()).toEqual(["key-0", "key-1"]);
+      expect(provider.getAiGatewayApiKeys()).toEqual(["key-0", "key-1"]);
+      expect(provider.getCredentialProfiles()).toEqual(["default", "paid"]);
+      await expect(provider.getNextApiKeyIndex()).resolves.toBe(1);
+      expect(Secrets.getAll).toHaveBeenCalledWith(
+        "OPENAI_API_KEY",
+        false,
+        "paid",
+      );
+      expect(Secrets.getNext).toHaveBeenCalledWith("OPENAI_API_KEY", "paid");
     });
 
     it("does not rotate a single configured credential", async () => {
-      class TestProvider extends ProviderBase {
-        readonly apiKeyName: keyof Env = "OPENAI_API_KEY";
-      }
       vi.mocked(Secrets.getAll).mockReturnValue(["only-key"]);
 
-      expect(await new TestProvider().getNextApiKeyIndex()).toBe(0);
+      const provider = createProvider({ apiKeyName: "OPENAI_API_KEY" });
+      expect(await provider.getNextApiKeyIndex()).toBe(0);
       expect(Secrets.getNext).not.toHaveBeenCalled();
     });
 
     it("falls back safely when a key source has no binding name", async () => {
-      class ExternalKeyProvider extends ProviderBase {
+      const provider = createProvider({
         getApiKeys(): string[] {
           return ["first", "second"];
-        }
-      }
+        },
+      });
 
-      expect(await new ExternalKeyProvider().getNextApiKeyIndex()).toBe(0);
+      expect(await provider.getNextApiKeyIndex()).toBe(0);
     });
 
-    it("builds filtered OpenAI-compatible requests", async () => {
-      const provider = new ProviderBase();
+    it("drops explicitly unsupported fields and retains extensions", async () => {
+      const provider = createProvider({
+        endpoints: {
+          chat_completions: chatCompletionsEndpoint(),
+          models: { path: "/models" },
+        },
+      });
       vi.spyOn(provider, "headers").mockResolvedValue({
         Authorization: "provider-header",
         "X-Provider": "kept",
       });
 
-      const [chatPath, chatInit] = await provider.buildChatCompletionsRequest({
-        body: JSON.stringify({
+      const [chatPath, chatInit] = await buildInferenceRequest(provider, {
+        data: {
           model: "model-id",
           messages: [],
           temperature: 0.5,
-          unsupported: "removed",
-        }),
+          verbosity: "high",
+          unsupported: "retained",
+        },
         headers: { Authorization: "caller-header" },
         apiKeyIndex: 1,
+        target: "direct",
       });
-      expect(chatPath).toBe("/chat/completions");
-      expect(chatInit).toEqual({
+      expect(chatPath).toBe("https://example.com/chat/completions");
+      expect(chatInit).toMatchObject({
         method: "POST",
         body: JSON.stringify({
           model: "model-id",
           messages: [],
           temperature: 0.5,
+          verbosity: "high",
+          unsupported: "retained",
         }),
-        headers: {
-          Authorization: "caller-header",
-          "X-Provider": "kept",
-        },
       });
+      // Provider-computed headers take precedence over caller-supplied ones.
+      expect(new Headers(chatInit.headers)).toEqual(
+        new Headers({
+          "content-type": "application/json",
+          Authorization: "provider-header",
+          "X-Provider": "kept",
+        }),
+      );
 
-      await expect(provider.buildModelsRequest(1)).resolves.toEqual([
+      const preparedData = {
+        model: "prepared-model",
+        messages: [],
+        unsupported: "removed",
+      };
+      const [, preparedInit] = await buildInferenceRequest(provider, {
+        data: { model: preparedData.model, messages: [] },
+        headers: {},
+        target: "direct",
+      });
+      expect(preparedInit.body).toBe(
+        JSON.stringify({ model: "prepared-model", messages: [] }),
+      );
+
+      await expect(
+        buildModelsRequest(provider, provider.endpoints.models!, 1),
+      ).resolves.toEqual([
         "/models",
         {
           method: "GET",
-          headers: {
+          headers: new Headers({
             Authorization: "provider-header",
             "X-Provider": "kept",
-          },
+          }),
         },
       ]);
     });
@@ -156,14 +220,26 @@ describe("provider contracts", () => {
 
       expect(fetchMock).toHaveBeenCalledWith("https://example.com/resource", {
         method: "POST",
-        headers: {},
+        headers: expect.any(Headers),
+        redirect: "manual",
       });
+      expect(new Headers(fetchMock.mock.calls[0][1]?.headers)).toEqual(
+        new Headers(),
+      );
       expect(response.status).toBe(202);
       expect(await response.text()).toBe("proxied");
     });
   });
 
   describe("OpenAI-compatible credentials", () => {
+    it("preserves the existing base and OpenAI-compatible instance contracts", () => {
+      const provider = new OpenAI();
+
+      expect(provider).toBeInstanceOf(ProviderBase);
+      expect(provider).toBeInstanceOf(OpenAICompatibleProvider);
+      expect(provider).toBeInstanceOf(OpenAI);
+    });
+
     it("omits authorization when no API key exists", async () => {
       vi.mocked(Secrets.getAll).mockReturnValue([]);
       expect(await new OpenAICompatibleProvider().headers()).toEqual({});
@@ -174,57 +250,255 @@ describe("provider contracts", () => {
       vi.spyOn(provider, "getApiKeys").mockReturnValue(["first", "second"]);
 
       await expect(provider.headers()).resolves.toEqual({
-        "Content-Type": "application/json",
         Authorization: "Bearer first",
       });
       await expect(provider.headers(3)).resolves.toEqual({
-        "Content-Type": "application/json",
         Authorization: "Bearer second",
       });
     });
   });
 
-  describe("provider-specific behavior", () => {
-    it.each([
-      [new Anthropic(), "/v1/chat/completions", "/v1/models"],
+  describe("built-in provider declarations", () => {
+    // Every built-in provider is described by the same five values, so they are
+    // asserted from one table instead of a near-identical file per provider.
+    const declarations: [
+      name: string,
+      provider: ProviderBase,
+      declaration: {
+        apiKeyName: string;
+        baseUrl: string;
+        pathnamePrefix?: string;
+        chatCompletionPath?: string;
+        modelsPath?: string;
+      },
+    ][] = [
       [
+        "anthropic",
+        new Anthropic(),
+        {
+          apiKeyName: "ANTHROPIC_API_KEY",
+          baseUrl: "https://api.anthropic.com",
+          chatCompletionPath: "/v1/chat/completions",
+          modelsPath: "/v1/models",
+        },
+      ],
+      [
+        "cerebras",
+        new Cerebras(),
+        {
+          apiKeyName: "CEREBRAS_API_KEY",
+          baseUrl: "https://api.cerebras.ai/v1",
+        },
+      ],
+      [
+        "cline",
+        new Cline(),
+        {
+          apiKeyName: "CLINE_API_KEY",
+          baseUrl: "https://api.cline.bot/api/v1",
+          modelsPath: "/ai/cline/recommended-models",
+        },
+      ],
+      [
+        "cohere",
         new Cohere(),
-        "/compatibility/v1/chat/completions",
-        "/v1/models?page_size=100&endpoint=chat",
+        {
+          apiKeyName: "COHERE_API_KEY",
+          baseUrl: "https://api.cohere.com",
+          chatCompletionPath: "/compatibility/v1/chat/completions",
+          modelsPath: "/v1/models?page_size=100&endpoint=chat",
+        },
       ],
       [
+        "deepseek",
+        new DeepSeek(),
+        {
+          apiKeyName: "DEEPSEEK_API_KEY",
+          baseUrl: "https://api.deepseek.com",
+        },
+      ],
+      [
+        "google-ai-studio",
         new GoogleAiStudio(),
-        "/v1beta/openai/chat/completions",
-        "/v1beta/models",
+        {
+          apiKeyName: "GEMINI_API_KEY",
+          baseUrl: "https://generativelanguage.googleapis.com",
+          chatCompletionPath: "/v1beta/openai/chat/completions",
+          modelsPath: "/v1beta/models",
+        },
       ],
-      [new Grok(), "/v1/chat/completions", "/v1/models"],
-      [new HuggingFace(), "", ""],
-      [new Mistral(), "/v1/chat/completions", "/v1/models"],
-      [new OpenRouter(), "/v1/chat/completions", "/v1/models"],
-      [new PerplexityAi(), "/v1/chat/completions", "/v1/models"],
-      [new Replicate(), "", ""],
       [
-        new WorkersAi(),
-        "/v1/chat/completions",
-        "/models/search?task=Text Generation",
+        "grok",
+        new Grok(),
+        {
+          apiKeyName: "GROK_API_KEY",
+          baseUrl: "https://api.x.ai",
+          chatCompletionPath: "/v1/chat/completions",
+          modelsPath: "/v1/models",
+        },
       ],
-    ])(
-      "exposes the expected endpoint paths for %s",
-      (provider, chat, models) => {
-        expect(provider.chatCompletionPath).toBe(chat);
-        expect(provider.modelsPath).toBe(models);
+      [
+        "groq",
+        new Groq(),
+        {
+          apiKeyName: "GROQ_API_KEY",
+          baseUrl: "https://api.groq.com/openai/v1",
+        },
+      ],
+      [
+        "huggingface",
+        new HuggingFace(),
+        {
+          apiKeyName: "HUGGINGFACE_API_KEY",
+          baseUrl: "https://api-inference.huggingface.co/models",
+          chatCompletionPath: "",
+          modelsPath: "",
+        },
+      ],
+      [
+        "mistral",
+        new Mistral(),
+        {
+          apiKeyName: "MISTRAL_API_KEY",
+          baseUrl: "https://api.mistral.ai",
+          chatCompletionPath: "/v1/chat/completions",
+          modelsPath: "/v1/models",
+        },
+      ],
+      [
+        "nvidia-nim",
+        new NvidiaNim(),
+        {
+          apiKeyName: "NVIDIA_NIM_API_KEY",
+          baseUrl: "https://integrate.api.nvidia.com",
+          pathnamePrefix: "/v1",
+        },
+      ],
+      [
+        "ollama",
+        new Ollama(),
+        {
+          apiKeyName: "OLLAMA_API_KEY",
+          baseUrl: "https://ollama.com",
+          pathnamePrefix: "/v1",
+        },
+      ],
+      [
+        "openai",
+        new OpenAI(),
+        {
+          apiKeyName: "OPENAI_API_KEY",
+          baseUrl: "https://api.openai.com/v1",
+        },
+      ],
+      [
+        "openrouter",
+        new OpenRouter(),
+        {
+          apiKeyName: "OPENROUTER_API_KEY",
+          baseUrl: "https://openrouter.ai/api",
+          chatCompletionPath: "/v1/chat/completions",
+          modelsPath: "/v1/models",
+        },
+      ],
+      [
+        "perplexity-ai",
+        new PerplexityAi(),
+        {
+          apiKeyName: "PERPLEXITYAI_API_KEY",
+          baseUrl: "https://api.perplexity.ai",
+          chatCompletionPath: "/v1/chat/completions",
+          modelsPath: "/v1/models",
+        },
+      ],
+      [
+        "replicate",
+        new Replicate(),
+        {
+          apiKeyName: "REPLICATE_API_KEY",
+          baseUrl: "https://api.replicate.com/v1",
+          chatCompletionPath: "",
+          modelsPath: "",
+        },
+      ],
+      [
+        "workers_ai",
+        new WorkersAi(),
+        {
+          apiKeyName: "CLOUDFLARE_API_KEY",
+          baseUrl:
+            "https://api.cloudflare.com/client/v4/accounts/account-id/ai",
+          chatCompletionPath: "/v1/chat/completions",
+          modelsPath: "/models/search?task=Text%20Generation",
+        },
+      ],
+    ];
+
+    it.each(declarations)(
+      "declares the credential and endpoints of %s",
+      (_name, provider, declaration) => {
+        expect(provider.apiKeyName).toBe(declaration.apiKeyName);
+        expect(provider.baseUrl()).toBe(declaration.baseUrl);
+        expect(provider.pathnamePrefix()).toBe(
+          declaration.pathnamePrefix ?? "",
+        );
+        expect(provider.endpoints.chat_completions?.path).toBe(
+          ["huggingface", "replicate"].includes(_name)
+            ? undefined
+            : (declaration.chatCompletionPath ?? "/chat/completions"),
+        );
+        expect(provider.endpoints.models?.path).toBe(
+          ["huggingface", "replicate", "perplexity-ai"].includes(_name)
+            ? undefined
+            : (declaration.modelsPath ?? "/models"),
+        );
       },
     );
+
+    it.each(declarations)(
+      "reports the credential availability of %s",
+      (_name, provider) => {
+        expect(provider.available()).toBe(true);
+        vi.mocked(Secrets.getAll).mockReturnValue([]);
+        expect(provider.available()).toBe(false);
+      },
+    );
+  });
+
+  describe("provider-specific behavior", () => {
+    it("tracks the current OpenAI Chat Completions top-level parameters", () => {
+      expect(
+        chatParameterFilter()({
+          model: "gpt-test",
+          messages: [],
+          moderation: { type: "omni-moderation-latest" },
+          prompt_cache_key: "tenant",
+          prompt_cache_options: { mode: "explicit", ttl: "30m" },
+          prompt_cache_retention: "24h",
+          safety_identifier: "hashed-user",
+          web_search_options: {},
+          suffix: "legacy",
+        }),
+      ).toEqual({
+        model: "gpt-test",
+        messages: [],
+        moderation: { type: "omni-moderation-latest" },
+        prompt_cache_key: "tenant",
+        prompt_cache_options: { mode: "explicit", ttl: "30m" },
+        prompt_cache_retention: "24h",
+        safety_identifier: "hashed-user",
+        web_search_options: {},
+      });
+    });
 
     it("builds Anthropic headers and converts model timestamps", async () => {
       const provider = new Anthropic();
       await expect(provider.headers(1)).resolves.toEqual({
-        "Content-Type": "application/json",
         "x-api-key": "key-1",
         "anthropic-version": "2023-06-01",
       });
       expect(
-        provider.modelsToOpenAIFormat({
+        provider.endpoints.models!.convertResponse!.call(provider, {
           data: [
             {
               id: "claude",
@@ -253,7 +527,7 @@ describe("provider contracts", () => {
 
     it("converts provider model lists to the common format", () => {
       expect(
-        new Cohere().modelsToOpenAIFormat({
+        new Cohere().endpoints.models!.convertResponse!.call(new Cohere(), {
           models: [{ name: "command", endpoints: ["chat"] }],
           next_page_token: null,
         }),
@@ -271,23 +545,26 @@ describe("provider contracts", () => {
       });
 
       expect(
-        new GoogleAiStudio().modelsToOpenAIFormat({
-          models: [
-            {
-              name: "models/gemini",
-              version: "1",
-              displayName: "Gemini",
-              description: "model",
-              inputTokenLimit: 1,
-              outputTokenLimit: 1,
-              supportedGenerationMethods: ["generateContent"],
-              temperature: 1,
-              maxTemperature: 2,
-              topP: 1,
-              topK: 1,
-            },
-          ],
-        }),
+        new GoogleAiStudio().endpoints.models!.convertResponse!.call(
+          new GoogleAiStudio(),
+          {
+            models: [
+              {
+                name: "models/gemini",
+                version: "1",
+                displayName: "Gemini",
+                description: "model",
+                inputTokenLimit: 1,
+                outputTokenLimit: 1,
+                supportedGenerationMethods: ["generateContent"],
+                temperature: 1,
+                maxTemperature: 2,
+                topP: 1,
+                topK: 1,
+              },
+            ],
+          },
+        ),
       ).toMatchObject({
         object: "list",
         data: [
@@ -312,19 +589,12 @@ describe("provider contracts", () => {
           },
         ],
       };
-      expect(new Groq().modelsToOpenAIFormat(openAiShaped)).toEqual({
-        object: "list",
-        data: [
-          {
-            id: "model",
-            object: "model",
-            created: 12,
-            owned_by: "owner",
-            _: { active: true },
-          },
-        ],
-      });
-      expect(new Mistral().modelsToOpenAIFormat(openAiShaped)).toEqual({
+      expect(
+        new Groq().endpoints.models!.convertResponse!.call(
+          new Groq(),
+          openAiShaped,
+        ),
+      ).toEqual({
         object: "list",
         data: [
           {
@@ -337,9 +607,29 @@ describe("provider contracts", () => {
         ],
       });
       expect(
-        new OpenRouter().modelsToOpenAIFormat({
-          data: [{ id: "router-model", created: 42, name: "Router" }],
-        }),
+        new Mistral().endpoints.models!.convertResponse!.call(
+          new Mistral(),
+          openAiShaped,
+        ),
+      ).toEqual({
+        object: "list",
+        data: [
+          {
+            id: "model",
+            object: "model",
+            created: 12,
+            owned_by: "owner",
+            _: { active: true },
+          },
+        ],
+      });
+      expect(
+        new OpenRouter().endpoints.models!.convertResponse!.call(
+          new OpenRouter(),
+          {
+            data: [{ id: "router-model", created: 42, name: "Router" }],
+          },
+        ),
       ).toEqual({
         object: "list",
         data: [
@@ -360,35 +650,95 @@ describe("provider contracts", () => {
         .mockResolvedValue(new Response());
       const provider = new GoogleAiStudio();
 
+      await expect(provider.headers()).resolves.toEqual({
+        "x-goog-api-key": "key-0",
+      });
       await expect(provider.headers(1)).resolves.toEqual({
-        "Content-Type": "application/json",
         "x-goog-api-key": "key-1",
       });
+      expect(
+        new Headers(
+          await provider.buildHeadersForPath(
+            "/v1beta/openai/chat/completions",
+            undefined,
+            1,
+          ),
+        ),
+      ).toEqual(
+        new Headers({
+          authorization: "Bearer key-1",
+        }),
+      );
+      expect(
+        new Headers(
+          await provider.buildHeadersForPath("/v1beta/models", undefined, 1),
+        ),
+      ).toEqual(
+        new Headers({
+          "x-goog-api-key": "key-1",
+        }),
+      );
+      vi.mocked(Secrets.getAll).mockReturnValue([]);
+      await expect(provider.headers()).resolves.toEqual({});
+      expect(
+        new Headers(
+          await provider.buildHeadersForPath(
+            "/v1beta/openai/chat/completions",
+            undefined,
+            0,
+          ),
+        ),
+      ).toEqual(new Headers({}));
+      vi.mocked(Secrets.getAll).mockReturnValue(["key-0", "key-1"]);
+      const [builtChatPath, builtChatInit] = await buildInferenceRequest(
+        provider,
+        {
+          data: { model: "gemini", messages: [] },
+          headers: {
+            Authorization: "Bearer caller-key",
+            "x-goog-api-key": "caller-key",
+            "X-Custom": "value",
+          },
+          apiKeyIndex: 1,
+          target: "direct",
+        },
+      );
+      expect(builtChatPath).toBe(
+        "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      );
+      expect(new Headers(builtChatInit.headers)).toEqual(
+        new Headers({
+          Authorization: "Bearer key-1",
+          "Content-Type": "application/json",
+          "X-Custom": "value",
+        }),
+      );
+
       await provider.fetch(
         "/v1beta/openai/chat/completions",
         { headers: { "x-goog-api-key": "old", "X-Custom": "value" } },
         1,
       );
-      expect(fetchMock).toHaveBeenLastCalledWith(
+      const [chatUrl, chatInit] = fetchMock.mock.calls.at(-1) ?? [];
+      expect(chatUrl).toBe(
         "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-        {
-          headers: {
-            Authorization: "Bearer key-1",
-            "Content-Type": "application/json",
-            "X-Custom": "value",
-          },
-        },
+      );
+      expect(new Headers(chatInit?.headers)).toEqual(
+        new Headers({
+          Authorization: "Bearer key-1",
+          "X-Custom": "value",
+        }),
       );
 
       await provider.fetch("/v1beta/models", undefined, 0);
-      expect(fetchMock).toHaveBeenLastCalledWith(
+      const [modelsUrl, modelsInit] = fetchMock.mock.calls.at(-1) ?? [];
+      expect(modelsUrl).toBe(
         "https://generativelanguage.googleapis.com/v1beta/models",
-        {
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": "key-0",
-          },
-        },
+      );
+      expect(new Headers(modelsInit?.headers)).toEqual(
+        new Headers({
+          "x-goog-api-key": "key-0",
+        }),
       );
     });
 
@@ -399,11 +749,19 @@ describe("provider contracts", () => {
         "https://api.cloudflare.com/client/v4/accounts/account-id/ai",
       );
       await expect(provider.headers(1)).resolves.toEqual({
-        "Content-Type": "application/json",
         Authorization: "Bearer key-1",
       });
+      const [modelsUrl] = await provider.buildRequest(
+        provider.endpoints.models!.path,
+        {
+          method: "GET",
+        },
+      );
+      expect(modelsUrl).toBe(
+        "https://api.cloudflare.com/client/v4/accounts/account-id/ai/models/search?task=Text%20Generation",
+      );
       expect(
-        provider.modelsToOpenAIFormat({
+        provider.endpoints.models!.convertResponse!.call(provider, {
           success: true,
           errors: [],
           messages: [],
@@ -432,28 +790,31 @@ describe("provider contracts", () => {
       expect(provider.available()).toBe(false);
     });
 
-    it.each([
-      [new HuggingFace(), "HuggingFace"],
-      [new Replicate(), "Replicate"],
-    ])("rejects unsupported operations for %s", async (provider, name) => {
-      await expect(
-        provider.buildChatCompletionsRequest({ body: "{}", headers: {} }),
-      ).rejects.toThrow(
-        new ProviderNotSupportedError(
-          `${name} does not support chat completions`,
-        ),
+    it("rejects an unsafe Cloudflare account identifier", () => {
+      expect(new WorkersAi().configurationError()).toBeUndefined();
+      vi.mocked(Secrets.get).mockReturnValue("");
+      expect(new WorkersAi().configurationError()).toBeUndefined();
+
+      vi.mocked(Secrets.get).mockImplementation((name) =>
+        name === "CLOUDFLARE_ACCOUNT_ID" ? "../other-account" : "key-0",
       );
-      await expect(provider.buildModelsRequest()).rejects.toThrow(
-        new ProviderNotSupportedError(
-          `${name} does not support models list via this proxy.`,
-        ),
-      );
+      const provider = new WorkersAi();
+      expect(provider.configurationError()).toContain("invalid");
+      expect(() => provider.baseUrl()).toThrow("missing or invalid");
     });
 
-    it("rejects the unsupported Perplexity models operation", async () => {
-      await expect(new PerplexityAi().buildModelsRequest()).rejects.toThrow(
-        "Perplexity AI does not support models list via this proxy.",
-      );
+    it.each([new Replicate()])(
+      "does not declare unsupported inference or models for %s",
+      async (provider) => {
+        expect(
+          await provider.resolveInference("model", "chat_completions"),
+        ).toBeUndefined();
+        expect(provider.endpoints.models).toBeUndefined();
+      },
+    );
+
+    it("does not declare a Perplexity models operation", () => {
+      expect(new PerplexityAi().endpoints.models).toBeUndefined();
     });
   });
 
@@ -472,14 +833,14 @@ describe("provider contracts", () => {
       expect(await provider.getNextApiKeyIndex()).toBe(1);
       expect(Secrets.getNextIndex).toHaveBeenCalledWith("custom", 2);
       await expect(provider.headers(3)).resolves.toEqual({
-        "Content-Type": "application/json",
         Authorization: "Bearer second",
       });
       await expect(provider.headers()).resolves.toEqual({
-        "Content-Type": "application/json",
         Authorization: "Bearer first",
       });
-      expect(provider.staticModels()).toMatchObject({
+      expect(
+        provider.endpoints.models?.getStaticModels?.call(provider),
+      ).toMatchObject({
         object: "list",
         data: [
           { id: "one", object: "model", owned_by: "custom" },
@@ -494,10 +855,10 @@ describe("provider contracts", () => {
         baseUrl: "https://none.example",
       });
       expect(withoutKeys.getApiKeys()).toEqual([]);
-      await expect(withoutKeys.headers()).resolves.toEqual({
-        "Content-Type": "application/json",
-      });
-      expect(withoutKeys.staticModels()).toBeUndefined();
+      await expect(withoutKeys.headers()).resolves.toEqual({});
+      expect(
+        withoutKeys.endpoints.models?.getStaticModels?.call(withoutKeys),
+      ).toBeUndefined();
 
       const scalarKey = new CustomOpenAI({
         name: "scalar",
@@ -507,8 +868,33 @@ describe("provider contracts", () => {
       });
       expect(scalarKey.getApiKeys()).toEqual(["only"]);
       expect(await scalarKey.getNextApiKeyIndex()).toBe(0);
-      expect(scalarKey.staticModels()).toBeUndefined();
+      expect(
+        scalarKey.endpoints.models?.getStaticModels?.call(scalarKey),
+      ).toBeUndefined();
       expect(Secrets.getNextIndex).not.toHaveBeenCalled();
+
+      expect(withProviderProfile(scalarKey, "paid").getApiKeys()).toEqual([]);
+    });
+
+    it("selects and rotates named custom endpoint profiles", async () => {
+      const baseProvider = new CustomOpenAI({
+        name: "custom-profiled",
+        baseUrl: "https://custom.example",
+        apiKeys: {
+          default: "default-key",
+          paid: ["paid-one", "paid-two"],
+          "bad/profile": "ignored",
+        },
+      });
+      const paidProvider = withProviderProfile(baseProvider, "paid");
+
+      expect(baseProvider.getCredentialProfiles()).toEqual(["default", "paid"]);
+      expect(paidProvider.getApiKeys()).toEqual(["paid-one", "paid-two"]);
+      await expect(paidProvider.getNextApiKeyIndex()).resolves.toBe(1);
+      expect(Secrets.getNextIndex).toHaveBeenCalledWith(
+        "custom-profiled:paid",
+        2,
+      );
     });
   });
 });
