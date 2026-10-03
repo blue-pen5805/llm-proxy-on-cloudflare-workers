@@ -5,7 +5,7 @@ are documented in this file. Date entries in `YYYY-MM-DD` format and order them
 in reverse chronological order. Add new entries at the top of the relevant
 dated section; when multiple changes share a date, put the newest change first.
 
-## 1.0.0 (Unreleased)
+## 1.0.0
 
 ### 2026-10-03
 

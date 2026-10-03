@@ -9,7 +9,7 @@
     "paths": {
       "~/src/*": ["../src/*"]
     },
-    "types": ["node", "@cloudflare/vitest-pool-workers/types"]
+    "types": ["node", "@cloudflare/vitest-plugin/types"]
   },
   "include": [
     "./src/**/*.ts",

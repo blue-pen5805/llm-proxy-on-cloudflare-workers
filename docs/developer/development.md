@@ -34,7 +34,10 @@ The project uses the beta Cloudflare CLI, `cf`. `cloudflare.config.ts` owns
 Worker deployment settings. `cf` uses its internal Wrangler bundler with default
 settings, including automatic type generation during development and builds.
 Vitest takes the entry point, compatibility date, and compatibility flags from
-`cloudflare.config.ts` and passes them directly to the Workers test plugin.
+`cloudflare.config.ts` and passes them directly to `@cloudflare/vitest-plugin`.
+The plugin runs tests in the Workers runtime and requires Vitest `^4.1.0`; keep
+`vitest` and `@vitest/coverage-istanbul` on matching versions. See the official
+[Workers Vitest integration](https://developers.cloudflare.com/workers/testing/vitest-integration/).
 No separate Wrangler configuration file is needed.
 
 Node.js 22.18 or later is required to load the TypeScript configuration.
@@ -54,6 +57,8 @@ npm run deploy -- --dry-run
 These checks build and package the Worker without uploading it. For CLI
 configuration and commands, see the official
 [cf migration reference](https://developers.cloudflare.com/cf/wrangler/reference/).
+
+Use `npx cf auth logout` to sign out of the local Cloudflare CLI session.
 
 ## Project map
 
@@ -208,6 +213,9 @@ npm run verify
 The verification command runs type checking, formatting, linting, and the full
 test suite with coverage in that order. Use `npm run test` when coverage is not
 needed for a faster test-only run.
+
+For interactive testing, use `npx vitest watch`. Apply automatic lint fixes with
+`npm run lint -- --fix`.
 
 Coverage is a required contract: statements, branches, functions, and lines
 must each remain at 100%. Add meaningful assertions for reachable behavior.
