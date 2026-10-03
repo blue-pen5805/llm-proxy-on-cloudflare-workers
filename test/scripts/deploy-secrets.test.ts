@@ -77,7 +77,7 @@ describe("deploy-secrets", () => {
     vi.mocked(fs.readFileSync).mockReset();
     vi.mocked(fs.unlinkSync).mockReset();
     vi.mocked(fs.existsSync).mockReset().mockReturnValue(true);
-    vi.mocked(syncAiGatewayCustomProviders).mockResolvedValue({
+    vi.mocked(syncAiGatewayCustomProviders).mockReset().mockResolvedValue({
       enabled: false,
       desired: 0,
       created: 0,
@@ -341,11 +341,6 @@ describe("deploy-secrets", () => {
     });
 
     it.each([
-      ["omitted partner", { CUSTOM_OPENAI_ENDPOINTS: null }],
-      [
-        "omitted partner, reversed",
-        { VIRTUAL_MODELS: { "virtual/a": ["openai/gpt-4"] } },
-      ],
       // An empty value satisfies key presence while deploying nothing, so
       // testing presence rather than the effective operation would let a
       // partial update through under the guise of a complete declaration.
@@ -367,13 +362,10 @@ describe("deploy-secrets", () => {
         },
       ],
     ])(
-      "requires the interdependent settings to change together: %s",
+      "rejects an explicitly empty partner in a dependent update: %s",
       async (_name, config) => {
-        // A setting this file does not deploy keeps its deployed value, which
-        // this command cannot read back. Deleting CUSTOM_OPENAI_ENDPOINTS on
-        // its own would otherwise pass while turning a retained VIRTUAL_MODELS
-        // entry that referenced that endpoint into a self-reference, so every
-        // request would fail with HTTP 503 after a successful deployment.
+        // Explicitly empty values preserve deployed state and cannot be
+        // treated as deletions when validating the dependent update.
         const mockFs = createMockFsOps({
           "/root/config.jsonc": JSON.stringify(config),
         });
@@ -421,23 +413,104 @@ describe("deploy-secrets", () => {
 
       expect(result.success).toBe(true);
       expect(result.messages).toContain("   - VIRTUAL_MODELS: [delete]");
+      expect(result.messages.join("\n")).not.toContain(
+        "CUSTOM_OPENAI_ENDPOINTS: [delete]",
+      );
     });
 
-    it("still rejects changing the endpoints on their own", async () => {
-      // The reverse direction stays unverifiable: a retained virtual model may
-      // reference an endpoint this deployment adds or removes.
-      const mockFs = createMockFsOps({
-        "/root/config.jsonc": JSON.stringify({
+    it.each([
+      [
+        "custom endpoints without virtual models",
+        {
           CUSTOM_OPENAI_ENDPOINTS: [
             { name: "custom", baseUrl: "https://custom.example/v1" },
           ],
-        }),
+        },
+        "CUSTOM_OPENAI_ENDPOINTS",
+        "VIRTUAL_MODELS",
+        "set",
+      ],
+      [
+        "endpoint deletion without virtual models",
+        { CUSTOM_OPENAI_ENDPOINTS: null },
+        "CUSTOM_OPENAI_ENDPOINTS",
+        "VIRTUAL_MODELS",
+        "delete",
+      ],
+      [
+        "virtual models without custom endpoints",
+        { VIRTUAL_MODELS: { "virtual/a": ["openai/gpt-4"] } },
+        "VIRTUAL_MODELS",
+        "CUSTOM_OPENAI_ENDPOINTS",
+        "set",
+      ],
+    ])(
+      "resolves an omitted partner to deletion for %s",
+      async (_name, config, changed, omitted, operation) => {
+        const mockFs = createMockFsOps({
+          "/root/config.jsonc": JSON.stringify(config),
+        });
+        const result = await deploySecrets("/root", undefined, true, mockFs);
+        expect(result.success).toBe(true);
+        expect(result.messages).toContain(`   - ${changed}: [${operation}]`);
+        expect(result.messages).toContain(`   - ${omitted}: [delete]`);
+        expect(execFileSync).not.toHaveBeenCalled();
+        expect(spawn).not.toHaveBeenCalled();
+        expect(mockFs.writeFileSync).not.toHaveBeenCalled();
+      },
+    );
+
+    it("deletes retained virtual models when deploying a legacy custom configuration", async () => {
+      const endpoints = [
+        { name: "custom", baseUrl: "https://custom.example/v1" },
+      ];
+      const config = { CUSTOM_OPENAI_ENDPOINTS: endpoints };
+      const mockFs = createMockFsOps({
+        "/root/config.jsonc": JSON.stringify(config),
       });
+      vi.mocked(execFileSync).mockReturnValue('[{"name":"VIRTUAL_MODELS"}]');
 
-      const result = await deploySecrets("/root", undefined, true, mockFs);
+      const result = await deploySecrets(
+        "/root",
+        undefined,
+        false,
+        mockFs,
+        true,
+      );
 
-      expect(result.success).toBe(false);
-      expect(result.messages[0]).toContain("is left unchanged");
+      expect(result.success).toBe(true);
+      expect(syncAiGatewayCustomProviders).toHaveBeenCalledWith(
+        { ...config, VIRTUAL_MODELS: null },
+        false,
+      );
+      const bulkPayload = vi.mocked(fs.writeFileSync).mock
+        .calls[0][1] as string;
+      expect(JSON.parse(bulkPayload)).toEqual({
+        secrets: {
+          CUSTOM_OPENAI_ENDPOINTS: {
+            name: "CUSTOM_OPENAI_ENDPOINTS",
+            type: "secret_text",
+            text: JSON.stringify(endpoints),
+          },
+          VIRTUAL_MODELS: null,
+        },
+      });
+      expect(spawn).toHaveBeenCalledOnce();
+      expect(mockFs.writeFileSync).not.toHaveBeenCalled();
+    });
+
+    it("preserves both dependent settings during an unrelated credential update", async () => {
+      const mockFs = createMockFsOps({
+        "/root/config.jsonc": '{"OPENAI_API_KEY":"example-key"}',
+      });
+      const result = await deploySecrets("/root", undefined, false, mockFs);
+      expect(result.success).toBe(true);
+      const bulkPayload = vi.mocked(fs.writeFileSync).mock
+        .calls[0][1] as string;
+      expect(Object.keys(JSON.parse(bulkPayload).secrets)).toEqual([
+        "OPENAI_API_KEY",
+      ]);
+      expect(execFileSync).not.toHaveBeenCalled();
     });
 
     it("detects the cycle that deleting a custom endpoint would create", async () => {

@@ -5,10 +5,15 @@ are documented in this file. Date entries in `YYYY-MM-DD` format and order them
 in reverse chronological order. Add new entries at the top of the relevant
 dated section; when multiple changes share a date, put the newest change first.
 
-## Unreleased
+## 1.0.0 (Unreleased)
 
-Planned version: `1.0.0`. The package remains at `0.2.1` until the version
-update is explicitly approved.
+### 2026-10-03
+
+- Accepted custom endpoint configuration without `VIRTUAL_MODELS` during secret
+  deployment. Dependent updates treat an omitted partner as `null` in validation,
+  Gateway synchronization, and the deployed secret operations, clearing retained
+  state. Updates to unrelated settings and deletion of virtual models alone
+  preserve their existing partial-update behavior.
 
 ### 2026-10-02
 

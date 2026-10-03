@@ -35,20 +35,28 @@ express, including endpoint-name uniqueness, exact CORS origins, and bounded,
 acyclic virtual-model graphs. `--dry-run` performs the same validation.
 Effective `PROXY_API_KEY` updates must also pass the runtime authentication
 reader, including its 64-key limit and requirement for at least one nonblank
-key. Omitted and empty no-op values remain unchanged, and `null` remains an
-explicit deletion. Local validation and serialized secret-size checks finish
-before any Gateway synchronization or cf operation.
+key. Empty no-op values remain unchanged, and `null` is an explicit deletion.
+Omitted values remain unchanged except for dependent updates described below.
+Local validation and serialized secret-size checks finish before any Gateway
+synchronization or cf operation.
 
-`CUSTOM_OPENAI_ENDPOINTS` and `VIRTUAL_MODELS` are interdependent. When either
-changes, include the final value or `null` for both so retained deployment state
-cannot leave unresolved references. Deleting `VIRTUAL_MODELS` alone is allowed
-because it removes every reference. Empty values are no-ops and do not count as
-an update.
+`CUSTOM_OPENAI_ENDPOINTS` and `VIRTUAL_MODELS` are interdependent. When setting
+either or deleting custom endpoints, an omitted partner is treated as `null`:
+validation sees no value and deployment deletes any existing partner secret.
+For example, deploying custom endpoints without a `VIRTUAL_MODELS` key succeeds
+and clears any deployed virtual models. Include both final values to retain both.
+An explicitly empty partner is still a no-op and is rejected for these dependent
+updates; omit it or use `null` to delete it instead.
+
+Deleting `VIRTUAL_MODELS` alone leaves custom endpoints unchanged because it
+removes every reference. If neither setting has an effective update, both remain
+unchanged. The helper does not rewrite the local configuration file.
 
 `npm run secrets:deploy` treats a top-level `null` as an explicit deletion of
-that deployed Worker secret. A setting omitted from the file is left unchanged,
-while empty strings, empty arrays, and empty objects are ignored. Dry-run output
-labels each name as `[set]` or `[delete]` without showing its value.
+that deployed Worker secret. Apart from the dependent-update rule above, omitted
+settings are left unchanged. Empty strings, empty arrays, and empty objects are
+ignored. Dry-run output labels each name as `[set]` or `[delete]` without showing
+its value.
 
 For local development, `.dev.vars` generation omits top-level `null` and missing
 values because dotenv files cannot express cf's deployed-secret deletion

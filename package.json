@@ -1,6 +1,6 @@
 {
   "name": "llm-proxy-on-cloudflare-workers",
-  "version": "0.2.1",
+  "version": "1.0.0",
   "private": true,
   "description": "A serverless proxy on Cloudflare Workers for multiple LLM APIs with unified authentication and key rotation.",
   "license": "MIT",

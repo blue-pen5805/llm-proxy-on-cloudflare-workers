@@ -67,6 +67,7 @@ curl https://your-worker.example/v1/chat/completions \
 ## ドキュメント
 
 - [初期セットアップ](docs/user/initial-setup_ja.md) ([English](docs/user/initial-setup.md))
+- [1.0.0 へのアップグレード](docs/user/upgrade_ja.md) ([English](docs/user/upgrade.md))
 - [設定リファレンス](docs/user/configuration.md)
 - [HTTP API とルーティング](docs/user/api/overview.md)
 - [運用・トラブルシューティング](docs/user/operations.md)

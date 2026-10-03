@@ -2,8 +2,9 @@
 
 ## Deployment checklist
 
-Follow [initial setup](initial-setup.md) for installation and deployment. For
-updates:
+Follow [initial setup](initial-setup.md) for installation and deployment, or the
+[1.0.0 upgrade guide](upgrade.md) ([日本語](upgrade_ja.md)) for an existing
+installation. For routine updates:
 
 1. Edit the target configuration and preview it with
    `npm run secrets:deploy -- --dry-run [--env <env>]`.

@@ -76,29 +76,24 @@ function configOperation(
 }
 
 /**
- * Require the interdependent settings to change together.
+ * Resolve omitted partners to explicit deletions for dependent updates.
  *
- * A setting this file leaves alone keeps whatever is already deployed, and this
- * command cannot read deployed secret values back, so validating the file alone
- * describes the resulting configuration only when both halves of the pair are
- * known. Deleting CUSTOM_OPENAI_ENDPOINTS on its own, for example, would
- * otherwise pass while turning a retained VIRTUAL_MODELS entry that referenced
- * that endpoint into a self-reference the Worker rejects with HTTP 503.
+ * The command cannot read deployed secret values back. An omitted partner must
+ * therefore be deleted, not merely treated as absent during validation, so a
+ * retained virtual model cannot reference an endpoint this update removes.
  *
- * The test is the effective operation rather than key presence, because an
- * empty value satisfies presence while deploying nothing, which would reopen
- * exactly that gap.
+ * Explicitly empty values remain no-ops and cannot complete a dependent update.
+ * Files that update neither setting retain both deployed values.
  *
  * The dependency runs one way, so the pairing is not symmetric. Deleting
  * VIRTUAL_MODELS leaves no reference that could name an endpoint, and both
  * cycles and the attempt limit are properties of that graph alone, so the
- * result is verifiable whatever CUSTOM_OPENAI_ENDPOINTS holds. Every other
- * one-sided change leaves the retained half unknown.
+ * result is verifiable whatever CUSTOM_OPENAI_ENDPOINTS holds.
  */
-function assertInterdependentConfigIsComplete(
+function resolveInterdependentConfig(
   config: Record<string, unknown>,
-): void {
-  if (configOperation(config, VIRTUAL_MODELS_KEY) === "delete") return;
+): Record<string, unknown> {
+  if (configOperation(config, VIRTUAL_MODELS_KEY) === "delete") return config;
 
   const changing = INTERDEPENDENT_CONFIG_KEYS.filter(
     (key) => configOperation(config, key) !== "unchanged",
@@ -107,17 +102,23 @@ function assertInterdependentConfigIsComplete(
     changing.length === 0 ||
     changing.length === INTERDEPENDENT_CONFIG_KEYS.length
   ) {
-    return;
+    return config;
   }
+
+  const resolvedConfig = {
+    [CUSTOM_ENDPOINTS_KEY]: null,
+    [VIRTUAL_MODELS_KEY]: null,
+    ...config,
+  };
   const unchanged = INTERDEPENDENT_CONFIG_KEYS.filter(
-    (key) => !changing.includes(key),
+    (key) => configOperation(resolvedConfig, key) === "unchanged",
   );
+  if (unchanged.length === 0) return resolvedConfig;
+
   throw new Error(
     `${changing.join(", ")} cannot be deployed while ${unchanged.join(", ")} ` +
-      `is left unchanged, whether by omitting it or by giving it an empty ` +
-      `value that deploys nothing. A setting that is not deployed keeps its ` +
-      `deployed value, which cannot be read back, so give both their final ` +
-      `value or null for the resulting configuration to be verifiable.`,
+      `is left unchanged by an explicitly empty value that deploys nothing. ` +
+      `Give the partner its final value, or omit it or use null to delete it.`,
   );
 }
 
@@ -541,13 +542,14 @@ export async function deploySecrets(
     // Reject undeclared deployment modes before any Gateway synchronization.
     cloudflareConfig({ mode: environmentName, isPreview: false });
     const configFileContent = fileSystem.readFileSync(configPath, "utf8");
-    const parsedConfig = parseJsonc(configFileContent);
+    const parsedConfig = resolveInterdependentConfig(
+      parseJsonc(configFileContent),
+    );
     const warnings = deprecatedConfigWarnings(parsedConfig);
 
     // Validate the configuration this deployment results in, not the file's
-    // literal contents: no-op empty values are excluded, and the interdependent
-    // settings must be declared together for that result to be knowable.
-    assertInterdependentConfigIsComplete(parsedConfig);
+    // literal contents: no-op empty values are excluded, and omitted partners
+    // have been resolved to deletions shared by validation and deployment.
     const resultingConfig = deployableConfig(parsedConfig);
     validateVirtualModelGraph(resultingConfig);
     validateRuntimeConfig(resultingConfig);

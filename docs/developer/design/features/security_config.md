@@ -114,12 +114,17 @@ values are masked, output is value-free, and generated local files use
 owner-only permissions. Operator configuration files remain untracked.
 
 Deployment also applies constraints the schema cannot express, including unique
-endpoint names, exact origins, and bounded acyclic virtual-model graphs. Because
-omitted settings retain their deployed value, `CUSTOM_OPENAI_ENDPOINTS` and
-`VIRTUAL_MODELS` normally change together; deleting `VIRTUAL_MODELS` alone is
-safe because no endpoint reference remains. Runtime validation repeats critical
-checks for bindings installed outside the repository tooling and fails closed
-with a non-disclosing HTTP 503.
+endpoint names, exact origins, and bounded acyclic virtual-model graphs.
+Setting `CUSTOM_OPENAI_ENDPOINTS` or `VIRTUAL_MODELS`, or deleting custom
+endpoints, resolves an omitted partner to `null`. The same resolved snapshot is
+used for validation, Gateway synchronization, and secret deployment: merely
+validating the missing value as absent would leave unknown deployed state behind.
+Explicitly empty partners remain no-ops and cannot complete a dependent update.
+Deleting `VIRTUAL_MODELS` alone preserves custom endpoints because no reference
+remains; files that update neither setting preserve both. Other omitted settings
+retain their partial-update semantics, and the local JSONC file is not rewritten.
+Runtime validation repeats critical checks for bindings installed outside the
+repository tooling and fails closed with a non-disclosing HTTP 503.
 
 Effective proxy-key updates must produce a nonempty key pool within the runtime
 64-key bound. Unchanged settings and explicit deletions retain their partial

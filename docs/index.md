@@ -15,6 +15,7 @@ with initial setup, then use configuration and operations.
   - [AI Gateway API](user/api/ai-gateway.md)
   - [Proxy management API](user/api/proxy-management.md)
 - [Initial setup](user/initial-setup.md) ([日本語](user/initial-setup_ja.md))
+- [Upgrade to 1.0.0](user/upgrade.md) ([日本語](user/upgrade_ja.md))
 - [Configuration reference](user/configuration.md)
 - [Operations and troubleshooting](user/operations.md)
 

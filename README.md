@@ -68,6 +68,7 @@ features, use a [pass-through route](docs/user/api/provider-pass-through.md).
 ## Documentation
 
 - [Initial setup](docs/user/initial-setup.md) ([日本語](docs/user/initial-setup_ja.md))
+- [Upgrade to 1.0.0](docs/user/upgrade.md) ([日本語](docs/user/upgrade_ja.md))
 - [Configuration](docs/user/configuration.md)
 - [HTTP API and routing](docs/user/api/overview.md)
 - [Operations and troubleshooting](docs/user/operations.md)
